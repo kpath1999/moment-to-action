@@ -1,0 +1,1 @@
+Some of these scripts profile Nexa SDK inference on Rubik Pi 3 by running a fixed prompt against different backend hints (auto, CPU, GPU) and logging latency plus tokens/sec to timestamped output. It also captures basic system capability info (CPU, GPU, NPU) and appends guidance on monitoring hardware usage to help determine which accelerator handles the workload.
