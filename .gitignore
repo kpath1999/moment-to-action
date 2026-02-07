@@ -1,0 +1,109 @@
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+target/
+.gradle/
+build/
+
+# .NET
+bin/
+obj/
+
+# Rust
+target/
+
+# Go
+bin/
+pkg/
+
+# C/C++
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# Logs
+logs/
+*.log
+
+# Archives
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+
+# Databases
+*.sqlite
+*.sqlite3
+*.db
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# Misc large
+dist/
+out/
+coverage/
+cache/
+.tmp/
+temp/
+
+# Python environments
+venvs/
+litert_venv/
+litert_venv
+*/.venv/
+*/venv/
+
+# Local SDK/tool drops
+tools/
+export_assets/
+models/
+archives/
+test_audio/
+test-data/
+projects/
+
+# Project-specific binaries
+projects/edge-impulse/install.sh
+
+# Large model/data artifacts
+*.tflite
+*.onnx
+*.dlc
+*.aar
+*.dll
+*.so
+*.dylib
+*.pt
+*.ckpt
+*.bin
