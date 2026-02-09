@@ -1,0 +1,2982 @@
+XD-Violence Weak Label Analysis
+============================================================
+
+Videos analyzed: 1804
+Videos without labels: 0
+
+Overall Metrics:
+  Accuracy:  0.5909
+  Precision: 0.7698
+  Recall:    0.5909
+  F1 Score:  0.6423
+
+Classification Report:
+              precision    recall  f1-score   support
+
+ NonViolence       0.88      0.59      0.71      1500
+    Violence       0.23      0.60      0.33       304
+
+    accuracy                           0.59      1804
+   macro avg       0.55      0.60      0.52      1804
+weighted avg       0.77      0.59      0.64      1804
+
+
+Label Mapping (XD-Violence):
+  A, B1, B2, B4 → NonViolence
+  B5, B6, G → Violence
+
+
+Misclassified Videos:
+============================================================
+  A.Beautiful.Mind.2001__#00-16-18_00-17-09_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7769)
+
+  A.Beautiful.Mind.2001__#00-57-20_00-58-17_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9975)
+
+  A.Beautiful.Mind.2001__#01-29-31_01-31-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9642)
+
+  About.Time.2013__#00-20-35_00-23-06_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9676)
+
+  About.Time.2013__#00-25-20_00-29-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9604)
+
+  About.Time.2013__#00-33-52_00-38-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8954)
+
+  About.Time.2013__#00-49-48_00-51-12_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9108)
+
+  About.Time.2013__#00-51-55_00-55-16_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9537)
+
+  About.Time.2013__#00-56-40_01-02-02_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8838)
+
+  About.Time.2013__#01-02-18_01-03-10_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7380)
+
+  About.Time.2013__#01-09-30_01-16-59_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8958)
+
+  About.Time.2013__#01-17-00_01-19-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9818)
+
+  About.Time.2013__#01-30-25_01-33-56_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8071)
+
+  About.Time.2013__#01-34-18_01-38-11_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6752)
+
+  About.Time.2013__#01-39-05_01-46-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7506)
+
+  About.Time.2013__#01-50-20_01-56-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9310)
+
+  Bad.Boys.1995__#00-34-10_00-35-15_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8173)
+
+  Bad.Boys.1995__#01-07-01_01-08-13_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9650)
+
+  Bad.Boys.1995__#01-21-35_01-22-25_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5104)
+
+  Bad.Boys.II.2003__#00-30-16_00-36-53_label_B2-B6-G.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9952)
+
+  Bad.Boys.II.2003__#00-43-05_00-44-20_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8944)
+
+  Bad.Boys.II.2003__#00-48-24_00-52-00_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9773)
+
+  Bad.Boys.II.2003__#00-56-45_00-58-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9303)
+
+  Bad.Boys.II.2003__#01-27-09_01-28-25_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9880)
+
+  Bad.Boys.II.2003__#01-29-04_01-30-03_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9986)
+
+  Bad.Boys.II.2003__#01-46-00_01-48-35_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8618)
+
+  Bad.Boys.II.2003__#02-05-15_02-05-36_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9614)
+
+  Bad.Boys.II.2003__#02-07-07_02-12-05_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9428)
+
+  Bad.Boys.II.2003__#02-15-48_02-18-12_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9990)
+
+  Be.with.You.2018__#00-08-55_00-10-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8352)
+
+  Be.with.You.2018__#00-37-40_00-40-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8735)
+
+  Be.with.You.2018__#00-40-52_00-42-01_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6932)
+
+  Be.with.You.2018__#00-42-52_00-45-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8377)
+
+  Be.with.You.2018__#00-45-40_00-47-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8980)
+
+  Be.with.You.2018__#00-50-26_00-55-16_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9812)
+
+  Be.with.You.2018__#00-58-18_01-02-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6640)
+
+  Be.with.You.2018__#01-50-50_01-52-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9692)
+
+  Be.with.You.2018__#01-58-20_02-01-10_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9709)
+
+  Before.Sunrise.1995__#00-05-52_00-08-22_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9481)
+
+  Before.Sunrise.1995__#00-20-35_00-23-06_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9332)
+
+  Before.Sunrise.1995__#00-25-20_00-29-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8279)
+
+  Before.Sunrise.1995__#00-45-40_00-47-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5032)
+
+  Before.Sunrise.1995__#00-57-20_00-58-17_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9853)
+
+  Before.Sunrise.1995__#01-21-22_01-25-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9650)
+
+  Before.Sunset.2004__#00-08-55_00-10-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9954)
+
+  Before.Sunset.2004__#00-11-00_00-15-08_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9905)
+
+  Before.Sunset.2004__#00-42-52_00-45-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8443)
+
+  Before.Sunset.2004__#00-55-26_00-57-16_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9872)
+
+  Before.Sunset.2004__#01-02-40_01-06-51_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5193)
+
+  Black.Hawk.Down.2001__#00-12-00_00-12-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9774)
+
+  Black.Hawk.Down.2001__#00-44-05_00-44-40_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9662)
+
+  Black.Hawk.Down.2001__#00-47-58_00-48-58_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9796)
+
+  Black.Hawk.Down.2001__#00-59-10_01-00-01_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9993)
+
+  Black.Hawk.Down.2001__#01-21-39_01-22-24_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8148)
+
+  Black.Hawk.Down.2001__#01-23-28_01-24-47_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8704)
+
+  Black.Hawk.Down.2001__#01-49-18_01-49-50_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.5452)
+
+  Black.Hawk.Down.2001__#01-51-26_01-51-50_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9604)
+
+  Black.Hawk.Down.2001__#02-04-08_02-04-28_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9524)
+
+  Black.Hawk.Down.2001__#02-14-30_02-14-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9996)
+
+  Braveheart.1995__#00-41-00_00-44-30_label_B5-B1-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9790)
+
+  Braveheart.1995__#00-58-01_01-00-01_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7015)
+
+  Braveheart.1995__#01-23-50_01-25-30_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9383)
+
+  Braveheart.1995__#01-38-50_01-39-49_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9655)
+
+  Braveheart.1995__#02-01-31_02-04-10_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6083)
+
+  Braveheart.1995__#02-28-15_02-29-59_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6369)
+
+  Braveheart.1995__#02-43-01_02-46-50_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9104)
+
+  Brick.Mansions.2014__#00-00-54_00-01-24_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9414)
+
+  Brick.Mansions.2014__#00-03-40_00-03-55_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9348)
+
+  Brick.Mansions.2014__#00-04-52_00-05-38_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8860)
+
+  Brick.Mansions.2014__#00-08-07_00-08-27_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9977)
+
+  Brick.Mansions.2014__#00-16-02_00-16-26_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5577)
+
+  Brick.Mansions.2014__#00-18-00_00-18-49_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5328)
+
+  Brick.Mansions.2014__#00-35-46_00-36-04_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7869)
+
+  Brick.Mansions.2014__#00-37-48_00-38-48_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8639)
+
+  Brick.Mansions.2014__#00-38-48_00-39-22_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5570)
+
+  Brick.Mansions.2014__#00-47-11_00-48-52_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9817)
+
+  Brick.Mansions.2014__#00-53-40_00-55-05_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9197)
+
+  Brick.Mansions.2014__#00-58-05_00-58-57_label_B2-B1-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7600)
+
+  Brick.Mansions.2014__#00-59-15_00-59-39_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9700)
+
+  Brick.Mansions.2014__#01-02-45_01-03-18_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9663)
+
+  Bullet.in.the.Head.1990__#00-06-13_00-07-41_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9687)
+
+  Bullet.in.the.Head.1990__#00-21-30_00-23-30_label_B4-B1-G.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8270)
+
+  Bullet.in.the.Head.1990__#00-52-55_00-54-30_label_B1-B2-G.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9161)
+
+  Bullet.in.the.Head.1990__#01-07-01_01-10-00_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7511)
+
+  Bullet.in.the.Head.1990__#01-17-31_01-18-22_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9675)
+
+  Bullet.in.the.Head.1990__#01-33-02_01-35-40_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9120)
+
+  Bullet.in.the.Head.1990__#01-36-00_01-38-33_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9979)
+
+  Bullet.in.the.Head.1990__#01-46-45_01-47-50_label_B5-B2-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9851)
+
+  Bullet.in.the.Head.1990__#01-59-31_02-01-50_label_B6-B2-G.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9838)
+
+  Bullet.in.the.Head.1990__#02-05-23_02-06-45_label_G-B2-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9967)
+
+  Casino.Royale.2006__#00-01-52_00-02-13_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9956)
+
+  Casino.Royale.2006__#00-11-35_00-12-05_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9931)
+
+  Casino.Royale.2006__#00-12-26_00-12-36_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8417)
+
+  Casino.Royale.2006__#00-12-36_00-12-46_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8917)
+
+  Casino.Royale.2006__#00-13-56_00-14-44_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8117)
+
+  Casino.Royale.2006__#00-16-55_00-18-30_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5780)
+
+  Casino.Royale.2006__#00-23-03_00-25-33_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8468)
+
+  Casino.Royale.2006__#00-32-34_00-35-11_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9594)
+
+  Casino.Royale.2006__#00-49-40_00-50-05_label_B6-G-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8763)
+
+  Casino.Royale.2006__#02-10-15_02-14-15_label_B2-B1-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7967)
+
+  City.of.God.2002__#00-06-10_00-07-01_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9149)
+
+  City.of.God.2002__#00-19-34_00-20-05_label_B2-B5-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9979)
+
+  City.of.God.2002__#00-27-11_00-28-05_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9726)
+
+  City.of.God.2002__#00-42-00_00-43-02_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9749)
+
+  City.of.God.2002__#00-59-55_01-02-35_label_B5-B2-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9815)
+
+  City.of.God.2002__#01-02-36_01-04-02_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9967)
+
+  City.of.God.2002__#01-10-36_01-11-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8962)
+
+  City.of.God.2002__#01-26-21_01-27-25_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9698)
+
+  City.of.God.2002__#01-27-26_01-28-48_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9936)
+
+  City.of.God.2002__#01-32-31_01-33-11_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5994)
+
+  City.of.God.2002__#01-37-13_01-38-30_label_G-B2-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9860)
+
+  City.of.God.2002__#01-38-31_01-39-00_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9185)
+
+  City.of.God.2002__#01-54-15_01-56-20_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7449)
+
+  City.of.God.2002__#02-00-11_02-01-40_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8558)
+
+  City.Of.Men.2007__#00-11-30_00-12-02_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9339)
+
+  City.Of.Men.2007__#00-24-29_00-25-30_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9762)
+
+  City.Of.Men.2007__#00-53-50_00-54-30_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8569)
+
+  City.Of.Men.2007__#01-09-40_01-10-20_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9833)
+
+  Crank.Dircut.2006__#01-04-45_01-05-36_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8657)
+
+  Deadpool.2.2018__#0-01-55_0-02-34_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9629)
+
+  Deadpool.2.2018__#0-09-10_0-10-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9927)
+
+  Deadpool.2.2018__#0-14-23_0-16-20_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8793)
+
+  Deadpool.2.2018__#0-24-44_0-25-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8006)
+
+  Deadpool.2.2018__#0-52-40_0-53-06_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9783)
+
+  Deadpool.2.2018__#0-55-12_0-56-27_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8123)
+
+  Deadpool.2.2018__#0-57-55_0-59-15_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6829)
+
+  Deadpool.2.2018__#0-59-16_0-59-23_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8580)
+
+  Deadpool.2.2018__#01-37-54_01-38-07_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9697)
+
+  Deadpool.2.2018__#01-42-58_01-43-15_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6355)
+
+  Deadpool.2016__#0-06-50_0-08-49_label_B1-B2-B6.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8029)
+
+  Deadpool.2016__#0-10-14_0-12-16_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9925)
+
+  Deadpool.2016__#0-13-36_0-14-22_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9029)
+
+  Deadpool.2016__#0-17-08_0-17-52_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6913)
+
+  Deadpool.2016__#0-28-34_0-29-54_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6854)
+
+  Deadpool.2016__#0-30-17_0-31-51_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9507)
+
+  Deadpool.2016__#0-53-31_0-55-31_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9909)
+
+  Deadpool.2016__#01-00-11_01-00-24_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8995)
+
+  Deadpool.2016__#01-00-24_01-00-35_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9898)
+
+  Deadpool.2016__#01-01-24_01-01-39_label_B2-B1-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8544)
+
+  Deadpool.2016__#01-18-13_01-20-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9300)
+
+  Deadpool.2016__#01-22-32_01-22-41_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8742)
+
+  Deadpool.2016__#01-24-30_01-24-40_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9240)
+
+  Deadpool.2016__#01-27-52_01-28-33_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5773)
+
+  Deadpool.2016__#01-28-50_01-29-52_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9978)
+
+  Deadpool.2016__#01-36-22_01-37-45_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9936)
+
+  Death.Proof.2007__#00-06-20_00-08-55_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9927)
+
+  Death.Proof.2007__#00-50-18_00-51-44_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7252)
+
+  Death.Proof.2007__#01-48-30_01-49-26_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.5004)
+
+  Desperado.1995__#00-31-12_00-37-04_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6312)
+
+  Desperado.1995__#01-20-31_01-21-27_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7860)
+
+  Desperado.1995__#01-27-37_01-31-55_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7989)
+
+  Election.2005__#01-08-01_01-09-04_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9108)
+
+  Election.2005__#01-12-58_01-14-11_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7436)
+
+  Election.2005__#01-19-48_01-21-18_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8820)
+
+  Election.2005__#01-30-35_01-34-07_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7970)
+
+  Fast.Five.2011__#00-00-50_00-01-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9382)
+
+  Fast.Five.2011__#00-07-53_00-08-53_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8791)
+
+  Fast.Five.2011__#00-23-05_00-24-44_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7492)
+
+  Fast.Five.2011__#00-30-33_00-31-13_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7680)
+
+  Fast.Five.2011__#00-31-50_00-32-05_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9835)
+
+  Fast.Five.2011__#00-32-24_00-32-39_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9918)
+
+  Fast.Five.2011__#00-38-01_00-40-44_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5629)
+
+  Fast.Five.2011__#00-42-00_00-45-37_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8826)
+
+  Fast.Five.2011__#01-00-48_01-00-58_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9545)
+
+  Fast.Five.2011__#01-06-30_01-06-53_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9427)
+
+  Fast.Five.2011__#01-32-48_01-33-22_label_B2-G-B6.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9527)
+
+  Fast.Five.2011__#01-33-25_01-34-41_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9345)
+
+  Fast.Five.2011__#01-34-41_01-35-12_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9730)
+
+  Fast.Five.2011__#01-50-50_01-51-37_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9949)
+
+  Fast.Five.2011__#01-55-07_01-58-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8092)
+
+  Fast.Furious.2009__#00-13-50_00-14-04_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8073)
+
+  Fast.Furious.2009__#00-15-05_00-19-56_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7484)
+
+  Fast.Furious.2009__#01-03-26_01-04-10_label_G-B2-B1.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9833)
+
+  Fast.Furious.6.2013__#00-10-20_00-11-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6655)
+
+  Fast.Furious.6.2013__#00-23-40_00-24-31_label_B6-B2-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7839)
+
+  Fast.Furious.6.2013__#00-24-40_00-25-40_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8101)
+
+  Fast.Furious.6.2013__#00-29-05_00-30-15_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6921)
+
+  Fast.Furious.6.2013__#00-47-40_00-50-20_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9979)
+
+  Fast.Furious.6.2013__#01-02-17_01-03-10_label_B6-B2-G.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9772)
+
+  Fast.Furious.6.2013__#01-05-40_01-07-59_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7262)
+
+  Fast.Furious.6.2013__#01-10-55_01-14-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9639)
+
+  Fast.Furious.6.2013__#01-44-00_01-46-40_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7577)
+
+  Fast.Furious.6.2013__#01-50-00_01-51-02_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8747)
+
+  Fast.Furious.6.2013__#01-51-35_01-53-02_label_B1-B6-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9613)
+
+  Flipped.2010__#00-03-00_00-04-05_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8049)
+
+  Flipped.2010__#00-11-00_00-15-08_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7943)
+
+  Flipped.2010__#00-16-18_00-18-09_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8099)
+
+  Flipped.2010__#00-31-05_00-32-05_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5991)
+
+  Flipped.2010__#00-47-55_00-49-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7833)
+
+  Flipped.2010__#01-14-30_01-16-51_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9834)
+
+  Fury.2014__#00-09-04_00-10-42_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9118)
+
+  Fury.2014__#00-27-12_00-28-42_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8793)
+
+  Fury.2014__#00-31-22_00-35-11_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5784)
+
+  Fury.2014__#01-14-49_01-15-52_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9777)
+
+  Fury.2014__#01-24-39_01-26-24_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8850)
+
+  Fury.2014__#01-27-52_01-30-09_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5965)
+
+  Fury.2014__#01-42-02_01-47-12_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9085)
+
+  Gladiator.2000__#00-23-08_00-23-42_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9804)
+
+  Gladiator.2000__#00-41-25_00-42-45_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9470)
+
+  Gladiator.2000__#00-59-29_01-02-19_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9835)
+
+  Gladiator.2000__#01-02-57_01-04-54_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7594)
+
+  Gladiator.2000__#01-27-58_01-29-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9925)
+
+  Gladiator.2000__#01-32-15_01-37-06_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9991)
+
+  Gladiator.2000__#02-08-45_02-10-17_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9008)
+
+  God.Bless.America.2011__#00-14-02_00-18-05_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9546)
+
+  God.Bless.America.2011__#00-52-07_00-53-55_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8414)
+
+  God.Bless.America.2011__#01-15-20_01-16-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9478)
+
+  God.Bless.America.2011__#01-33-26_01-35-50_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6774)
+
+  GoldenEye.1995__#00-05-41_00-07-32_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9604)
+
+  GoldenEye.1995__#00-08-07_00-09-04_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9775)
+
+  GoldenEye.1995__#00-17-21_00-20-35_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9699)
+
+  GoldenEye.1995__#00-26-45_00-27-14_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9543)
+
+  GoldenEye.1995__#00-39-57_00-41-32_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8175)
+
+  GoldenEye.1995__#01-12-02_01-12-44_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8964)
+
+  GoldenEye.1995__#01-25-54_01-26-53_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9364)
+
+  GoldenEye.1995__#01-28-03_01-28-24_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9796)
+
+  GoldenEye.1995__#01-33-05_01-33-39_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9832)
+
+  GoldenEye.1995__#01-43-18_01-44-30_label_B1-B2-G.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9686)
+
+  GoldenEye.1995__#02-05-18_02-06-13_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7313)
+
+  Haywire.2011__#00-05-37_00-07-13_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9031)
+
+  Haywire.2011__#01-03-19_01-04-02_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9542)
+
+  Haywire.2011__#01-16-30_01-18-01_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9045)
+
+  Hear.Me.2009__#00-06-37_00-08-22_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9107)
+
+  Hear.Me.2009__#00-16-18_00-17-27_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8165)
+
+  Hear.Me.2009__#00-23-50_00-24-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9910)
+
+  Hear.Me.2009__#00-38-52_00-40-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9980)
+
+  Hot.Fuzz.2007__#00-02-45_00-05-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7876)
+
+  Hot.Fuzz.2007__#00-08-11_00-10-43_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8699)
+
+  Hot.Fuzz.2007__#00-14-20_00-15-05_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7990)
+
+  Hot.Fuzz.2007__#01-33-10_01-38-50_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9880)
+
+  Hot.Fuzz.2007__#01-41-50_01-44-10_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9589)
+
+  IP.Man.2.2010__#00-12-46_00-13-46_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9990)
+
+  IP.Man.2.2010__#00-17-54_00-18-57_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9559)
+
+  IP.Man.2.2010__#00-39-03_00-40-13_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9747)
+
+  IP.Man.2.2010__#00-40-54_00-42-26_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9086)
+
+  IP.Man.2.2010__#00-48-20_00-49-07_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5208)
+
+  IP.Man.2.2010__#01-04-54_01-06-57_label_B4-B1-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5781)
+
+  Ip.Man.2008__#00-19-02_00-20-14_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7232)
+
+  Ip.Man.2008__#00-20-20_00-21-26_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8465)
+
+  Ip.Man.2008__#00-23-19_00-24-27_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9434)
+
+  Ip.Man.2008__#00-28-08_00-33-03_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5400)
+
+  Ip.Man.2008__#01-07-28_01-07-38_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9374)
+
+  Ip.Man.2008__#01-07-54_01-08-34_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9943)
+
+  Ip.Man.2008__#01-19-09_01-20-43_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9540)
+
+  Ip.Man.3.2015__#00-42-00_00-42-50_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9962)
+
+  Ip.Man.3.2015__#01-11-30_01-11-54_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7197)
+
+  Ip.Man.3.2015__#01-13-45_01-15-18_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9061)
+
+  Jason.Bourne.2016__#0-02-40_0-04-00_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8994)
+
+  Jason.Bourne.2016__#0-22-15_0-22-52_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8015)
+
+  Jason.Bourne.2016__#0-23-49_0-25-22_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8207)
+
+  Jason.Bourne.2016__#0-26-38_0-26-55_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5317)
+
+  Jason.Bourne.2016__#0-26-58_0-27-20_label_B2-B6-B1.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6760)
+
+  Jason.Bourne.2016__#0-28-43_0-29-35_label_B6-B4-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8858)
+
+  Jason.Bourne.2016__#0-30-30_0-30-38_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8601)
+
+  Jason.Bourne.2016__#0-30-38_0-31-45_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8125)
+
+  Jason.Bourne.2016__#0-36-20_0-37-27_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8352)
+
+  Jason.Bourne.2016__#0-38-40_0-40-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8388)
+
+  Jason.Bourne.2016__#0-55-15_0-57-25_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9876)
+
+  Jason.Bourne.2016__#0-57-28_0-58-55_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9965)
+
+  Jason.Bourne.2016__#01-10-50_01-11-00_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9926)
+
+  Jason.Bourne.2016__#01-16-40_01-18-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9059)
+
+  Jason.Bourne.2016__#01-24-46_01-25-35_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6408)
+
+  Jason.Bourne.2016__#01-27-09_01-29-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7417)
+
+  Jason.Bourne.2016__#01-31-13_01-31-32_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9875)
+
+  Jason.Bourne.2016__#01-31-32_01-31-37_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7940)
+
+  Jason.Bourne.2016__#01-39-00_01-39-26_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8894)
+
+  Jason.Bourne.2016__#01-39-30_01-45-05_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7833)
+
+  Kill.Bill.Vol.1.2003__#0-16-34_0-17-36_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9995)
+
+  Kill.Bill.Vol.1.2003__#0-42-09_0-42-50_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9681)
+
+  Kill.Bill.Vol.1.2003__#00-32-20_00-34-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7543)
+
+  Kill.Bill.Vol.1.2003__#01-05-33_01-06-42_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6940)
+
+  Kill.Bill.Vol.1.2003__#01-15-45_01-16-10_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9801)
+
+  Kill.Bill.Vol.1.2003__#01-16-11_01-17-12_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7273)
+
+  Kill.Bill.Vol.1.2003__#01-28-19_01-28-50_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6894)
+
+  Kill.Bill.Vol.2.2004__#0-02-00_0-04-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9227)
+
+  Kill.Bill.Vol.2.2004__#0-31-20_0-32-00_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9608)
+
+  Kill.Bill.Vol.2.2004__#0-44-18_0-49-18_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9626)
+
+  Kingsman.The.Golden.Circle.2017__#00-01-40_00-04-51_label_B1-B2-B6.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9649)
+
+  Kingsman.The.Golden.Circle.2017__#00-05-38_00-07-20_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9100)
+
+  Kingsman.The.Golden.Circle.2017__#00-10-56_00-12-15_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7126)
+
+  Kingsman.The.Golden.Circle.2017__#00-26-28_00-27-05_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9950)
+
+  Kingsman.The.Golden.Circle.2017__#00-50-38_00-51-42_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8159)
+
+  Kingsman.The.Golden.Circle.2017__#01-11-34_01-13-28_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9782)
+
+  Kingsman.The.Golden.Circle.2017__#01-29-11_01-31-16_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8900)
+
+  Kingsman.The.Golden.Circle.2017__#01-51-23_01-51-35_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9966)
+
+  Kingsman.The.Golden.Circle.2017__#01-52-11_01-55-03_label_B1-B2-G.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9364)
+
+  Kingsman.The.Golden.Circle.2017__#02-06-23_02-08-23_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9922)
+
+  Kingsman.The.Secret.Service.2014__#00-05-55_00-06-46_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9663)
+
+  Kingsman.The.Secret.Service.2014__#00-20-40_00-21-40_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9906)
+
+  Kingsman.The.Secret.Service.2014__#01-18-20_01-19-23_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8158)
+
+  Kingsman.The.Secret.Service.2014__#01-46-30_01-47-10_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9579)
+
+  Kingsman.The.Secret.Service.2014__#01-49-00_01-49-40_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8101)
+
+  Law.Abiding.Citizen.2009__#00-01-31_00-02-49_label_B1-B5-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9834)
+
+  Law.Abiding.Citizen.2009__#00-13-05_00-14-51_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9554)
+
+  Law.Abiding.Citizen.2009__#01-14-42_01-15-38_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9794)
+
+  Law.Abiding.Citizen.2009__#01-27-40_01-27-59_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7400)
+
+  Lord.of.War__#00-28-20_00-29-08_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8416)
+
+  Lord.of.War__#01-20-45_01-21-45_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9691)
+
+  Lord.of.War__#01-44-03_01-44-50_label_G-B2-B1.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9994)
+
+  Love.Actually.2003__#00-21-59_00-24-04_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9424)
+
+  Love.Actually.2003__#00-33-52_00-38-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9479)
+
+  Love.Actually.2003__#00-38-52_00-40-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7911)
+
+  Love.Actually.2003__#00-43-52_00-45-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8550)
+
+  Love.Actually.2003__#02-02-50_02-09-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8201)
+
+  Love.Death.and.Robots.S01E04__#00-06-28_00-10-33_label_G-B2-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8633)
+
+  Love.Death.and.Robots.S01E10__#0-02-13_0-03-11_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7357)
+
+  Love.Death.and.Robots.S01E10__#0-03-55_0-05-25_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9730)
+
+  Love.Death.and.Robots.S01E10__#0-09-01_0-11-52_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8033)
+
+  Love.Death.and.Robots.S01E13__#0-03-24_0-06-43_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6676)
+
+  Love.Death.and.Robots.S01E13__#0-07-49_0-11-46_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8916)
+
+  Love.Death.and.Robots.S01E15__#0-01-35_0-02-09_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9974)
+
+  Love.Death.and.Robots.S01E15__#0-02-51_0-03-05_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9348)
+
+  Love.Death.and.Robots.S01E15__#0-04-22_0-05-00_label_G-B2-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7779)
+
+  Love.Death.and.Robots.S01E16__#0-04-10_0-04-57_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9686)
+
+  Love.Death.and.Robots.S01E16__#0-07-15_0-07-35_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6179)
+
+  Love.Me.If.You.Dare.2003__#00-46-40_00-48-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9961)
+
+  Mindhunters.2004__#00-07-51_00-08-38_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5710)
+
+  Mindhunters.2004__#00-10-04_00-11-04_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9240)
+
+  Mindhunters.2004__#00-33-40_00-34-35_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9246)
+
+  Mindhunters.2004__#00-38-50_00-39-40_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9708)
+
+  Mindhunters.2004__#01-34-40_01-35-40_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7166)
+
+  Mission.Impossible.Fallout.2018__#00-08-20_00-10-50_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9110)
+
+  Mission.Impossible.Fallout.2018__#00-28-59_00-30-07_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8346)
+
+  Mission.Impossible.Fallout.2018__#01-02-09_01-02-49_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8788)
+
+  Mission.Impossible.Fallout.2018__#01-10-39_01-16-05_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9298)
+
+  Mission.Impossible.Fallout.2018__#02-04-55_02-05-29_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9250)
+
+  Mission.Impossible.Fallout.2018__#02-06-21_02-07-31_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8685)
+
+  Mission.Impossible.Fallout.2018__#02-12-31_02-12-38_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9665)
+
+  Mission.Impossible.Fallout.2018__#02-15-52_02-18-19_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5279)
+
+  Mission.Impossible.Ghost.Protocol.2011__#00-07-35_00-08-35_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7092)
+
+  Mission.Impossible.Ghost.Protocol.2011__#00-13-45_00-14-12_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8532)
+
+  Mission.Impossible.Ghost.Protocol.2011__#00-20-02_00-21-12_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9612)
+
+  Mission.Impossible.Ghost.Protocol.2011__#00-30-57_00-31-32_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9165)
+
+  Mission.Impossible.Ghost.Protocol.2011__#01-14-53_01-15-29_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8981)
+
+  Mission.Impossible.Ghost.Protocol.2011__#01-15-36_01-16-32_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8381)
+
+  Mission.Impossible.Ghost.Protocol.2011__#01-56-38_01-56-52_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8761)
+
+  Mission.Impossible.II.2000__#00-04-25_00-04-55_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8117)
+
+  Mission.Impossible.II.2000__#01-16-32_01-16-58_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8766)
+
+  Mission.Impossible.II.2000__#01-17-25_01-18-55_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7391)
+
+  Mission.Impossible.II.2000__#01-22-53_01-23-16_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8127)
+
+  Mission.Impossible.II.2000__#01-24-40_01-25-08_label_G-B2-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7105)
+
+  Mission.Impossible.II.2000__#01-33-57_01-34-19_label_G-B2-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9953)
+
+  Mission.Impossible.II.2000__#01-42-10_01-43-06_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8882)
+
+  Mission.Impossible.II.2000__#01-55-15_01-55-36_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9993)
+
+  Mission.Impossible.II.2000__#01-56-14_01-58-10_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5254)
+
+  Mission.Impossible.III.2006__#00-17-45_00-18-13_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6692)
+
+  Mission.Impossible.III.2006__#00-22-20_00-22-35_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9226)
+
+  Mission.Impossible.III.2006__#00-23-15_00-23-35_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8027)
+
+  Mission.Impossible.III.2006__#01-04-32_01-05-54_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9487)
+
+  Mission.Impossible.III.2006__#01-18-20_01-20-05_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8652)
+
+  Mission.Impossible.III.2006__#01-31-37_01-32-20_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9634)
+
+  Mission.Impossible.III.2006__#01-47-33_01-49-14_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8391)
+
+  Mission.Impossible.III.2006__#01-50-19_01-51-13_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6225)
+
+  Mission.Impossible.III.2006__#01-56-50_01-58-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8644)
+
+  Mission.Impossible.V.Rogue.Nation.2015__#00-37-00_00-37-59_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7734)
+
+  Mission.Impossible.V.Rogue.Nation.2015__#00-41-49_00-42-21_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9577)
+
+  Mission.Impossible.V.Rogue.Nation.2015__#01-14-35_01-15-25_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8021)
+
+  Mission.Impossible.V.Rogue.Nation.2015__#01-57-48_01-59-18_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8555)
+
+  New.Kids.Turbo.2010__#00-01-11_00-02-07_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6327)
+
+  New.Kids.Turbo.2010__#00-02-24_00-03-30_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9822)
+
+  New.Kids.Turbo.2010__#00-14-30_00-15-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9907)
+
+  New.Kids.Turbo.2010__#00-58-01_00-58-33_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9933)
+
+  New.Kids.Turbo.2010__#01-12-25_01-14-25_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9668)
+
+  A.Beautiful.Mind.2001__#00-40-52_00-42-01_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8534)
+
+  About.Time.2013__#00-23-50_00-24-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6058)
+
+  About.Time.2013__#00-30-50_00-32-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6930)
+
+  Bad.Boys.II.2003__#00-06-42_00-10-00_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9758)
+
+  Before.Sunrise.1995__#00-23-50_00-24-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9959)
+
+  Black.Hawk.Down.2001__#01-13-59_01-14-49_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8857)
+
+  Black.Hawk.Down.2001__#01-42-58_01-43-58_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9876)
+
+  Braveheart.1995__#00-56-30_00-57-20_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7687)
+
+  Braveheart.1995__#02-05-34_02-06-40_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6488)
+
+  Brick.Mansions.2014__#00-11-57_00-12-12_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9821)
+
+  Brick.Mansions.2014__#00-41-25_00-42-36_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9955)
+
+  Bullet.in.the.Head.1990__#00-17-20_00-18-55_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5177)
+
+  Bullet.in.the.Head.1990__#00-23-31_00-24-40_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9994)
+
+  Bullet.in.the.Head.1990__#00-41-30_00-44-16_label_B4-G-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9268)
+
+  Casino.Royale.2006__#00-50-05_00-51-16_label_B1-B2-B6.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6496)
+
+  Casino.Royale.2006__#01-17-29_01-17-46_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9361)
+
+  Casino.Royale.2006__#01-46-40_01-47-14_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7734)
+
+  City.of.God.2002__#00-33-10_00-34-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9621)
+
+  City.of.God.2002__#00-37-20_00-38-02_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9787)
+
+  City.of.God.2002__#01-24-10_01-25-10_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7173)
+
+  City.of.God.2002__#01-52-20_01-54-32_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9710)
+
+  City.Of.Men.2007__#00-51-50_00-53-31_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9929)
+
+  City.Of.Men.2007__#00-57-37_00-58-27_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8918)
+
+  City.Of.Men.2007__#01-17-27_01-17-59_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9102)
+
+  City.Of.Men.2007__#01-35-30_01-36-00_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9464)
+
+  City.Of.Men.2007__#01-36-01_01-37-31_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9849)
+
+  Deadpool.2.2018__#0-50-30_0-51-20_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7305)
+
+  Deadpool.2016__#0-18-58_0-19-20_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8779)
+
+  Death.Proof.2007__#00-02-04_00-05-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9707)
+
+  Death.Proof.2007__#00-45-05_00-47-36_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9605)
+
+  Death.Proof.2007__#01-40-41_01-42-17_label_B5-B6-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9342)
+
+  Election.2005__#00-47-57_00-50-54_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.5927)
+
+  Fast.Five.2011__#00-32-05_00-32-24_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9532)
+
+  Fast.Five.2011__#00-32-56_00-33-26_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9994)
+
+  Fast.Five.2011__#01-29-27_01-32-05_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7589)
+
+  Fast.Five.2011__#01-59-16_02-01-12_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9572)
+
+  Fast.Furious.2009__#00-21-06_00-21-57_label_B6-B2-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9890)
+
+  Fast.Furious.2009__#01-18-00_01-19-00_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8539)
+
+  Fast.Furious.6.2013__#00-45-40_00-47-13_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6202)
+
+  From.Dusk.Till.Dawn.1996__#00-31-52_00-34-21_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8116)
+
+  Fury.2014__#00-39-36_00-40-44_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7992)
+
+  Gladiator.2000__#01-10-27_01-11-59_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8920)
+
+  God.Bless.America.2011__#00-38-25_00-39-37_label_B2-B5-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9574)
+
+  God.Bless.America.2011__#00-51-00_00-52-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7539)
+
+  God.Bless.America.2011__#00-58-09_01-04-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8420)
+
+  GoldenEye.1995__#00-10-00_00-10-40_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9755)
+
+  GoldenEye.1995__#00-24-53_00-25-06_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6178)
+
+  GoldenEye.1995__#01-02-11_01-03-43_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6108)
+
+  GoldenEye.1995__#01-33-40_01-34-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5861)
+
+  GoldenEye.1995__#02-03-40_02-04-13_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9577)
+
+  IP.Man.2.2010__#00-02-50_00-06-45_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6762)
+
+  IP.Man.2.2010__#00-07-14_00-09-13_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9254)
+
+  Ip.Man.2008__#01-14-31_01-15-24_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9179)
+
+  Kill.Bill.Vol.1.2003__#00-21-42_00-22-42_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9297)
+
+  Kill.Bill.Vol.1.2003__#01-17-20_01-20-20_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7790)
+
+  Kill.Bill.Vol.1.2003__#01-21-39_01-26-55_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9820)
+
+  Kingsman.The.Golden.Circle.2017__#00-41-22_00-41-32_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9928)
+
+  Kingsman.The.Secret.Service.2014__#00-25-29_00-26-24_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8179)
+
+  Law.Abiding.Citizen.2009__#01-26-34_01-27-25_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6085)
+
+  Lord.of.War__#00-50-10_00-50-50_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9628)
+
+  Lord.of.War__#01-41-04_01-41-53_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9810)
+
+  Love.Actually.2003__#00-51-55_00-55-16_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9543)
+
+  Love.Death.and.Robots.S01E04__#00-14-28_00-15-27_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6992)
+
+  Love.Me.If.You.Dare.2003__#01-04-40_01-06-59_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7868)
+
+  Mission.Impossible.Fallout.2018__#00-31-21_00-32-50_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9742)
+
+  Mission.Impossible.Fallout.2018__#00-39-18_00-40-36_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5686)
+
+  Mission.Impossible.Fallout.2018__#02-03-50_02-04-35_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8452)
+
+  Mission.Impossible.Ghost.Protocol.2011__#01-54-24_01-54-50_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9931)
+
+  Mission.Impossible.Ghost.Protocol.2011__#01-56-52_01-57-03_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9965)
+
+  Mission.Impossible.II.2000__#01-32-56_01-33-25_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9140)
+
+  Mission.Impossible.III.2006__#00-19-56_00-20-26_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9610)
+
+  Mission.Impossible.III.2006__#00-56-23_00-56-40_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9337)
+
+  Mission.Impossible.V.Rogue.Nation.2015__#00-14-40_00-17-12_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9035)
+
+  Mission.Impossible.V.Rogue.Nation.2015__#01-15-52_01-16-48_label_B6-B2-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7387)
+
+  Mission.Impossible.V.Rogue.Nation.2015__#01-29-39_01-33-39_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9871)
+
+  Mission.Impossible.V.Rogue.Nation.2015__#01-54-23_01-55-10_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8452)
+
+  New.Kids.Turbo.2010__#00-22-35_00-23-14_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9970)
+
+  Operation.Red.Sea.2018__#0-29-36_0-30-20_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9659)
+
+  Operation.Red.Sea.2018__#01-20-58_01-22-00_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9942)
+
+  Quantum.Of.Solace.2008__#01-19-30_01-20-05_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9782)
+
+  Quantum.Of.Solace.2008__#01-30-26_01-30-42_label_B2-B1-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9958)
+
+  Rush.Hour.1998.BluRay__#00-08-08_00-09-15_label_B2-B6-G.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9881)
+
+  Rush.Hour.1998.BluRay__#00-11-05_00-12-10_label_B2-B1-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9558)
+
+  Rush.Hour.1998.BluRay__#01-25-21_01-25-46_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9725)
+
+  Rush.Hour.3.2007.BluRay__#00-04-59_00-05-31_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9740)
+
+  Rush.Hour.3.2007.BluRay__#01-00-40_01-04-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8165)
+
+  Rush.Hour.3.2007.BluRay__#01-12-16_01-12-36_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9897)
+
+  Salt.2010__#01-12-05_01-12-32_label_B2-G-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7787)
+
+  Saving.Private.Ryan.1998__#00-47-50_00-49-35_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9868)
+
+  Saving.Private.Ryan.1998__#02-00-56_02-03-06_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7759)
+
+  Saving.Private.Ryan.1998__#02-23-00_02-23-28_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9913)
+
+  Saving.Private.Ryan.1998__#02-24-18_02-25-42_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9894)
+
+  Saving.Private.Ryan.1998__#02-25-42_02-26-03_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8754)
+
+  Shoplifters.2018__#00-17-30_00-19-10_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8328)
+
+  Sin.City.2005__#0-29-34_0-29-56_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8909)
+
+  Sin.City.2005__#0-32-00_0-32-16_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9066)
+
+  Sin.City.2005__#01-51-59_01-52-29_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9720)
+
+  Skyfall.2012__#01-20-05_01-20-20_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8139)
+
+  Skyfall.2012__#01-57-40_01-58-00_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7375)
+
+  Spectre.2015__#01-08-58_01-09-20_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8980)
+
+  Spectre.2015__#01-17-22_01-18-53_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9765)
+
+  Spectre.2015__#01-32-55_01-35-40_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8637)
+
+  Spectre.2015__#02-02-57_02-03-27_label_B1-B2-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6628)
+
+  Spectre.2015__#02-15-30_02-16-05_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8814)
+
+  Taken.2.UNRATED.EXTENDED.2012__#00-13-42_00-14-16_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9596)
+
+  Taken.2.UNRATED.EXTENDED.2012__#01-00-00_01-00-16_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9666)
+
+  Taken.2.UNRATED.EXTENDED.2012__#01-06-28_01-06-49_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9930)
+
+  Taken.2.UNRATED.EXTENDED.2012__#01-18-25_01-18-40_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6492)
+
+  Taken.3.2014__#01-04-50_01-05-05_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8571)
+
+  Taken.3.2014__#01-09-26_01-09-54_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9879)
+
+  Taken.3.2014__#01-12-48_01-14-30_label_B2-B1-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9923)
+
+  Taken.3.2014__#01-20-10_01-21-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9628)
+
+  Taken.Extended.Cut.2008__#00-50-45_00-51-04_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8838)
+
+  The.Attorney.2013__#00-47-00_00-49-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9611)
+
+  The.Bourne.Identity.2002__#0-19-53_0-21-48_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8586)
+
+  The.Bourne.Identity.2002__#0-29-16_0-32-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9247)
+
+  The.Bourne.Identity.2002__#0-54-45_0-56-25_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9394)
+
+  The.Bourne.Legacy.2012__#0-39-56_0-40-15_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9985)
+
+  The.Bourne.Legacy.2012__#0-59-18_01-01-52_label_B2-B1-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9852)
+
+  The.Bourne.Ultimatum.2007__#0-55-55_0-56-10_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9896)
+
+  The.Bourne.Ultimatum.2007__#01-26-27_01-28-03_label_B2-B6-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9780)
+
+  The.Bourne.Ultimatum.2007__#01-44-02_01-44-11_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7440)
+
+  The.Fast.and.the.Furious.2001__#00-52-18_00-53-36_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9259)
+
+  The.Fast.and.the.Furious.2001__#01-14-04_01-15-20_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8345)
+
+  The.Hurt.Locker.2008__#0-19-22_0-22-32_label_B2-B1-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9605)
+
+  The.Hurt.Locker.2008__#0-29-25_0-30-15_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9799)
+
+  The.Hurt.Locker.2008__#0-45-39_0-47-06_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9420)
+
+  The.Hurt.Locker.2008__#01-02-10_01-03-55_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8213)
+
+  The.Hurt.Locker.2008__#01-27-42_01-28-09_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9743)
+
+  The.Intouchables.2011__#00-04-20_00-05-35_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9555)
+
+  The.Intouchables.2011__#00-58-18_01-02-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7603)
+
+  The.Notebook.2004__#00-08-55_00-10-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9675)
+
+  The.Pursuit.of.Happyness.2006__#00-17-30_00-19-10_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5680)
+
+  The.Pursuit.of.Happyness.2006__#01-34-18_01-38-11_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9299)
+
+  The.Secret.Life.of.Walter.Mitty.2013__#00-08-55_00-10-50_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9816)
+
+  The.Secret.Life.of.Walter.Mitty.2013__#01-23-00_01-29-08_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9912)
+
+  The.World.Is.Not.Enough.1999__#00-07-04_00-07-45_label_G-B2-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9674)
+
+  The.World.Is.Not.Enough.1999__#00-10-22_00-10-40_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.6927)
+
+  Tropa.de.Elite.2.2010__#00-13-41_00-14-56_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9983)
+
+  Tropa.de.Elite.2.2010__#01-33-31_01-34-20_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6325)
+
+  Tropa.de.Elite.2007__#00-10-30_00-12-08_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9235)
+
+  Tropa.de.Elite.2007__#00-52-33_00-54-35_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9946)
+
+  v=-5RWxUUJ7lQ__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9990)
+
+  v=-etV57xZ4_I__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9998)
+
+  v=-fOWSLV6Esw__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9972)
+
+  v=-kwNh1lMU-w__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9977)
+
+  v=-tqHsoEoUyY__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8343)
+
+  v=0LEefpIPBHA__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9319)
+
+  v=0N0PbzjEg0U__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9990)
+
+  v=0vVOXlgHC1U__#00-12-00_00-18-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9440)
+
+  v=0vVOXlgHC1U__#00-48-00_00-54-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9941)
+
+  v=0yHBkMBE8r4__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9947)
+
+  v=1202rYvw7go__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9963)
+
+  v=15wDrZJQpsw__#00-05-20_00-06-20_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9502)
+
+  v=1djrJ0wxlYo__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9746)
+
+  v=1EvRIhdsX1s__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9535)
+
+  v=1io9Uh54Vhg__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8117)
+
+  v=1q5V6DKH3bw__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9791)
+
+  v=251___mEwZA__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9998)
+
+  v=2al4t5inObA__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9906)
+
+  v=2JJ9d97sd64__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9410)
+
+  v=2jwO15SMyuo__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9959)
+
+  v=2Rr21qkZEDQ__#00-14-10_00-16-09_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.6946)
+
+  v=2WkuPNLfl5s__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9105)
+
+  v=3e3C-LQWF2s__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9994)
+
+  v=3lSHv_DUbJs__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9698)
+
+  v=3WmMhircZOc__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9975)
+
+  v=3xkwZk44VQs__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8298)
+
+  v=3xWiBCIxjIk__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9958)
+
+  v=3y2OOc6WTrg__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9959)
+
+  v=3zgaqeVSXuI__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6782)
+
+  v=3ZVcLOjwOMk__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9907)
+
+  v=4jVgDKbu_TI__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9942)
+
+  v=5l-nbDl0qvg__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7212)
+
+  v=5NZxPmTpV6Y__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9922)
+
+  v=6KQFxxHmVMc__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9827)
+
+  v=6nfo9c7a5pE__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9996)
+
+  v=6TR2rcgHm4g__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9392)
+
+  v=78u9uBJBqIw__#1_label_B4-B5-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6279)
+
+  v=7isLhaNYgkU__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9734)
+
+  v=7rDRFFSUrPI__#00-01-50_00-02-32_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9574)
+
+  v=7smETZfN0XA__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5961)
+
+  v=7xQr5wYwNPg__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9970)
+
+  v=8ewWXhYRUNs__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9985)
+
+  v=8oJMGgaww70__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9996)
+
+  v=96N4XAJ7FKM__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9959)
+
+  v=9eME1y6V-T4__#01-18-00_01-24-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8452)
+
+  v=9eME1y6V-T4__#02-00-00_02-06-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9799)
+
+  v=9FxmNOXF25Q__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9273)
+
+  v=9Jk2sIp5MRQ__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9688)
+
+  v=9Ydg5IeZpFI__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9994)
+
+  v=abATVcjFumY__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9978)
+
+  v=ADQNFs9bfFk__#00-00-00_00-00-58_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9132)
+
+  v=AF9p0YA0hyA__#00-03-03_00-04-20_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8535)
+
+  v=afhttnv46Y4__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9997)
+
+  v=ajnl7P9bf78__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7525)
+
+  v=aWPWHU8x6kE__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8873)
+
+  v=b0MUjeKAGZw__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6797)
+
+  v=bDm2-1NZBLw__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9919)
+
+  v=bfOlheR5nUQ__#00-00-00_00-04-33_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9993)
+
+  v=bfOlheR5nUQ__#00-04-33_00-06-02_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9996)
+
+  v=BFPkt0AuSFA__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9922)
+
+  v=bhZs3ALdL7Y__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9482)
+
+  v=BL8ppFg7NKI__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6106)
+
+  v=BQjKQbYgUBA__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9287)
+
+  v=bU86SW6L7Tc__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9649)
+
+  v=BXR3d22BhHs__#00-06-00_00-07-00_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9998)
+
+  v=cEOM18n8fhU__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8765)
+
+  v=CLFYvG6MsZU__#00-02-16_00-05-06_label_B2-0-0.mp4
+    Label: B2 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9989)
+
+  v=cuUK-3MNqtw__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9840)
+
+  v=cvEJ5WFk2KE__#00-06-00_00-09-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9374)
+
+  v=d5lTTPvJLpw__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9903)
+
+  v=DD3jfKr8e-k__#00-00-00_00-01-40_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9938)
+
+  v=DdIA1Owbcdc__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5269)
+
+  v=Dh-3BlhAOnE__#00-00-00_00-13-36_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9377)
+
+  v=DRGMajXo_PI__#00-02-15_00-03-02_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9255)
+
+  v=eAgqJnO3kr8__#00-06-00_00-12-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7457)
+
+  v=Ehh8ZdIMMj4__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9995)
+
+  v=enYITYwvPAQ__#00-27-00_00-30-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7241)
+
+  v=es97CGK_5XQ__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9984)
+
+  v=EToznHwS0OA__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9901)
+
+  v=f6j3YWgVBto__#00-01-50_00-02-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9736)
+
+  v=f6j3YWgVBto__#00-06-16_00-06-51_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7756)
+
+  v=fIlmgvc-bUk__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9806)
+
+  v=fkps18H3SXY__#00-00-00_00-06-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7579)
+
+  v=fQQzg2VfJME__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8170)
+
+  v=FRj2K0ulD8Q__#00-00-00_00-00-57_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9902)
+
+  v=FRj2K0ulD8Q__#00-04-16_00-06-05_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9412)
+
+  v=FRj2K0ulD8Q__#00-06-05_00-08-25_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9793)
+
+  v=FW_qbiPH7UA__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.5200)
+
+  v=g2v3EkBj9Zc__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9229)
+
+  v=g4FnGZ5MAdo__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9884)
+
+  v=g7fnNf88IOc__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8626)
+
+  v=GbMQ2CxeNHU__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8860)
+
+  v=gbRIKogNZvE__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6717)
+
+  v=gENp4SyNxkI__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9997)
+
+  v=gGlqujwrhbI__#00-12-00_00-15-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9977)
+
+  v=GI49YSCruwY__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9315)
+
+  v=GrHfWKeTDEI__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8848)
+
+  v=gxrLosPS27c__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9993)
+
+  v=H12BVHrNiXs__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9511)
+
+  v=H5W58Loofks__#00-05-50_00-06-20_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9722)
+
+  v=H9Y5_X1sEEA__#00-30-00_00-33-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8827)
+
+  v=H9Y5_X1sEEA__#00-36-00_00-39-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9525)
+
+  v=H9Y5_X1sEEA__#00-42-00_00-45-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9962)
+
+  v=H9Y5_X1sEEA__#00-45-00_00-48-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9927)
+
+  v=hdy5kZ5dwj8__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7852)
+
+  v=hgoGZZSMhMQ__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9923)
+
+  v=Hnfy9XhlIPM__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9979)
+
+  v=HSisjzLESak__#00-00-00_00-00-51_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9854)
+
+  v=HSisjzLESak__#00-01-00_00-02-45_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8918)
+
+  v=HTEyaXBPf9U__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9986)
+
+  v=HUL83wCQATc__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9059)
+
+  v=I7oSupyExVY__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9978)
+
+  v=Ia9ATKNeUbY__#00-04-19_00-05-11_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9918)
+
+  v=Ia9ATKNeUbY__#00-05-19_00-06-09_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8953)
+
+  v=iHuggczItBk__#00-04-00_00-04-55_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9352)
+
+  v=IWzI9V3WSnc__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8057)
+
+  v=jAvOGTD7_pU__#00-12-00_00-15-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9903)
+
+  v=JHsfKFF9Oag__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9612)
+
+  v=JzrpCC7XmyE__#01-06-00_01-12-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9748)
+
+  v=KEh6EOQvQO0__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7506)
+
+  v=kVl-6-A9ZO4__#00-08-01_00-09-35_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7029)
+
+  v=k_cvJa1kNaM__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9753)
+
+  v=L2Qs4KyW-Co__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9605)
+
+  v=lcBUb7EOQ4o__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9290)
+
+  v=ldnLxTablA8__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9968)
+
+  v=lpkL0Y1MhA8__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9912)
+
+  v=lVJVRywgmYM__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9849)
+
+  v=LYzmr5ORvCg__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9745)
+
+  v=lyZxvgPD4gM__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6742)
+
+  v=m5Ya6z6qroo__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9950)
+
+  v=m5zK-tzYCQM__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9751)
+
+  v=m8EkFsaGPzU__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9033)
+
+  v=mfFYGFJhBI4__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9971)
+
+  v=MJLylzPRvyw__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9973)
+
+  v=MqrNCb2N5to__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9784)
+
+  v=n0AhGnEjako__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9864)
+
+  v=NbNFfnVSIn8__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9594)
+
+  v=NeAC-MfTZzU__#00-15-00_00-18-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7733)
+
+  v=NjI-AuzKgMc__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8362)
+
+  v=NnmqkS1e88s__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9998)
+
+  v=O9g1uuI62m0__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9994)
+
+  v=OB0-MXNPUIU__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9994)
+
+  v=OE9t3XImErk__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9970)
+
+  v=OFxPTJxA5pg__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9944)
+
+  v=ONsmJAyFAAw__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.5156)
+
+  v=osjdmjNJUdg__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9977)
+
+  v=ovQ1VTJ_IUI__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9668)
+
+  v=p7kvQ4OpDgU__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9828)
+
+  v=Pf7WtK-YPDA__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9113)
+
+  v=pFamvR9CpYw__#00-00-00_00-06-36_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9632)
+
+  v=pFamvR9CpYw__#00-06-36_00-15-20_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8218)
+
+  v=pHZ9gOfmY_k__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9938)
+
+  v=pL2HjXvWuPc__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9982)
+
+  v=pMtu7fOHdII__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9982)
+
+  v=PuZy1PQIgrA__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9997)
+
+  v=Q-u3Y9TkZhQ__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9984)
+
+  v=Q6zIX29HkSo__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9185)
+
+  v=Q8b0XbtpFsA__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9979)
+
+  v=Q8K7roZu3WU__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9730)
+
+  v=Q9Re4CnFJRg__#00-01-21_00-01-47_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9846)
+
+  v=QBfO3qfo7zg__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9965)
+
+  v=Qc3pAEeK16A__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8645)
+
+  v=qqsd-cZr01k__#00-06-10_00-07-19_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8353)
+
+  v=qrKfaX1lCUM__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8500)
+
+  v=qV4YYnXdQCc__#00-03-00_00-06-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9968)
+
+  v=q_DhkdHGXos__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9996)
+
+  v=rJgg00ic1G8__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9558)
+
+  v=rJz4NXm6vis__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9984)
+
+  v=rKpXqwE2rg8__#00-01-57_00-03-06_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9810)
+
+  v=RRiN5W9XwJE__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9930)
+
+  v=sbEHU4GskX4__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9995)
+
+  v=sE-DC2trBkI__#00-09-00_00-10-05_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.8446)
+
+  v=SE5fxK7SasU__#00-03-23_00-04-08_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9998)
+
+  v=SmFpAAHmoII__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9935)
+
+  v=smnw0Q7AxFQ__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9130)
+
+  v=T-LH8Gv5zzY__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9985)
+
+  v=TfS-MJoVNjM__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8788)
+
+  v=tI7fktKY6OU__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9990)
+
+  v=tivXK3PGByk__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9967)
+
+  v=TsuuRo6PEXM__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8248)
+
+  v=tT-SrQC6Ddw__#00-04-00_00-05-15_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9842)
+
+  v=tv0rI-5ycBU__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8518)
+
+  v=t_TZYpT6xjY__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8157)
+
+  v=u0Tnw01PNxc__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9989)
+
+  v=U6MC8JJJZSY__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7659)
+
+  v=UK--hvgP2uY__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9836)
+
+  v=UK2w9Sh47fM__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9758)
+
+  v=uprb6aBzymw__#00-03-03_00-05-13_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9769)
+
+  v=usAvzbDq6-c__#00-21-00_00-24-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9995)
+
+  v=utQ5AvXtNLA__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9961)
+
+  v=uyvM-vq5DwA__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9405)
+
+  v=UzxuX79xq4s__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9006)
+
+  v=v-Plzx73K68__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8237)
+
+  v=vFPQ_NiDBIU__#01-48-00_01-54-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8152)
+
+  v=vsI_pKNcgeQ__#00-15-00_00-18-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7764)
+
+  v=vv-MFJPi4Qs__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9976)
+
+  v=v_LxqgpRouM__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9727)
+
+  v=w16YmhAZ1_Y__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9415)
+
+  v=w2NgAYJHnS0__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9904)
+
+  v=W5qLlC9il3s__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9951)
+
+  v=waIS8TaJxts__#00-00-00_00-00-51_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9417)
+
+  v=waIS8TaJxts__#00-05-50_00-06-20_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9472)
+
+  v=Wc2QW06H48M__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9767)
+
+  v=WiS3TIvykeY__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9097)
+
+  v=wnd3IYH7x1o__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7546)
+
+  v=Wp6gzFUaci8__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9070)
+
+  v=wPkBaI6vOv0__#00-00-00_00-01-00_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9984)
+
+  v=x0-z4h6mFoU__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9991)
+
+  v=X6Tbn8_X-Os__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9169)
+
+  v=xbPWQKZspfU__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9991)
+
+  v=Y1hxr1MWLjM__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9996)
+
+  v=y7JEq-kf-2I__#00-01-50_00-02-30_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9952)
+
+  v=YANmwpkuWRo__#1_label_G-0-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.6952)
+
+  v=YhCSFZNwfHc__#00-01-15_00-01-42_label_G-B2-0.mp4
+    Label: G (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.5920)
+
+  v=Yr41_8QOTF8__#00-09-00_00-12-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6966)
+
+  v=Yr41_8QOTF8__#00-21-00_00-24-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9704)
+
+  v=yrpZJ8Vr3aA__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8231)
+
+  v=yvnj5VIDsNI__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.6853)
+
+  v=yy-KIWDcBr4__#00-08-35_00-10-25_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.6530)
+
+  v=yZ2wlTAN49g__#00-03-00_00-06-00_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9907)
+
+  v=Z12t5h2mBJc__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9982)
+
+  v=zI0q5UDP47g__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9996)
+
+  v=zoIn2hOrUIM__#00-06-10_00-07-19_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.7251)
+
+  v=ZpWR_YZNZTM__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9872)
+
+  v=zQbnQBCTSiA__#1_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9588)
+
+  v=_5Kmb4tqMxs__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9994)
+
+  v=_Hn2Xlt-IWU__#1_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9828)
+
+  v=_tsSKAsVZfo__#1_label_B4-0-0.mp4
+    Label: B4 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.8113)
+
+  v=_YobflFU_HU__#00-06-10_00-07-51_label_B6-0-0.mp4
+    Label: B6 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9386)
+
+  Yellow.Sea.2010__#00-10-16_00-11-14_label_A.mp4
+    Label: A (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9993)
+
+  Yellow.Sea.2010__#01-58-30_01-59-27_label_B5-0-0.mp4
+    Label: B5 (Truth: Violence)
+    Predicted: NonViolence (Conf: 0.9949)
+
+  Young.And.Dangerous.I.1996__#0-20-50_0-22-15_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.9825)
+
+  Young.And.Dangerous.IV.1997__#01-07-50_01-09-45_label_B1-0-0.mp4
+    Label: B1 (Truth: NonViolence)
+    Predicted: Violence (Conf: 0.7533)
+
