@@ -1,0 +1,3741 @@
+RWF-2000 Dataset Evaluation
+============================================================
+
+Videos analyzed: 2000
+Videos without labels: 0
+
+Overall Metrics:
+  Accuracy:  0.5355
+  Precision: 0.5479
+  Recall:    0.5355
+  F1 Score:  0.5033
+
+Classification Report:
+              precision    recall  f1-score   support
+
+ NonViolence       0.57      0.28      0.38      1000
+    Violence       0.52      0.79      0.63      1000
+
+    accuracy                           0.54      2000
+   macro avg       0.55      0.54      0.50      2000
+weighted avg       0.55      0.54      0.50      2000
+
+
+Misclassified Videos:
+============================================================
+  0TFi8D8IBg4_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9941)
+
+  1dsLuL5Lvbc_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9880)
+
+  1dsLuL5Lvbc_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9130)
+
+  1dsLuL5Lvbc_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6059)
+
+  1r0Wz04q_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9074)
+
+  1tU4kxa51vw_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9844)
+
+  3SS0E4SmTk8_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9827)
+
+  3SS0E4SmTk8_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9982)
+
+  4RqDG4I4iAk_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9877)
+
+  4RqDG4I4iAk_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9490)
+
+  4RqDG4I4iAk_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9233)
+
+  4RqDG4I4iAk_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9958)
+
+  4RqDG4I4iAk_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9954)
+
+  4RqDG4I4iAk_5.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9923)
+
+  4RqDG4I4iAk_6.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9743)
+
+  6TDF_27.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9972)
+
+  88ndrvAZpE8_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6053)
+
+  88ndrvAZpE8_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9197)
+
+  8SWZq5we_fk_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7935)
+
+  8SWZq5we_fk_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8251)
+
+  8VqTmuq4HcI_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6798)
+
+  a7gBQaAFEtw_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9976)
+
+  aKgSasWRJ2s_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9395)
+
+  aKgSasWRJ2s_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9420)
+
+  aKgSasWRJ2s_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9173)
+
+  aKgSasWRJ2s_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8600)
+
+  aKK0B4kpKZA_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9759)
+
+  ar5ns2zW4lY_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9880)
+
+  bd48s5BpoGY_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9186)
+
+  BpargJW29Wo_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9971)
+
+  BpargJW29Wo_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9985)
+
+  BpargJW29Wo_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9989)
+
+  BpargJW29Wo_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9981)
+
+  BpargJW29Wo_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9983)
+
+  bzw-HKuuQbg_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9847)
+
+  bzw-HKuuQbg_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6550)
+
+  bzw-HKuuQbg_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8437)
+
+  C4SQF-UZzkA_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9997)
+
+  cJvLTWGs-SE_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6789)
+
+  cy1gi3ZJb_c_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9830)
+
+  cy1gi3ZJb_c_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8815)
+
+  cy1gi3ZJb_c_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9683)
+
+  DC10fyQgNqo_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9996)
+
+  DC10fyQgNqo_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9990)
+
+  DC10fyQgNqo_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9988)
+
+  DC10fyQgNqo_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9971)
+
+  dKqbUbuRxB4_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9807)
+
+  dOM7frJMFbc_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9739)
+
+  DTq6Gu30-uA_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9386)
+
+  DTq6Gu30-uA_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7828)
+
+  DTq6Gu30-uA_6.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9290)
+
+  dxzvtJ4gPC0_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9057)
+
+  E0Huf4Qi0JE_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9244)
+
+  E2gqgFNyPL8_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5196)
+
+  erwyrhd_337.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9704)
+
+  erwyrhd_338.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9590)
+
+  erwyrhd_340.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9985)
+
+  EtRfZ2KP_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9525)
+
+  EtRfZ2KP_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7804)
+
+  fK7CSrQ6OpM_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9924)
+
+  fK7CSrQ6OpM_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9531)
+
+  FSaZ8wiFw8Q_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9982)
+
+  fSE4L50n_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7187)
+
+  gJDvtfRrM7k_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9032)
+
+  gJDvtfRrM7k_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9983)
+
+  gnBmOf7v_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5112)
+
+  Gr3ikl6A2bE_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5740)
+
+  HgwpC5Xx_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7621)
+
+  HVSv9sgz2ZI_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9995)
+
+  HVSv9sgz2ZI_5.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7982)
+
+  HW48LUZKOL4_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9995)
+
+  HW48LUZKOL4_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9473)
+
+  I-x0G5pAan0_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9970)
+
+  Ile3EVQA_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9152)
+
+  jCD7lUJQ7Xc_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8312)
+
+  jCD7lUJQ7Xc_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5174)
+
+  JRL5Vvql_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9072)
+
+  Jt4WbOZeT7s_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7558)
+
+  K6WRP2xi_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7272)
+
+  l4gqDHx9_dI_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9824)
+
+  l4gqDHx9_dI_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8527)
+
+  lL3FQltu_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9283)
+
+  lmfaDmCCRoY_5.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9746)
+
+  lmfaDmCCRoY_6.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7011)
+
+  lmfaDmCCRoY_7.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9778)
+
+  lUjx4FXvv34_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9995)
+
+  lUjx4FXvv34_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9996)
+
+  mVTcBPrjh-E_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9972)
+
+  mVTcBPrjh-E_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9667)
+
+  mX4cQM1xMFc_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9452)
+
+  mX4cQM1xMFc_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9654)
+
+  mX4cQM1xMFc_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7897)
+
+  mxlWEjopk_c_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9933)
+
+  MzcX84QCuE8_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9669)
+
+  N1Q9v-saJ_g_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6375)
+
+  NvYo6CS_i_A_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9043)
+
+  o9sRXy5r_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8613)
+
+  o9sRXy5r_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9845)
+
+  o9sRXy5r_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9964)
+
+  oIEZ45OCmAw_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5194)
+
+  oM-goKOVjeU_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7396)
+
+  OTVE3eLAuUM_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9981)
+
+  OTVE3eLAuUM_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9986)
+
+  OTVE3eLAuUM_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9967)
+
+  p1bUxYeJ_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8491)
+
+  p1bUxYeJ_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8811)
+
+  p4DwXTNr-xc_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7165)
+
+  Pe1uIhp4dAQ_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9797)
+
+  PlHzsigAFas_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9951)
+
+  PlHzsigAFas_10.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9964)
+
+  PlHzsigAFas_11.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9963)
+
+  PlHzsigAFas_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9334)
+
+  PlHzsigAFas_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9562)
+
+  PlHzsigAFas_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9946)
+
+  PlHzsigAFas_5.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6302)
+
+  PlHzsigAFas_7.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9741)
+
+  PlHzsigAFas_8.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9750)
+
+  PlHzsigAFas_9.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9359)
+
+  POGFN_429.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8500)
+
+  QaIY5Au8yOc_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9994)
+
+  QaIY5Au8yOc_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9997)
+
+  QaIY5Au8yOc_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9981)
+
+  QkqaGJ9x_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8453)
+
+  QkqaGJ9x_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9890)
+
+  QUGT4a6qcJs_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9503)
+
+  R1A_AxUKosk_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9381)
+
+  R1A_AxUKosk_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7881)
+
+  rn7Qjaj9_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8320)
+
+  RTDSFDSA_677.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9684)
+
+  s3gaPKuW_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9236)
+
+  sadffg_950.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9989)
+
+  sadsa_956.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9594)
+
+  sadsa_957.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9293)
+
+  sadsa_958.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9888)
+
+  sadsa_959.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9652)
+
+  sadsa_960.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9058)
+
+  SjJEt0drQZs_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8525)
+
+  SNGRni0hBUM_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9004)
+
+  t2z75yT2S_M_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9250)
+
+  t2z75yT2S_M_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9963)
+
+  trhfd_1015.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5092)
+
+  tuQyUHkOpdk_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9793)
+
+  tUzd4cN2_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9973)
+
+  u1r8f71c_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5114)
+
+  videoplayback (2)_74.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9957)
+
+  vQKHxtrdEHM_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9935)
+
+  vQKHxtrdEHM_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9356)
+
+  vQKHxtrdEHM_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9978)
+
+  vQKHxtrdEHM_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9223)
+
+  vQKHxtrdEHM_7.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5279)
+
+  vQKHxtrdEHM_9.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9483)
+
+  VYWWsld6ibI_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6369)
+
+  w1T3NmEAt00_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9468)
+
+  Wby1vUy8aYI_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9292)
+
+  Wby1vUy8aYI_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8713)
+
+  Xh6FNqKDMak_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6862)
+
+  YUOfgfuh_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9737)
+
+  z1WyVUv8_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9544)
+
+  z1WyVUv8_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7275)
+
+  z1WyVUv8_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6266)
+
+  ZnRk8nWJ548_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9808)
+
+  ZVPU5c95_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5069)
+
+  _6-B11R9FJM_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9626)
+
+  _6-B11R9FJM_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8985)
+
+  _6-B11R9FJM_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9754)
+
+  _6-B11R9FJM_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9899)
+
+  _6-B11R9FJM_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9919)
+
+  _q5Nwh4Z6ao_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5457)
+
+  _q5Nwh4Z6ao_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6800)
+
+  _q5Nwh4Z6ao_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5818)
+
+  ╤à╨┤╨╖╤ë╨⌐╨û╤ç╨á╨û╤à╨ƒ╨í╤àΓòæ╨º╤à╨ƒ╨í╤ç╨ñ╨»╤ç╨░╨¥╤äΓòæΓòæ╤äΓòæ╨¢╤äΓòùΓòó╤ÅΓò¥╨£╤äΓòò╨¢╤å╨Ö╨¢╤ç╨¼╨»╤ç╨¢╨░╤ÅΓò¥╨æ_urlgot_121.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9096)
+
+  ╤à╨┤╨╖╤ë╨⌐╨û╤ç╨á╨û╤à╨ƒ╨í╤àΓòæ╨º╤à╨ƒ╨í╤ç╨ñ╨»╤ç╨░╨¥╤äΓòæΓòæ╤äΓòæ╨¢╤äΓòùΓòó╤ÅΓò¥╨£╤äΓòò╨¢╤å╨Ö╨¢╤ç╨¼╨»╤ç╨¢╨░╤ÅΓò¥╨æ_urlgot_122.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9953)
+
+  ╤à╨┤╨╖╤ë╨⌐╨û╤ç╨á╨û╤à╨ƒ╨í╤àΓòæ╨º╤à╨ƒ╨í╤ç╨ñ╨»╤ç╨░╨¥╤äΓòæΓòæ╤äΓòæ╨¢╤äΓòùΓòó╤ÅΓò¥╨£╤äΓòò╨¢╤å╨Ö╨¢╤ç╨¼╨»╤ç╨¢╨░╤ÅΓò¥╨æ_urlgot_123.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9868)
+
+  ╤à╨┤╨╖╤ë╨⌐╨û╤ç╨á╨û╤à╨ƒ╨í╤àΓòæ╨º╤à╨ƒ╨í╤ç╨ñ╨»╤ç╨░╨¥╤äΓòæΓòæ╤äΓòæ╨¢╤äΓòùΓòó╤ÅΓò¥╨£╤äΓòò╨¢╤å╨Ö╨¢╤ç╨¼╨»╤ç╨¢╨░╤ÅΓò¥╨æ_urlgot_127.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9947)
+
+  -1l5631l3fg_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9925)
+
+  ╤à╨╢╨Æ╤å╨«╨¼╤äΓòò╨¥╤å╨¿╨┐╤ç╨½╨í╤å╨₧╨╖,╤êΓûæ╨æ╤äΓò¥╨¬╤ç╨½Γòò╤äΓöÉ╨▒╤àΓûæ╨ƒ╤äΓò¥╨⌐╤äΓòòΓòæ╤äΓòæ╨û╤å╨Ö╨ú╤å╨«Γòó╤ç╨½Γöñ╤å╨₧╨╡╤äΓòù╨₧╤äΓòæ╨£╤å╨╡Γò¥╤êΓòûΓöé╤äΓòò╨¢╤à╨₧Γòù_urlgot_254.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9980)
+
+  -1l5631l3fg_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  0AvTZRYx_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9786)
+
+  0GGPb4iO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  0H2s9UJcNJ0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9354)
+
+  0H2s9UJcNJ0_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9736)
+
+  0H2s9UJcNJ0_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9529)
+
+  0NqPsSHdri8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9976)
+
+  0QSeuqzpcOQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  0QSeuqzpcOQ_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  0TP13Nyn_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9944)
+
+  0vasozvJYvk_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9703)
+
+  0vasozvJYvk_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8972)
+
+  0_DzLlklZa0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9444)
+
+  0_DzLlklZa0_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9266)
+
+  0_DzLlklZa0_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9986)
+
+  0_DzLlklZa0_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  11vr9Jho_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9155)
+
+  14YZVngQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  16O0PIQP_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9762)
+
+  18xQQOv5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9898)
+
+  1A3zEkCHBl8_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9902)
+
+  1A3zEkCHBl8_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9985)
+
+  1O4KGHbRt3M_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  1O4KGHbRt3M_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  1OXrIaQK_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9871)
+
+  1r91ACCe_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  1Ytq2moWGdw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  24E0xYYUz44_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9776)
+
+  24E0xYYUz44_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9758)
+
+  24E0xYYUz44_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9940)
+
+  2bBn7MLg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9704)
+
+  2KMf6p5Q_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9944)
+
+  2KvkZ4yo_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9347)
+
+  310cmTrl_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9355)
+
+  36zWWHlldS8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  3CQi0ZCCHvc_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8968)
+
+  3CQi0ZCCHvc_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9993)
+
+  3djtKN3k_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9944)
+
+  3GUaHts0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9960)
+
+  3kpviz7lAMY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9971)
+
+  3OKArbzg1uc_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  3qsou7p57Nk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9981)
+
+  3qsou7p57Nk_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9993)
+
+  3SS0E4SmTk8_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9964)
+
+  3TQqO4N8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9716)
+
+  3Vw7MoNBgx4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9696)
+
+  3Vw7MoNBgx4_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8490)
+
+  3z7ncTuu_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9986)
+
+  3ZY4hpms_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  40l8LuP4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9975)
+
+  4Fqxw7Nl_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9987)
+
+  4fY0Iv4t_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9100)
+
+  4grE6XdY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  4HH7yMU8y9A_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9670)
+
+  4HH7yMU8y9A_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  4HH7yMU8y9A_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9987)
+
+  4HH7yMU8y9A_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  4jZvTj4j_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9884)
+
+  4RqDG4I4iAk_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9617)
+
+  4RqDG4I4iAk_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5959)
+
+  4yTlGiDoxBo_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  4yTlGiDoxBo_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  4yTlGiDoxBo_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  551_wlV44GU_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  551_wlV44GU_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  5RayT2Vy0EA_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9896)
+
+  5RayT2Vy0EA_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8209)
+
+  5RayT2Vy0EA_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  5zVqOS0l_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9914)
+
+  6b254l7P_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  6Dej3-k3MRE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  6Dej3-k3MRE_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  6Dej3-k3MRE_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9883)
+
+  6JmCJbug_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5641)
+
+  6mrIIcAQ2fI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  6mrIIcAQ2fI_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  6MSwCc0a_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9968)
+
+  7icHwpC_d44_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9895)
+
+  7QgVKRHB_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9925)
+
+  7qtRgyFsk3s_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9697)
+
+  7qtRgyFsk3s_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8792)
+
+  7R1m3V8C30g_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  7R1m3V8C30g_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  80ySNph9_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8744)
+
+  85dkGMed_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  86lUShJD_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9978)
+
+  88ndrvAZpE8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9869)
+
+  88ndrvAZpE8_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9936)
+
+  8MuRpAyP_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7486)
+
+  8pKKdS7rhXo_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9970)
+
+  8PuNOqvh_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9469)
+
+  8SWZq5we_fk_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8878)
+
+  8VqTmuq4HcI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9985)
+
+  8VqTmuq4HcI_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9776)
+
+  8VqTmuq4HcI_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9585)
+
+  9CeKXVvD_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9963)
+
+  9F6pZn73_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9993)
+
+  9haGKtHJ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  9Jss3rP1_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9975)
+
+  9N4HikpX_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  9nFtxkJ7ywg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9892)
+
+  9qjOCoE7_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9905)
+
+  9U8J4abJGDg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9963)
+
+  9uvZbSsy_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9938)
+
+  a2kw3cfb_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  a7gBQaAFEtw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  a7gBQaAFEtw_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  a7gBQaAFEtw_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  a7gBQaAFEtw_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9796)
+
+  a7gBQaAFEtw_4.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9848)
+
+  a7gBQaAFEtw_5.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9943)
+
+  AF4Rk1I2_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9975)
+
+  AG0ofjSP_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9953)
+
+  aGfwZ3E4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9925)
+
+  aKK0B4kpKZA_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5743)
+
+  API3q8TBGu4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9940)
+
+  API3q8TBGu4_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9901)
+
+  aQysMqg0K7M_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  aQysMqg0K7M_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  aQysMqg0K7M_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  aQysMqg0K7M_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  aRvWjteA_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  arXD3QM2_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9684)
+
+  as4zD6d86q0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  AsGAgf8U2rk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9287)
+
+  Assault005_x264_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8744)
+
+  Assault010_x264_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8018)
+
+  Assault011_x264_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7970)
+
+  AszvEN7z_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9839)
+
+  ATDMY6PzK9U_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  B3UdlWcs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  B6DO4tXb_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9715)
+
+  b6XfVAZC9Zs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9837)
+
+  b6XfVAZC9Zs_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  b9I5dDvH_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  bd48s5BpoGY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  BEoVUtDm_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6223)
+
+  bK1saynI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9628)
+
+  BKtajPcB_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9783)
+
+  BOLcNZ5O_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9518)
+
+  bQHNsRpQOIE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  bQHNsRpQOIE_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  bQHNsRpQOIE_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  bUaC34RU_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9970)
+
+  BUjGBAPb_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5158)
+
+  c1bRFt0x_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9766)
+
+  c1PJngmt_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9731)
+
+  C76VU1PQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9800)
+
+  c7j3qEqO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  C7Ty4ui5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9968)
+
+  cAp5A44HRS8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9973)
+
+  cAp5A44HRS8_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6926)
+
+  cErr6pCN_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  cfks5NXs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  cfOKjx8l_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  CfPgoKqk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  cHsy9xWM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8628)
+
+  cJvLTWGs-SE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9913)
+
+  cJvLTWGs-SE_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8886)
+
+  CKzrrb7E_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  cLsPLNQn_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9560)
+
+  CPGf41PN_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  CqJB8ZWLZ-o_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9735)
+
+  CqJB8ZWLZ-o_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9504)
+
+  CqJB8ZWLZ-o_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9747)
+
+  CqJB8ZWLZ-o_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9888)
+
+  cqP8OyUh_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8694)
+
+  cVYo5yT2_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5567)
+
+  cWJ92fkhME4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  cwLtq5Y3_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9812)
+
+  d1b2n9qX_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9928)
+
+  d3WwO8eM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9981)
+
+  D6cjNRiP_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9991)
+
+  DAMfrqpC_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9983)
+
+  dBllnaSKVfQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  DIsQwAdR8MI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6550)
+
+  DjLWv5mr_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8225)
+
+  dkTzP0SB_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  DL2gWMZA_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  dOM7frJMFbc_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9361)
+
+  dOM7frJMFbc_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9804)
+
+  dOM7frJMFbc_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9924)
+
+  dOM7frJMFbc_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9932)
+
+  dPV9BZrq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9981)
+
+  DrKgJwIv_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8525)
+
+  DRlOjUNi_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6905)
+
+  dt8YUGoOSgQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  dt8YUGoOSgQ_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  DThokDTW_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  DTq6Gu30-uA_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9686)
+
+  DWEBHWM9_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9619)
+
+  d_93UNyiVM4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  d_93UNyiVM4_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  E0rUpvbX_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9884)
+
+  E2gqgFNyPL8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8749)
+
+  E2gqgFNyPL8_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9973)
+
+  E2gqgFNyPL8_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9647)
+
+  e4U3gEDEB58_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  e6iHy7V5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8753)
+
+  EBwt3Thb_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9796)
+
+  EckGCByW_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7802)
+
+  EDaOod1H_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9993)
+
+  eF5S8iGLAm4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  eF5S8iGLAm4_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  EizIwdII_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  ELL0jBUP_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9572)
+
+  emGsAcqs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9727)
+
+  ep1_I0f-u7g_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8444)
+
+  ep1_I0f-u7g_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9967)
+
+  EUgjFWbm_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9340)
+
+  eUtGwBik_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9642)
+
+  f50PQz7mXds_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9950)
+
+  f50PQz7mXds_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  F7W6PQ3V3y8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  F7W6PQ3V3y8_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  F7W6PQ3V3y8_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  F7W6PQ3V3y8_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9960)
+
+  f9jcrHqO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9967)
+
+  FB3eqRE8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  fBwfFDcgJlk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5360)
+
+  fBwfFDcgJlk_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9864)
+
+  fHOVzWgX_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8936)
+
+  Fighting014_x264_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8515)
+
+  Fighting014_x264_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9809)
+
+  fJkWWpNB_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5464)
+
+  fJMvC8TV_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9978)
+
+  fMmvH1Fa_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9940)
+
+  fNy9LoED_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8997)
+
+  FrwBev61_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9803)
+
+  fvtpgsrF_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8235)
+
+  fwEk96k8g_I_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9752)
+
+  fwEk96k8g_I_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  FWsNU4WI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  FZDDNtcaBcw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9903)
+
+  G0rgy9Ts_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  G9uNZGcK_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  gAFkygeJ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9816)
+
+  gBBRxXBI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9917)
+
+  gDeDWPVe_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9918)
+
+  gEODOSeI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  GgT095uX_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9947)
+
+  gHcG_c1i4uE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  gHcG_c1i4uE_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9972)
+
+  gI4u3PwG_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9918)
+
+  gk0v57Xn_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9974)
+
+  GL9jSSxg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9752)
+
+  golJWJCak1k_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9135)
+
+  Gr3ikl6A2bE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6488)
+
+  gR4OsEPl894_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9845)
+
+  gR4OsEPl894_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9986)
+
+  gR4OsEPl894_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  gR4OsEPl894_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9993)
+
+  grxri53x_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9975)
+
+  gSmdNZya_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  gUYfrLHe_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  GVdnjHyU_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9582)
+
+  gzozjcrr_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9976)
+
+  GzPhV725_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9942)
+
+  gzrwD4E5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9985)
+
+  GZWxDB1c_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8883)
+
+  H1AzC-GyKto_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  H1AzC-GyKto_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9991)
+
+  H1AzC-GyKto_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  H1AzC-GyKto_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9970)
+
+  H68yvSdp_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8598)
+
+  HAh9eqtO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9969)
+
+  HbfZYAXw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  hbTlgnTw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  HG8xQFSd_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  hgMpDK55_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9934)
+
+  HodGUj8s_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9825)
+
+  hrBh5x_3hW0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  Hsvzcq2l_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  HvfhYJ8b_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9983)
+
+  HVSv9sgz2ZI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9954)
+
+  HVSv9sgz2ZI_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9417)
+
+  HVSv9sgz2ZI_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8124)
+
+  HVSv9sgz2ZI_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7851)
+
+  HW48LUZKOL4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  HW48LUZKOL4_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9884)
+
+  HW48LUZKOL4_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5149)
+
+  HW48LUZKOL4_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8221)
+
+  hWBjrqFS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  HYkbCvPj_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7979)
+
+  H_VQJU0Bqpc_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9864)
+
+  H_VQJU0Bqpc_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9869)
+
+  H_VQJU0Bqpc_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9936)
+
+  H_VQJU0Bqpc_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9955)
+
+  I-x0G5pAan0_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9674)
+
+  i2sLegg2JPA_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  i2sLegg2JPA_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  i5xJxtv4gXs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  i5xJxtv4gXs_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9986)
+
+  i5xJxtv4gXs_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9986)
+
+  I7u5I8Oa_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9979)
+
+  iki0PAvq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7596)
+
+  iqAmk7ES_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9960)
+
+  iquSbj5Wqj0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  iRnSE1TL_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9713)
+
+  iTs901V6_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9659)
+
+  itstEXVr_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6420)
+
+  IynvwHe9W3U_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9980)
+
+  IynvwHe9W3U_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  IynvwHe9W3U_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  IynvwHe9W3U_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  J2Am3J0z_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9840)
+
+  J2rsCgMC_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9489)
+
+  j83up7ni_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9974)
+
+  JBRqNBaP_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  jbSCSexU_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  jgjAKGZW_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8401)
+
+  jILBnY3lB2Q_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9980)
+
+  jILBnY3lB2Q_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  jILBnY3lB2Q_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  jj9SJGft_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9463)
+
+  jOZLjdSi_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9586)
+
+  JPIeYvRgo6I_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9687)
+
+  jR91oXYV_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9906)
+
+  JsjF2OSJ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9950)
+
+  jTbvVbkUaPM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  jTbvVbkUaPM_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  JwfajujK_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  JWFfsHEG_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  JwTPruSFTjk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9508)
+
+  JwTPruSFTjk_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9404)
+
+  JxpNuQop_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8968)
+
+  K4700BuM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9981)
+
+  kB9NYpu1_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  kBSHDWaGFyc_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6127)
+
+  KDOVTf7T_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9702)
+
+  kExp3yhspR0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9451)
+
+  kExp3yhspR0_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8841)
+
+  kFbpQrq2_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9977)
+
+  KLEwMKTN_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9993)
+
+  kLHNW0uRutY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  Km94kW0O_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9976)
+
+  kMI2JME3Aag_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9955)
+
+  kMI2JME3Aag_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  kMI2JME3Aag_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  kMI2JME3Aag_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  kMI2JME3Aag_4.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  KOaUqaC8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9766)
+
+  kOp57sQKMPY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  kOp57sQKMPY_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  kOp57sQKMPY_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  KQTiHlA11fM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6656)
+
+  KQTiHlA11fM_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7372)
+
+  KQTiHlA11fM_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9323)
+
+  KQTiHlA11fM_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9910)
+
+  KxOHVkVQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9948)
+
+  L9tYVvJY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6304)
+
+  La60qonu_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9963)
+
+  La9lzohO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8132)
+
+  ljLg4lFbS0Y_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9723)
+
+  ljLg4lFbS0Y_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9275)
+
+  LLo_TXIz5-g_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7355)
+
+  LLo_TXIz5-g_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9462)
+
+  lmfaDmCCRoY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9900)
+
+  LMNJJere_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9923)
+
+  lNAzMZFI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9987)
+
+  lQ39ffan_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9842)
+
+  LqW9A21g_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9528)
+
+  LSJPhJTB_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8972)
+
+  lx4TN9dS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9602)
+
+  m3PZvVSL_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9953)
+
+  MBxCX6pw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9967)
+
+  mE9Cp4na_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  MhiGg6f7_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  MhVfgPWz_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9965)
+
+  mHY487R6_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  MmUtpm6Z_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  MOST Shocking CCTV footage (_TwPzPRK7dc)_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9911)
+
+  MOST Shocking CCTV footage (_TwPzPRK7dc)_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6635)
+
+  mRqg-WXiR7Q_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9726)
+
+  Mv3d3zJy_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  mVAv7aB5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9081)
+
+  MvYkXHIi_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9968)
+
+  MwZvUQRO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  N1Q9v-saJ_g_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  ndNHBJbS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9474)
+
+  NEUya2Rr_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7900)
+
+  niXRLeON_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9785)
+
+  nj9Rc3lY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9063)
+
+  NmNKzttk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9865)
+
+  NPeKBgURcxI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  NPeKBgURcxI_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9915)
+
+  NPeKBgURcxI_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8917)
+
+  NSdXEN1l_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9959)
+
+  NxtwlqSnLbY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  NxtwlqSnLbY_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9475)
+
+  o8sEvktx_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9789)
+
+  oAeudqZD_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7575)
+
+  OAFsSiyX_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9722)
+
+  OAfV0xPIhZw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9386)
+
+  OAfV0xPIhZw_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9723)
+
+  OakN3f1N_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  OCseFRss_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  oDGm-DOOyI4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9910)
+
+  oDGm-DOOyI4_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9791)
+
+  oDGm-DOOyI4_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7888)
+
+  oDWNiATJ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9839)
+
+  OdxnpEnn_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9893)
+
+  OFwYyouR_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9873)
+
+  oG3Qxvq0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9903)
+
+  oIEZ45OCmAw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8389)
+
+  okA8k7rF_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9036)
+
+  oLs9ckoV_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9861)
+
+  on2HIPgB_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  oUqxGhTe_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  oVMhWJIpHnc_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8307)
+
+  oYFVr2kK_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9945)
+
+  OznqyUJq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9953)
+
+  p19HiyCX7EQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9970)
+
+  p9d6QmKh_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9923)
+
+  PFw7SeFOD04_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9928)
+
+  PFw7SeFOD04_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9508)
+
+  PJDdPv2b9-s_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9986)
+
+  PJDdPv2b9-s_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  pKOUG5AqLpY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  pKOUG5AqLpY_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  pLb6Zimq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9846)
+
+  PqB7UvdW_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9061)
+
+  pqvGKGz7_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6856)
+
+  pr8yRPMO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  PTy2vx8Ejas_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9971)
+
+  pU9BTy7h_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  q2yEYFD5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9983)
+
+  q78eIX56_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9521)
+
+  Q876qiBJYfA_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9890)
+
+  Q876qiBJYfA_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9944)
+
+  Q876qiBJYfA_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9949)
+
+  QCgEbCBH_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  qIRZ4SMf_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7970)
+
+  qmvilMkD57M_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9971)
+
+  qmvilMkD57M_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9850)
+
+  qnpure5G_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9813)
+
+  Qqfn1urQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  qrBAhb8K_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6379)
+
+  qrWTk-2a13o_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  qrWTk-2a13o_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  qrWTk-2a13o_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  R1A_AxUKosk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9313)
+
+  r8PX3ZJ1_II_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9991)
+
+  RbpXgk5M1S0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  RbpXgk5M1S0_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  RbpXgk5M1S0_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  RfqBhe5z_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9963)
+
+  RFUr2krY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6059)
+
+  RGIpCpdlzI8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9967)
+
+  RGIpCpdlzI8_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9820)
+
+  Ri_poPbOu-k_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9352)
+
+  Ri_poPbOu-k_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8492)
+
+  rjHXmq47_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9632)
+
+  RNOSWjgC_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9858)
+
+  rp9hJAQE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9403)
+
+  RQbYptdw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  RR23nrP0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9851)
+
+  rRbZUKgk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9964)
+
+  rSGIFH7n_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9979)
+
+  rSumd9HEmrA_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  RVV3lolZ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9761)
+
+  rYE6iUUF_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5087)
+
+  s-jW4cyavW0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  s-jW4cyavW0_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  s2S2nIWk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9450)
+
+  S5dmvVF4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9973)
+
+  SaIUKN4N_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8141)
+
+  SCnBiAteLVI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9903)
+
+  SCnBiAteLVI_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  SCnBiAteLVI_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9968)
+
+  sHa6YZW9_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9223)
+
+  sIbVwIO0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8464)
+
+  skycjZcE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5631)
+
+  sLOqgf6N_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5207)
+
+  snhUvpXC_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9819)
+
+  sPd5Wmkc_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9119)
+
+  sq03O3JL_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9448)
+
+  Suv_mMs8J9g_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5567)
+
+  Swr7caI0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9974)
+
+  sYGIUeBX_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9893)
+
+  TfDHgxDm_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  tgkbh2d9_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  THqDidIr4Xs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9967)
+
+  THqDidIr4Xs_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9724)
+
+  tIHY2ZFQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9894)
+
+  tILABXoHE7s_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9343)
+
+  tIvvuvuJFYc_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9379)
+
+  TJfoIe801t8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9971)
+
+  tPpXT9VI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  TSHiCcMS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  TuWan04E3gQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9904)
+
+  TuWan04E3gQ_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  TX2ePcRo_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9202)
+
+  tXk2yvmq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9625)
+
+  TYsebroPeGY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9969)
+
+  TYsebroPeGY_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  TYX5vuHO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9972)
+
+  tzdvtHL7Akk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9103)
+
+  Tzn3HwZD_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  U1Z1bVRt_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  uAKRFGFR_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9915)
+
+  ug2tQMG8DC0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  uhTalZ00_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9969)
+
+  UIAGmwT1_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  UIsigi4O-sI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9913)
+
+  UIsigi4O-sI_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9872)
+
+  umOs1WLBkuo_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9993)
+
+  umOs1WLBkuo_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  umOs1WLBkuo_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9916)
+
+  uNtsEcFR_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9906)
+
+  UQ42UqFJ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8701)
+
+  uu3SB2L1_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9099)
+
+  UvLAudRA91Y_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9865)
+
+  UvLAudRA91Y_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8819)
+
+  UvLAudRA91Y_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  uWQG2hQT_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6209)
+
+  uXf4C-YwbtM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9862)
+
+  uXf4C-YwbtM_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9928)
+
+  uyeWsodv_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9973)
+
+  uz4dXoN5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9656)
+
+  V3EI1n_7JwU_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9553)
+
+  V726w0IKCp4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9976)
+
+  v8cACThQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9981)
+
+  vBwKQfJYG1Q_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9813)
+
+  vBwKQfJYG1Q_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9905)
+
+  VbwTMJroTbI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8687)
+
+  vCO6CZNt_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9912)
+
+  Vd27cYFthms_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9991)
+
+  vGCZpdPR_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9986)
+
+  vJDAaUzYOi8_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9171)
+
+  VnDOPZls_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9951)
+
+  vQKHxtrdEHM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9870)
+
+  vu6lIsQm_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9972)
+
+  VXLdrn0b_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  VYWWsld6ibI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8073)
+
+  WCbsjDUV_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9847)
+
+  WfjOB1Vq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  WHNtrI7MEUg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9968)
+
+  WHNtrI7MEUg_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  wk5WCCti_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9353)
+
+  wKMXI2vp_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  wMgaVgMG_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9988)
+
+  wNTaSOXj_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  ww9L6ULb_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9767)
+
+  WXwfibYX_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9970)
+
+  X0fP5VQMrbg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9991)
+
+  X0fP5VQMrbg_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  X14e9Fwxa8w_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9874)
+
+  X3mPJLe9_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  x7iljhbM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7692)
+
+  Xhh2ONc7_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9907)
+
+  XJfaYlr0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9758)
+
+  xKq3hlefCUI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  Xmmy8LvV_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9938)
+
+  XQR0CvyY_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9932)
+
+  Xr0T6ylW_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5723)
+
+  xR1o8M5o_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9972)
+
+  xtA4owfr_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.5963)
+
+  XVfkS6rM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9958)
+
+  xW8Esfp9_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  xxIkl4Ue_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9826)
+
+  xYWhwcqL_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9987)
+
+  Y1y9Gxs6_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  y4njAG00_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  ycOdxOJt_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  ykI6keNQ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9715)
+
+  yldWawWf_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9960)
+
+  ypdSZICv_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9983)
+
+  yvNawsRf_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  Yw7Ip3VS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8533)
+
+  yWnLtCrM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  Yxz9WncB_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  zbg2jsE4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9237)
+
+  zHRkgmIT_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9859)
+
+  ZIj9BzT4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8799)
+
+  ZPhVyVZt_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6297)
+
+  zWrAqXFn_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9810)
+
+  zZHTBiER_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9718)
+
+  _fPfNbHM16M_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9641)
+
+  _q5Nwh4Z6ao_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  _q5Nwh4Z6ao_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  _q5Nwh4Z6ao_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  _q5Nwh4Z6ao_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9982)
+
+  _q5Nwh4Z6ao_4.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9977)
+
+  _q5Nwh4Z6ao_5.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9728)
+
+  _q5Nwh4Z6ao_6.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  _q5Nwh4Z6ao_7.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9975)
+
+  _wVuRdfDHbE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9991)
+
+  -1l5631l3fg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9981)
+
+  1Kbw1bUw_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9986)
+
+  1Kbw1bUw_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9436)
+
+  1Kbw1bUw_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9972)
+
+  1Kbw1bUw_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9737)
+
+  6Rl7q_kXYbg_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9991)
+
+  6Rl7q_kXYbg_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9996)
+
+  6Rl7q_kXYbg_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9991)
+
+  6Rl7q_kXYbg_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9998)
+
+  6Rl7q_kXYbg_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9998)
+
+  6Rl7q_kXYbg_5.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9998)
+
+  A7FCl8G35Cs_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9693)
+
+  A7FCl8G35Cs_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9678)
+
+  bW2vHhYbzHM_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9968)
+
+  etyiEs3j8x8_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7854)
+
+  FXC43fACfPc_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9964)
+
+  I-QiUMPTWNE_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7185)
+
+  I-QiUMPTWNE_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.8150)
+
+  I-QiUMPTWNE_5.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9771)
+
+  I-QiUMPTWNE_6.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9911)
+
+  I-QiUMPTWNE_7.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9948)
+
+  I-QiUMPTWNE_8.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9979)
+
+  nVdn1krnTCQ_2.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9860)
+
+  nVdn1krnTCQ_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9993)
+
+  nVdn1krnTCQ_4.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9986)
+
+  nVdn1krnTCQ_6.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9993)
+
+  Q0v2MB0b_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9862)
+
+  RTHTRS_720.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7872)
+
+  SDFDSSDF_972.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9013)
+
+  SDFDSSDF_973.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.5573)
+
+  v4dhdnsxiX4_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9601)
+
+  v4dhdnsxiX4_1.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9918)
+
+  v4dhdnsxiX4_3.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.9987)
+
+  Wq0BuA8GM84_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.6733)
+
+  zOqs7Oh9oDM_0.mp4
+    Truth: Violence
+    Predicted: NonViolence (Conf: 0.7332)
+
+  1MVS2QPWbHc_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9955)
+
+  1W8hsVvyKt4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9344)
+
+  1W8hsVvyKt4_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7059)
+
+  1W8hsVvyKt4_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9884)
+
+  2lrARl7utL4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  2lrARl7utL4_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  2lrARl7utL4_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  2qFnVnnZ_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8934)
+
+  4I1DGWsh_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9981)
+
+  4p2iGvo8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9937)
+
+  66U2c3YMjOI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9272)
+
+  66U2c3YMjOI_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7904)
+
+  6doZoiaG9PM_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9627)
+
+  6doZoiaG9PM_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9624)
+
+  6doZoiaG9PM_3.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9968)
+
+  7emxm3za_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9656)
+
+  7gLKFV5voOg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  8s3rES1a_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  8SmT9rE9_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9473)
+
+  8tWVjrUW_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9779)
+
+  9JxNZtUK_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9537)
+
+  Assault006_x264_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7663)
+
+  Assault006_x264_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9739)
+
+  aZxUVVqk_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9925)
+
+  BOnEkkm1_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9179)
+
+  cpFWuHXF_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9701)
+
+  Cw0HuNI5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7927)
+
+  cw8fPfUL_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9796)
+
+  DeCoZoey_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9935)
+
+  e8jli13nLaM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9873)
+
+  E9SvEiNt_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9474)
+
+  EB08Cq4t_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9522)
+
+  EFv961C5RgY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  egQvmVL2_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  etyiEs3j8x8_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9943)
+
+  etyiEs3j8x8_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9175)
+
+  FpDZIe2z_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9484)
+
+  Fwhi4UNI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9974)
+
+  g7fqR4gn_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9011)
+
+  g8SVNUCm_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9393)
+
+  GCgD8AkV_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9855)
+
+  I-QiUMPTWNE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  I-QiUMPTWNE_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  I-QiUMPTWNE_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  I3rTHE3L_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  I9OYGpUd_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9953)
+
+  IMA4zYs83Lo_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9993)
+
+  IvimSdBV_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  JECBfnp2ZXc_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  JECBfnp2ZXc_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  JECBfnp2ZXc_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  JOMXfA1R_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9980)
+
+  jpYrguiW_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9974)
+
+  K4qpMWJS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7724)
+
+  kMgCk8Ku_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9961)
+
+  LKdiIccO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  LruY67tu_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6036)
+
+  LtfqEsod_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9177)
+
+  mwuiYEBdkJs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  mwuiYEBdkJs_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9975)
+
+  MxkTo5F-nvU_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9978)
+
+  N8M1mmW9_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9853)
+
+  ngv36FBY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9985)
+
+  Nlopikk0zhE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  NnUOjff0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  NoUdd8wq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9916)
+
+  NQpYodM6_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9160)
+
+  nTsOksk7_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9930)
+
+  nuf-d5GugL0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9990)
+
+  nuf-d5GugL0_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9651)
+
+  NWqRgoGh_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9834)
+
+  O2rd3LTv_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8590)
+
+  Ob0YCDgS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  ojZVUz7i_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9900)
+
+  oXeSTCLT_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9783)
+
+  PaTrwJbs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9836)
+
+  q4jlVJRb_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9578)
+
+  qaAclucigpY_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9989)
+
+  qaAclucigpY_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9599)
+
+  qaAclucigpY_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9997)
+
+  Qj3oZsaqNGE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9346)
+
+  QRJFLxqK_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9984)
+
+  qyRJeYN5_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9596)
+
+  RIXaF_TkLlU_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  RIXaF_TkLlU_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  RIXaF_TkLlU_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  RQt37bnC_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9000)
+
+  rtSWit6k_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  Ry5c1PbcIa0_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9484)
+
+  scznszmE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9975)
+
+  SJRnWfHAx_E_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  SJRnWfHAx_E_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9920)
+
+  SJRnWfHAx_E_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.6432)
+
+  tf_X7GtOGyE_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  tf_X7GtOGyE_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  tf_X7GtOGyE_2.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9975)
+
+  TP6mtOzL_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9946)
+
+  u-VcErKk6Qs_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9986)
+
+  UoS3KEYq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9140)
+
+  utRmPckr_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9791)
+
+  VF8M3gXp_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8855)
+
+  VIPpAkyG_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9830)
+
+  vKUjLaXO_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  VtIQbKvy_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7457)
+
+  VTOPSZvF_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9965)
+
+  VzHfmJeI_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9965)
+
+  w6VytllR_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9994)
+
+  wMcODEtzJIA_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  wMcODEtzJIA_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  WPXtCPPS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9939)
+
+  Wq0BuA8GM84_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9847)
+
+  wyLoweAn_9Q_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9705)
+
+  wyLoweAn_9Q_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9992)
+
+  Xcd0v-KhKL4_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  xRbCHA5YTi8_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8187)
+
+  xV69l7Vj_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9932)
+
+  y2pGPMqikJg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9998)
+
+  y2pGPMqikJg_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  YDOJvzChqSg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9754)
+
+  yFaADLZw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9914)
+
+  YL1qlr23_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9954)
+
+  Yma07mlW_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.8476)
+
+  YukOkfIj_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  ZCa5f4yq_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  zGBzk5SeJOw_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+
+  zGBzk5SeJOw_1.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9999)
+
+  zMbmPG71_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9995)
+
+  zOqs7Oh9oDM_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.7359)
+
+  ZwhC7Kyg_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9987)
+
+  10uSOcwS_0.mp4
+    Truth: NonViolence
+    Predicted: Violence (Conf: 0.9996)
+

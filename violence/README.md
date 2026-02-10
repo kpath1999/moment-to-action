@@ -63,8 +63,9 @@ Run inference on unseen videos using a trained model:
 ./run_violence_detection.sh \
   --mode inference \
   --model ./output/violence_detection_model.h5 \
-  --test-dirs "/Volumes/KAUSAR/1-1004" "/Volumes/KAUSAR/videos/" \
-  --output ./output
+  --test-dirs "/Volumes/KAUSAR/rwf2000/RWF-2000/train" "/Volumes/KAUSAR/rwf2000/RWF-2000/val" \
+  --output ./output \
+  --analyze
 ```
 
 ### Mode 3: Full Pipeline (Recommended)
@@ -75,9 +76,22 @@ Train, evaluate, and run inference in one go:
 ./run_violence_detection.sh \
   --mode full \
   --dataset "/Volumes/KAUSAR/kaggle/Real Life Violence Dataset" \
-  --test-dirs "/Volumes/KAUSAR/1-1004" "/Volumes/KAUSAR/videos/" \
+  --test-dirs "/Volumes/KAUSAR/rwf2000/RWF-2000/train" "/Volumes/KAUSAR/rwf2000/RWF-2000/val" \
+  --output ./output \
+  --analyze
+```
+
+### Mode 4: Analyze Results
+
+Analyze previously generated inference results against ground truth labels:
+
+```bash
+./run_violence_detection.sh \
+  --mode analyze \
   --output ./output
 ```
+
+This mode finds the most recent inference results file and evaluates predictions against RWF-2000 ground truth labels extracted from directory structure.
 
 **Alternative:** If you have issues with the wrapper script, you can run directly:
 
@@ -90,14 +104,15 @@ $(conda info --base)/envs/vio/bin/python violence_detection.py --mode full --dat
 
 | Argument | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `--mode` | Yes | - | Operation mode: `train`, `inference`, or `full` |
+| `--mode` | Yes | - | Operation mode: `train`, `inference`, `full`, or `analyze` |
 | `--dataset` | For train/full | `/Volumes/KAUSAR/kaggle/Real Life Violence Dataset` | Path to training dataset |
-| `--test-dirs` | For inference/full | `/Volumes/KAUSAR/1-1004` `/Volumes/KAUSAR/videos/` | Directories with test videos |
+| `--test-dirs` | For inference/full | `/Volumes/KAUSAR/rwf2000/RWF-2000/train` `/Volumes/KAUSAR/rwf2000/RWF-2000/val` | Directories with test videos |
 | `--model` | For inference | - | Path to saved model file |
 | `--output` | No | `./output` | Output directory |
 | `--cache` | No | `./cache` | Dataset cache directory |
 | `--force-recreate` | No | False | Force dataset recreation |
 | `--test-split` | No | 0.1 | Test set split ratio |
+| `--analyze` | No | False | Evaluate predictions against ground truth (for inference/full modes) |
 
 ## Output Files
 
@@ -114,10 +129,19 @@ The system generates several output files:
 ### Inference Mode
 - `inference_results_YYYYMMDD_HHMMSS.json` - Predictions for all videos
 
+### RWF-2000 Evaluation (with --analyze flag)
+- `rwf2000_analysis.txt` - Detailed evaluation report including:
+  - Overall metrics (accuracy, precision, recall, F1 score)
+  - Confusion matrix statistics
+  - List of all misclassified videos with confidence scores
+- `rwf2000_confusion_matrix.png` - Visual confusion matrix heatmap
+
 ### Logs
 - `violence_detection_YYYYMMDD_HHMMSS.log` - Comprehensive execution log
 
 ## Dataset Structure
+
+### Training Dataset Structure
 
 Expected directory structure for training dataset:
 
@@ -132,6 +156,30 @@ Real Life Violence Dataset/
     ├── NV_2.mp4
     └── ...
 ```
+
+### RWF-2000 Dataset Structure
+
+Expected directory structure for RWF-2000 evaluation dataset:
+
+```
+RWF-2000/
+├── train/
+│   ├── Train_Fight/
+│   │   ├── video_1.avi
+│   │   └── ...
+│   └── Train_NonFight/
+│       ├── video_1.avi
+│       └── ...
+└── val/
+    ├── Val_Fight/
+    │   ├── video_1.avi
+    │   └── ...
+    └── Val_NonFight/
+        ├── video_1.avi
+        └── ...
+```
+
+The analyze mode automatically extracts ground truth labels from the directory names (Fight/NonFight).
 
 ## Inference Results Format
 
@@ -149,6 +197,19 @@ The inference results JSON contains:
   ...
 ]
 ```
+
+## RWF-2000 Label Extraction
+
+When using `--analyze` mode with RWF-2000 dataset, ground truth labels are automatically extracted from the directory path:
+
+- Directories containing **"Fight"** (but not "NonFight") → labeled as **Violence**
+- Directories containing **"NonFight"** → labeled as **NonViolence**
+
+Examples:
+- `/Volumes/KAUSAR/rwf2000/RWF-2000/train/Train_Fight/video1.avi` → Violence
+- `/Volumes/KAUSAR/rwf2000/RWF-2000/val/Val_NonFight/video2.avi` → NonViolence
+
+The system then compares predicted labels against these ground truth labels to compute accuracy, precision, recall, F1 score, and generate confusion matrices.
 
 ## System Requirements
 
@@ -171,38 +232,19 @@ The inference results JSON contains:
 - The system works on CPU by default
 - For GPU support, install `tensorflow-gpu` instead
 
-## Model Performance
+## Quick Reference
 
-# Violence Detection
+**Training a new model:**
+```bash
+./run_violence_detection.sh --mode train --dataset "/Volumes/KAUSAR/kaggle/Real Life Violence Dataset" --output ./output
+```
 
-Minimal workflow to train, evaluate, and run inference on violence videos.
+**Running inference on RWF-2000:**
+```bash
+./run_violence_detection.sh --mode inference --model ./output/violence_detection_model.h5 --test-dirs "/Volumes/KAUSAR/rwf2000/RWF-2000/train" "/Volumes/KAUSAR/rwf2000/RWF-2000/val" --output ./output --analyze
+```
 
-## Setup
-- Run once: `bash setup_env.sh` (creates `vio` conda env and installs deps)
-- Use wrapper: `./run_violence_detection.sh` (activates env automatically)
-
-## Run
-- Full pipeline: `./run_violence_detection.sh --mode full --dataset "/Volumes/KAUSAR/kaggle/Real Life Violence Dataset" --test-dirs "/Volumes/KAUSAR/1-1004" "/Volumes/KAUSAR/videos/" --output ./output`
-- Train only: `./run_violence_detection.sh --mode train --dataset "<dataset>" --output ./output`
-- Inference only: `./run_violence_detection.sh --mode inference --model ./output/violence_detection_model.h5 --test-dirs "<dir1>" "<dir2>" --output ./output`
-- Analyze latest results: `./run_violence_detection.sh --mode analyze --output ./output`
-- Inference with analysis: add `--analyze` flag to inference or full mode
-
-## Arguments
-- `--mode`: train | inference | full
-- `--dataset`: dataset root (needs Violence/ and NonViolence/ subfolders)
-- `--test-dirs`: one or more folders with .mp4 files
-- `--model`: required for inference mode
-- `--output`: where to write models/results (default `./output`)
-- `--cache`: dataset cache dir (default `./cache`)
-- `--force-recreate`: rebuild cache
-- `--test-split`: test fraction (default 0.1)
-- `--analyze`: evaluate predictions against weak labels (XD-Violence: A/B1/B2/B4→NonViolence, B5/B6/G→Violence)
-
-## Outputs
-- `output/violence_detection_model.h5`
-- `output/training_history.json`, `loss_plot.png`, `accuracy_plot.png`
-- `output/confusion_matrix.png`, `classification_report.txt`
-- `output/inference_results_YYYYMMDD_HHMMSS.json`
-- `output/weak_label_analysis.txt`, `weak_label_confusion_matrix.png` (if `--analyze` used)
-- Logs: `violence_detection_*.log` (in this folder)
+**Analyzing existing results:**
+```bash
+./run_violence_detection.sh --mode analyze --output ./output
+```

@@ -348,31 +348,32 @@ def evaluate_model(model, features_test, labels_test, output_dir, logger):
     
     return accuracy
 
-# ========================== WEAK LABEL ANALYSIS ==========================
+# ========================== RWF-2000 LABEL ANALYSIS ==========================
 
-def extract_weak_label(video_name):
-    """Extract weak label from XD-Violence dataset filename"""
-    match = re.search(r'[_\-\.\s]([ABG]\d*)[_\-\.\s]', video_name)
-    if not match:
-        match = re.search(r'^([ABG]\d*)[_\-\.]', video_name)
-    if not match:
-        match = re.search(r'[_\-\.]([ABG]\d*)$', video_name.replace('.mp4', ''))
-    return match.group(1) if match else None
+def extract_rwf_label(video_path):
+    """Extract ground truth label from RWF-2000 directory structure"""
+    path_parts = video_path.replace('\\', '/').split('/')
+    
+    for part in path_parts:
+        if 'Fight' in part and 'NonFight' not in part:
+            return 'Fight'
+        elif 'NonFight' in part:
+            return 'NonFight'
+    
+    return None
 
-def map_label_to_class(label):
-    """Map XD-Violence weak label to Violence/NonViolence"""
-    if label is None:
-        return None
-    if label in ['B5', 'B6'] or label.startswith('G'):
+def map_rwf_label_to_class(label):
+    """Map RWF-2000 label to Violence/NonViolence"""
+    if label == 'Fight':
         return 'Violence'
-    elif label.startswith('A') or label in ['B1', 'B2', 'B4']:
+    elif label == 'NonFight':
         return 'NonViolence'
     return None
 
 def analyze_predictions(results_file, output_dir, logger):
-    """Analyze predictions against weak labels"""
+    """Analyze predictions against RWF-2000 ground truth labels"""
     logger.info("="*60)
-    logger.info("ANALYZING PREDICTIONS WITH WEAK LABELS")
+    logger.info("ANALYZING PREDICTIONS - RWF-2000 DATASET")
     logger.info("="*60)
     
     with open(results_file, 'r') as f:
@@ -385,12 +386,14 @@ def analyze_predictions(results_file, output_dir, logger):
     unlabeled_count = 0
     
     for result in results:
+        video_path = result.get('video_path', '')
         video_name = result['video_name']
         predicted_class = result['predicted_class']
         confidence = result['confidence']
         
-        weak_label = extract_weak_label(video_name)
-        ground_truth = map_label_to_class(weak_label)
+        # Extract ground truth from path
+        rwf_label = extract_rwf_label(video_path)
+        ground_truth = map_rwf_label_to_class(rwf_label)
         
         if ground_truth and predicted_class:
             y_true.append(ground_truth)
@@ -398,7 +401,7 @@ def analyze_predictions(results_file, output_dir, logger):
             y_conf.append(confidence)
             labeled_videos.append({
                 'name': video_name,
-                'label': weak_label,
+                'path': video_path,
                 'ground_truth': ground_truth,
                 'predicted': predicted_class,
                 'confidence': confidence,
@@ -408,12 +411,13 @@ def analyze_predictions(results_file, output_dir, logger):
             unlabeled_count += 1
     
     if not y_true:
-        logger.warning("No videos with valid weak labels found")
+        logger.warning("No videos with valid labels found")
         return
     
     logger.info(f"Videos with labels: {len(y_true)}")
     logger.info(f"Videos without labels: {unlabeled_count}")
     
+    # Calculate metrics
     accuracy = accuracy_score(y_true, y_pred)
     precision, recall, f1, _ = precision_recall_fscore_support(
         y_true, y_pred, average='weighted', zero_division=0
@@ -425,30 +429,34 @@ def analyze_predictions(results_file, output_dir, logger):
     logger.info(f"  Recall:    {recall:.4f}")
     logger.info(f"  F1 Score:  {f1:.4f}")
     
+    # Confusion matrix
     cm = confusion_matrix(y_true, y_pred, labels=['NonViolence', 'Violence'])
     logger.info(f"\nConfusion Matrix:")
-    logger.info(f"  True NV | True V")
-    logger.info(f"  {cm[0][0]:7d} | {cm[0][1]:6d}  (Predicted NonViolence)")
-    logger.info(f"  {cm[1][0]:7d} | {cm[1][1]:6d}  (Predicted Violence)")
+    logger.info(f"                True NonViolence | True Violence")
+    logger.info(f"Pred NonViolence      {cm[0][0]:7d} | {cm[0][1]:6d}")
+    logger.info(f"Pred Violence         {cm[1][0]:7d} | {cm[1][1]:6d}")
     
+    # Save confusion matrix plot
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=['NonViolence', 'Violence'],
                 yticklabels=['NonViolence', 'Violence'])
     plt.xlabel('Predicted')
-    plt.ylabel('Actual (Weak Labels)')
-    plt.title(f'Weak Label Analysis (Acc: {accuracy:.4f})')
-    cm_path = os.path.join(output_dir, 'weak_label_confusion_matrix.png')
+    plt.ylabel('Actual (RWF-2000)')
+    plt.title(f'RWF-2000 Evaluation (Acc: {accuracy:.4f})')
+    cm_path = os.path.join(output_dir, 'rwf2000_confusion_matrix.png')
     plt.savefig(cm_path)
     plt.close()
     logger.info(f"\nConfusion matrix saved to: {cm_path}")
     
+    # Classification report
     report = classification_report(y_true, y_pred, target_names=['NonViolence', 'Violence'])
     logger.info(f"\nClassification Report:\n{report}")
     
-    report_path = os.path.join(output_dir, 'weak_label_analysis.txt')
+    # Save detailed report
+    report_path = os.path.join(output_dir, 'rwf2000_analysis.txt')
     with open(report_path, 'w') as f:
-        f.write("XD-Violence Weak Label Analysis\n")
+        f.write("RWF-2000 Dataset Evaluation\n")
         f.write("="*60 + "\n\n")
         f.write(f"Videos analyzed: {len(y_true)}\n")
         f.write(f"Videos without labels: {unlabeled_count}\n\n")
@@ -458,35 +466,19 @@ def analyze_predictions(results_file, output_dir, logger):
         f.write(f"  Recall:    {recall:.4f}\n")
         f.write(f"  F1 Score:  {f1:.4f}\n\n")
         f.write(f"Classification Report:\n{report}\n")
-        f.write(f"\nLabel Mapping (XD-Violence):\n")
-        f.write(f"  A, B1, B2, B4 → NonViolence\n")
-        f.write(f"  B5, B6, G → Violence\n\n")
         f.write(f"\nMisclassified Videos:\n")
         f.write("="*60 + "\n")
         for vid in labeled_videos:
             if not vid['correct']:
                 f.write(f"  {vid['name']}\n")
-                f.write(f"    Label: {vid['label']} (Truth: {vid['ground_truth']})\n")
+                f.write(f"    Truth: {vid['ground_truth']}\n")
                 f.write(f"    Predicted: {vid['predicted']} (Conf: {vid['confidence']:.4f})\n\n")
     
     logger.info(f"Analysis report saved to: {report_path}")
     
-    correct_by_label = {}
-    total_by_label = {}
-    for vid in labeled_videos:
-        label = vid['label']
-        if label not in total_by_label:
-            total_by_label[label] = 0
-            correct_by_label[label] = 0
-        total_by_label[label] += 1
-        if vid['correct']:
-            correct_by_label[label] += 1
-    
-    logger.info(f"\nPer-Label Accuracy:")
-    for label in sorted(total_by_label.keys()):
-        acc = correct_by_label[label] / total_by_label[label]
-        logger.info(f"  {label:4s}: {acc:.4f} ({correct_by_label[label]}/{total_by_label[label]})")
-    
+    # Summary statistics
+    correct_count = sum(1 for v in labeled_videos if v['correct'])
+    logger.info(f"\nSummary: {correct_count}/{len(labeled_videos)} correct predictions")
     logger.info("="*60)
 
 # ========================== INFERENCE ==========================
