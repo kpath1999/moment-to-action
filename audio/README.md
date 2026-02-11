@@ -1,1 +1,0 @@
-How does the audio model work?
