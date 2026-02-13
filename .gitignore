@@ -87,6 +87,10 @@ litert_venv
 # Local SDK/tool drops
 tools/
 export_assets/
+weights/
+keys/
+third_party/
+groq-sdk/
 models/
 archives/
 test_audio/

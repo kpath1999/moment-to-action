@@ -5,3 +5,7 @@ Call to function
 Load frames (yolo)
 Call to function
 Load video (mobileclip)
+
+```
+source /Users/kausar/miniconda3/bin/activate violence-pipeline && export PATH="/Users/kausar/miniconda3/envs/violence-pipeline/bin:$PATH" && hash -r && which python
+```
