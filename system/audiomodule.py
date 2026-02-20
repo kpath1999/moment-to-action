@@ -18,9 +18,20 @@ from yolosync import AudioEvent, AudioSpeech
 
 # -------------------------- YAMNET HELPERS ---------------------------
 
+# Cache YAMNet model globally to avoid re-loading
+_YAMNET_MODEL = None
+_YAMNET_CLASS_NAMES = None
+
+
 def _load_yamnet_model():
-	"""Load YAMNet from TF Hub once and reuse it."""
-	return hub.load("https://www.kaggle.com/models/google/yamnet/TensorFlow2/yamnet/1")
+	"""Load YAMNet from TF Hub once and cache it."""
+	global _YAMNET_MODEL, _YAMNET_CLASS_NAMES
+	if _YAMNET_MODEL is None:
+		_YAMNET_MODEL = hub.load("https://www.kaggle.com/models/google/yamnet/TensorFlow2/yamnet/1")
+		class_map_path = _YAMNET_MODEL.class_map_path().numpy()
+		class_map_csv = tf.io.read_file(class_map_path).numpy().decode("utf-8")
+		_YAMNET_CLASS_NAMES = class_names_from_csv(class_map_csv)
+	return _YAMNET_MODEL, _YAMNET_CLASS_NAMES
 
 
 def class_names_from_csv(class_map_csv_text: str) -> List[str]:
@@ -32,14 +43,11 @@ def class_names_from_csv(class_map_csv_text: str) -> List[str]:
 
 def generate_audio_label(segment) -> Tuple[str, float]:
 	"""Run YAMNet on one waveform segment and return top label and confidence."""
-	model = _load_yamnet_model()
+	model, class_names = _load_yamnet_model()
 
 	# segment is expected to be a 1-D float32 waveform tensor
 	scores, _embeddings, _log_mel_spectrogram = model(segment)
 	scores.shape.assert_is_compatible_with([None, 521])
-
-	class_map_path = model.class_map_path().numpy()
-	class_names = class_names_from_csv(tf.io.read_file(class_map_path).numpy().decode("utf-8"))
 
 	avg_scores = scores.numpy().mean(axis=0)
 	top_idx = int(avg_scores.argmax())
@@ -58,6 +66,7 @@ def analyze_audio_segments(segments: Iterable[Tuple[float, float, tf.Tensor]]) -
 
 
 # -------------------------- SPEECH TRANSCRIPTION ---------------------------
+# TODO: look for a free speech-to-text service you can use; openai is blocking me
 
 def transcribe_speech(
 	audio_events: List[AudioEvent],
@@ -89,13 +98,13 @@ def transcribe_speech(
 		return []
 	
 	try:
-		from openai import OpenAI
+		from groq import Groq
 		
-		client = OpenAI()
+		client = Groq()
 		
 		with open(audio_file_path, "rb") as audio_file:
 			transcription = client.audio.transcriptions.create(
-				model="whisper-1",
+				model="whisper-large-v3-turbo",
 				file=audio_file,
 				response_format="verbose_json",
 				timestamp_granularities=["segment"]

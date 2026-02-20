@@ -35,6 +35,7 @@ import librosa
 import numpy as np
 import soundfile as sf
 import tensorflow as tf
+import json
 
 from audiomodule import analyze_audio_segments, transcribe_speech
 from llmquery import analyze_video_with_llm
@@ -97,6 +98,28 @@ def select_random_video(directory: str) -> str | None:
     if not candidates:
         return None
     return str(random.choice(candidates))
+
+
+def has_audio_stream(video_path: str) -> bool:
+    """Return True if the video contains at least one audio stream."""
+    probe_cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream=index",
+        "-of",
+        "csv=p=0",
+        video_path,
+    ]
+
+    try:
+        result = subprocess.run(probe_cmd, check=True, capture_output=True, text=True)
+        return bool(result.stdout.strip())
+    except subprocess.CalledProcessError:
+        return False
 
 
 # ========================== AUDIO EXTRACTION ==========================
@@ -162,17 +185,33 @@ def create_audio_segments(audio_path: str, segment_duration: float = 0.975, over
 # ========================== PIPELINE ==========================
 
 def run_pipeline(args, logger):
-    video_path = select_random_video(args.dataset)
-    if not video_path:
-        logger.error(f"No videos found in dataset: {args.dataset}")
+    video_path = None
+    audio_path = None
+
+    for attempt in range(1, args.max_tries + 1):
+        candidate = select_random_video(args.dataset)
+        if not candidate:
+            logger.error(f"No videos found in dataset: {args.dataset}")
+            return
+
+        if not has_audio_stream(candidate):
+            logger.warning(f"Attempt {attempt}: {candidate} has no audio track. Retrying...")
+            continue
+
+        logger.info(f"Selected video: {candidate}")
+
+        logger.info("Extracting audio from video...")
+        try:
+            audio_path = extract_audio_from_video(candidate)
+            video_path = candidate
+            logger.info(f"Audio extracted to: {audio_path}")
+            break
+        except RuntimeError as err:
+            logger.warning(f"Attempt {attempt}: audio extraction failed for {candidate} -> {err}")
+
+    if not video_path or not audio_path:
+        logger.error("Unable to find a video with extractable audio after multiple attempts.")
         return
-
-    logger.info(f"Selected video: {video_path}")
-
-    # Extract audio from video
-    logger.info("Extracting audio from video...")
-    audio_path = extract_audio_from_video(video_path)
-    logger.info(f"Audio extracted to: {audio_path}")
 
     # Create audio segments for YAMNet analysis
     logger.info("Creating audio segments...")
@@ -184,15 +223,48 @@ def run_pipeline(args, logger):
     yamnet_events = analyze_audio_segments(audio_segments)
     logger.info(f"YAMNet detected {len(yamnet_events)} audio events")
     
+    # Log sample of detected audio events
+    if yamnet_events:
+        logger.info(f"Sample audio events: {[(e.label, f'{e.confidence:.2f}') for e in yamnet_events[:5]]}")
+    
+    # Save YAMNet results
+    yamnet_output = os.path.join(args.output, "yamnet_events.json")
+    with open(yamnet_output, "w") as f:
+        json.dump([{"start": e.start, "end": e.end, "label": e.label, "confidence": e.confidence} for e in yamnet_events], f, indent=2)
+    logger.info(f"YAMNet results saved to {yamnet_output}")
+    
     # Run speech transcription if speech detected
     logger.info("Checking for speech transcription...")
     speech_events = transcribe_speech(yamnet_events, audio_segments, audio_path)
     logger.info(f"Transcribed {len(speech_events)} speech segments")
     
+    # Log sample of transcribed speech
+    if speech_events:
+        logger.info(f"Sample transcriptions: {[e.label[:50] + '...' if len(e.label) > 50 else e.label for e in speech_events[:3]]}")
+    
+    # Save speech transcription results
+    speech_output = os.path.join(args.output, "speech_events.json")
+    with open(speech_output, "w") as f:
+        json.dump([{"start": e.start, "end": e.end, "text": e.label, "confidence": e.confidence} for e in speech_events], f, indent=2)
+    logger.info(f"Speech transcription results saved to {speech_output}")
+    
     # Run YOLO on video
-    logger.info("Running YOLO object detection...")
-    yolo_events = run_yolo_tracking(video_path, display=args.mode == "yolo")
+    logger.info(f"Running YOLO object detection on {args.yolo_frames} sampled frames...")
+    yolo_events = run_yolo_tracking(video_path, display=args.mode == "yolo", num_frames=args.yolo_frames)
     logger.info(f"YOLO detected {len(yolo_events)} visual events")
+    
+    # Log sample of detected objects
+    if yolo_events:
+        sample_objs = set()
+        for e in yolo_events[:3]:
+            sample_objs.update(e.objects)
+        logger.info(f"Sample detected objects: {list(sample_objs)[:10]}")
+    
+    # Save YOLO results
+    yolo_output = os.path.join(args.output, "yolo_events.json")
+    with open(yolo_output, "w") as f:
+        json.dump([{"time": e.time, "objects": e.objects, "boxes": e.boxes, "confidences": e.confidences} for e in yolo_events], f, indent=2)
+    logger.info(f"YOLO results saved to {yolo_output}")
 
     if args.mode == "yamnet":
         logger.info(f"YAMNet events: {len(yamnet_events)}")
@@ -203,6 +275,7 @@ def run_pipeline(args, logger):
         return
 
     # LLM reasoning (used by mobileclip/full modes)
+    logger.info("Querying LLM for violence analysis...")
     llm_response = analyze_video_with_llm(
         yamnet_predictions=yamnet_events,
         whisper_predictions=speech_events,
@@ -210,7 +283,14 @@ def run_pipeline(args, logger):
         question=args.question,
     )
 
-    logger.info(f"LLM response: {llm_response}")
+    logger.info(f"LLM Violence Probability: {llm_response.get('violence_probability', 'N/A')}")
+    logger.info(f"LLM Summary: {llm_response.get('summary', 'N/A')}")
+    
+    # Save LLM response
+    llm_output = os.path.join(args.output, "llm_response.json")
+    with open(llm_output, "w") as f:
+        json.dump(llm_response, f, indent=2)
+    logger.info(f"LLM analysis saved to {llm_output}")
 
     if args.mode == "mobileclip":
         frame_paths = extract_frames(video_path, os.path.join(args.output, "frames"))
@@ -294,6 +374,22 @@ def main():
         type=str,
         default="Is violence likely?",
         help="Question passed to the LLM",
+    )
+
+    parser.add_argument(
+        "--max-tries",
+        dest="max_tries",
+        type=int,
+        default=20,
+        help="Maximum number of videos to sample when searching for one with audio",
+    )
+
+    parser.add_argument(
+        "--yolo-frames",
+        dest="yolo_frames",
+        type=int,
+        default=10,
+        help="Number of frames to sample for YOLO detection (default: 10)",
     )
 
     args = parser.parse_args()

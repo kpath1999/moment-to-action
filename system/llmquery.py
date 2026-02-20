@@ -54,7 +54,7 @@ QUESTION: {question}
 """
 
 	completion = client.chat.completions.create(
-		model="llama3-70b-8192",
+		model="llama-3.1-8b-instant",
 		temperature=0.1,
 		messages=[
 			{"role": "system", "content": system_prompt},

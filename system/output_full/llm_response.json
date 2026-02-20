@@ -1,0 +1,15 @@
+{
+  "violence_probability": 0.0,
+  "summary": "A person is repeatedly saying the same phrase near a stop sign, with a crowd present at the end.",
+  "moments_of_interest": [
+    {
+      "start": 4.0,
+      "end": 5.0,
+      "reason": "Crowd presence",
+      "mobileclip_queries": [
+        "person near stop sign",
+        "crowd near stop sign"
+      ]
+    }
+  ]
+}

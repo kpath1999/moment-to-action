@@ -14,7 +14,6 @@ from typing import List
 import cv2
 from ultralytics import YOLO
 
-
 # -------------------------- DATA CLASSES ---------------------------
 
 @dataclass
@@ -51,9 +50,18 @@ class FusedMoment:
 
 # -------------------------- YOLO INFERENCE ---------------------------
 
-def run_yolo_tracking(video_path: str, model_path: str = "yolov8n.pt", display: bool = False) -> List[VisualEvent]:
+def run_yolo_tracking(video_path: str, model_path: str = "yolov8n.pt", display: bool = False, num_frames: int = 10) -> List[VisualEvent]:
 	"""
-	Run YOLO tracking on a video and return VisualEvent entries with timestamps.
+	Run YOLO detection on evenly-sampled frames from a video.
+	
+	Args:
+		video_path: Path to video file
+		model_path: Path to YOLO model weights
+		display: Whether to display annotated frames
+		num_frames: Number of frames to sample evenly across the video (default: 10)
+	
+	Returns:
+		List of VisualEvent objects with timestamps
 	"""
 	model = YOLO(model_path)
 	cap = cv2.VideoCapture(video_path)
@@ -61,17 +69,25 @@ def run_yolo_tracking(video_path: str, model_path: str = "yolov8n.pt", display: 
 		return []
 
 	fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+	total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+	
+	if total_frames == 0:
+		cap.release()
+		return []
+	
+	# Calculate which frame indices to sample (evenly distributed)
+	frame_indices = [int(i * total_frames / num_frames) for i in range(num_frames)]
 	events: List[VisualEvent] = []
 
-	while cap.isOpened():
+	for frame_idx in frame_indices:
+		cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
 		success, frame = cap.read()
 		if not success:
-			break
+			continue
 
-		frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
 		timestamp = frame_idx / fps
 
-		results = model.track(frame, persist=True)
+		results = model(frame)  # Use model() instead of model.track() for single-frame inference
 		if not results or len(results) == 0:
 			continue
 
@@ -85,8 +101,8 @@ def run_yolo_tracking(video_path: str, model_path: str = "yolov8n.pt", display: 
 
 		if display:
 			annotated_frame = results[0].plot()
-			cv2.imshow("yolo26 tracking", annotated_frame)
-			if cv2.waitKey(1) & 0xFF == ord("q"):
+			cv2.imshow("YOLO Detection", annotated_frame)
+			if cv2.waitKey(500) & 0xFF == ord("q"):  # Show each frame for 500ms
 				break
 
 	cap.release()
