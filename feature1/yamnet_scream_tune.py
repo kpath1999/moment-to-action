@@ -51,8 +51,8 @@ class AudioConfig:
         self.hop_size = HOP_SIZE  # Using efficient 480ms hop!
         self.channels = CHANNELS
         self.use_npu = '--use-npu' in sys.argv
-        self.model_path = "yamnet_quantized.tflite"
-        self.labels_path = "yamnet_class_map.csv"
+        self.model_path = "models/yamnet/yamnet_quantized.tflite"
+        self.labels_path = "models/yamnet/yamnet_class_map.csv"
         
         # Performance monitoring
         self.enable_profiling = '--profile' in sys.argv
@@ -471,7 +471,7 @@ class RealtimeYAMNet:
 
                 # Load your test image
                 #image = Image.open("pedestrian.jpg").convert("RGB")
-                image = Image.open("weapon.jpg").convert("RGB")
+                image = Image.open("images_for_clip_test/weapon.jpg").convert("RGB")
 
                 inputs = processor(
                 text=prompts,
