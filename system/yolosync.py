@@ -9,10 +9,15 @@ Provides:
 """
 
 from dataclasses import dataclass
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 import cv2
+import os
+import random
+import numpy as np
+import tensorflow as tf
 from ultralytics import YOLO
+from ai_edge_litert.interpreter import Interpreter
 
 # -------------------------- DATA CLASSES ---------------------------
 
@@ -110,6 +115,154 @@ def run_yolo_tracking(video_path: str, model_path: str = "yolov8n.pt", display: 
 		cv2.destroyAllWindows()
 
 	return events
+
+
+# -------------------------- MOVINET INFERENCE ---------------------------
+
+MOVINET_CLASSES = ["Fight", "No_Fight"]
+
+
+def _default_movinet_model_path() -> str:
+	base_dir = os.path.dirname(os.path.abspath(__file__))
+	return os.path.join(base_dir, "movinet.tflite")
+
+
+def build_movinet_runner(model_path: str | None = None) -> Tuple[Any, Dict[str, tf.Tensor]]:
+	"""Create LiteRT signature runner and zero-initialized recurrent states."""
+	resolved_model_path = model_path or _default_movinet_model_path()
+	interpreter = Interpreter(model_path=resolved_model_path)
+	runner = interpreter.get_signature_runner()
+
+	init_states = {
+		name: tf.zeros(details["shape"], dtype=details["dtype"])
+		for name, details in runner.get_input_details().items()
+	}
+	if "image" in init_states:
+		del init_states["image"]
+
+	return runner, init_states
+
+def frames_from_video_file(video_path: str, n_frames: int, output_size=(224, 224), frame_step: int = 15) -> np.ndarray:
+	"""
+		Creates frames from each video file present for each category.
+
+		Args:
+		video_path: File path to the video.
+		n_frames: Number of frames to be created per video file.
+		output_size: Pixel size of the output frame image.
+
+		Return:
+		An NumPy array of frames in the shape of (n_frames, height, width, channels).
+	"""
+
+	# Read each video frame by frame
+	result = []
+	src = cv2.VideoCapture(str(video_path))
+	if not src.isOpened():
+		raise ValueError(f"Unable to open video file: {video_path}")
+
+	video_length = int(src.get(cv2.CAP_PROP_FRAME_COUNT))
+	
+	need_length = 1 + (n_frames - 1) * frame_step
+
+	if need_length > video_length:
+		start = 0
+	else:
+		max_start = video_length - need_length
+		start = random.randint(0, max_start + 1)
+
+	src.set(cv2.CAP_PROP_POS_FRAMES, start)
+	# ret is a boolean indicating whether read was successful, frame is the image itself
+	ret, frame = src.read()
+	if not ret:
+		src.release()
+		raise ValueError(f"Unable to read frames from video file: {video_path}")
+	
+	result.append(format_frames(frame, output_size))
+
+	for _ in range(n_frames - 1):
+		for _ in range(frame_step):
+			ret, frame = src.read()
+			if ret:
+				frame = format_frames(frame, output_size)
+				result.append(frame)
+			else:
+				result.append(np.zeros_like(result[0]))
+	
+	src.release()
+	result = np.array(result)[..., [2, 1, 0]]
+
+	return result
+
+def format_frames(frame: np.ndarray, output_size) -> tf.Tensor:
+	"""
+		Pad and resize an image from a video.
+
+		Args:
+		frame: Image that needs to resized and padded.
+		output_size: Pixel size of the output frame image.
+
+		Return:
+		Formatted frame with padding of specified output size.
+	"""
+	frame = tf.image.convert_image_dtype(frame, tf.float32)
+	frame = tf.image.resize_with_pad(frame, *output_size)
+	return frame
+
+def video_to_tensor(video_path: str, image_size=(172, 172), n_frames: int = 12, frame_step: int = 15) -> tf.Tensor:
+	"""Load and preprocess video frames into a [T, H, W, 3] float32 tensor."""
+	frames = frames_from_video_file(
+		video_path=video_path,
+		n_frames=n_frames,
+		output_size=image_size,
+		frame_step=frame_step,
+	)
+	return tf.convert_to_tensor(frames, dtype=tf.float32)
+
+
+def get_top_k(probs: tf.Tensor, k: int = 2, label_map: List[str] = MOVINET_CLASSES):
+	"""Outputs the top k model labels and probabilities on the given video."""
+	top_predictions = tf.argsort(probs, axis=-1, direction='DESCENDING')[:k]
+	top_indices = [int(x) for x in top_predictions.numpy().tolist()]
+	top_labels = [label_map[index] for index in top_indices]
+	top_probs = tf.gather(probs, top_predictions, axis=-1).numpy()
+	return tuple(zip(top_labels, top_probs))
+
+def run_movinet_inference(
+		video_path: str,
+		model_path: str | None = None,
+		image_size=(172, 172),
+		n_frames: int = 12,
+		frame_step: int = 15,
+		top_k: int = 2,
+		label_map: List[str] = MOVINET_CLASSES,
+) -> Dict[str, Any]:
+	"""Run LiteRT MoViNet inference on a single clip and return probabilities."""
+	runner, init_states = build_movinet_runner(model_path=model_path)
+	video = video_to_tensor(video_path, image_size=image_size, n_frames=n_frames, frame_step=frame_step)
+	clips = tf.split(video[tf.newaxis], video.shape[0], axis=1)
+
+	states = dict(init_states)
+	logits = None
+	for clip in clips:
+		outputs = runner(**states, image=clip)
+		logits = outputs.pop("logits")[0]
+		states = outputs
+
+	if logits is None:
+		raise ValueError(f"No logits produced for video: {video_path}")
+
+	probs = tf.nn.softmax(logits)
+	top_predictions = get_top_k(probs, k=top_k, label_map=label_map)
+	class_probabilities = {
+		label: float(prob)
+		for label, prob in zip(label_map, probs.numpy().tolist())
+	}
+
+	return {
+		"top_k": [{"label": label, "probability": float(prob)} for label, prob in top_predictions],
+		"class_probabilities": class_probabilities,
+	}
 
 
 # -------------------------- ALIGNMENT ---------------------------

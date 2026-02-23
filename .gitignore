@@ -95,6 +95,7 @@ archives/
 test_audio/
 test-data/
 projects/
+helpers/
 
 # Project-specific binaries
 projects/edge-impulse/install.sh

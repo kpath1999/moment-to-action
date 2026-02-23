@@ -1,0 +1,17 @@
+{
+  "video_path": "/Volumes/KAUSAR/kaggle/Real Life Violence Dataset/Violence/V_411.mp4",
+  "top_k": [
+    {
+      "label": "Fight",
+      "probability": 0.8133257627487183
+    },
+    {
+      "label": "No_Fight",
+      "probability": 0.18667425215244293
+    }
+  ],
+  "class_probabilities": {
+    "Fight": 0.8133257627487183,
+    "No_Fight": 0.18667425215244293
+  }
+}

@@ -66,7 +66,6 @@ def analyze_audio_segments(segments: Iterable[Tuple[float, float, tf.Tensor]]) -
 
 
 # -------------------------- SPEECH TRANSCRIPTION ---------------------------
-# TODO: look for a free speech-to-text service you can use; openai is blocking me
 
 def transcribe_speech(
 	audio_events: List[AudioEvent],

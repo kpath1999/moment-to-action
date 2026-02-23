@@ -17,6 +17,7 @@ Take one video clip from the RLVS dataset (randomly pick one; fight/no-fight)
 Sample terminal command:
 python3 minimodal.py \
     --mode full \
+    --movinet-only true \
     --dataset "/Volumes/KAUSAR/kaggle/Real Life Violence Dataset" \
     --output ./output_full
 """
@@ -40,7 +41,15 @@ import json
 from audiomodule import analyze_audio_segments, transcribe_speech
 from llmquery import analyze_video_with_llm
 from retrieveframe import extract_frames, get_best_frames
-from yolosync import run_yolo_tracking
+from yolosync import run_yolo_tracking, run_movinet_inference
+
+
+def _parse_bool_flag(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
 
 # ========================== KEYS SETUP ==========================
@@ -94,7 +103,13 @@ def setup_logging(log_dir):
 def select_random_video(directory: str) -> str | None:
     """Pick a random video file from the dataset directory."""
     extensions = {".mp4", ".avi", ".mov", ".mkv"}
-    candidates = [p for p in Path(directory).rglob("*") if p.suffix.lower() in extensions]
+    candidates = [
+        p for p in Path(directory).rglob("*")
+        if p.suffix.lower() in extensions
+        and not p.name.startswith("._")  # Exclude macOS metadata files
+        and not p.name.startswith(".")   # Exclude other hidden files
+        and p.stat().st_size > 1024       # Exclude files smaller than 1KB
+    ]
     if not candidates:
         return None
     return str(random.choice(candidates))
@@ -185,8 +200,56 @@ def create_audio_segments(audio_path: str, segment_duration: float = 0.975, over
 # ========================== PIPELINE ==========================
 
 def run_pipeline(args, logger):
+    movinet_only = _parse_bool_flag(args.movinet_only)
     video_path = None
     audio_path = None
+
+    if movinet_only:
+        logger.info("MoViNet-only mode enabled. Selecting a random video clip...")
+        
+        # Retry logic to handle corrupted/invalid videos
+        max_retries = args.max_tries
+        for attempt in range(1, max_retries + 1):
+            video_path = select_random_video(args.dataset)
+            if not video_path:
+                logger.error(f"No videos found in dataset: {args.dataset}")
+                return
+
+            logger.info(f"Attempt {attempt}/{max_retries}: Selected video for MoViNet: {video_path}")
+            
+            try:
+                movinet_result = run_movinet_inference(
+                    video_path=video_path,
+                    model_path=args.movinet_model,
+                )
+                
+                # Success - save results and exit
+                movinet_output = os.path.join(args.output, "movinet_results.json")
+                with open(movinet_output, "w") as f:
+                    json.dump(
+                        {
+                            "video_path": video_path,
+                            "top_k": movinet_result["top_k"],
+                            "class_probabilities": movinet_result["class_probabilities"],
+                        },
+                        f,
+                        indent=2,
+                    )
+
+                logger.info(f"MoViNet results saved to {movinet_output}")
+                if movinet_result["top_k"]:
+                    top1 = movinet_result["top_k"][0]
+                    logger.info(f"MoViNet top prediction: {top1['label']} ({top1['probability']:.4f})")
+                return
+                
+            except (ValueError, IOError, OSError) as e:
+                logger.warning(f"Attempt {attempt}/{max_retries}: Failed to process {video_path}: {e}")
+                if attempt < max_retries:
+                    logger.info(f"Retrying with a different video...")
+                    continue
+                else:
+                    logger.error(f"Failed to process any video after {max_retries} attempts")
+                    return
 
     for attempt in range(1, args.max_tries + 1):
         candidate = select_random_video(args.dataset)
@@ -344,6 +407,20 @@ def main():
         required=True,
         choices=["yamnet", "yolo", "mobileclip", "full"],
         help="Operation mode: yamnet, yolo, mobileclip, or full",
+    )
+
+    parser.add_argument(
+        "--movinet-only",
+        type=str,
+        default="false",
+        help="Run only MoViNet Fight/No-Fight inference on one random dataset clip",
+    )
+
+    parser.add_argument(
+        "--movinet-model",
+        type=str,
+        default=os.path.abspath(os.path.join(os.path.dirname(__file__), "movinet.tflite")),
+        help="Path to MoViNet LiteRT .tflite model",
     )
 
     parser.add_argument(
