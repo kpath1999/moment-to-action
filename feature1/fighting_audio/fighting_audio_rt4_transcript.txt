@@ -1,5 +1,0 @@
-Trigger: Explosion
-Timestamp: Multiple detections
-
-Transcript:
-

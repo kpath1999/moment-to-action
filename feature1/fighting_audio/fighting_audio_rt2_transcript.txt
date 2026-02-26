@@ -1,5 +1,0 @@
-Trigger: Speech
-Timestamp: Multiple detections
-
-Transcript:
-Hey governor.ériof**********mit. avatar

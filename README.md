@@ -1,13 +1,9 @@
 ## Moment-to-Action repository
 
-If `conda` complains about the relative path (it sometimes does depending on the version), the most bulletproof method is to remove `mobileclip` from the YAML and install it separately.
+The **TRIGGER!!**
+audio + imu (accel + gyro + magnet):
+* function: threat estimation using audio and motion (vision comes later)
+* vigilance through audio and motion, followed by estimation by pulling in video (/reasoner)
+* 2 Modalities: Audio, Motion
+* Audio and Motion monitor → Final threat estimator (using 2 modes)
 
-1.  Remove the `mobileclip` line from environment.yml.
-2.  Run:
-    ```bash
-    conda env create -f environment.yml
-    conda activate violence-pipeline
-    pip install -e third_party/mobileclip
-    ```
-
-However, **Option 1 (Relative Path)** usually works fine in modern Conda/Pip versions and is the cleanest experience.
