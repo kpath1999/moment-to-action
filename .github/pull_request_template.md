@@ -1,5 +1,3 @@
-## TITLE
-
 ## Changes
 - 
 
