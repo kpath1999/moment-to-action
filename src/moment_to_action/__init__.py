@@ -1,2 +1,8 @@
+"""Moment2Action project."""
+
+import sys
+
+
 def main() -> None:
-    print("Hello from moment-to-action!")
+    """Entrypoint."""
+    sys.stdout.write("Hello from moment-to-action!")
