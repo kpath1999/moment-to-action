@@ -1,0 +1,54 @@
+[project]
+name = "moment-to-action"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Nikola Vuk Maruszewski", email = "nikola@gatech.edu" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+m2a = "moment_to_action:main"
+
+[build-system]
+requires = ["uv_build>=0.10.8,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.1.1",
+    "mypy>=1.19.1",
+    "pylsp-mypy>=0.7.1",
+    "python-lsp-ruff>=2.3.0",
+    "python-lsp-server[all]>=1.14.0",
+    "ruff>=0.15.4",
+]
+
+[tool.ruff]
+line-length = 100
+indent-width = 4
+
+[tool.ruff.lint]
+select = ["ALL"]
+
+ignore = [
+    # Lint-incompatible rules
+    "COM812",
+]
+
+[tool.ruff.lint.pydocstyle]
+# Use Google-style docstrings.
+convention = "google"
+
+[tool.ruff.lint.pylint]
+max-args = 8
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_untyped_defs = true
+exclude = ['.mypy_cache', '.venv']
+ignore_missing_imports = true
+ignore_missing_imports_per_module = true
+show_error_codes = true

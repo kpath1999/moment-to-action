@@ -1,4 +1,3 @@
-## Moment-to-Action repository
+# Moment2Action
 
-This is where demo code should be hosted.
-If Kausar commits code, then Soma/Nino would have to review it in order for it to merge.
+Use [`uv`](https://docs.astral.sh/uv/) for project management.

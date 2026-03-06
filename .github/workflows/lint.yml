@@ -1,0 +1,44 @@
+name: Lint and Type Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          # This enables caching of the uv cache and ensures
+          # it uses the version specified in your .python-version file
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        # uv sync installs everything in your dev group by default
+        run: uv sync --frozen
+
+      - name: Check Formatting (Ruff)
+        # This will fail if the code is not formatted correctly
+        run: uv run ruff format --check src --output-format github
+
+      - name: Run Linting (Ruff)
+        # Using 'uv run' ensures we use the ruff version in your lockfile
+        run: uv run ruff check src --output-format github
+
+      - name: Register Mypy Problem Matcher
+        # This "taps" into the output of the next step to create PR annotations
+        run: echo "::add-matcher::.github/mypy-matcher.json"
+
+      - name: Run Type Check (Mypy)
+        # Use standard output; the matcher will intercept it
+        run: uv run mypy src --show-column-numbers
