@@ -74,7 +74,7 @@ class LLMBase(ABC):
         if backend not in cls._registry:
             available = ", ".join(sorted(cls._registry))
             msg = f"Unknown backend '{backend}'. Available: {available}"
-            raise ValueError(msg)  # noqa: TRY003
+            raise ValueError(msg)
         return cls._registry[backend](config)
 
     @abstractmethod
@@ -118,7 +118,8 @@ class HuggingFaceLLM(LLMBase):
     def run(self, system_prompt: str, user_prompt: str) -> str:
         """Build prompt, run inference, and return the generated text."""
         if self.model is None or self.tokenizer is None:
-            raise RuntimeError("Model is not loaded. Call load() first.")
+            msg = "Model is not loaded. Call load() first."
+            raise RuntimeError(msg)
 
         messages = [
             {"role": "system", "content": system_prompt},
