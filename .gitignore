@@ -8,7 +8,8 @@
 .LSOverride
 
 # Icon must end with two \r
-Icon
+Icon
+
 
 # Thumbnails
 ._*
@@ -204,5 +205,8 @@ poetry.toml
 
 # LSP config files
 pyrightconfig.json
+
+# custom
+src/moment_to_action/models/
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,python

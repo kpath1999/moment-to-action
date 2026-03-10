@@ -18,6 +18,7 @@ def _default_device() -> str:
         return "mps"
     return "cpu"
 
+
 # CONFIGURATION
 @dataclass
 class GenerationConfig:
@@ -27,6 +28,7 @@ class GenerationConfig:
     top_k: int = 50
     do_sample: bool = True
     repetition_penalty: float = 1.1
+
 
 @dataclass
 class AppConfig:
@@ -83,7 +85,11 @@ class HuggingFaceLLM(LLMBase):
         self.torch_device = torch.device(config.device)
 
     def load(self) -> None:
-        token = self.config.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
+        token = (
+            self.config.hf_token
+            or os.getenv("HF_TOKEN")
+            or os.getenv("HUGGINGFACEHUB_API_TOKEN")
+        )
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.config.model_id,
             cache_dir=self.config.model_dir,
@@ -114,30 +120,28 @@ class HuggingFaceLLM(LLMBase):
                 add_generation_prompt=True,
             )
         else:
-            prompt = (
-                f"System: {system_prompt}\n"
-                f"User: {user_prompt}\n"
-                "Assistant:"
-            )
+            prompt = f"System: {system_prompt}\n" f"User: {user_prompt}\n" "Assistant:"
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.torch_device)
-        
+
         # Build generation kwargs - only include supported parameters
         gen_kwargs = {
             "max_new_tokens": self.config.generation.max_new_tokens,
             "do_sample": self.config.generation.do_sample,
             "pad_token_id": self.tokenizer.eos_token_id,
         }
-        
+
         # Add sampling parameters only if do_sample=True
         if self.config.generation.do_sample:
-            gen_kwargs.update({
-                "temperature": self.config.generation.temperature,
-                "top_p": self.config.generation.top_p,
-                "top_k": self.config.generation.top_k,
-                "repetition_penalty": self.config.generation.repetition_penalty,
-            })
-        
+            gen_kwargs.update(
+                {
+                    "temperature": self.config.generation.temperature,
+                    "top_p": self.config.generation.top_p,
+                    "top_k": self.config.generation.top_k,
+                    "repetition_penalty": self.config.generation.repetition_penalty,
+                }
+            )
+
         outputs = self.model.generate(**inputs, **gen_kwargs)
 
         generated_tokens = outputs[0][inputs["input_ids"].shape[1] :]
@@ -146,17 +150,31 @@ class HuggingFaceLLM(LLMBase):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Simple LLM runner")
-    parser.add_argument("--backend", default="huggingface", help="LLM backend registry key")
-    parser.add_argument("--model-id", default="gpt2", help="Model id from Hugging Face Hub")
-    parser.add_argument("--model-dir", default="./models", help="Local model cache directory")
-    parser.add_argument("--device", default=_default_device(), choices=["cpu", "cuda", "mps"])
-    parser.add_argument("--hf-token", default=None, help="HF token (or use HF_TOKEN env var)")
-    parser.add_argument("--system", default="You are a helpful assistant.", help="System prompt")
+    parser.add_argument(
+        "--backend", default="huggingface", help="LLM backend registry key"
+    )
+    parser.add_argument(
+        "--model-id", default="gpt2", help="Model id from Hugging Face Hub"
+    )
+    parser.add_argument(
+        "--model-dir", default="./models", help="Local model cache directory"
+    )
+    parser.add_argument(
+        "--device", default=_default_device(), choices=["cpu", "cuda", "mps"]
+    )
+    parser.add_argument(
+        "--hf-token", default=None, help="HF token (or use HF_TOKEN env var)"
+    )
+    parser.add_argument(
+        "--system", default="You are a helpful assistant.", help="System prompt"
+    )
     parser.add_argument("--prompt", required=True, help="User prompt")
     parser.add_argument("--max-new-tokens", type=int, default=80)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--do-sample", action="store_true")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose transformers logging")
+    parser.add_argument(
+        "--verbose", action="store_true", help="Enable verbose transformers logging"
+    )
     return parser.parse_args()
 
 
@@ -173,6 +191,7 @@ def build_config(args: argparse.Namespace) -> AppConfig:
         backend=args.backend,
         hf_token=args.hf_token,
     )
+
 
 """
 ungated models:
@@ -193,11 +212,11 @@ tiiuae/falcon-7b-instruct
 # USAGE
 if __name__ == "__main__":
     args = parse_args()
-    
+
     # Set verbosity if requested
     if args.verbose:
         os.environ["TRANSFORMERS_VERBOSITY"] = "info"
-    
+
     cfg = build_config(args)
     llm = LLMBase.create(cfg)
     llm.load()
