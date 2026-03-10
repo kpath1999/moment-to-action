@@ -1,11 +1,15 @@
+"""LLM API: a minimal interface for running Hugging Face language models locally."""
+
 import argparse
 import os
+import sys
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import ClassVar
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Set transformers verbosity for better debugging
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "warning")
@@ -22,6 +26,8 @@ def _default_device() -> str:
 # CONFIGURATION
 @dataclass
 class GenerationConfig:
+    """Parameters controlling text generation."""
+
     max_new_tokens: int = 256
     temperature: float = 0.7
     top_p: float = 0.9
@@ -32,6 +38,8 @@ class GenerationConfig:
 
 @dataclass
 class AppConfig:
+    """Top-level application configuration."""
+
     model_id: str
     model_dir: str
     device: str = field(default_factory=_default_device)
@@ -46,10 +54,13 @@ class LLMBase(ABC):
     _registry: ClassVar[dict[str, type["LLMBase"]]] = {}
 
     def __init__(self, config: AppConfig) -> None:
+        """Initialize with application config."""
         self.config = config
 
     @classmethod
-    def register(cls, name: str) -> Any:
+    def register(cls, name: str) -> Callable[[type["LLMBase"]], type["LLMBase"]]:
+        """Register a backend class under the given name."""
+
         def decorator(subclass: type["LLMBase"]) -> type["LLMBase"]:
             cls._registry[name] = subclass
             return subclass
@@ -58,11 +69,12 @@ class LLMBase(ABC):
 
     @classmethod
     def create(cls, config: AppConfig) -> "LLMBase":
+        """Instantiate the backend registered under config.backend."""
         backend = config.backend.lower()
         if backend not in cls._registry:
             available = ", ".join(sorted(cls._registry))
             msg = f"Unknown backend '{backend}'. Available: {available}"
-            raise ValueError(msg)
+            raise ValueError(msg)  # noqa: TRY003
         return cls._registry[backend](config)
 
     @abstractmethod
@@ -79,12 +91,14 @@ class HuggingFaceLLM(LLMBase):
     """Small Hugging Face text-generation backend."""
 
     def __init__(self, config: AppConfig) -> None:
+        """Initialize tokenizer/model placeholders and resolve torch device."""
         super().__init__(config)
         self.tokenizer = None
         self.model = None
         self.torch_device = torch.device(config.device)
 
     def load(self) -> None:
+        """Download (if needed) and load the model and tokenizer."""
         token = (
             self.config.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
         )
@@ -102,6 +116,7 @@ class HuggingFaceLLM(LLMBase):
         self.model.eval()
 
     def run(self, system_prompt: str, user_prompt: str) -> str:
+        """Build prompt, run inference, and return the generated text."""
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model is not loaded. Call load() first.")
 
@@ -147,6 +162,7 @@ class HuggingFaceLLM(LLMBase):
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse and return command-line arguments."""
     parser = argparse.ArgumentParser(description="Simple LLM runner")
     parser.add_argument("--backend", default="huggingface", help="LLM backend registry key")
     parser.add_argument("--model-id", default="gpt2", help="Model id from Hugging Face Hub")
@@ -165,6 +181,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_config(args: argparse.Namespace) -> AppConfig:
+    """Build AppConfig from parsed CLI arguments."""
     return AppConfig(
         model_id=args.model_id,
         model_dir=args.model_dir,
@@ -206,4 +223,4 @@ if __name__ == "__main__":
     cfg = build_config(args)
     llm = LLMBase.create(cfg)
     llm.load()
-    print(llm.run(args.system, args.prompt))
+    sys.stdout.write(llm.run(args.system, args.prompt) + "\n")
