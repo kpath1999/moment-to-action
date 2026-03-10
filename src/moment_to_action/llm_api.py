@@ -86,9 +86,7 @@ class HuggingFaceLLM(LLMBase):
 
     def load(self) -> None:
         token = (
-            self.config.hf_token
-            or os.getenv("HF_TOKEN")
-            or os.getenv("HUGGINGFACEHUB_API_TOKEN")
+            self.config.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.config.model_id,
@@ -120,7 +118,7 @@ class HuggingFaceLLM(LLMBase):
                 add_generation_prompt=True,
             )
         else:
-            prompt = f"System: {system_prompt}\n" f"User: {user_prompt}\n" "Assistant:"
+            prompt = f"System: {system_prompt}\nUser: {user_prompt}\nAssistant:"
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.torch_device)
 
@@ -150,24 +148,12 @@ class HuggingFaceLLM(LLMBase):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Simple LLM runner")
-    parser.add_argument(
-        "--backend", default="huggingface", help="LLM backend registry key"
-    )
-    parser.add_argument(
-        "--model-id", default="gpt2", help="Model id from Hugging Face Hub"
-    )
-    parser.add_argument(
-        "--model-dir", default="./models", help="Local model cache directory"
-    )
-    parser.add_argument(
-        "--device", default=_default_device(), choices=["cpu", "cuda", "mps"]
-    )
-    parser.add_argument(
-        "--hf-token", default=None, help="HF token (or use HF_TOKEN env var)"
-    )
-    parser.add_argument(
-        "--system", default="You are a helpful assistant.", help="System prompt"
-    )
+    parser.add_argument("--backend", default="huggingface", help="LLM backend registry key")
+    parser.add_argument("--model-id", default="gpt2", help="Model id from Hugging Face Hub")
+    parser.add_argument("--model-dir", default="./models", help="Local model cache directory")
+    parser.add_argument("--device", default=_default_device(), choices=["cpu", "cuda", "mps"])
+    parser.add_argument("--hf-token", default=None, help="HF token (or use HF_TOKEN env var)")
+    parser.add_argument("--system", default="You are a helpful assistant.", help="System prompt")
     parser.add_argument("--prompt", required=True, help="User prompt")
     parser.add_argument("--max-new-tokens", type=int, default=80)
     parser.add_argument("--temperature", type=float, default=0.7)
