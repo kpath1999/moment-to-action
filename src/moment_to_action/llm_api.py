@@ -93,8 +93,8 @@ class HuggingFaceLLM(LLMBase):
     def __init__(self, config: AppConfig) -> None:
         """Initialize tokenizer/model placeholders and resolve torch device."""
         super().__init__(config)
-        self.tokenizer = None
-        self.model = None
+        self.tokenizer: AutoTokenizer | None = None
+        self.model: AutoModelForCausalLM | None = None
         self.torch_device = torch.device(config.device)
 
     def load(self) -> None:
