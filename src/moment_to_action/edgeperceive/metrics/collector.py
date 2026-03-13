@@ -34,8 +34,8 @@ class InferenceRecord:
 @dataclass
 class PipelineRecord:
     timestamp: float
-    event_type: str             # "trigger_fired", "detection", "false_positive"
-    stage: int                  # 1 or 2
+    event_type: str  # "trigger_fired", "detection", "false_positive"
+    stage: int  # 1 or 2
     latency_ms: float
     metadata: dict = field(default_factory=dict)
 
@@ -65,14 +65,16 @@ class MetricsCollector:
         confidence: float,
         compute_unit: str,
     ) -> None:
-        self._inference_log.append(InferenceRecord(
-            timestamp=time.time(),
-            model_name=model_name,
-            latency_ms=latency_ms,
-            label=label,
-            confidence=confidence,
-            compute_unit=compute_unit,
-        ))
+        self._inference_log.append(
+            InferenceRecord(
+                timestamp=time.time(),
+                model_name=model_name,
+                latency_ms=latency_ms,
+                label=label,
+                confidence=confidence,
+                compute_unit=compute_unit,
+            )
+        )
 
     def log_pipeline_event(
         self,
@@ -81,13 +83,15 @@ class MetricsCollector:
         latency_ms: float,
         metadata: dict = None,
     ) -> None:
-        self._pipeline_log.append(PipelineRecord(
-            timestamp=time.time(),
-            event_type=event_type,
-            stage=stage,
-            latency_ms=latency_ms,
-            metadata=metadata or {},
-        ))
+        self._pipeline_log.append(
+            PipelineRecord(
+                timestamp=time.time(),
+                event_type=event_type,
+                stage=stage,
+                latency_ms=latency_ms,
+                metadata=metadata or {},
+            )
+        )
 
     def log_stage(
         self,
@@ -96,21 +100,25 @@ class MetricsCollector:
         metadata: dict = None,
     ) -> None:
         """Record a single stage execution."""
-        self._event_log.append({
-            "timestamp": time.time(),
-            "type": "stage",
-            "stage_name": stage_name,
-            "latency_ms": latency_ms,
-            **(metadata or {}),
-        })
+        self._event_log.append(
+            {
+                "timestamp": time.time(),
+                "type": "stage",
+                "stage_name": stage_name,
+                "latency_ms": latency_ms,
+                **(metadata or {}),
+            }
+        )
 
     def log_event(self, event_type: str, data: dict) -> None:
         """General purpose event log for load times, config changes, etc."""
-        self._event_log.append({
-            "timestamp": time.time(),
-            "type": event_type,
-            **data,
-        })
+        self._event_log.append(
+            {
+                "timestamp": time.time(),
+                "type": event_type,
+                **data,
+            }
+        )
 
     # ------------------------------------------------------------------
     # Timer helpers - measure wall-clock spans
@@ -180,10 +188,18 @@ class MetricsCollector:
         """Break down latency against the <5s target.
         Shows exactly where time is spent in the pipeline.
         """
-        stage1 = [r for r in self._inference_log
-                  if any(name in r.model_name.lower() for name in ["yamnet", "imu", "ir"])]
-        stage2 = [r for r in self._inference_log
-                  if any(name in r.model_name.lower() for name in ["movinet", "mobileclip", "yolo", "qwen"])]
+        stage1 = [
+            r
+            for r in self._inference_log
+            if any(name in r.model_name.lower() for name in ["yamnet", "imu", "ir"])
+        ]
+        stage2 = [
+            r
+            for r in self._inference_log
+            if any(
+                name in r.model_name.lower() for name in ["movinet", "mobileclip", "yolo", "qwen"]
+            )
+        ]
 
         def stats(records):
             if not records:
@@ -206,10 +222,7 @@ class MetricsCollector:
 
     def print_stage_latencies(self) -> None:
         """Print latency table for the most recent pipeline run."""
-        stage_records = [
-            e for e in self._event_log
-            if e.get("type") == "stage"
-        ]
+        stage_records = [e for e in self._event_log if e.get("type") == "stage"]
         if not stage_records:
             print("No stage latencies recorded.")
             return
@@ -230,9 +243,9 @@ class MetricsCollector:
     def print_summary(self) -> None:
         """Print a human-readable summary to stdout."""
         r = self.report()
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"METRICS SUMMARY  |  session: {r['session_id']}")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
         print(f"Total inferences: {r['total_inferences']}")
         print("\nPer-model latency:")
         for model, stats in r["per_model"].items():
@@ -241,6 +254,8 @@ class MetricsCollector:
         print("\nLatency budget (target <5000ms):")
         print(f"  Stage 1: {budget.get('stage1', {}).get('mean_ms', 0):.1f}ms")
         print(f"  Stage 2: {budget.get('stage2', {}).get('mean_ms', 0):.1f}ms")
-        print(f"  Total:   {budget['total_mean_ms']:.1f}ms  "
-              f"({'✓ within budget' if budget['within_budget'] else '✗ over budget'})")
-        print(f"{'='*50}\n")
+        print(
+            f"  Total:   {budget['total_mean_ms']:.1f}ms  "
+            f"({'✓ within budget' if budget['within_budget'] else '✗ over budget'})"
+        )
+        print(f"{'=' * 50}\n")

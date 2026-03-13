@@ -34,19 +34,22 @@ logger = logging.getLogger(__name__)
 # Output types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProcessedFrame:
     """Single preprocessed frame ready for model-specific tensor conversion.
     Handed off from ImagePreprocessor to a model's _preprocess().
     """
-    data: np.ndarray        # HxWxC float32, normalized
-    original_size: tuple    # (H, W) before resize
+
+    data: np.ndarray  # HxWxC float32, normalized
+    original_size: tuple  # (H, W) before resize
     timestamp: float
 
 
 # ---------------------------------------------------------------------------
 # Configs
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ImagePreprocessConfig:
@@ -56,28 +59,31 @@ class ImagePreprocessConfig:
     YOLO:          target_size=(640,640), letterbox=True
     MoViNet:       target_size=(172,172), standard ImageNet mean/std
     """
-    target_size: tuple[int, int] = (256, 256)       # (H, W) — resize to this first
-    crop_size: tuple[int, int] | None = None      # then center-crop to this; None = no crop
+
+    target_size: tuple[int, int] = (256, 256)  # (H, W) — resize to this first
+    crop_size: tuple[int, int] | None = None  # then center-crop to this; None = no crop
     mean: tuple[float, ...] = (0.485, 0.456, 0.406)
-    std:  tuple[float, ...] = (0.229, 0.224, 0.225)
+    std: tuple[float, ...] = (0.229, 0.224, 0.225)
     to_rgb: bool = True
-    letterbox: bool = False                          # preserve aspect ratio + pad
+    letterbox: bool = False  # preserve aspect ratio + pad
 
 
 @dataclass
 class VideoPreprocessConfig:
     """Tunable parameters for video clip preprocessing."""
+
     target_size: tuple[int, int] = (256, 256)
-    target_fps: float | None = None          # None = keep original fps
+    target_fps: float | None = None  # None = keep original fps
     mean: tuple[float, ...] = (0.485, 0.456, 0.406)
-    std:  tuple[float, ...] = (0.229, 0.224, 0.225)
+    std: tuple[float, ...] = (0.229, 0.224, 0.225)
     to_rgb: bool = True
-    max_frames: int | None = None            # clip to N frames
+    max_frames: int | None = None  # clip to N frames
 
 
 # ---------------------------------------------------------------------------
 # ImagePreprocessor
 # ---------------------------------------------------------------------------
+
 
 class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
     """Preprocesses a single ImageInput into a ProcessedFrame.
@@ -131,7 +137,8 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
             input = self._dispatch(self._to_rgb, input)
 
         frame = self._dispatch(
-            self._resize, input,
+            self._resize,
+            input,
             self.config.target_size,
             self.config.letterbox,
         )
@@ -140,7 +147,8 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
             frame = self._dispatch(self._center_crop, frame, self.config.crop_size)
 
         frame = self._dispatch(
-            self._normalize, frame,
+            self._normalize,
+            frame,
             self.config.mean,
             self.config.std,
         )
@@ -156,11 +164,13 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         """Convert BGR (OpenCV default) to RGB."""
         try:
             import cv2
+
             rgb = cv2.cvtColor(image.frame, cv2.COLOR_BGR2RGB)
         except ImportError:
             rgb = image.frame[..., ::-1].copy()
-        return RawFrameMessage(frame=rgb, timestamp=image.timestamp,
-                         width=image.width, height=image.height)
+        return RawFrameMessage(
+            frame=rgb, timestamp=image.timestamp, width=image.width, height=image.height
+        )
 
     def _center_crop(self, frame: ProcessedFrame, crop_size: tuple[int, int]) -> ProcessedFrame:
         """Crop the center crop_size (H, W) pixels from a frame.
@@ -174,9 +184,9 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
                 f"Frame {fh}x{fw} is smaller than crop size {ch}x{cw}. "
                 f"Increase target_size so it is >= crop_size."
             )
-        top  = (fh - ch) // 2
+        top = (fh - ch) // 2
         left = (fw - cw) // 2
-        cropped = frame.data[top:top + ch, left:left + cw].copy()
+        cropped = frame.data[top : top + ch, left : left + cw].copy()
         return ProcessedFrame(
             data=cropped,
             original_size=frame.original_size,
@@ -192,6 +202,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         """Resize to target_size. Uses intermediate buffer separate from crop buffer."""
         try:
             import cv2
+
             if letterbox:
                 frame = self._letterbox_cv2(image.frame, target_size)
             else:
@@ -222,29 +233,31 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         if data.max() > 1.0:
             data /= 255.0
         mean_arr = np.array(mean, dtype=np.float32)
-        std_arr  = np.array(std,  dtype=np.float32)
+        std_arr = np.array(std, dtype=np.float32)
         data = (data - mean_arr) / std_arr
-        return ProcessedFrame(data=data, original_size=frame.original_size,
-                             timestamp=frame.timestamp)
+        return ProcessedFrame(
+            data=data, original_size=frame.original_size, timestamp=frame.timestamp
+        )
 
     def _letterbox_cv2(self, image: np.ndarray, target_size: tuple) -> np.ndarray:
         """Resize preserving aspect ratio, pad remainder. Used by YOLO."""
         import cv2
+
         h, w = image.shape[:2]
         th, tw = target_size
         scale = min(tw / w, th / h)
         new_w, new_h = int(w * scale), int(h * scale)
         resized = cv2.resize(image, (new_w, new_h))
         padded = np.full((th, tw, 3), 114, dtype=np.uint8)
-        pad_top  = (th - new_h) // 2
+        pad_top = (th - new_h) // 2
         pad_left = (tw - new_w) // 2
-        padded[pad_top:pad_top + new_h, pad_left:pad_left + new_w] = resized
+        padded[pad_top : pad_top + new_h, pad_left : pad_left + new_w] = resized
         return padded
 
     def _resize_numpy(self, image: np.ndarray, target_size: tuple) -> np.ndarray:
         """Numpy-only nearest-neighbor fallback."""
         th, tw = target_size
-        h, w   = image.shape[:2]
+        h, w = image.shape[:2]
         row_idx = (np.arange(th) * h / th).astype(int)
         col_idx = (np.arange(tw) * w / tw).astype(int)
         return image[row_idx][:, col_idx]
@@ -256,5 +269,6 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         self._buffers.register("resize", BufferSpec((rh, rw, 3), np.float32), overwrite=True)
         fh, fw = config.crop_size or config.target_size
         self._buffers.register("frame", BufferSpec((fh, fw, 3), np.float32), overwrite=True)
-        logger.info(f"ImagePreprocessor reconfigured: resize={config.target_size} crop={config.crop_size}")
-
+        logger.info(
+            f"ImagePreprocessor reconfigured: resize={config.target_size} crop={config.crop_size}"
+        )

@@ -44,7 +44,7 @@ from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 logger = logging.getLogger(__name__)
 
 # Generic type variables
-InputT  = TypeVar("InputT")   # what goes in  (AudioInput, ImageInput, ...)
+InputT = TypeVar("InputT")  # what goes in  (AudioInput, ImageInput, ...)
 OutputT = TypeVar("OutputT")  # what comes out (list[AudioChunk], ProcessedFrame, ...)
 
 
@@ -52,9 +52,11 @@ OutputT = TypeVar("OutputT")  # what comes out (list[AudioChunk], ProcessedFrame
 # Pre-allocated buffer pool
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class BufferSpec:
     """Describes a pre-allocated output buffer."""
+
     shape: tuple
     dtype: np.dtype = np.float32
 
@@ -113,6 +115,7 @@ class BufferPool:
 # Compute dispatch
 # ---------------------------------------------------------------------------
 
+
 class ComputeDispatcher:
     """Routes preprocessing operations to the right compute unit.
 
@@ -139,7 +142,7 @@ class ComputeDispatcher:
         """
         if self._unit == ComputeUnit.DSP and self._dsp_available:
             return self._dispatch_dsp(fn, *args, **kwargs)
-        return fn(*args, **kwargs)   # CPU path - direct call
+        return fn(*args, **kwargs)  # CPU path - direct call
 
     def _dispatch_dsp(self, fn: Callable, *args, **kwargs) -> Any:
         """DSP dispatch path.
@@ -159,6 +162,7 @@ class ComputeDispatcher:
 # ---------------------------------------------------------------------------
 # Base preprocessor
 # ---------------------------------------------------------------------------
+
 
 class BasePreprocessor(ABC, Generic[InputT, OutputT]):
     """Abstract base for all preprocessors.
@@ -194,7 +198,7 @@ class BasePreprocessor(ABC, Generic[InputT, OutputT]):
     def __init__(
         self,
         compute_unit: ComputeUnit = ComputeUnit.CPU,
-        metrics=None,           # Optional[MetricsCollector] - avoid circular import
+        metrics=None,  # Optional[MetricsCollector] - avoid circular import
     ):
         self._compute_unit = compute_unit
         self._metrics = metrics
@@ -224,11 +228,14 @@ class BasePreprocessor(ABC, Generic[InputT, OutputT]):
         elapsed_ms = (time.perf_counter() - t_start) * 1000
 
         if self._metrics:
-            self._metrics.log_event("preprocess", {
-                "preprocessor": self.__class__.__name__,
-                "latency_ms": elapsed_ms,
-                "compute_unit": self._dispatcher.active_unit.name,
-            })
+            self._metrics.log_event(
+                "preprocess",
+                {
+                    "preprocessor": self.__class__.__name__,
+                    "latency_ms": elapsed_ms,
+                    "compute_unit": self._dispatcher.active_unit.name,
+                },
+            )
 
         logger.debug(f"{self.__class__.__name__}.process: {elapsed_ms:.2f}ms")
         return result

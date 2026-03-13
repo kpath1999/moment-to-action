@@ -23,8 +23,8 @@ from moment_to_action.edgeperceive.stages import (
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--image",  required=True)
-parser.add_argument("--model",  required=True)
+parser.add_argument("--image", required=True)
+parser.add_argument("--model", required=True)
 parser.add_argument("--device", choices=["cpu", "npu"], default="cpu")
 args = parser.parse_args()
 
@@ -36,25 +36,28 @@ PROMPTS = [
     "a photo of a person in distress",
 ]
 
-device  = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
+device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
 metrics = MetricsCollector()
 
-pipeline = Pipeline(stages=[
-    SensorStage(),
-    PreprocessorStage(
-        target_size=(256, 256),
-        mean=(0.0, 0.0, 0.0),
-        std=(1.0, 1.0, 1.0),
-        letterbox=False,
-    ),
-    MobileCLIPStage(
-        model_path=args.model,
-        text_prompts=PROMPTS,
-        compute_unit=device,
-    ),
-], metrics=metrics)
+pipeline = Pipeline(
+    stages=[
+        SensorStage(),
+        PreprocessorStage(
+            target_size=(256, 256),
+            mean=(0.0, 0.0, 0.0),
+            std=(1.0, 1.0, 1.0),
+            letterbox=False,
+        ),
+        MobileCLIPStage(
+            model_path=args.model,
+            text_prompts=PROMPTS,
+            compute_unit=device,
+        ),
+    ],
+    metrics=metrics,
+)
 
-msg    = RawFrameMessage(frame=None, timestamp=time.time(), source=args.image)
+msg = RawFrameMessage(frame=None, timestamp=time.time(), source=args.image)
 result = pipeline.run(msg)
 
 if result is None:
@@ -63,7 +66,7 @@ else:
     print("\nResults:")
     print("-" * 60)
     for prompt, score in sorted(result.all_scores.items(), key=lambda x: -x[1]):
-        bar    = "█" * int(score * 40)
+        bar = "█" * int(score * 40)
         marker = " ← best" if prompt == result.label else ""
         print(f"  {score:.3f}  {bar:<40}  {prompt}{marker}")
     print("-" * 60)

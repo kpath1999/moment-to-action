@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 
 class Stage(ABC):
-
     @property
     def name(self) -> str:
         return self.__class__.__name__
@@ -48,7 +47,6 @@ class Stage(ABC):
 
 
 class Pipeline:
-
     def __init__(
         self,
         stages: list[Stage],

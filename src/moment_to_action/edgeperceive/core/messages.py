@@ -20,23 +20,27 @@ import numpy as np
 @dataclass
 class RawFrameMessage:
     """Out of SensorStage. Raw image, nothing done to it yet."""
-    frame: np.ndarray       # HxWxC uint8, BGR (OpenCV default)
+
+    frame: np.ndarray  # HxWxC uint8, BGR (OpenCV default)
     timestamp: float
-    source: str = ""        # path or device name, useful for debugging
+    source: str = ""  # path or device name, useful for debugging
     width: int = 0
     height: int = 0
+
 
 @dataclass
 class TensorMessage:
     """Out of PreprocessorStage. Frame is resized, normalized, ready for a model."""
-    tensor: np.ndarray      # model-ready float32 tensor, shape depends on model
-    original_size: tuple    # (H, W) before preprocessing
+
+    tensor: np.ndarray  # model-ready float32 tensor, shape depends on model
+    original_size: tuple  # (H, W) before preprocessing
     timestamp: float
 
 
 @dataclass
 class BoundingBox:
     """A single YOLO detection."""
+
     x1: float
     y1: float
     x2: float
@@ -49,6 +53,7 @@ class BoundingBox:
 @dataclass
 class DetectionMessage:
     """Out of ModelStage (YOLO). Zero or more bounding boxes."""
+
     boxes: list[BoundingBox]
     latency_ms: float
     timestamp: float
@@ -65,22 +70,27 @@ class DetectionMessage:
 @dataclass
 class ReasoningMessage:
     """Out of ReasoningStage (LLM). Final text output."""
+
     response: str
-    prompt: str             # what was sent to the LLM, useful for debugging
+    prompt: str  # what was sent to the LLM, useful for debugging
     latency_ms: float
     timestamp: float
+
 
 @dataclass
 class ClassificationMessage:
     """Out of MobileCLIPStage. Best matching prompt and all scores."""
-    label: str                      # best matching prompt
-    confidence: float               # softmax score for best match
-    all_scores: dict[str, float]    # prompt → score for all prompts
+
+    label: str  # best matching prompt
+    confidence: float  # softmax score for best match
+    all_scores: dict[str, float]  # prompt → score for all prompts
     latency_ms: float
     timestamp: float
+
 
 # Union of all message types — what a stage can receive or emit
 # (this will be useful for multimodal stages, where we may have to combine data
 # from different sensors)
-Message = RawFrameMessage | TensorMessage | DetectionMessage | ReasoningMessage | ClassificationMessage
-
+Message = (
+    RawFrameMessage | TensorMessage | DetectionMessage | ReasoningMessage | ClassificationMessage
+)

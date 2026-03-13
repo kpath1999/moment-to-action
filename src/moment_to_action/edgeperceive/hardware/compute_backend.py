@@ -38,6 +38,7 @@ ModelInput = Union[np.ndarray, dict[str, np.ndarray]]
 # Power monitor
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PowerSample:
     timestamp: float
@@ -50,6 +51,7 @@ class PowerMonitor:
     """Reads power draw from sysfs on QCS6490.
     Falls back to estimates when sensors are unavailable.
     """
+
     SYSFS_POWER_PATH = "/sys/class/power_supply"
 
     def __init__(self):
@@ -57,6 +59,7 @@ class PowerMonitor:
 
     def _check_hw_sensors(self) -> bool:
         import os
+
         return os.path.exists(self.SYSFS_POWER_PATH)
 
     def sample(self, unit: ComputeUnit) -> PowerSample:
@@ -69,8 +72,10 @@ class PowerMonitor:
             with open(f"{self.SYSFS_POWER_PATH}/battery/power_now") as f:
                 power_uw = int(f.read().strip())
             return PowerSample(
-                timestamp=time.time(), compute_unit=unit,
-                power_mw=power_uw / 1000.0, utilization_pct=0.0,
+                timestamp=time.time(),
+                compute_unit=unit,
+                power_mw=power_uw / 1000.0,
+                utilization_pct=0.0,
             )
         except (FileNotFoundError, ValueError) as e:
             logger.warning(f"HW power sensor read failed: {e}")
@@ -84,14 +89,17 @@ class PowerMonitor:
             ComputeUnit.CPU: 300.0,
         }
         return PowerSample(
-            timestamp=time.time(), compute_unit=unit,
-            power_mw=estimates.get(unit, 300.0), utilization_pct=0.0,
+            timestamp=time.time(),
+            compute_unit=unit,
+            power_mw=estimates.get(unit, 300.0),
+            utilization_pct=0.0,
         )
 
 
 # ---------------------------------------------------------------------------
 # Runtime backends
 # ---------------------------------------------------------------------------
+
 
 class InferenceBackend(ABC):
     """Abstract runtime. One implementation per runtime (LiteRT, SNPE, ONNX)."""
@@ -112,18 +120,21 @@ def _load_interpreter(model_path: str, delegates: list) -> Any:
     """
     try:
         from ai_edge_litert.interpreter import Interpreter
+
         interp = Interpreter(model_path=model_path, experimental_delegates=delegates)
         logger.info(f"Loaded {model_path} via ai_edge_litert")
     except RuntimeError as e:
         if delegates:
             logger.warning(f"Delegate failed ({e}) — retrying on CPU")
             from ai_edge_litert.interpreter import Interpreter
+
             interp = Interpreter(model_path=model_path)
         else:
             raise
     except ImportError:
         logger.warning("ai_edge_litert not installed, falling back to tf.lite")
         import tensorflow as tf
+
         try:
             interp = tf.lite.Interpreter(model_path=model_path, experimental_delegates=delegates)
         except (RuntimeError, ValueError, OSError):
@@ -158,17 +169,13 @@ def _set_inputs(interp: Any, inputs: ModelInput) -> None:
     for name, tensor in inputs.items():
         if name not in name_to_detail:
             available = list(name_to_detail.keys())
-            raise KeyError(
-                f"Input name '{name}' not found in model. "
-                f"Available: {available}"
-            )
+            raise KeyError(f"Input name '{name}' not found in model. Available: {available}")
         detail = name_to_detail[name]
         # Validate dtype to catch float32/int64 mismatches early
         expected_dtype = detail["dtype"]
         if tensor.dtype != expected_dtype:
             raise TypeError(
-                f"Input '{name}' dtype mismatch: "
-                f"got {tensor.dtype}, model expects {expected_dtype}"
+                f"Input '{name}' dtype mismatch: got {tensor.dtype}, model expects {expected_dtype}"
             )
         interp.set_tensor(detail["index"], tensor)
 
@@ -199,11 +206,12 @@ class LiteRTBackend(InferenceBackend):
         delegates = []
         try:
             from ai_edge_litert.interpreter import load_delegate
+
             if self._unit == ComputeUnit.NPU:
                 qnn = load_delegate("/usr/lib/libQnnTFLiteDelegate.so")
                 delegates.append(qnn)
                 logger.info("QNN delegate loaded → Hexagon HTP/NPU")
-        except Exception as e: # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             # Delegate failed → fallback to CPU interpreter
             logger.warning(f"NPU delegate unavailable ({e}), falling back to CPU XNNPACK")
         return delegates
@@ -236,6 +244,7 @@ class ONNXBackend(InferenceBackend):
             return self._session_cache[model_path]
         try:
             import onnxruntime as ort
+
             session = ort.InferenceSession(
                 model_path,
                 providers=["CPUExecutionProvider"],
@@ -281,6 +290,7 @@ class CPUBackend(InferenceBackend):
 # ComputeBackend — what models actually call
 # ---------------------------------------------------------------------------
 
+
 class ComputeBackend:
     """HAL entry point. Models call this, never LiteRT or SNPE directly.
 
@@ -320,6 +330,7 @@ class ComputeBackend:
         """Run inference. Routes to the correct backend based on model handle type."""
         try:
             import onnxruntime as ort
+
             if isinstance(model_handle, ort.InferenceSession):
                 return self._onnx_backend.run(model_handle, inputs)
         except ImportError:
@@ -352,12 +363,12 @@ class ComputeBackend:
 
         arr = np.array(latencies)
         return {
-            "mean_ms":    float(np.mean(arr)),
-            "p50_ms":     float(np.percentile(arr, 50)),
-            "p95_ms":     float(np.percentile(arr, 95)),
-            "p99_ms":     float(np.percentile(arr, 99)),
-            "min_ms":     float(np.min(arr)),
-            "max_ms":     float(np.max(arr)),
+            "mean_ms": float(np.mean(arr)),
+            "p50_ms": float(np.percentile(arr, 50)),
+            "p95_ms": float(np.percentile(arr, 95)),
+            "p99_ms": float(np.percentile(arr, 99)),
+            "min_ms": float(np.min(arr)),
+            "max_ms": float(np.max(arr)),
             "compute_unit": self.active_unit.name,
-            "n_runs":     n_runs,
+            "n_runs": n_runs,
         }

@@ -15,7 +15,7 @@ from moment_to_action.edgeperceive.core import RawFrameMessage
 from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 from moment_to_action.edgeperceive.metrics.collector import MetricsCollector
 from moment_to_action.edgeperceive.stages import (
-    #Pipeline, RawFrameMessage,
+    # Pipeline, RawFrameMessage,
     Pipeline,
     PreprocessorStage,
     ReasoningStage,
@@ -26,23 +26,26 @@ from moment_to_action.edgeperceive.stages import (
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--image",  required=True)
-parser.add_argument("--model",  required=True, help="Path to YOLO tflite")
+parser.add_argument("--image", required=True)
+parser.add_argument("--model", required=True, help="Path to YOLO tflite")
 parser.add_argument("--device", choices=["cpu", "npu"], default="cpu")
-parser.add_argument("--conf",   type=float, default=0.5, help="Confidence threshold")
+parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold")
 args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
 metrics = MetricsCollector()
 
 # ── build pipeline ─────────────────────────────────────────────────
-#build a pipeline as a sequence of stages
-pipeline = Pipeline(stages=[
-    SensorStage(),
-    PreprocessorStage(target_size=(640, 640), letterbox=True),
-    YOLOStage(model_path=args.model, confidence_threshold=args.conf, compute_unit=device),
-    ReasoningStage(model_path=None),
-], metrics=metrics)
+# build a pipeline as a sequence of stages
+pipeline = Pipeline(
+    stages=[
+        SensorStage(),
+        PreprocessorStage(target_size=(640, 640), letterbox=True),
+        YOLOStage(model_path=args.model, confidence_threshold=args.conf, compute_unit=device),
+        ReasoningStage(model_path=None),
+    ],
+    metrics=metrics,
+)
 
 # ── run ────────────────────────────────────────────────────────────
 msg = RawFrameMessage(frame=None, timestamp=time.time(), source=args.image)

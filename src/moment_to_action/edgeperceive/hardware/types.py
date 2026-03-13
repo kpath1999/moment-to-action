@@ -10,6 +10,7 @@ from enum import Enum, auto
 
 class ComputeUnit(Enum):
     """Available compute units on the QCS6490."""
+
     CPU = auto()
     NPU = auto()
     GPU = auto()

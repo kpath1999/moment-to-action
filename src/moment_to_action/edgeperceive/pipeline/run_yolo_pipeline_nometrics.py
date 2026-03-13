@@ -24,21 +24,23 @@ from moment_to_action.edgeperceive.stages import (
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--image",  required=True)
-parser.add_argument("--model",  required=True, help="Path to YOLO tflite")
+parser.add_argument("--image", required=True)
+parser.add_argument("--model", required=True, help="Path to YOLO tflite")
 parser.add_argument("--device", choices=["cpu", "npu"], default="cpu")
-parser.add_argument("--conf",   type=float, default=0.5, help="Confidence threshold")
+parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold")
 args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
 
 # ── build pipeline ─────────────────────────────────────────────────
-pipeline = Pipeline([
-    SensorStage(),
-    PreprocessorStage(target_size=(640, 640), letterbox=True),
-    YOLOStage(model_path=args.model, confidence_threshold=args.conf, compute_unit=device),
-    ReasoningStage(model_path=None),   # LLM stub for now
-])
+pipeline = Pipeline(
+    [
+        SensorStage(),
+        PreprocessorStage(target_size=(640, 640), letterbox=True),
+        YOLOStage(model_path=args.model, confidence_threshold=args.conf, compute_unit=device),
+        ReasoningStage(model_path=None),  # LLM stub for now
+    ]
+)
 
 # ── run ────────────────────────────────────────────────────────────
 msg = RawFrameMessage(frame=None, timestamp=time.time(), source=args.image)

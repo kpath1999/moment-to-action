@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 # MobileCLIPStage
 # ──────────────────────────────────────────────────────────────────
 
+
 class MobileCLIPStage(Stage):
     """Runs MobileCLIP-S2 zero-shot classification on a preprocessed tensor.
 
@@ -51,6 +52,7 @@ class MobileCLIPStage(Stage):
     ):
         from moment_to_action.edgeperceive.hardware.compute_backend import ComputeBackend
         from moment_to_action.edgeperceive.hardware.types import ComputeUnit
+
         if compute_unit is None:
             compute_unit = ComputeUnit.CPU
 
@@ -69,12 +71,12 @@ class MobileCLIPStage(Stage):
             outputs = self._backend.run(
                 self._handle,
                 {
-                    "serving_default_args_0:0": msg.tensor,   # [1, 3, 256, 256]
-                    "serving_default_args_1:0": token_tensor, # [1, 77]
-                }
+                    "serving_default_args_0:0": msg.tensor,  # [1, 3, 256, 256]
+                    "serving_default_args_1:0": token_tensor,  # [1, 77]
+                },
             )
-            image_emb = outputs[1][0]   # [512]
-            text_emb  = outputs[0][0]   # [512]
+            image_emb = outputs[1][0]  # [512]
+            text_emb = outputs[0][0]  # [512]
             scores.append(self._cosine_similarity(image_emb, text_emb))
 
         scores_arr = np.array(scores, dtype=np.float32)
@@ -102,6 +104,7 @@ class MobileCLIPStage(Stage):
     def _tokenize(self, prompts: list[str]) -> np.ndarray:
         try:
             import open_clip
+
             tokenizer = open_clip.get_tokenizer("MobileCLIP-S2")
             return tokenizer(prompts).numpy().astype(np.int64)
         except ImportError as err:

@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # 1. SensorStage
 # ──────────────────────────────────────────────────────────────────
 
+
 class SensorStage(Stage):
     """Loads an image from disk and emits a RawFrameMessage.
     In production this will read from a camera buffer instead.
@@ -45,6 +46,7 @@ class SensorStage(Stage):
     def process(self, msg: RawFrameMessage) -> RawFrameMessage | None:
         try:
             import cv2
+
             frame = cv2.imread(msg.source)
             if frame is None:
                 logger.error(f"SensorStage: could not read {msg.source}")
@@ -64,6 +66,7 @@ class SensorStage(Stage):
 # 2. PreprocessorStage
 # ──────────────────────────────────────────────────────────────────
 
+
 class PreprocessorStage(Stage):
     """Resizes and normalizes a raw frame for a specific model.
     Wraps the existing ImagePreprocessor — config drives behaviour.
@@ -78,7 +81,7 @@ class PreprocessorStage(Stage):
         letterbox: bool = True,
         channels_first: bool = True,
         mean: tuple = (0.0, 0.0, 0.0),
-        std: tuple  = (1.0, 1.0, 1.0),
+        std: tuple = (1.0, 1.0, 1.0),
     ):
         self._preprocessor = ImagePreprocessor(
             config=ImagePreprocessConfig(
@@ -91,7 +94,7 @@ class PreprocessorStage(Stage):
         self._channels_first = channels_first
 
     def process(self, msg: RawFrameMessage) -> TensorMessage | None:
-        #img = ImageInput(
+        # img = ImageInput(
         img = RawFrameMessage(
             frame=msg.frame,
             timestamp=msg.timestamp,
@@ -108,4 +111,3 @@ class PreprocessorStage(Stage):
             original_size=processed.original_size,
             timestamp=msg.timestamp,
         )
-
