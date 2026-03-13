@@ -89,6 +89,12 @@ To run ruff
 uv run ruff check src/moment_to_action
 ```
 
+**Download MobileCLIP model**:
+
+```bash
+mkdir -p src/moment_to_action/edgeperceive/models/mobileclip_s2
+curl -L --create-dirs --output-dir src/moment_to_action/edgeperceive/models/mobileclip_s2/ -O https://huggingface.co/anton96vice/mobileclip2_tflite/resolve/main/mobileclip_s2_datacompdr_last.tflite
+
 ### YOLOv8 Object Detection
 
 ```bash
