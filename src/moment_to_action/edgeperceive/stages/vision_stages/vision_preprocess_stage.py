@@ -1,6 +1,4 @@
-"""stages/vision_preprocess_stage.py
-
-Initial stage/s for the YOLO → LLM baseline pipeline.
+"""Initial stages for the YOLO → LLM baseline pipeline.
 
 SensorStage        loads an image from disk → RawFrameMessage
 PreprocessorStage  resizes + normalizes    → TensorMessage
@@ -37,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 class SensorStage(Stage):
     """Loads an image from disk and emits a RawFrameMessage.
+
     In production this will read from a camera buffer instead.
 
     Input:  path string (passed via a bootstrap RawFrameMessage)
@@ -44,22 +43,24 @@ class SensorStage(Stage):
     """
 
     def process(self, msg: RawFrameMessage) -> RawFrameMessage | None:
+        """Load an image from disk and return a RawFrameMessage."""
         try:
             import cv2
 
             frame = cv2.imread(msg.source)
             if frame is None:
-                logger.error(f"SensorStage: could not read {msg.source}")
+                logger.error("SensorStage: could not read %s", msg.source)
                 return None
             h, w = frame.shape[:2]
-            logger.debug(f"SensorStage: loaded {msg.source} ({w}x{h})")
+            logger.debug("SensorStage: loaded %s (%dx%d)", msg.source, w, h)
             return RawFrameMessage(
                 frame=frame,
                 timestamp=msg.timestamp or time.time(),
                 source=msg.source,
             )
         except ImportError as err:
-            raise RuntimeError("opencv-python required: pip install opencv-python") from err
+            msg = "opencv-python required: pip install opencv-python"
+            raise RuntimeError(msg) from err
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ class SensorStage(Stage):
 
 class PreprocessorStage(Stage):
     """Resizes and normalizes a raw frame for a specific model.
+
     Wraps the existing ImagePreprocessor — config drives behaviour.
 
     Input:  RawFrameMessage
@@ -78,11 +80,12 @@ class PreprocessorStage(Stage):
     def __init__(
         self,
         target_size: tuple[int, int] = (640, 640),
+        *,
         letterbox: bool = True,
         channels_first: bool = True,
         mean: tuple = (0.0, 0.0, 0.0),
         std: tuple = (1.0, 1.0, 1.0),
-    ):
+    ) -> None:
         self._preprocessor = ImagePreprocessor(
             config=ImagePreprocessConfig(
                 target_size=target_size,
@@ -94,7 +97,7 @@ class PreprocessorStage(Stage):
         self._channels_first = channels_first
 
     def process(self, msg: RawFrameMessage) -> TensorMessage | None:
-        # img = ImageInput(
+        """Preprocess a raw frame into a model-ready tensor."""
         img = RawFrameMessage(
             frame=msg.frame,
             timestamp=msg.timestamp,

@@ -1,8 +1,7 @@
-"""hardware/types.py
+"""Hardware-related enums.
 
-Hardware-related enums. Kept separate from compute_backend.py
-to avoid circular imports — stages and preprocessors import
-ComputeUnit from here, not from compute_backend.py.
+Kept separate from compute_backend.py to avoid circular imports —
+stages and preprocessors import ComputeUnit from here, not from compute_backend.py.
 """
 
 from enum import Enum, auto

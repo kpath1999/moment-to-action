@@ -1,20 +1,21 @@
-"""stages/messages.py
+"""Messages are the data contracts between stages.
 
-Messages are the data contracts between stages.
 Each stage consumes one message type and produces another.
 Plain dataclasses — no logic, no imports from the rest of the framework.
 
-I'm creating messages focused around YoLo and MobileCLIP for now
+Creating messages focused around YoLo and MobileCLIP for now.
 The idea is to make it easy to extend the message space in two ways:
     1. Add new classes of messages (mostly for different sensors)
-    2. Add/Remove new parameters to existing message classes if different information is required
+    2. Add/Remove new parameters to existing message classes if different information is required.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 
 @dataclass
@@ -60,6 +61,7 @@ class DetectionMessage:
 
     @property
     def has_detections(self) -> bool:
+        """Return True if any bounding boxes are present."""
         return len(self.boxes) > 0
 
     def top(self, n: int = 1) -> list[BoundingBox]:

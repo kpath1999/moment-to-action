@@ -1,4 +1,4 @@
-"""stages/vision.py
+"""MobileCLIP-S2 zero-shot classification stage.
 
 Concrete stages for vision pipelines.
 
@@ -22,6 +22,7 @@ from moment_to_action.edgeperceive.core.messages import (
     ClassificationMessage,
     TensorMessage,
 )
+from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 from moment_to_action.edgeperceive.stages.base import Stage
 
 logger = logging.getLogger(__name__)
@@ -48,10 +49,9 @@ class MobileCLIPStage(Stage):
         self,
         model_path: str,
         text_prompts: list[str],
-        compute_unit=None,
-    ):
+        compute_unit: ComputeUnit | None = None,
+    ) -> None:
         from moment_to_action.edgeperceive.hardware.compute_backend import ComputeBackend
-        from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 
         if compute_unit is None:
             compute_unit = ComputeUnit.CPU
@@ -60,9 +60,10 @@ class MobileCLIPStage(Stage):
         self._handle = self._backend.load_model(model_path)
         self.text_prompts = text_prompts
         self._text_tokens = self._tokenize(text_prompts)
-        logger.info(f"MobileCLIPStage: loaded {model_path} with {len(text_prompts)} prompts")
+        logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))
 
     def process(self, msg: TensorMessage) -> ClassificationMessage | None:
+        """Run zero-shot classification against all text prompts."""
         t = time.perf_counter()
 
         scores = []
@@ -86,12 +87,14 @@ class MobileCLIPStage(Stage):
 
         label = self.text_prompts[best_idx]
         confidence = float(scores_softmax[best_idx])
-        logger.info(f"MobileCLIPStage: '{label}'  conf={confidence:.3f}  {latency_ms:.1f}ms")
+        logger.info("MobileCLIPStage: '%s'  conf=%.3f  %.1fms", label, confidence, latency_ms)
 
         return ClassificationMessage(
             label=label,
             confidence=confidence,
-            all_scores={p: float(s) for p, s in zip(self.text_prompts, scores_softmax)},
+            all_scores={
+                p: float(s) for p, s in zip(self.text_prompts, scores_softmax, strict=False)
+            },
             latency_ms=latency_ms,
             timestamp=msg.timestamp,
         )
@@ -108,7 +111,8 @@ class MobileCLIPStage(Stage):
             tokenizer = open_clip.get_tokenizer("MobileCLIP-S2")
             return tokenizer(prompts).numpy().astype(np.int64)
         except ImportError as err:
-            raise RuntimeError("open_clip required: pip install open-clip-torch") from err
+            msg = "open_clip required: pip install open-clip-torch"
+            raise RuntimeError(msg) from err
 
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         a = a / (np.linalg.norm(a) + 1e-8)

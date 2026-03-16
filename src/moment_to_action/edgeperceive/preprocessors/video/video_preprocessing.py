@@ -1,6 +1,4 @@
-"""preprocessors/vision.py
-
-Vision preprocessors - extend BasePreprocessor.
+"""Vision preprocessors — extend BasePreprocessor.
 
 ImagePreprocessor(BasePreprocessor[ImageInput, ProcessedFrame])
 VideoPreprocessor(BasePreprocessor[VideoInput, list[ProcessedFrame]])
@@ -20,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -38,6 +37,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProcessedFrame:
     """Single preprocessed frame ready for model-specific tensor conversion.
+
     Handed off from ImagePreprocessor to a model's _preprocess().
     """
 
@@ -104,8 +104,8 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         self,
         config: ImagePreprocessConfig | None = None,
         compute_unit: ComputeUnit = ComputeUnit.CPU,
-        metrics=None,
-    ):
+        metrics: Any = None,
+    ) -> None:
         self.config = config or ImagePreprocessConfig()
         super().__init__(compute_unit=compute_unit, metrics=metrics)
 
@@ -113,13 +113,16 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
     # BasePreprocessor interface
     # ------------------------------------------------------------------
 
-    def _validate(self, input: RawFrameMessage) -> None:
-        if input.frame is None:
-            raise ValueError("ImageInput has no frame data")
-        if input.frame.ndim not in (2, 3):
-            raise ValueError(f"Expected 2D or 3D frame, got shape {input.frame.shape}")
-        if input.width <= 0 or input.height <= 0:
-            raise ValueError(f"Invalid dimensions: {input.width}x{input.height}")
+    def _validate(self, data: RawFrameMessage) -> None:
+        if data.frame is None:
+            msg = "ImageInput has no frame data"
+            raise ValueError(msg)
+        if data.frame.ndim not in (2, 3):
+            msg = f"Expected 2D or 3D frame, got shape {data.frame.shape}"
+            raise ValueError(msg)
+        if data.width <= 0 or data.height <= 0:
+            msg = f"Invalid dimensions: {data.width}x{data.height}"
+            raise ValueError(msg)
 
     def _allocate_buffers(self) -> None:
         if not hasattr(self, "config"):
@@ -131,14 +134,14 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         fh, fw = self.config.crop_size or self.config.target_size
         self._buffers.register("frame", BufferSpec((fh, fw, 3), np.float32))
 
-    def _process(self, input: RawFrameMessage) -> ProcessedFrame:
+    def _process(self, data: RawFrameMessage) -> ProcessedFrame:
         """Rgb → resize → [center crop] → normalize, each step dispatched."""
         if self.config.to_rgb:
-            input = self._dispatch(self._to_rgb, input)
+            data = self._dispatch(self._to_rgb, data)
 
         frame = self._dispatch(
             self._resize,
-            input,
+            data,
             self.config.target_size,
             self.config.letterbox,
         )
@@ -153,7 +156,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
             self.config.std,
         )
 
-        return frame
+        return frame  # noqa: RET504
 
     # ------------------------------------------------------------------
     # Vision-specific operations
@@ -174,16 +177,18 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
 
     def _center_crop(self, frame: ProcessedFrame, crop_size: tuple[int, int]) -> ProcessedFrame:
         """Crop the center crop_size (H, W) pixels from a frame.
+
         Assumes frame.data is already resized to >= crop_size in both dims.
         Matches torchvision.transforms.CenterCrop behaviour.
         """
         ch, cw = crop_size
         fh, fw = frame.data.shape[:2]
         if fh < ch or fw < cw:
-            raise ValueError(
+            msg = (
                 f"Frame {fh}x{fw} is smaller than crop size {ch}x{cw}. "
                 f"Increase target_size so it is >= crop_size."
             )
+            raise ValueError(msg)
         top = (fh - ch) // 2
         left = (fw - cw) // 2
         cropped = frame.data[top : top + ch, left : left + cw].copy()
@@ -197,7 +202,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         self,
         image: RawFrameMessage,
         target_size: tuple[int, int],
-        letterbox: bool,
+        letterbox: bool,  # noqa: FBT001
     ) -> ProcessedFrame:
         """Resize to target_size. Uses intermediate buffer separate from crop buffer."""
         try:
@@ -270,5 +275,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         fh, fw = config.crop_size or config.target_size
         self._buffers.register("frame", BufferSpec((fh, fw, 3), np.float32), overwrite=True)
         logger.info(
-            f"ImagePreprocessor reconfigured: resize={config.target_size} crop={config.crop_size}"
+            "ImagePreprocessor reconfigured: resize=%s crop=%s",
+            config.target_size,
+            config.crop_size,
         )

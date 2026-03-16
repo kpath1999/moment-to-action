@@ -1,3 +1,5 @@
+"""Pipeline stages for sensor-to-action processing."""
+
 from .base import Pipeline
 from .vision_stages.mobileclip_stage import MobileCLIPStage
 from .vision_stages.vision_preprocess_stage import PreprocessorStage, SensorStage

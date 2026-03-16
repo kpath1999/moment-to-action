@@ -7,7 +7,14 @@ authors = [
     { name = "Nikola Vuk Maruszewski", email = "nikola@gatech.edu" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "ai-edge-litert>=2.1.3",
+    "numpy>=2.4.3",
+    "onnxruntime>=1.24.3",
+    "open-clip-torch>=3.3.0",
+    "opencv-python>=4.13.0.92",
+    "tensorflow>=2.21.0",
+]
 
 [project.scripts]
 m2a = "moment_to_action:main"
@@ -15,6 +22,10 @@ m2a = "moment_to_action:main"
 [build-system]
 requires = ["uv_build>=0.10.8,<0.11.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "moment_to_action"
 
 [dependency-groups]
 dev = [
@@ -34,8 +45,17 @@ indent-width = 4
 select = ["ALL"]
 
 ignore = [
-    # Lint-incompatible rules
+    # Formatter-incompatible
     "COM812",
+
+    # Lazy/conditional imports are intentional for optional deps (cv2, tf, onnxruntime)
+    "PLC0415",
+
+    # Any is appropriate for opaque runtime handles (TFLite interpreters, ONNX sessions)
+    "ANN401",
+
+    # __init__ docstrings are redundant when classes have docstrings
+    "D107",
 ]
 
 [tool.ruff.lint.pydocstyle]

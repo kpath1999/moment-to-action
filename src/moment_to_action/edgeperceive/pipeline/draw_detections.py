@@ -1,10 +1,9 @@
-"""draw_detections.py
-
-Runs the YOLO pipeline and draws bounding boxes on the image.
+"""Runs the YOLO pipeline and draws bounding boxes on the image.
 
 Usage:
     uv run python draw_detections.py --image weapon.jpg --model model.onnx
-    uv run python draw_detections.py --image weapon.jpg --model model.onnx --conf 0.3 --out result.jpg
+    uv run python draw_detections.py --image weapon.jpg --model model.onnx \
+        --conf 0.3 --out result.jpg
 """
 
 import argparse
@@ -24,6 +23,7 @@ from moment_to_action.edgeperceive.stages import (
 )
 from moment_to_action.edgeperceive.stages.base import Stage
 
+logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 parser = argparse.ArgumentParser()
@@ -38,10 +38,11 @@ args = parser.parse_args()
 class CaptureStage(Stage):
     """Stores the DetectionMessage and passes it through."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.detections = None
 
-    def process(self, msg):
+    def process(self, msg: DetectionMessage) -> DetectionMessage:
+        """Capture the detection message and pass it through."""
         self.detections = msg
         return msg
 
@@ -64,7 +65,7 @@ msg = RawFrameMessage(frame=None, timestamp=time.time(), source=args.image)
 pipeline.run(msg)
 
 if capture.detections is None:
-    print(f"No detections above conf={args.conf}")
+    logger.info("No detections above conf=%s", args.conf)
     sys.exit(0)
 
 # ── draw ───────────────────────────────────────────────────────────
@@ -73,7 +74,8 @@ det: DetectionMessage = capture.detections
 
 
 # Color per label (consistent across runs)
-def label_color(label: str) -> tuple:
+def label_color(label: str) -> tuple[int, int, int]:
+    """Return a deterministic BGR color for a label."""
     h = abs(hash(label)) % 179
     import colorsys
 
@@ -100,6 +102,9 @@ for box in sorted(det.boxes, key=lambda b: b.confidence):
     )
 
 cv2.imwrite(args.out, frame)
-print(f"\n{len(det.boxes)} detection(s) drawn → {args.out}")
+logger.info("\n%d detection(s) drawn → %s", len(det.boxes), args.out)
 for b in sorted(det.boxes, key=lambda b: -b.confidence):
-    print(f"  {b.label:20s}  {b.confidence:.2f}  [{b.x1:.0f},{b.y1:.0f},{b.x2:.0f},{b.y2:.0f}]")
+    logger.info(
+        "  %-20s  %.2f  [%.0f,%.0f,%.0f,%.0f]",
+        b.label, b.confidence, b.x1, b.y1, b.x2, b.y2,
+    )

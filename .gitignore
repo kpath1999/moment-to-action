@@ -212,3 +212,6 @@ src/moment_to_action/edgeperceive/trash/
 
 # Ignore large ML models
 src/moment_to_action/edgeperceive/models/mobileclip_s2/*.tflite
+
+# Ignore research models and HuggingFace weights
+src/moment_to_action/models/

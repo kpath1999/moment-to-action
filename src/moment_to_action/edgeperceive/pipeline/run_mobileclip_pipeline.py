@@ -1,9 +1,9 @@
-"""run_mobileclip_pipeline.py
+"""Runs SensorStage → PreprocessorStage → MobileCLIPStage on an image.
 
-Runs SensorStage → PreprocessorStage → MobileCLIPStage on an image.
+Usage::
 
-Usage:
-    uv run python run_mobileclip_pipeline.py --image weapon.jpg --model mobileclip_s2_datacompdr_last.tflite
+    uv run python run_mobileclip_pipeline.py --image weapon.jpg \
+        --model mobileclip_s2_datacompdr_last.tflite
 """
 
 import argparse
@@ -20,6 +20,7 @@ from moment_to_action.edgeperceive.stages import (
     SensorStage,
 )
 
+logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 parser = argparse.ArgumentParser()
@@ -61,14 +62,14 @@ msg = RawFrameMessage(frame=None, timestamp=time.time(), source=args.image)
 result = pipeline.run(msg)
 
 if result is None:
-    print("Pipeline returned no result.")
+    logger.info("Pipeline returned no result.")
 else:
-    print("\nResults:")
-    print("-" * 60)
+    logger.info("\nResults:")
+    logger.info("-" * 60)
     for prompt, score in sorted(result.all_scores.items(), key=lambda x: -x[1]):
         bar = "█" * int(score * 40)
         marker = " ← best" if prompt == result.label else ""
-        print(f"  {score:.3f}  {bar:<40}  {prompt}{marker}")
-    print("-" * 60)
+        logger.info("  %.3f  %-40s  %s%s", score, bar, prompt, marker)
+    logger.info("-" * 60)
 
 metrics.print_stage_latencies()
