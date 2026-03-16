@@ -165,6 +165,8 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
 
     def _to_rgb(self, image: RawFrameMessage) -> RawFrameMessage:
         """Convert BGR (OpenCV default) to RGB."""
+        if image.frame is None:
+            return image
         try:
             import cv2
 
@@ -205,6 +207,9 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         letterbox: bool,  # noqa: FBT001
     ) -> ProcessedFrame:
         """Resize to target_size. Uses intermediate buffer separate from crop buffer."""
+        if image.frame is None:
+            msg = "Cannot resize a RawFrameMessage with frame=None"
+            raise ValueError(msg)
         try:
             import cv2
 

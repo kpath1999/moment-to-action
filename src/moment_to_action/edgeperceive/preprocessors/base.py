@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 import numpy as np
+import numpy.typing as npt
 
 from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 
@@ -58,7 +59,7 @@ class BufferSpec:
     """Describes a pre-allocated output buffer."""
 
     shape: tuple
-    dtype: np.dtype = np.float32
+    dtype: npt.DTypeLike = np.float32
 
     def allocate(self) -> np.ndarray:
         """Allocate a zeroed numpy array matching this spec."""
@@ -83,9 +84,9 @@ class BufferPool:
         self._pool: dict[str, np.ndarray] = {}
         self._specs: dict[str, BufferSpec] = {}
 
-    def register(self, name: str, spec: BufferSpec) -> None:
+    def register(self, name: str, spec: BufferSpec, *, overwrite: bool = False) -> None:
         """Register and pre-allocate a named buffer. Call once at init."""
-        if name not in self._pool:
+        if name not in self._pool or overwrite:
             self._pool[name] = spec.allocate()
             self._specs[name] = spec
             logger.debug("BufferPool: allocated '%s' %s %s", name, spec.shape, spec.dtype)

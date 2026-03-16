@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -24,6 +25,9 @@ from moment_to_action.edgeperceive.core.messages import (
 )
 from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 from moment_to_action.edgeperceive.stages.base import Stage
+
+if TYPE_CHECKING:
+    from moment_to_action.edgeperceive.core.messages import Message
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +66,11 @@ class MobileCLIPStage(Stage):
         self._text_tokens = self._tokenize(text_prompts)
         logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))
 
-    def process(self, msg: TensorMessage) -> ClassificationMessage | None:
+    def process(self, msg: Message) -> ClassificationMessage | None:
         """Run zero-shot classification against all text prompts."""
+        if not isinstance(msg, TensorMessage):
+            err = f"MobileCLIPStage expects TensorMessage, got {type(msg).__name__}"
+            raise TypeError(err)
         t = time.perf_counter()
 
         scores = []

@@ -11,6 +11,7 @@ import logging
 import time
 
 from moment_to_action.edgeperceive.core import RawFrameMessage
+from moment_to_action.edgeperceive.core.messages import ClassificationMessage
 from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 from moment_to_action.edgeperceive.metrics.collector import MetricsCollector
 from moment_to_action.edgeperceive.stages import (
@@ -63,7 +64,7 @@ result = pipeline.run(msg)
 
 if result is None:
     logger.info("Pipeline returned no result.")
-else:
+elif isinstance(result, ClassificationMessage):
     logger.info("\nResults:")
     logger.info("-" * 60)
     for prompt, score in sorted(result.all_scores.items(), key=lambda x: -x[1]):

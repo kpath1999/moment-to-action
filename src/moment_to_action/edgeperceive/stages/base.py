@@ -62,8 +62,9 @@ class Pipeline:
 
     def run(self, msg: Message) -> Message | None:
         """Run the message through all stages sequentially."""
+        current: Message | None = msg
         for stage in self.stages:
-            msg = stage.run(msg, metrics=self.metrics)
-            if msg is None:
+            current = stage.run(current, metrics=self.metrics)  # type: ignore[arg-type]
+            if current is None:
                 return None
-        return msg
+        return current

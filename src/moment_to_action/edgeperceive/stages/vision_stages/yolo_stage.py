@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
@@ -26,6 +26,9 @@ from moment_to_action.edgeperceive.core.messages import (
 )
 from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 from moment_to_action.edgeperceive.stages.base import Stage
+
+if TYPE_CHECKING:
+    from moment_to_action.edgeperceive.core.messages import Message
 
 logger = logging.getLogger(__name__)
 
@@ -143,8 +146,11 @@ class YOLOStage(Stage):
         self.confidence_threshold = confidence_threshold
         logger.info("YOLOStage: loaded %s", model_path)
 
-    def process(self, msg: TensorMessage) -> DetectionMessage | None:
+    def process(self, msg: Message) -> DetectionMessage | None:
         """Run YOLO inference and return detections above threshold."""
+        if not isinstance(msg, TensorMessage):
+            err = f"YOLOStage expects TensorMessage, got {type(msg).__name__}"
+            raise TypeError(err)
         t = time.perf_counter()
         outputs = self._backend.run(self._handle, msg.tensor)
         latency_ms = (time.perf_counter() - t) * 1000
@@ -288,8 +294,11 @@ class ReasoningStage(Stage):
             "Based on the detected objects and their positions, assess the scene briefly."
         )
 
-    def process(self, msg: DetectionMessage) -> ReasoningMessage | None:
+    def process(self, msg: Message) -> ReasoningMessage | None:
         """Format detections into a prompt and run the LLM."""
+        if not isinstance(msg, DetectionMessage):
+            err = f"ReasoningStage expects DetectionMessage, got {type(msg).__name__}"
+            raise TypeError(err)
         prompt = self._build_prompt(msg)
         t = time.perf_counter()
         # LLM inference — tokenize, run, decode

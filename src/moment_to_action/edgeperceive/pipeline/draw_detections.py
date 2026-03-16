@@ -6,10 +6,13 @@ Usage:
         --conf 0.3 --out result.jpg
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import sys
 import time
+from typing import TYPE_CHECKING
 
 import cv2
 
@@ -22,6 +25,9 @@ from moment_to_action.edgeperceive.stages import (
     YOLOStage,
 )
 from moment_to_action.edgeperceive.stages.base import Stage
+
+if TYPE_CHECKING:
+    from moment_to_action.edgeperceive.core.messages import Message
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -39,10 +45,13 @@ class CaptureStage(Stage):
     """Stores the DetectionMessage and passes it through."""
 
     def __init__(self) -> None:
-        self.detections = None
+        self.detections: DetectionMessage | None = None
 
-    def process(self, msg: DetectionMessage) -> DetectionMessage:
+    def process(self, msg: Message) -> DetectionMessage:
         """Capture the detection message and pass it through."""
+        if not isinstance(msg, DetectionMessage):
+            err = f"CaptureStage expects DetectionMessage, got {type(msg).__name__}"
+            raise TypeError(err)
         self.detections = msg
         return msg
 
@@ -70,6 +79,9 @@ if capture.detections is None:
 
 # ── draw ───────────────────────────────────────────────────────────
 frame = cv2.imread(args.image)
+if frame is None:
+    logger.error("Could not read image: %s", args.image)
+    sys.exit(1)
 det: DetectionMessage = capture.detections
 
 

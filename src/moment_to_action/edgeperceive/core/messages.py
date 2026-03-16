@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 class RawFrameMessage:
     """Out of SensorStage. Raw image, nothing done to it yet."""
 
-    frame: np.ndarray  # HxWxC uint8, BGR (OpenCV default)
+    frame: np.ndarray | None  # HxWxC uint8, BGR (OpenCV default); None for path-only bootstrap
     timestamp: float
     source: str = ""  # path or device name, useful for debugging
     width: int = 0

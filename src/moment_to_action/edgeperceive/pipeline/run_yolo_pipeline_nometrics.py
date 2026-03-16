@@ -9,11 +9,11 @@ import argparse
 import logging
 import time
 
+from moment_to_action.edgeperceive.core.messages import RawFrameMessage, ReasoningMessage
 from moment_to_action.edgeperceive.hardware.types import ComputeUnit
 from moment_to_action.edgeperceive.stages import (
     Pipeline,
     PreprocessorStage,
-    RawFrameMessage,
     ReasoningStage,
     SensorStage,
     YOLOStage,
@@ -53,7 +53,7 @@ logger.info("\nTotal latency: %.1fms", total_ms)
 
 if result is None:
     logger.info("Pipeline stopped — no detections above threshold.")
-else:
+elif isinstance(result, ReasoningMessage):
     # Extract detections from the prompt (built by ReasoningStage._build_prompt)
     logger.info("\nYOLO detections:")
     logger.info("-" * 50)

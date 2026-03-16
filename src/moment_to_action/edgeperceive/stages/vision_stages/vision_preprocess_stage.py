@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -24,6 +25,9 @@ from moment_to_action.edgeperceive.preprocessors import (
     ImagePreprocessor,
 )
 from moment_to_action.edgeperceive.stages.base import Stage
+
+if TYPE_CHECKING:
+    from moment_to_action.edgeperceive.core.messages import Message
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +46,11 @@ class SensorStage(Stage):
     Output: RawFrameMessage with the loaded frame
     """
 
-    def process(self, msg: RawFrameMessage) -> RawFrameMessage | None:
+    def process(self, msg: Message) -> RawFrameMessage | None:
         """Load an image from disk and return a RawFrameMessage."""
+        if not isinstance(msg, RawFrameMessage):
+            err = f"SensorStage expects RawFrameMessage, got {type(msg).__name__}"
+            raise TypeError(err)
         try:
             import cv2
 
@@ -59,8 +66,8 @@ class SensorStage(Stage):
                 source=msg.source,
             )
         except ImportError as err:
-            msg = "opencv-python required: pip install opencv-python"
-            raise RuntimeError(msg) from err
+            err_msg = "opencv-python required: pip install opencv-python"
+            raise RuntimeError(err_msg) from err
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -96,8 +103,13 @@ class PreprocessorStage(Stage):
         )
         self._channels_first = channels_first
 
-    def process(self, msg: RawFrameMessage) -> TensorMessage | None:
+    def process(self, msg: Message) -> TensorMessage | None:
         """Preprocess a raw frame into a model-ready tensor."""
+        if not isinstance(msg, RawFrameMessage):
+            err = f"PreprocessorStage expects RawFrameMessage, got {type(msg).__name__}"
+            raise TypeError(err)
+        if msg.frame is None:
+            return None
         img = RawFrameMessage(
             frame=msg.frame,
             timestamp=msg.timestamp,
