@@ -100,7 +100,9 @@ class HuggingFaceLLM(LLMBase):
     def load(self) -> None:
         """Download (if needed) and load the model and tokenizer."""
         token = (
-            self.config.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
+            self.config.hf_token
+            or os.getenv("HF_TOKEN")
+            or os.getenv("HUGGINGFACEHUB_API_TOKEN")
         )
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.config.model_id,
@@ -165,12 +167,24 @@ class HuggingFaceLLM(LLMBase):
 def parse_args() -> argparse.Namespace:
     """Parse and return command-line arguments."""
     parser = argparse.ArgumentParser(description="Simple LLM runner")
-    parser.add_argument("--backend", default="huggingface", help="LLM backend registry key")
-    parser.add_argument("--model-id", default="gpt2", help="Model id from Hugging Face Hub")
-    parser.add_argument("--model-dir", default="./models", help="Local model cache directory")
-    parser.add_argument("--device", default=_default_device(), choices=["cpu", "cuda", "mps"])
-    parser.add_argument("--hf-token", default=None, help="HF token (or use HF_TOKEN env var)")
-    parser.add_argument("--system", default="You are a helpful assistant.", help="System prompt")
+    parser.add_argument(
+        "--backend", default="huggingface", help="LLM backend registry key"
+    )
+    parser.add_argument(
+        "--model-id", default="gpt2", help="Model id from Hugging Face Hub"
+    )
+    parser.add_argument(
+        "--model-dir", default="./models", help="Local model cache directory"
+    )
+    parser.add_argument(
+        "--device", default=_default_device(), choices=["cpu", "cuda", "mps"]
+    )
+    parser.add_argument(
+        "--hf-token", default=None, help="HF token (or use HF_TOKEN env var)"
+    )
+    parser.add_argument(
+        "--system", default="You are a helpful assistant.", help="System prompt"
+    )
     parser.add_argument("--prompt", required=True, help="User prompt")
     parser.add_argument("--max-new-tokens", type=int, default=80)
     parser.add_argument("--temperature", type=float, default=0.7)
@@ -211,6 +225,7 @@ microsoft/phi-2
 stabilityai/stablelm-2-1_6b-chat
 mistralai/Mistral-7B-Instruct-v0.3
 tiiuae/falcon-7b-instruct
+TinyLlama/TinyLlama-1.1B-Chat-v1.0
 """
 
 # USAGE

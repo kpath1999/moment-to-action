@@ -134,3 +134,5 @@ The script uses a simple registry pattern:
 - Registry allows adding new backends (OpenAI, Anthropic, etc.)
 
 Flow: CLI args → `AppConfig` → `LLMBase.create()` → `load()` → `run()`
+
+# Franky's points
