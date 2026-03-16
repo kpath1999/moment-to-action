@@ -185,8 +185,7 @@ def _set_inputs(interp: Any, inputs: ModelInput) -> None:
         expected_dtype = detail["dtype"]
         if tensor.dtype != expected_dtype:
             msg = (
-                f"Input '{name}' dtype mismatch: "
-                f"got {tensor.dtype}, model expects {expected_dtype}"
+                f"Input '{name}' dtype mismatch: got {tensor.dtype}, model expects {expected_dtype}"
             )
             raise TypeError(msg)
         interp.set_tensor(detail["index"], tensor)

@@ -106,5 +106,10 @@ logger.info("\n%d detection(s) drawn → %s", len(det.boxes), args.out)
 for b in sorted(det.boxes, key=lambda b: -b.confidence):
     logger.info(
         "  %-20s  %.2f  [%.0f,%.0f,%.0f,%.0f]",
-        b.label, b.confidence, b.x1, b.y1, b.x2, b.y2,
+        b.label,
+        b.confidence,
+        b.x1,
+        b.y1,
+        b.x2,
+        b.y2,
     )

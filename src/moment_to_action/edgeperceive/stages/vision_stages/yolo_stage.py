@@ -221,9 +221,7 @@ class YOLOStage(Stage):
             y2 = min(orig_h, float(box[3]) * sy)
             class_id = int(cid)
             label = (
-                self.COCO_LABELS[class_id]
-                if class_id < len(self.COCO_LABELS)
-                else str(class_id)
+                self.COCO_LABELS[class_id] if class_id < len(self.COCO_LABELS) else str(class_id)
             )
             boxes.append(
                 BoundingBox(
