@@ -65,6 +65,9 @@ class StageRecord:
     stage_name: str
     """Class name of the stage."""
 
+    stage_idx: int
+    """Pipeline stage index (1 = trigger/sensor, 2 = vision/LLM)."""
+
     latency_ms: float
     """Wall-clock time for this stage in milliseconds."""
 
@@ -228,14 +231,23 @@ class MetricsCollector:
     def log_stage(
         self,
         stage_name: str,
+        stage_idx: int,
         latency_ms: float,
         metadata: dict | None = None,
     ) -> None:
-        """Record a single stage execution."""
+        """Record a single stage execution.
+
+        Args:
+            stage_name: Class name of the stage (e.g. ``"YOLOStage"``).
+            stage_idx: Pipeline stage index (1 = trigger/sensor, 2 = vision/LLM).
+            latency_ms: Wall-clock time for this stage in milliseconds.
+            metadata: Optional extra context to attach to the record.
+        """
         self._stage_log.append(
             StageRecord(
                 timestamp=time.time(),
                 stage_name=stage_name,
+                stage_idx=stage_idx,
                 latency_ms=latency_ms,
                 metadata=metadata or {},
             )
@@ -322,8 +334,8 @@ class MetricsCollector:
         """
         stage1_idx = 1
         stage2_idx = 2
-        stage1_records = [r for r in self._stage_log if r.metadata.get("stage_idx") == stage1_idx]
-        stage2_records = [r for r in self._stage_log if r.metadata.get("stage_idx") == stage2_idx]
+        stage1_records = [r for r in self._stage_log if r.stage_idx == stage1_idx]
+        stage2_records = [r for r in self._stage_log if r.stage_idx == stage2_idx]
 
         def _stats(records: list[StageRecord]) -> StageLatencyStats | None:
             if not records:
