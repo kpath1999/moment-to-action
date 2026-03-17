@@ -63,17 +63,19 @@ class PipelineRecord:
     metadata: dict = field(default_factory=dict)
 
 
-LATENCY_BUDGET_MS = 5000
-
-
 class MetricsCollector:
     """Collects timing, accuracy, and power metrics across the pipeline.
 
     Thread-safe for concurrent writes from sensor threads.
     """
 
-    def __init__(self, session_id: str | None = None) -> None:
+    def __init__(
+        self,
+        session_id: str | None = None,
+        latency_budget_ms: float = 5000.0,
+    ) -> None:
         self._session_id = session_id or f"session_{int(time.time())}"
+        self._latency_budget_ms = latency_budget_ms
         self._inference_log: list[InferenceRecord] = []
         self._pipeline_log: list[PipelineRecord] = []
         self._event_log: list[dict] = []
@@ -249,9 +251,9 @@ class MetricsCollector:
             "stage1": s1,
             "stage2": s2,
             "total_mean_ms": total_mean,
-            "budget_ms": LATENCY_BUDGET_MS,
-            "headroom_ms": LATENCY_BUDGET_MS - total_mean,
-            "within_budget": total_mean < LATENCY_BUDGET_MS,
+            "budget_ms": self._latency_budget_ms,
+            "headroom_ms": self._latency_budget_ms - total_mean,
+            "within_budget": total_mean < self._latency_budget_ms,
         }
 
     def print_stage_latencies(self) -> None:
@@ -291,7 +293,7 @@ class MetricsCollector:
                 stats["p95_ms"],
             )
         budget = r["latency_budget"]
-        logger.info("\nLatency budget (target <%dms):", LATENCY_BUDGET_MS)
+        logger.info("\nLatency budget (target <%dms):", self._latency_budget_ms)
         logger.info("  Stage 1: %.1fms", budget.get("stage1", {}).get("mean_ms", 0))
         logger.info("  Stage 2: %.1fms", budget.get("stage2", {}).get("mean_ms", 0))
         status = "✓ within budget" if budget["within_budget"] else "✗ over budget"

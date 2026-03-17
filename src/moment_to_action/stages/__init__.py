@@ -1,30 +1,17 @@
-"""Public API for the ``moment_to_action.stages`` package.
+"""Stages package — expose core abstractions and submodules.
 
-Re-exports the full public API so consumers only need a single import::
+Consumers import from the submodules directly::
 
-    from moment_to_action.stages import Pipeline, Stage, PreprocessorStage, YOLOStage
+    from moment_to_action.stages.video import YOLOStage, PreprocessorStage
+    from moment_to_action.stages.vlm import MobileCLIPStage
+    from moment_to_action.stages.llm import ReasoningStage
 """
 
 from __future__ import annotations
 
-from ._base import Stage
-from ._pipeline import Pipeline
-from .llm import ReasoningStage
-from .video import (
-    ImagePreprocessConfig,
-    ImagePreprocessor,
-    PreprocessorStage,
-    ProcessedFrame,
-    YOLOStage,
-)
+from moment_to_action._pipeline import Pipeline
 
-__all__ = [
-    "ImagePreprocessConfig",
-    "ImagePreprocessor",
-    "Pipeline",
-    "PreprocessorStage",
-    "ProcessedFrame",
-    "ReasoningStage",
-    "Stage",
-    "YOLOStage",
-]
+from . import llm, video, vlm
+from ._base import Stage
+
+__all__ = ["Pipeline", "Stage", "llm", "video", "vlm"]

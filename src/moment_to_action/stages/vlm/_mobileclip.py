@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
+import open_clip
 
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.stages._base import Stage
@@ -95,8 +96,6 @@ class MobileCLIPStage(Stage):
         self._text_tokens = self._tokenize(prompts)
 
     def _tokenize(self, prompts: list[str]) -> np.ndarray:
-        import open_clip
-
         tokenizer = open_clip.get_tokenizer("MobileCLIP-S2")
         # Use np.asarray to handle both torch tensors and arrays uniformly.
         return np.asarray(tokenizer(prompts)).astype(np.int64)

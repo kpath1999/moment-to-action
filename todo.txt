@@ -15,3 +15,5 @@ dict returns
 logging
 
 yeet old files
+
+metriuc collector gets stage name and index from pipeline

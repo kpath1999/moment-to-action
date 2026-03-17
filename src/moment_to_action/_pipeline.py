@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
     from moment_to_action.metrics._collector import MetricsCollector
-
-    from ._base import Stage
+    from moment_to_action.stages._base import Stage
 
 
 class Pipeline:
@@ -19,8 +18,13 @@ class Pipeline:
         stages: list[Stage],
         metrics: MetricsCollector | None = None,
     ) -> None:
-        self.stages = stages
+        self._stages = stages
         self._metrics = metrics
+
+    @property
+    def stages(self) -> list[Stage]:
+        """Return the list of stages."""
+        return self._stages
 
     @property
     def metrics(self) -> MetricsCollector | None:
@@ -30,7 +34,7 @@ class Pipeline:
     def run(self, msg: Message) -> Message | None:
         """Run the message through all stages sequentially."""
         current: Message | None = msg
-        for stage in self.stages:
+        for stage in self._stages:
             current = stage.process(current, metrics=self._metrics)  # type: ignore[arg-type]
             if current is None:
                 return None
