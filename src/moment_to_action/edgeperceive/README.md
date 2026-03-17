@@ -48,7 +48,7 @@ edgeperceive/
 │   ├── compute_backend.py              # HAL: ONNXBackend, LiteRTBackend, CPUBackend
 │   └── types.py                        # Hardware compute units (CPU, NPU, GPU, DSP)
 │
-├── models/
+├── models/                             # downloaded locally; gitignored
 │   ├── mobileclip_s2/
 │   │   └── mobileclip_s2_datacompdr_last.tflite
 │   └── yolo/
@@ -99,7 +99,7 @@ curl -L --create-dirs --output-dir src/moment_to_action/edgeperceive/models/mobi
 
 ```bash
 uv run python -m moment_to_action.edgeperceive.pipeline.run_yolo_pipeline \
-  --image src/moment_to_action/edgeperceive/images/<choose_image>.jpg \
+  --image images/<choose_image>.jpg \
   --model src/moment_to_action/edgeperceive/models/yolo/model.onnx \
   --conf 0.3
 ```
@@ -108,7 +108,7 @@ Draw bounding boxes on the output image:
 
 ```bash
 uv run python -m moment_to_action.edgeperceive.pipeline.draw_detections \
-  --image src/moment_to_action/edgeperceive/images/<choose_image>.jpg \
+  --image images/<choose_image>.jpg \
   --model src/moment_to_action/edgeperceive/models/yolo/model.onnx \
   --conf 0.3 \
   --out result.jpg
@@ -118,7 +118,7 @@ uv run python -m moment_to_action.edgeperceive.pipeline.draw_detections \
 
 ```bash
 uv run python -m moment_to_action.edgeperceive.pipeline.run_mobileclip_pipeline \
-  --image src/moment_to_action/edgeperceive/images/<choose_image>.jpg \
+  --image images/<choose_image>.jpg \
   --model src/moment_to_action/edgeperceive/models/mobileclip_s2/mobileclip_s2_datacompdr_last.tflite
 ```
 
