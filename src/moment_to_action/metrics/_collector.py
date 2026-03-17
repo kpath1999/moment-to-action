@@ -147,10 +147,15 @@ class MetricsCollector:
     def _pipeline_stats(self) -> PipelineStats:
         triggers = [r for r in self._pipeline_log if r.event_type == EventType.TRIGGER_FIRED]
         detections = [r for r in self._pipeline_log if r.event_type == EventType.DETECTION]
+        false_positives = [
+            r for r in self._pipeline_log if r.event_type == EventType.FALSE_POSITIVE
+        ]
         return PipelineStats(
             total_triggers=len(triggers),
             total_detections=len(detections),
+            total_false_positives=len(false_positives),
             trigger_rate=len(triggers) / max(1, len(self._pipeline_log)),
+            false_positive_rate=len(false_positives) / max(1, len(detections)),
         )
 
     def _latency_budget_analysis(self) -> LatencyBudget:

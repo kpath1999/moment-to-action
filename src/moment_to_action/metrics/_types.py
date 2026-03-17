@@ -107,8 +107,14 @@ class PipelineStats:
     total_detections: int
     """Number of detection events."""
 
+    total_false_positives: int
+    """Number of false positive events."""
+
     trigger_rate: float
     """Fraction of pipeline events that were triggers (0-1)."""
+
+    false_positive_rate: float
+    """Fraction of detections that were false positives (0-1)."""
 
 
 @dataclass
