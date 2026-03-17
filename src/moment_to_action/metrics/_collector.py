@@ -19,14 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from moment_to_action.hardware._types import ComputeUnit  # noqa: TC001
-
 logger = logging.getLogger(__name__)
-
-# Model names used for stage-1 latency bucketing.
-_STAGE1_MODEL_NAMES: frozenset[str] = frozenset({"yamnet", "imu", "ir"})
-# Model names used for stage-2 latency bucketing.
-_STAGE2_MODEL_NAMES: frozenset[str] = frozenset({"movinet", "mobileclip", "yolo", "qwen"})
 
 
 class EventType(Enum):
@@ -40,29 +33,6 @@ class EventType(Enum):
 
     FALSE_POSITIVE = auto()
     """A detection was later determined to be incorrect."""
-
-
-@dataclass
-class InferenceRecord:
-    """Record of a single model inference."""
-
-    timestamp: float
-    """Unix epoch timestamp when the inference ran."""
-
-    model_name: str
-    """Short name identifying the model (e.g. ``"yolo"``)."""
-
-    latency_ms: float
-    """Wall-clock inference time in milliseconds."""
-
-    label: str
-    """Top predicted class label."""
-
-    confidence: float
-    """Confidence score for ``label`` in ``[0, 1]``."""
-
-    compute_unit: ComputeUnit
-    """Hardware unit that executed the inference."""
 
 
 @dataclass
@@ -194,14 +164,14 @@ class CollectorReport:
     session_id: str
     """Unique identifier for this collection session."""
 
-    total_inferences: int
-    """Total number of model inferences recorded."""
+    total_stages: int
+    """Total number of stage executions recorded."""
 
     total_pipeline_events: int
     """Total number of pipeline-level events recorded."""
 
-    per_model: dict[str, ModelStats]
-    """Per-model latency statistics keyed by model name."""
+    per_stage: dict[str, ModelStats]
+    """Per-stage latency statistics keyed by stage name."""
 
     pipeline: PipelineStats
     """Aggregate pipeline event statistics."""
@@ -223,7 +193,6 @@ class MetricsCollector:
     ) -> None:
         self._session_id = session_id or f"session_{int(time.time())}"
         self._latency_budget_ms = latency_budget_ms
-        self._inference_log: list[InferenceRecord] = []
         self._pipeline_log: list[PipelineRecord] = []
         self._stage_log: list[StageRecord] = []
         self._event_log: list[EventRecord] = []
@@ -237,26 +206,6 @@ class MetricsCollector:
     # ------------------------------------------------------------------
     # Logging methods
     # ------------------------------------------------------------------
-
-    def log_inference(
-        self,
-        model_name: str,
-        latency_ms: float,
-        label: str,
-        confidence: float,
-        compute_unit: ComputeUnit,
-    ) -> None:
-        """Record a single model inference with its timing and result."""
-        self._inference_log.append(
-            InferenceRecord(
-                timestamp=time.time(),
-                model_name=model_name,
-                latency_ms=latency_ms,
-                label=label,
-                confidence=confidence,
-                compute_unit=compute_unit,
-            )
-        )
 
     def log_pipeline_event(
         self,
@@ -327,23 +276,24 @@ class MetricsCollector:
         """Generate a summary report across all collected metrics."""
         return CollectorReport(
             session_id=self.session_id,
-            total_inferences=len(self._inference_log),
+            total_stages=len(self._stage_log),
             total_pipeline_events=len(self._pipeline_log),
-            per_model=self._per_model_stats(),
+            per_stage=self._per_stage_stats(),
             pipeline=self._pipeline_stats(),
             latency_budget=self._latency_budget_analysis(),
         )
 
-    def _per_model_stats(self) -> dict[str, ModelStats]:
-        if not self._inference_log:
+    def _per_stage_stats(self) -> dict[str, ModelStats]:
+        """Compute per-stage latency statistics from the stage log."""
+        if not self._stage_log:
             return {}
 
-        by_model: dict[str, list[float]] = {}
-        for record in self._inference_log:
-            by_model.setdefault(record.model_name, []).append(record.latency_ms)
+        by_stage: dict[str, list[float]] = {}
+        for record in self._stage_log:
+            by_stage.setdefault(record.stage_name, []).append(record.latency_ms)
 
         return {
-            model: ModelStats(
+            stage: ModelStats(
                 n_inferences=len(latencies),
                 mean_ms=float(np.mean(arr := np.array(latencies))),
                 p50_ms=float(np.percentile(arr, 50)),
@@ -351,7 +301,7 @@ class MetricsCollector:
                 min_ms=float(np.min(arr)),
                 max_ms=float(np.max(arr)),
             )
-            for model, latencies in by_model.items()
+            for stage, latencies in by_stage.items()
         }
 
     def _pipeline_stats(self) -> PipelineStats:
@@ -364,19 +314,18 @@ class MetricsCollector:
         )
 
     def _latency_budget_analysis(self) -> LatencyBudget:
-        """Break down latency against the configured budget target."""
-        stage1_records = [
-            r
-            for r in self._inference_log
-            if any(name in r.model_name.lower() for name in _STAGE1_MODEL_NAMES)
-        ]
-        stage2_records = [
-            r
-            for r in self._inference_log
-            if any(name in r.model_name.lower() for name in _STAGE2_MODEL_NAMES)
-        ]
+        """Break down latency against the configured budget target.
 
-        def _stats(records: list[InferenceRecord]) -> StageLatencyStats | None:
+        Callers pass ``metadata={"stage_idx": 1}`` or ``{"stage_idx": 2}``
+        to :meth:`log_stage`; records without a ``stage_idx`` are counted
+        in the total but not bucketed into stage-1 or stage-2.
+        """
+        stage1_idx = 1
+        stage2_idx = 2
+        stage1_records = [r for r in self._stage_log if r.metadata.get("stage_idx") == stage1_idx]
+        stage2_records = [r for r in self._stage_log if r.metadata.get("stage_idx") == stage2_idx]
+
+        def _stats(records: list[StageRecord]) -> StageLatencyStats | None:
             if not records:
                 return None
             arr = np.array([r.latency_ms for r in records])
@@ -422,12 +371,12 @@ class MetricsCollector:
         logger.info("\n%s", "=" * 50)
         logger.info("METRICS SUMMARY  |  session: %s", r.session_id)
         logger.info("=" * 50)
-        logger.info("Total inferences: %d", r.total_inferences)
-        logger.info("\nPer-model latency:")
-        for model, stats in r.per_model.items():
+        logger.info("Total stages: %d", r.total_stages)
+        logger.info("\nPer-stage latency:")
+        for stage, stats in r.per_stage.items():
             logger.info(
                 "  %-20s  mean=%.1fms  p95=%.1fms",
-                model,
+                stage,
                 stats.mean_ms,
                 stats.p95_ms,
             )
