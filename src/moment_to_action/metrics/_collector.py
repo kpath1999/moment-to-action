@@ -24,7 +24,6 @@ from moment_to_action.metrics._types import (
     LatencyBudget,
     PipelineRecord,
     PipelineStats,
-    StageLatencyStats,
     StageRecord,
     StageStats,
 )
@@ -135,7 +134,7 @@ class MetricsCollector:
 
         return {
             stage: StageStats(
-                n_inferences=len(latencies),
+                num_calls=len(latencies),
                 mean_ms=float(np.mean(arr := np.array(latencies))),
                 p50_ms=float(np.percentile(arr, 50)),
                 p95_ms=float(np.percentile(arr, 95)),
@@ -155,23 +154,11 @@ class MetricsCollector:
         )
 
     def _latency_budget_analysis(self) -> LatencyBudget:
-        """Break down latency per stage_idx against the configured budget target."""
-        # Group stage records by stage_idx.
-        by_idx: dict[int, list[StageRecord]] = {}
-        for r in self._stage_log:
-            by_idx.setdefault(r.stage_idx, []).append(r)
-
-        stages: dict[int, StageLatencyStats] = {}
-        for idx, records in by_idx.items():
-            arr = np.array([r.latency_ms for r in records])
-            stages[idx] = StageLatencyStats(
-                mean_ms=float(np.mean(arr)),
-                p95_ms=float(np.percentile(arr, 95)),
-            )
-
-        total_mean = sum(s.mean_ms for s in stages.values())
+        """Compute total mean latency across all recorded stages."""
+        total_mean = (
+            float(np.mean([r.latency_ms for r in self._stage_log])) if self._stage_log else 0.0
+        )
         return LatencyBudget(
-            stages=stages,
             total_mean_ms=total_mean,
             budget_ms=self._latency_budget_ms,
             headroom_ms=self._latency_budget_ms - total_mean,
@@ -213,8 +200,6 @@ class MetricsCollector:
             )
         budget = r.latency_budget
         logger.info("\nLatency budget (target <%.0fms):", budget.budget_ms)
-        for idx, stats in sorted(budget.stages.items()):
-            logger.info("  Stage %d: %.1fms", idx, stats.mean_ms)
         status = "✓ within budget" if budget.within_budget else "✗ over budget"
         logger.info("  Total:   %.1fms  (%s)", budget.total_mean_ms, status)
         logger.info("=" * 50)

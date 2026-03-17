@@ -78,7 +78,7 @@ class EventRecord:
 class StageStats:
     """Latency statistics for a single stage across all recorded executions."""
 
-    n_inferences: int
+    num_calls: int
     """Number of executions included in these statistics."""
 
     mean_ms: float
@@ -112,22 +112,8 @@ class PipelineStats:
 
 
 @dataclass
-class StageLatencyStats:
-    """Latency summary for one pipeline stage."""
-
-    mean_ms: float
-    """Mean latency in milliseconds."""
-
-    p95_ms: float
-    """95th percentile latency in milliseconds."""
-
-
-@dataclass
 class LatencyBudget:
     """Latency budget analysis measured against the configured target."""
-
-    stages: dict[int, StageLatencyStats]
-    """Per-stage latency statistics keyed by ``stage_idx``."""
 
     total_mean_ms: float
     """Sum of stage-1 and stage-2 mean latencies."""

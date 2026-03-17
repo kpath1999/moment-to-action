@@ -8,7 +8,6 @@ from moment_to_action.metrics._types import (
     LatencyBudget,
     PipelineRecord,
     PipelineStats,
-    StageLatencyStats,
     StageRecord,
     StageStats,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "MetricsCollector",
     "PipelineRecord",
     "PipelineStats",
-    "StageLatencyStats",
     "StageRecord",
     "StageStats",
 ]
