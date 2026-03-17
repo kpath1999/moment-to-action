@@ -34,31 +34,30 @@ def detect_platform() -> Platform:
     """Detect the current hardware platform via sysfs.
 
     Reads ``/sys/devices/soc0/machine`` (Qualcomm SOC name file) and maps
-    the value to a :class:`Platform` enum member.
+    the value to a :class:`Platform` enum member.  If the file is absent the
+    host is not a Qualcomm device; if the SoC name is unrecognised the device
+    is not yet supported — both are hard errors.
 
     Returns:
         The detected :class:`Platform`.
 
     Raises:
-        RuntimeError: If the sysfs file is absent or the SoC name is not
-            recognised.  This is intentional — callers must handle unsupported
-            hardware explicitly rather than silently running on a wrong platform.
+        RuntimeError: If the host is not a supported Qualcomm device.
     """
-    if not _QCOM_SOC_NAME_FILE.exists():
-        msg = (
-            f"Platform detection failed: {_QCOM_SOC_NAME_FILE} not found. "
-            "Are you running on supported hardware?"
-        )
-        raise RuntimeError(msg)
+    try:
+        soc_name = _QCOM_SOC_NAME_FILE.read_text().strip().upper()
+    except FileNotFoundError:
+        # sysfs file absent → definitely not a Qualcomm SoC.
+        msg = "Unsupported platform: not running on a Qualcomm device (sysfs machine file absent)."
+        raise RuntimeError(msg) from None
 
-    soc_name = _QCOM_SOC_NAME_FILE.read_text().strip().upper()
     logger.debug("Detected SoC: %r", soc_name)
 
     if "QCS6490" in soc_name:
         return Platform.QCS6490
 
     msg = (
-        f"Unrecognised SoC {soc_name!r}. "
+        f"Unsupported Qualcomm SoC {soc_name!r}. "
         "Add a new Platform member and backend to support this hardware."
     )
     raise RuntimeError(msg)
