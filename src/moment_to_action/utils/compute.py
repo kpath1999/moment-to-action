@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Callable  # noqa: TC003
+from typing import ParamSpec, TypeVar
 
 from moment_to_action.hardware import ComputeUnit
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 logger = logging.getLogger(__name__)
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 
 class ComputeDispatcher:
@@ -33,7 +34,7 @@ class ComputeDispatcher:
         # DSP backend not yet implemented
         return False
 
-    def dispatch(self, fn: Callable, *args: object, **kwargs: object) -> object:
+    def dispatch(self, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
         """Run ``fn(*args)`` on the configured compute unit.
 
         Falls back to CPU if the requested unit is unavailable.
@@ -42,7 +43,7 @@ class ComputeDispatcher:
             return self._dispatch_dsp(fn, *args, **kwargs)
         return fn(*args, **kwargs)  # CPU path — direct call
 
-    def _dispatch_dsp(self, fn: Callable, *args: object, **kwargs: object) -> object:
+    def _dispatch_dsp(self, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
         """DSP dispatch path (currently falls through to CPU).
 
         TODO: wrap fn in a Hexagon SDK call via ctypes/cffi.

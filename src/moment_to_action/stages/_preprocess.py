@@ -31,10 +31,8 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, TypeVar
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from collections.abc import Callable  # noqa: TC003
+from typing import ParamSpec, TypeVar
 
 from moment_to_action.hardware import ComputeUnit
 from moment_to_action.utils import BufferPool, ComputeDispatcher
@@ -44,6 +42,8 @@ logger = logging.getLogger(__name__)
 # Generic type variables
 InputT = TypeVar("InputT")  # what goes in  (AudioInput, ImageInput, ...)
 OutputT = TypeVar("OutputT")  # what comes out (list[AudioChunk], ProcessedFrame, ...)
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +163,7 @@ class BasePreprocessor[InputT, OutputT](ABC):
     # Protected helpers subclasses can use
     # ------------------------------------------------------------------
 
-    def _dispatch(self, fn: Callable, *args: object, **kwargs: object) -> object:
+    def _dispatch(self, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
         """Route a computation to DSP or CPU.
 
         Subclasses call this instead of calling fn() directly.
