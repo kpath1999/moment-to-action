@@ -123,7 +123,9 @@ class YOLOStage(Stage):
         model_path: str,
         backend: ComputeBackend,
         confidence_threshold: float = 0.5,
+        stage_idx: int = 2,
     ) -> None:
+        super().__init__(stage_idx)
         self._backend = backend
         self._handle = self._backend.load_model(model_path)
         self._confidence_threshold = confidence_threshold

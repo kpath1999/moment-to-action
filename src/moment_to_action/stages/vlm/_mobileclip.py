@@ -45,7 +45,9 @@ class MobileCLIPStage(Stage):
         model_path: str,
         text_prompts: list[str],
         backend: ComputeBackend,
+        stage_idx: int = 2,
     ) -> None:
+        super().__init__(stage_idx)
         self._backend = backend
         self._handle = self._backend.load_model(model_path)
         self._text_prompts = text_prompts
