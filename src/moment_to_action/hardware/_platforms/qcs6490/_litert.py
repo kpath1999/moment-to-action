@@ -71,7 +71,7 @@ class LiteRTBackend(InferenceBackend):
             logger.debug("Model cache hit: %s", path)
             return self._interpreter_cache[path]
 
-        interp = self._load_interpreter(path, self._get_delegates())
+        interp = self._load_interpreter(path)
         self._interpreter_cache[path] = interp
         logger.info("Loaded %s on %s", path, self._unit.name)
         return interp
@@ -142,24 +142,24 @@ class LiteRTBackend(InferenceBackend):
         # GPU and other units: no delegate implemented yet.
         return []
 
-    def _load_interpreter(self, model_path: str, delegates: list) -> Any:
+    def _load_interpreter(self, model_path: str) -> Any:
         """Load and allocate a TFLite interpreter.
 
-        Uses ``ai_edge_litert`` when available, otherwise ``tf.lite`` — both
-        are imported at module load time under the same ``_Interpreter`` name.
-        Raises ``RuntimeError`` if a non-empty delegate list fails to apply,
-        so the caller decides the retry strategy.
+        Calls :meth:`_get_delegates` internally to obtain the right delegate
+        list for the configured compute unit.  Uses ``ai_edge_litert`` when
+        available, otherwise ``tf.lite`` — both are imported at module load
+        time under the same ``_Interpreter`` name.
 
         Args:
             model_path: Filesystem path to the ``.tflite`` model.
-            delegates: List of loaded delegate objects (may be empty for CPU).
 
         Returns:
             An allocated interpreter handle.
 
         Raises:
-            RuntimeError: If a delegate fails to apply to the model.
+            RuntimeError: If a delegate fails to load or apply to the model.
         """
+        delegates = self._get_delegates()
         try:
             interp = _Interpreter(model_path=model_path, experimental_delegates=delegates)
         except RuntimeError as e:
