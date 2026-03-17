@@ -159,9 +159,11 @@ class MetricsCollector:
         )
 
     def _latency_budget_analysis(self) -> LatencyBudget:
-        """Compute total mean latency across all recorded stages."""
+        """Compute latency budget against end-to-end pipeline event times."""
         total_mean = (
-            float(np.mean([r.latency_ms for r in self._stage_log])) if self._stage_log else 0.0
+            float(np.mean([r.latency_ms for r in self._pipeline_log]))
+            if self._pipeline_log
+            else 0.0
         )
         return LatencyBudget(
             total_mean_ms=total_mean,
