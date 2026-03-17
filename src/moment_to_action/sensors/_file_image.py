@@ -15,7 +15,7 @@ from ._base import BaseSensor
 logger = logging.getLogger(__name__)
 
 
-class FileSensor(BaseSensor):
+class FileImageSensor(BaseSensor):
     """Sensor that reads a single image frame from a file on disk.
 
     This sensor is extracted from the original ``SensorStage`` pipeline
@@ -28,7 +28,7 @@ class FileSensor(BaseSensor):
             ``pathlib.Path`` for consistency.
 
     Example:
-        >>> with FileSensor("frame.jpg") as sensor:
+        >>> with FileImageSensor("frame.jpg") as sensor:
         ...     msg = sensor.read()
         ...     print(msg.width, msg.height)
     """
@@ -44,9 +44,9 @@ class FileSensor(BaseSensor):
             FileNotFoundError: If ``path`` does not point to an existing file.
         """
         if not self._path.is_file():
-            msg = f"FileSensor: image file not found: {self._path}"
+            msg = f"FileImageSensor: image file not found: {self._path}"
             raise FileNotFoundError(msg)
-        logger.debug("FileSensor opened: %s", self._path)
+        logger.debug("FileImageSensor opened: %s", self._path)
 
     def read(self) -> RawFrameMessage:
         """Load the image from disk and return it as a ``RawFrameMessage``.
@@ -64,8 +64,8 @@ class FileSensor(BaseSensor):
         """
         frame = cv2.imread(str(self._path))
         if frame is None:
-            logger.error("FileSensor: could not read %s", self._path)
-            msg = f"FileSensor: could not load image: {self._path}"
+            logger.error("FileImageSensor: could not read %s", self._path)
+            msg = f"FileImageSensor: could not load image: {self._path}"
             raise OSError(msg)
 
         h, w = frame.shape[:2]
@@ -81,6 +81,6 @@ class FileSensor(BaseSensor):
         """No-op: file-based reads hold no persistent resources.
 
         Implemented to satisfy the ``BaseSensor`` contract and to allow
-        ``FileSensor`` to be used safely as a context manager.
+        ``FileImageSensor`` to be used safely as a context manager.
         """
-        logger.debug("FileSensor closed: %s", self._path)
+        logger.debug("FileImageSensor closed: %s", self._path)

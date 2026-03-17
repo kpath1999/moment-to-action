@@ -16,6 +16,3 @@ class ClassificationMessage(BaseMessage):
 
     all_scores: dict[str, float]
     """Mapping of every candidate label to its score (full probability distribution)."""
-
-    latency_ms: float  # type: ignore[assignment]  # override optional base field as required
-    """Wall-clock inference time in milliseconds."""

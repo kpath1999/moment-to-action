@@ -13,6 +13,3 @@ class ReasoningMessage(BaseMessage):
 
     prompt: str
     """The exact prompt that was submitted to the model."""
-
-    latency_ms: float  # type: ignore[assignment]  # override optional base field as required
-    """Wall-clock inference time in milliseconds."""

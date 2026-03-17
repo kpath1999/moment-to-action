@@ -53,9 +53,6 @@ class DetectionMessage(BaseMessage):
     boxes: list[BoundingBox]
     """All bounding boxes returned by the detector (may be empty)."""
 
-    latency_ms: float  # type: ignore[assignment]  # override optional base field as required
-    """Wall-clock time taken by the detection stage in milliseconds."""
-
     @property
     def has_detections(self) -> bool:
         """Return ``True`` when at least one bounding box was detected."""

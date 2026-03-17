@@ -75,18 +75,6 @@ class ImagePreprocessConfig:
     letterbox: bool = False  # preserve aspect ratio + pad
 
 
-@dataclass
-class VideoPreprocessConfig:
-    """Tunable parameters for video clip preprocessing."""
-
-    target_size: tuple[int, int] = (256, 256)
-    target_fps: float | None = None  # None = keep original fps
-    mean: tuple[float, ...] = (0.485, 0.456, 0.406)
-    std: tuple[float, ...] = (0.229, 0.224, 0.225)
-    to_rgb: bool = True
-    max_frames: int | None = None  # clip to N frames
-
-
 # ---------------------------------------------------------------------------
 # ImagePreprocessor
 # ---------------------------------------------------------------------------
@@ -113,7 +101,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         compute_unit: ComputeUnit = ComputeUnit.CPU,
         metrics: Any = None,
     ) -> None:
-        self.config = config or ImagePreprocessConfig()
+        self._config = config or ImagePreprocessConfig()
         super().__init__(compute_unit=compute_unit, metrics=metrics)
 
     # ------------------------------------------------------------------
@@ -132,35 +120,35 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
             raise ValueError(msg)
 
     def _allocate_buffers(self) -> None:
-        if not hasattr(self, "config"):
+        if not hasattr(self, "_config"):
             return
         # Intermediate buffer for the resize step (always target_size)
-        rh, rw = self.config.target_size
+        rh, rw = self._config.target_size
         self._buffers.register("resize", BufferSpec((rh, rw, 3), np.float32))
         # Final output buffer — crop_size if set, otherwise same as resize
-        fh, fw = self.config.crop_size or self.config.target_size
+        fh, fw = self._config.crop_size or self._config.target_size
         self._buffers.register("frame", BufferSpec((fh, fw, 3), np.float32))
 
     def _process(self, data: RawFrameMessage) -> ProcessedFrame:
         """Rgb → resize → [center crop] → normalize, each step dispatched."""
-        if self.config.to_rgb:
+        if self._config.to_rgb:
             data = self._dispatch(self._to_rgb, data)
 
         frame = self._dispatch(
             self._resize,
             data,
-            self.config.target_size,
-            self.config.letterbox,
+            self._config.target_size,
+            self._config.letterbox,
         )
 
-        if self.config.crop_size is not None:
-            frame = self._dispatch(self._center_crop, frame, self.config.crop_size)
+        if self._config.crop_size is not None:
+            frame = self._dispatch(self._center_crop, frame, self._config.crop_size)
 
         frame = self._dispatch(
             self._normalize,
             frame,
-            self.config.mean,
-            self.config.std,
+            self._config.mean,
+            self._config.std,
         )
 
         return frame  # noqa: RET504
@@ -281,7 +269,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
 
     def reconfigure(self, config: ImagePreprocessConfig) -> None:
         """Swap config and re-allocate buffers if sizes changed."""
-        self.config = config
+        self._config = config
         rh, rw = config.target_size
         self._buffers.register("resize", BufferSpec((rh, rw, 3), np.float32), overwrite=True)
         fh, fw = config.crop_size or config.target_size
@@ -326,7 +314,7 @@ class PreprocessorStage(Stage):
         )
         self._channels_first = channels_first
 
-    def process(self, msg: Message) -> FrameTensorMessage | None:
+    def _process(self, msg: Message) -> FrameTensorMessage | None:
         """Preprocess a raw frame into a model-ready tensor.
 
         Returns a FrameTensorMessage (previously called TensorMessage).

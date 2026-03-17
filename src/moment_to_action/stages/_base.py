@@ -1,4 +1,4 @@
-"""Base stage and Pipeline.
+"""Abstract Stage base class.
 
 MetricsCollector is optional — pass one to Pipeline and every stage
 reports its latency automatically. No metrics code inside stages.
@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
-    from moment_to_action.metrics.collector import MetricsCollector
+    from moment_to_action.metrics._collector import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +26,19 @@ class Stage(ABC):
         """Return the class name as the stage identifier."""
         return self.__class__.__name__
 
-    def run(
+    def process(
         self,
         msg: Message,
         metrics: MetricsCollector | None = None,
     ) -> Message | None:
-        """Execute the stage, timing it and logging to metrics if provided."""
+        """Execute the stage, timing it, setting latency on the result, and logging to metrics."""
         t = time.perf_counter()
-        result = self.process(msg)
+        result = self._process(msg)
         elapsed_ms = (time.perf_counter() - t) * 1000
+
+        # Stamp latency on the result so consumers don't need to measure it.
+        if result is not None:
+            result = result.model_copy(update={"latency_ms": elapsed_ms})
 
         if metrics is not None:
             metrics.log_stage(self.name, elapsed_ms)
@@ -44,27 +48,6 @@ class Stage(ABC):
         return result
 
     @abstractmethod
-    def process(self, msg: Message) -> Message | None:
-        """Process a message and return the result or None to stop."""
+    def _process(self, msg: Message) -> Message | None:
+        """Process a message and return the result or None to stop the pipeline."""
         ...
-
-
-class Pipeline:
-    """Sequential pipeline of stages."""
-
-    def __init__(
-        self,
-        stages: list[Stage],
-        metrics: MetricsCollector | None = None,
-    ) -> None:
-        self.stages = stages
-        self.metrics = metrics
-
-    def run(self, msg: Message) -> Message | None:
-        """Run the message through all stages sequentially."""
-        current: Message | None = msg
-        for stage in self.stages:
-            current = stage.run(current, metrics=self.metrics)  # type: ignore[arg-type]
-            if current is None:
-                return None
-        return current

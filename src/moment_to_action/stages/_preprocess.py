@@ -121,7 +121,7 @@ class BufferPool:
 # ---------------------------------------------------------------------------
 
 
-class ComputeDispatcher:
+class _ComputeDispatcher:
     """Routes preprocessing operations to the right compute unit.
 
     When compute_unit == DSP: attempts DSP dispatch, falls back to CPU.
@@ -211,7 +211,7 @@ class BasePreprocessor[InputT, OutputT](ABC):
         self._compute_unit = compute_unit
         self._metrics = metrics
         self._buffers = BufferPool()
-        self._dispatcher = ComputeDispatcher(compute_unit)
+        self._dispatcher = _ComputeDispatcher(compute_unit)
 
         # Let subclass register its buffers
         self._allocate_buffers()

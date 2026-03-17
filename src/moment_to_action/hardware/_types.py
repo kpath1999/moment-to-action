@@ -21,16 +21,16 @@ class ComputeUnit(Enum):
 
 
 class PowerSample(BaseModel):
-    """A single power measurement snapshot for one compute unit.
-
-    Attributes:
-        timestamp: Unix timestamp of the measurement (seconds).
-        compute_unit: The unit that was active during sampling.
-        power_mw: Power draw in milliwatts.
-        utilization_pct: Utilisation percentage (0-100).
-    """
+    """A single power measurement snapshot for one compute unit."""
 
     timestamp: float
+    """Unix timestamp of the measurement (seconds)."""
+
     compute_unit: ComputeUnit
+    """The unit that was active during sampling."""
+
     power_mw: float
+    """Power draw in milliwatts."""
+
     utilization_pct: float
+    """Utilisation percentage (0-100)."""

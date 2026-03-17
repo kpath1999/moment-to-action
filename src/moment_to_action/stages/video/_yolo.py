@@ -10,16 +10,15 @@ Output: DetectionMessage, or None if nothing detected
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages.video import BoundingBox, DetectionMessage, FrameTensorMessage
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
+    from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
 
 logger = logging.getLogger(__name__)
@@ -122,25 +121,26 @@ class YOLOStage(Stage):
     def __init__(
         self,
         model_path: str,
+        backend: ComputeBackend,
         confidence_threshold: float = 0.5,
-        compute_unit: ComputeUnit | None = None,
     ) -> None:
-        if compute_unit is None:
-            compute_unit = ComputeUnit.CPU
-        self._backend = ComputeBackend(preferred_unit=compute_unit)
+        self._backend = backend
         self._handle = self._backend.load_model(model_path)
-        self.confidence_threshold = confidence_threshold
+        self._confidence_threshold = confidence_threshold
         logger.info("YOLOStage: loaded %s", model_path)
 
-    def process(self, msg: Message) -> DetectionMessage | None:
+    @property
+    def confidence_threshold(self) -> float:
+        """Detection confidence threshold in [0, 1]."""
+        return self._confidence_threshold
+
+    def _process(self, msg: Message) -> DetectionMessage | None:
         """Run YOLO inference and return detections above threshold."""
         # NOTE: input type check uses FrameTensorMessage (renamed from TensorMessage)
         if not isinstance(msg, FrameTensorMessage):
             err = f"YOLOStage expects FrameTensorMessage, got {type(msg).__name__}"
             raise TypeError(err)
-        t = time.perf_counter()
         outputs = self._backend.run(self._handle, msg.tensor)
-        latency_ms = (time.perf_counter() - t) * 1000
 
         boxes = self._parse_outputs(outputs, msg.original_size)
         boxes = [b for b in boxes if b.confidence >= self.confidence_threshold]
@@ -161,9 +161,9 @@ class YOLOStage(Stage):
                 b.y2,
             )
 
+        # latency_ms is stamped by Stage.process() via model_copy
         return DetectionMessage(
             boxes=boxes,
-            latency_ms=latency_ms,
             timestamp=msg.timestamp,
         )
 

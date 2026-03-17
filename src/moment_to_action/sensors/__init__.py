@@ -3,6 +3,6 @@
 from __future__ import annotations
 
 from ._base import BaseSensor
-from .file import FileSensor
+from ._file_image import FileImageSensor
 
-__all__ = ["BaseSensor", "FileSensor"]
+__all__ = ["BaseSensor", "FileImageSensor"]

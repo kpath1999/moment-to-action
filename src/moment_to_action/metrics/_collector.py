@@ -21,6 +21,11 @@ from moment_to_action.hardware._types import ComputeUnit  # noqa: TC001
 
 logger = logging.getLogger(__name__)
 
+# Model names used for stage-1 latency bucketing.
+_STAGE1_MODEL_NAMES: frozenset[str] = frozenset({"yamnet", "imu", "ir"})
+# Model names used for stage-2 latency bucketing.
+_STAGE2_MODEL_NAMES: frozenset[str] = frozenset({"movinet", "mobileclip", "yolo", "qwen"})
+
 
 class EventType(Enum):
     """Pipeline event types recorded by :class:`MetricsCollector`."""
@@ -53,7 +58,7 @@ class PipelineRecord:
 
     timestamp: float
     event_type: EventType
-    stage: int  # 1 or 2
+    stage_idx: int  # 1 or 2
     latency_ms: float
     metadata: dict = field(default_factory=dict)
 
@@ -68,11 +73,16 @@ class MetricsCollector:
     """
 
     def __init__(self, session_id: str | None = None) -> None:
-        self.session_id = session_id or f"session_{int(time.time())}"
+        self._session_id = session_id or f"session_{int(time.time())}"
         self._inference_log: list[InferenceRecord] = []
         self._pipeline_log: list[PipelineRecord] = []
         self._event_log: list[dict] = []
         self._timers: dict[str, float] = {}
+
+    @property
+    def session_id(self) -> str:
+        """Return the session identifier."""
+        return self._session_id
 
     # ------------------------------------------------------------------
     # Logging methods
@@ -101,7 +111,7 @@ class MetricsCollector:
     def log_pipeline_event(
         self,
         event_type: EventType,
-        stage: int,
+        stage_idx: int,
         latency_ms: float,
         metadata: dict | None = None,
     ) -> None:
@@ -110,7 +120,7 @@ class MetricsCollector:
             PipelineRecord(
                 timestamp=time.time(),
                 event_type=event_type,
-                stage=stage,
+                stage_idx=stage_idx,
                 latency_ms=latency_ms,
                 metadata=metadata or {},
             )
@@ -217,14 +227,12 @@ class MetricsCollector:
         stage1 = [
             r
             for r in self._inference_log
-            if any(name in r.model_name.lower() for name in ["yamnet", "imu", "ir"])
+            if any(name in r.model_name.lower() for name in _STAGE1_MODEL_NAMES)
         ]
         stage2 = [
             r
             for r in self._inference_log
-            if any(
-                name in r.model_name.lower() for name in ["movinet", "mobileclip", "yolo", "qwen"]
-            )
+            if any(name in r.model_name.lower() for name in _STAGE2_MODEL_NAMES)
         ]
 
         def stats(records: list[InferenceRecord]) -> dict[str, float]:

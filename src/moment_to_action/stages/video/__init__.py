@@ -7,7 +7,6 @@ from ._preprocess import (
     ImagePreprocessor,
     PreprocessorStage,
     ProcessedFrame,
-    VideoPreprocessConfig,
 )
 from ._yolo import YOLOStage
 
@@ -16,6 +15,5 @@ __all__ = [
     "ImagePreprocessor",
     "PreprocessorStage",
     "ProcessedFrame",
-    "VideoPreprocessConfig",
     "YOLOStage",
 ]

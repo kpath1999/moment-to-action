@@ -13,5 +13,5 @@ class BaseMessage(BaseModel):
     timestamp: float
     """Unix epoch timestamp (seconds) when the message was created."""
 
-    latency_ms: float | None = None
-    """End-to-end latency in milliseconds from capture to this message, if known."""
+    latency_ms: float = 0.0
+    """End-to-end latency in milliseconds from capture to this message."""

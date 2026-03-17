@@ -9,7 +9,6 @@ Output: ReasoningMessage
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
@@ -42,21 +41,19 @@ class ReasoningStage(Stage):
             "Based on the detected objects and their positions, assess the scene briefly."
         )
 
-    def process(self, msg: Message) -> ReasoningMessage | None:
+    def _process(self, msg: Message) -> ReasoningMessage | None:
         """Format detections into a prompt and run the LLM."""
         if not isinstance(msg, DetectionMessage):
             err = f"ReasoningStage expects DetectionMessage, got {type(msg).__name__}"
             raise TypeError(err)
         prompt = self._build_prompt(msg)
-        t = time.perf_counter()
         # LLM inference — tokenize, run, decode
         # Placeholder until Qwen is wired in
         response = self._run_llm(prompt)
-        latency_ms = (time.perf_counter() - t) * 1000
+        # latency_ms is stamped by Stage.process() via model_copy
         return ReasoningMessage(
             response=response,
             prompt=prompt,
-            latency_ms=latency_ms,
             timestamp=msg.timestamp,
         )
 

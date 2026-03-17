@@ -10,16 +10,15 @@ Output: ClassificationMessage
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
+    from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
 
 logger = logging.getLogger(__name__)
@@ -43,24 +42,20 @@ class MobileCLIPStage(Stage):
         self,
         model_path: str,
         text_prompts: list[str],
-        compute_unit: ComputeUnit | None = None,
+        backend: ComputeBackend,
     ) -> None:
-        if compute_unit is None:
-            compute_unit = ComputeUnit.CPU
-
-        self._backend = ComputeBackend(preferred_unit=compute_unit)
+        self._backend = backend
         self._handle = self._backend.load_model(model_path)
-        self.text_prompts = text_prompts
+        self._text_prompts = text_prompts
         self._text_tokens = self._tokenize(text_prompts)
         logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))
 
-    def process(self, msg: Message) -> ClassificationMessage | None:
+    def _process(self, msg: Message) -> ClassificationMessage | None:
         """Run zero-shot classification against all text prompts."""
         # NOTE: input type check uses FrameTensorMessage (renamed from TensorMessage)
         if not isinstance(msg, FrameTensorMessage):
             err = f"MobileCLIPStage expects FrameTensorMessage, got {type(msg).__name__}"
             raise TypeError(err)
-        t = time.perf_counter()
 
         scores = []
         for tokens in self._text_tokens:
@@ -79,36 +74,32 @@ class MobileCLIPStage(Stage):
         scores_arr = np.array(scores, dtype=np.float32)
         scores_softmax = self._softmax(scores_arr)
         best_idx = int(np.argmax(scores_softmax))
-        latency_ms = (time.perf_counter() - t) * 1000
 
-        label = self.text_prompts[best_idx]
+        label = self._text_prompts[best_idx]
         confidence = float(scores_softmax[best_idx])
-        logger.info("MobileCLIPStage: '%s'  conf=%.3f  %.1fms", label, confidence, latency_ms)
+        logger.info("MobileCLIPStage: '%s'  conf=%.3f", label, confidence)
 
+        # latency_ms is stamped by Stage.process() via model_copy
         return ClassificationMessage(
             label=label,
             confidence=confidence,
             all_scores={
-                p: float(s) for p, s in zip(self.text_prompts, scores_softmax, strict=False)
+                p: float(s) for p, s in zip(self._text_prompts, scores_softmax, strict=False)
             },
-            latency_ms=latency_ms,
             timestamp=msg.timestamp,
         )
 
     def update_prompts(self, prompts: list[str]) -> None:
         """Swap prompts at runtime without reloading the model."""
-        self.text_prompts = prompts
+        self._text_prompts = prompts
         self._text_tokens = self._tokenize(prompts)
 
     def _tokenize(self, prompts: list[str]) -> np.ndarray:
-        try:
-            import open_clip
+        import open_clip
 
-            tokenizer = open_clip.get_tokenizer("MobileCLIP-S2")
-            return tokenizer(prompts).numpy().astype(np.int64)
-        except ImportError as err:
-            msg = "open_clip required: pip install open-clip-torch"
-            raise RuntimeError(msg) from err
+        tokenizer = open_clip.get_tokenizer("MobileCLIP-S2")
+        # Use np.asarray to handle both torch tensors and arrays uniformly.
+        return np.asarray(tokenizer(prompts)).astype(np.int64)
 
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         a = a / (np.linalg.norm(a) + 1e-8)
