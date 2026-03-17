@@ -154,24 +154,31 @@ class LiteRTBackend(InferenceBackend):
     def _get_delegates(self) -> list:
         """Build the delegate list for the configured compute unit.
 
+        Short-circuits to an empty list for CPU so no imports are attempted —
+        this is how :class:`LiteRTBackend` doubles as a CPU backend (no
+        separate ``CPUBackend`` class needed).
+
         Raises:
             RuntimeError: If the QNN delegate cannot be loaded.  The caller
-                (``ComputeBackend._select_backend``) should catch this and
-                fall back to CPU.
+                (``QCS6490Backend._load_tflite``) should catch this and fall
+                back to ``LiteRTBackend(ComputeUnit.CPU)``.
         """
-        delegates = []
+        if self._unit == ComputeUnit.CPU:
+            return []
+
         try:
             from ai_edge_litert.interpreter import load_delegate
 
             if self._unit == ComputeUnit.NPU:
                 qnn = load_delegate("/usr/lib/libQnnTFLiteDelegate.so")
-                delegates.append(qnn)
                 logger.info("QNN delegate loaded → Hexagon HTP/NPU")
+                return [qnn]
         except Exception as e:
-            # Log first so the caller's warning includes the original cause.
+            # Raise so the caller can decide whether to retry on CPU.
             msg = f"NPU delegate unavailable: {e}"
             raise RuntimeError(msg) from e
-        return delegates
+
+        return []
 
     def run(self, handle: Any, inputs: ModelInput) -> list[np.ndarray]:
         """Run inference and return all output tensors.

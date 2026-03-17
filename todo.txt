@@ -7,3 +7,7 @@ have copilot automatically run linting
 add pre-commit
 
 copilot instructions
+
+get rid of any types
+
+dict returns

@@ -61,7 +61,7 @@ class QCS6490Backend(InferenceBackend):
 
     Internally delegates to format-specific sub-backends:
 
-    - ``.tflite`` → :class:`LiteRTBackend` (NPU/GPU) or :class:`CPUBackend`
+    - ``.tflite`` → :class:`LiteRTBackend` (NPU/GPU or CPU)
     - ``.onnx``   → :class:`ONNXBackend` (created on first ``.onnx`` load)
 
     If the accelerated sub-backend fails at load time, the model is retried
@@ -100,9 +100,10 @@ class QCS6490Backend(InferenceBackend):
     def _make_litert_backend(unit: ComputeUnit) -> InferenceBackend:
         """Create the best TFLite sub-backend for *unit*.
 
-        Tries NPU/GPU first; falls back to CPU if the delegate is missing.
+        Tries NPU/GPU first; silently falls back to ``LiteRTBackend(CPU)``
+        if the hardware delegate is unavailable (e.g. dev machine, CI).
+        ``LiteRTBackend`` handles CPU natively — no separate class needed.
         """
-        from moment_to_action.hardware._platforms.qcs6490._cpu import CPUBackend
         from moment_to_action.hardware._platforms.qcs6490._litert import LiteRTBackend
 
         try:
@@ -114,7 +115,7 @@ class QCS6490Backend(InferenceBackend):
                 unit.name,
                 e,
             )
-        return CPUBackend()
+        return LiteRTBackend(compute_unit=ComputeUnit.CPU)
 
     def _get_onnx_backend(self) -> InferenceBackend:
         """Return the ONNX sub-backend, creating it on first call."""
@@ -185,19 +186,19 @@ class QCS6490Backend(InferenceBackend):
 
     def _load_tflite(self, path: str) -> _ModelHandle:
         """Load a .tflite model, falling back to CPU on accelerator failure."""
-        from moment_to_action.hardware._platforms.qcs6490._cpu import CPUBackend
+        from moment_to_action.hardware._platforms.qcs6490._litert import LiteRTBackend
 
         try:
             raw = self._litert_backend.load_model(path)
             return _ModelHandle(raw=raw, backend=self._litert_backend)
         except Exception as e:
-            if not isinstance(self._litert_backend, CPUBackend):
+            if self._litert_backend.get_supported_unit() != ComputeUnit.CPU:
                 logger.warning(
                     "Model load failed on %s (%s) — retrying on CPU",
                     self._litert_backend.get_supported_unit().name,
                     e,
                 )
-                self._litert_backend = CPUBackend()
+                self._litert_backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
                 raw = self._litert_backend.load_model(path)
                 return _ModelHandle(raw=raw, backend=self._litert_backend)
             raise
