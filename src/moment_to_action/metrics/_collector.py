@@ -48,7 +48,6 @@ class MetricsCollector:
         self._pipeline_log: list[PipelineRecord] = []
         self._stage_log: list[StageRecord] = []
         self._event_log: list[EventRecord] = []
-        self._timers: dict[str, float] = {}
 
     @property
     def session_id(self) -> str:
@@ -109,23 +108,6 @@ class MetricsCollector:
                 data=data,
             )
         )
-
-    # ------------------------------------------------------------------
-    # Timer helpers - measure wall-clock spans
-    # ------------------------------------------------------------------
-
-    def start_timer(self, name: str) -> None:
-        """Start a named wall-clock timer."""
-        self._timers[name] = time.perf_counter()
-
-    def stop_timer(self, name: str) -> float:
-        """Return elapsed ms since :meth:`start_timer` was called."""
-        if name not in self._timers:
-            msg = f"Timer '{name}' was never started"
-            raise KeyError(msg)
-        elapsed_ms = (time.perf_counter() - self._timers.pop(name)) * 1000
-        self.log_event("timer", {"name": name, "elapsed_ms": elapsed_ms})
-        return elapsed_ms
 
     # ------------------------------------------------------------------
     # Reporting
