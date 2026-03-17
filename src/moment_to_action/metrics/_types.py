@@ -33,9 +33,6 @@ class PipelineRecord:
     event_type: EventType
     """Category of pipeline event."""
 
-    stage_idx: int
-    """Pipeline stage index (1 or 2)."""
-
     latency_ms: float
     """End-to-end latency for this event in milliseconds."""
 

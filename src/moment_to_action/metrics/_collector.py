@@ -62,7 +62,6 @@ class MetricsCollector:
     def log_pipeline_event(
         self,
         event_type: EventType,
-        stage_idx: int,
         latency_ms: float,
         metadata: dict | None = None,
     ) -> None:
@@ -71,7 +70,6 @@ class MetricsCollector:
             PipelineRecord(
                 timestamp=time.time(),
                 event_type=event_type,
-                stage_idx=stage_idx,
                 latency_ms=latency_ms,
                 metadata=metadata or {},
             )
