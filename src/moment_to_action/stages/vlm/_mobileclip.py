@@ -17,6 +17,7 @@ import open_clip
 
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.stages._base import Stage
+from moment_to_action.utils import cosine_similarity, softmax
 
 if TYPE_CHECKING:
     from moment_to_action.hardware import ComputeBackend
@@ -70,10 +71,10 @@ class MobileCLIPStage(Stage):
             )
             image_emb = outputs[1][0]  # [512]
             text_emb = outputs[0][0]  # [512]
-            scores.append(self._cosine_similarity(image_emb, text_emb))
+            scores.append(cosine_similarity(image_emb, text_emb))
 
         scores_arr = np.array(scores, dtype=np.float32)
-        scores_softmax = self._softmax(scores_arr)
+        scores_softmax = softmax(scores_arr)
         best_idx = int(np.argmax(scores_softmax))
 
         label = self._text_prompts[best_idx]
@@ -99,12 +100,3 @@ class MobileCLIPStage(Stage):
         tokenizer = open_clip.get_tokenizer("MobileCLIP-S2")
         # Use np.asarray to handle both torch tensors and arrays uniformly.
         return np.asarray(tokenizer(prompts)).astype(np.int64)
-
-    def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
-        a = a / (np.linalg.norm(a) + 1e-8)
-        b = b / (np.linalg.norm(b) + 1e-8)
-        return float(np.dot(a, b))
-
-    def _softmax(self, x: np.ndarray) -> np.ndarray:
-        e = np.exp(x - np.max(x))
-        return e / e.sum()
