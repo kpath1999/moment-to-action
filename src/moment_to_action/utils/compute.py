@@ -5,27 +5,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
 from moment_to_action.hardware import ComputeUnit
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
-
-
-def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """Return the cosine similarity between two vectors, safe against zero-norm inputs."""
-    a = a / (np.linalg.norm(a) + 1e-8)
-    b = b / (np.linalg.norm(b) + 1e-8)
-    return float(np.dot(a, b))
-
-
-def softmax(x: np.ndarray) -> np.ndarray:
-    """Numerically stable softmax over a 1-D array."""
-    e = np.exp(x - np.max(x))
-    return e / e.sum()
 
 
 class ComputeDispatcher:

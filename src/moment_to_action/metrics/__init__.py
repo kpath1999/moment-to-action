@@ -11,6 +11,7 @@ from moment_to_action.metrics._types import (
     StageRecord,
     StageStats,
 )
+from moment_to_action.metrics.ml import cosine_similarity, softmax
 
 __all__ = [
     "CollectorReport",
@@ -22,4 +23,6 @@ __all__ = [
     "PipelineStats",
     "StageRecord",
     "StageStats",
+    "cosine_similarity",
+    "softmax",
 ]
