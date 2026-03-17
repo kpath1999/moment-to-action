@@ -11,3 +11,7 @@ copilot instructions
 get rid of any types
 
 dict returns
+
+logging
+
+yeet old files

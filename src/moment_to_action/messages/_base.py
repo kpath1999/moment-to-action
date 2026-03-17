@@ -6,15 +6,12 @@ from pydantic import BaseModel
 
 
 class BaseMessage(BaseModel):
-    """Base class for all pipeline messages.
+    """Base class for all pipeline messages."""
 
-    All pipeline messages carry a timestamp so consumers can
-    reason about ordering and latency across pipeline stages.
-
-    Attributes:
-        timestamp: Unix epoch timestamp (seconds) when the message was created.
-    """
+    model_config = {"arbitrary_types_allowed": True}  # required for NDArray fields
 
     timestamp: float
+    """Unix epoch timestamp (seconds) when the message was created."""
 
-    model_config = {"arbitrary_types_allowed": True}  # required for np.ndarray fields
+    latency_ms: float | None = None
+    """End-to-end latency in milliseconds from capture to this message, if known."""

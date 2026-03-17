@@ -30,8 +30,6 @@ class PowerSample(BaseModel):
         utilization_pct: Utilisation percentage (0-100).
     """
 
-    model_config = {"arbitrary_types_allowed": True}
-
     timestamp: float
     compute_unit: ComputeUnit
     power_mw: float

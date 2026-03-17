@@ -16,8 +16,8 @@ platform at construction time and forwards every call.
 from __future__ import annotations
 
 import logging
-import platform
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -29,15 +29,48 @@ if TYPE_CHECKING:
         PowerMonitor,
     )
 
+from moment_to_action.hardware._platforms._detection import Platform, detect_platform
 from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
 from moment_to_action.hardware._types import ComputeUnit
 
 logger = logging.getLogger(__name__)
 
-# CPU architectures where hardware accelerators (NPU/GPU) may be present.
-# On other arches (x86_64 dev machines, CI) we tell the platform backend
-# to target CPU directly — avoids noisy delegate-loading failures.
-_ACCELERATOR_ARCHES: frozenset[str] = frozenset({"aarch64", "armv8l"})
+
+# ---------------------------------------------------------------------------
+# Result types
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkResult:
+    """Latency statistics from a :meth:`ComputeBackend.benchmark` run.
+
+    All times are in milliseconds.
+    """
+
+    mean_ms: float
+    """Mean inference latency across all runs."""
+
+    p50_ms: float
+    """Median (50th percentile) latency."""
+
+    p95_ms: float
+    """95th percentile latency."""
+
+    p99_ms: float
+    """99th percentile latency."""
+
+    min_ms: float
+    """Minimum observed latency."""
+
+    max_ms: float
+    """Maximum observed latency."""
+
+    compute_unit: str
+    """Name of the compute unit used (e.g. ``"CPU"``, ``"NPU"``)."""
+
+    n_runs: int
+    """Number of inference runs performed."""
 
 
 # ---------------------------------------------------------------------------
@@ -46,36 +79,28 @@ _ACCELERATOR_ARCHES: frozenset[str] = frozenset({"aarch64", "armv8l"})
 
 
 def _make_power_monitor() -> PowerMonitor:
-    """Return the power monitor appropriate for the current host.
-
-    Currently all platforms map to :class:`QCS6490PowerMonitor`, which
-    gracefully falls back to static estimates when sysfs is absent.
-    Extend with ``elif`` branches as new platforms are added.
-    """
-    machine = platform.machine().lower()
-    if machine not in _ACCELERATOR_ARCHES:
-        logger.debug(
-            "Platform %r: no accelerator expected — power monitor will use estimates",
-            machine,
-        )
-    return QCS6490PowerMonitor()
+    """Return the power monitor appropriate for the detected platform."""
+    match detect_platform():
+        case Platform.QCS6490:
+            return QCS6490PowerMonitor()
+        case Platform.UNKNOWN:
+            logger.debug("Unknown platform — power monitor will use estimates")
+            return QCS6490PowerMonitor()
 
 
 def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
-    """Return the platform backend for the current host.
+    """Return the platform backend for the detected platform.
 
-    On non-accelerator architectures the backend is told to use CPU
-    regardless of what *preferred_unit* says, so that delegate-loading
-    failures never surface in dev/CI environments.
+    On unknown platforms (dev machines, CI) the backend always targets CPU
+    so that delegate-loading failures never surface in local development.
     """
-    machine = platform.machine().lower()
-
-    # On dev machines force CPU to avoid noisy delegate warnings.
-    if machine not in _ACCELERATOR_ARCHES and preferred_unit != ComputeUnit.CPU:
-        logger.info("Platform %r: %s not available, using CPU", machine, preferred_unit.name)
-        return QCS6490Backend(preferred_unit=ComputeUnit.CPU)
-
-    return QCS6490Backend(preferred_unit=preferred_unit)
+    match detect_platform():
+        case Platform.QCS6490:
+            return QCS6490Backend(preferred_unit=preferred_unit)
+        case Platform.UNKNOWN:
+            if preferred_unit != ComputeUnit.CPU:
+                logger.info("Unknown platform: %s not available, using CPU", preferred_unit.name)
+            return QCS6490Backend(preferred_unit=ComputeUnit.CPU)
 
 
 # ---------------------------------------------------------------------------
@@ -107,10 +132,9 @@ class ComputeBackend:
         self._power_monitor: PowerMonitor = _make_power_monitor()
         self._backend: InferenceBackend = _make_backend(preferred_unit)
         logger.info(
-            "ComputeBackend: preferred=%s active=%s platform=%s",
+            "ComputeBackend: preferred=%s active=%s",
             preferred_unit.name,
             self._backend.get_supported_unit().name,
-            platform.machine(),
         )
 
     # ------------------------------------------------------------------
@@ -160,20 +184,20 @@ class ComputeBackend:
         return self._backend.run(model_handle, inputs)
 
     def get_input_details(self, model_handle: Any) -> list[dict]:
-        """Inspect model input slots (TFLite-specific).
+        """Inspect model input slots (delegates to the platform backend).
 
         Args:
             model_handle: Handle returned by :meth:`load_model`.
         """
-        return model_handle.raw.get_input_details()
+        return self._backend.get_input_details(model_handle)
 
     def get_output_details(self, model_handle: Any) -> list[dict]:
-        """Inspect model output slots (TFLite-specific).
+        """Inspect model output slots (delegates to the platform backend).
 
         Args:
             model_handle: Handle returned by :meth:`load_model`.
         """
-        return model_handle.raw.get_output_details()
+        return self._backend.get_output_details(model_handle)
 
     # ------------------------------------------------------------------
     # Benchmarking
@@ -184,7 +208,7 @@ class ComputeBackend:
         model_handle: Any,
         inputs: ModelInput,
         n_runs: int = 20,
-    ) -> dict:
+    ) -> BenchmarkResult:
         """Run inference *n_runs* times and return latency statistics.
 
         Args:
@@ -193,23 +217,21 @@ class ComputeBackend:
             n_runs: Number of inference repetitions.
 
         Returns:
-            Dict with keys ``mean_ms``, ``p50_ms``, ``p95_ms``, ``p99_ms``,
-            ``min_ms``, ``max_ms``, ``compute_unit``, ``n_runs``.
+            A :class:`BenchmarkResult` with latency percentiles and metadata.
         """
-        latencies: list[float] = []
-        for _ in range(n_runs):
+        latencies = np.empty(n_runs, dtype=np.float64)
+        for i in range(n_runs):
             t = time.perf_counter()
             self._backend.run(model_handle, inputs)
-            latencies.append((time.perf_counter() - t) * 1000)
+            latencies[i] = (time.perf_counter() - t) * 1000.0
 
-        arr = np.array(latencies)
-        return {
-            "mean_ms": float(np.mean(arr)),
-            "p50_ms": float(np.percentile(arr, 50)),
-            "p95_ms": float(np.percentile(arr, 95)),
-            "p99_ms": float(np.percentile(arr, 99)),
-            "min_ms": float(np.min(arr)),
-            "max_ms": float(np.max(arr)),
-            "compute_unit": self.active_unit.name,
-            "n_runs": n_runs,
-        }
+        return BenchmarkResult(
+            mean_ms=float(np.mean(latencies)),
+            p50_ms=float(np.percentile(latencies, 50)),
+            p95_ms=float(np.percentile(latencies, 95)),
+            p99_ms=float(np.percentile(latencies, 99)),
+            min_ms=float(np.min(latencies)),
+            max_ms=float(np.max(latencies)),
+            compute_unit=self.active_unit.name,
+            n_runs=n_runs,
+        )

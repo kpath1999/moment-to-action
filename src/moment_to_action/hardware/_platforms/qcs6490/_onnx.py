@@ -3,8 +3,6 @@
 CPU-only by default.  ExecutionProvider can be swapped for GPU/NPU if an
 appropriate ONNX EP is available, but that is not done here — ONNX models
 are rare in this codebase and CPU is sufficient.
-
-Install: pip install onnxruntime
 """
 
 from __future__ import annotations
@@ -13,6 +11,7 @@ import logging
 from typing import Any
 
 import numpy as np
+import onnxruntime as ort
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
 from moment_to_action.hardware._types import ComputeUnit
@@ -38,22 +37,12 @@ class ONNXBackend(InferenceBackend):
 
         Returns:
             A cached or freshly created ``onnxruntime.InferenceSession``.
-
-        Raises:
-            RuntimeError: If ``onnxruntime`` is not installed.
         """
         if path in self._session_cache:
             logger.debug("ONNX cache hit: %s", path)
             return self._session_cache[path]
 
-        try:
-            import onnxruntime as ort
-
-            session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
-        except ImportError as err:
-            msg = "onnxruntime not installed. Run: pip install onnxruntime"
-            raise RuntimeError(msg) from err
-
+        session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
         self._session_cache[path] = session
         logger.info("Loaded %s via onnxruntime", path)
         return session
@@ -72,6 +61,27 @@ class ONNXBackend(InferenceBackend):
         input_details = handle.get_inputs()
         feed = {input_details[0].name: inputs} if isinstance(inputs, np.ndarray) else inputs
         return handle.run(None, feed)
+
+    def get_input_details(self, handle: Any) -> list[dict]:
+        """Return the model's input metadata as a list of dicts.
+
+        Args:
+            handle: Session returned by :meth:`load_model`.
+        """
+        return [
+            {"name": inp.name, "shape": inp.shape, "dtype": inp.type} for inp in handle.get_inputs()
+        ]
+
+    def get_output_details(self, handle: Any) -> list[dict]:
+        """Return the model's output metadata as a list of dicts.
+
+        Args:
+            handle: Session returned by :meth:`load_model`.
+        """
+        return [
+            {"name": out.name, "shape": out.shape, "dtype": out.type}
+            for out in handle.get_outputs()
+        ]
 
     def get_supported_unit(self) -> ComputeUnit:
         """Return ``ComputeUnit.CPU``."""

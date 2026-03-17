@@ -7,7 +7,7 @@ Note: This module is a **placeholder** pending full audio-pipeline work.
 
 from __future__ import annotations
 
-import numpy as np  # noqa: TC002
+from numpy.typing import NDArray  # noqa: TC002
 
 from ._base import BaseMessage
 
@@ -15,16 +15,15 @@ from ._base import BaseMessage
 class AudioTensorMessage(BaseMessage):
     """Preprocessed audio tensor ready for model inference.
 
-    Placeholder — not yet used in the active pipeline.  Fields reflect a
-    minimal PCM / feature-tensor contract and are subject to revision.
-
-    Attributes:
-        data: Audio samples or feature tensor as a NumPy array.
-              Shape is intentionally unconstrained until the pipeline is finalised.
-        sample_rate: Sampling rate in Hz used when ``data`` holds raw PCM samples.
-        source: Identifier for the audio capture device or stream.
+    Placeholder — not yet used in the active pipeline.
     """
 
-    data: np.ndarray
-    sample_rate: int = 16000
-    source: str = ""
+    data: NDArray
+    """Audio samples or feature tensor as a NumPy array.
+    Shape is intentionally unconstrained until the pipeline is finalised."""
+
+    sample_rate: int
+    """Sampling rate in Hz used when ``data`` holds raw PCM samples."""
+
+    source: str
+    """Identifier for the audio capture device or stream."""

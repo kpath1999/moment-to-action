@@ -13,10 +13,26 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
+from enum import Enum, auto
 
 import numpy as np
 
+from moment_to_action.hardware._types import ComputeUnit  # noqa: TC001
+
 logger = logging.getLogger(__name__)
+
+
+class EventType(Enum):
+    """Pipeline event types recorded by :class:`MetricsCollector`."""
+
+    TRIGGER_FIRED = auto()
+    """A pipeline trigger condition was met."""
+
+    DETECTION = auto()
+    """An object or activity was detected by a model."""
+
+    FALSE_POSITIVE = auto()
+    """A detection was later determined to be incorrect."""
 
 
 @dataclass
@@ -28,7 +44,7 @@ class InferenceRecord:
     latency_ms: float
     label: str
     confidence: float
-    compute_unit: str
+    compute_unit: ComputeUnit
 
 
 @dataclass
@@ -36,7 +52,7 @@ class PipelineRecord:
     """Record of a pipeline-level event."""
 
     timestamp: float
-    event_type: str  # "trigger_fired", "detection", "false_positive"
+    event_type: EventType
     stage: int  # 1 or 2
     latency_ms: float
     metadata: dict = field(default_factory=dict)
@@ -68,7 +84,7 @@ class MetricsCollector:
         latency_ms: float,
         label: str,
         confidence: float,
-        compute_unit: str,
+        compute_unit: ComputeUnit,
     ) -> None:
         """Record a single model inference with its timing and result."""
         self._inference_log.append(
@@ -84,7 +100,7 @@ class MetricsCollector:
 
     def log_pipeline_event(
         self,
-        event_type: str,
+        event_type: EventType,
         stage: int,
         latency_ms: float,
         metadata: dict | None = None,
@@ -184,8 +200,8 @@ class MetricsCollector:
         return stats
 
     def _pipeline_stats(self) -> dict:
-        triggers = [r for r in self._pipeline_log if r.event_type == "trigger_fired"]
-        detections = [r for r in self._pipeline_log if r.event_type == "detection"]
+        triggers = [r for r in self._pipeline_log if r.event_type == EventType.TRIGGER_FIRED]
+        detections = [r for r in self._pipeline_log if r.event_type == EventType.DETECTION]
 
         return {
             "total_triggers": len(triggers),

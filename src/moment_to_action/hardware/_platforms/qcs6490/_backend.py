@@ -169,6 +169,24 @@ class QCS6490Backend(InferenceBackend):
         h: _ModelHandle = handle
         return h.backend.run(h.raw, inputs)
 
+    def get_input_details(self, handle: Any) -> list[dict]:
+        """Return input tensor metadata, delegating to the owning sub-backend.
+
+        Args:
+            handle: Handle returned by :meth:`load_model`.
+        """
+        h: _ModelHandle = handle
+        return h.backend.get_input_details(h.raw)
+
+    def get_output_details(self, handle: Any) -> list[dict]:
+        """Return output tensor metadata, delegating to the owning sub-backend.
+
+        Args:
+            handle: Handle returned by :meth:`load_model`.
+        """
+        h: _ModelHandle = handle
+        return h.backend.get_output_details(h.raw)
+
     def get_supported_unit(self) -> ComputeUnit:
         """Return the best compute unit available.
 

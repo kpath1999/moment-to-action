@@ -70,6 +70,31 @@ class InferenceBackend(ABC):
         ...
 
     @abstractmethod
+    def get_input_details(self, handle: Any) -> list[dict]:
+        """Return metadata for each input tensor of the loaded model.
+
+        Args:
+            handle: The handle returned by :meth:`load_model`.
+
+        Returns:
+            List of dicts, one per input slot.  Dict keys are runtime-specific
+            but at minimum include ``"name"``, ``"shape"``, and ``"dtype"``.
+        """
+        ...
+
+    @abstractmethod
+    def get_output_details(self, handle: Any) -> list[dict]:
+        """Return metadata for each output tensor of the loaded model.
+
+        Args:
+            handle: The handle returned by :meth:`load_model`.
+
+        Returns:
+            List of dicts, one per output slot.
+        """
+        ...
+
+    @abstractmethod
     def get_supported_unit(self) -> ComputeUnit:
         """Return the ``ComputeUnit`` this backend targets."""
         ...
