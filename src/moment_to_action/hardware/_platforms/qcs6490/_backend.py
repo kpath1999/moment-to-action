@@ -3,10 +3,10 @@
 ``QCS6490Backend`` is the single :class:`InferenceBackend` that the platform
 package exposes.  It owns:
 
-- **Format routing** — ``.tflite`` files go to LiteRT (or CPU fallback),
-  ``.onnx`` files go to ONNX Runtime.  Sub-backends are created lazily.
-- **Accelerator fallback** — if the NPU/GPU backend raises, the model is
-  retried on the CPU sub-backend.
+- **Format routing** — ``.tflite`` files go to LiteRT, ``.onnx`` files go to
+  ONNX Runtime.  All sub-backends are created eagerly at construction time.
+- **Accelerator fallback** — if the NPU/GPU backend raises at load time, the
+  model is retried on the always-present CPU backend.
 - **Model handle tracking** — each loaded model is paired (via
   ``_ModelHandle``) with the sub-backend that created it, so ``run()``
   needs no isinstance checks.
@@ -61,13 +61,11 @@ class _ModelHandle:
 class QCS6490Backend(InferenceBackend):
     """Unified inference backend for the Qualcomm QCS6490.
 
-    Internally delegates to format-specific sub-backends:
+    Internally delegates to format-specific sub-backends, all created eagerly:
 
-    - ``.tflite`` → :class:`LiteRTBackend` (NPU/GPU or CPU)
-    - ``.onnx``   → :class:`ONNXBackend` (created on first ``.onnx`` load)
-
-    If the accelerated sub-backend fails at load time, the model is retried
-    on CPU transparently.
+    - ``.tflite`` → ``_accel_backend`` (NPU/GPU, optional) with automatic
+      fallback to ``_cpu_backend`` (always present).
+    - ``.onnx``   → ``_onnx_backend`` (CPU via ONNX Runtime).
 
     Args:
         preferred_unit: The compute unit to attempt first for TFLite models.
@@ -82,14 +80,24 @@ class QCS6490Backend(InferenceBackend):
     def __init__(self, preferred_unit: ComputeUnit = ComputeUnit.NPU) -> None:
         self._preferred_unit = preferred_unit
 
-        # Sub-backends created eagerly — fail fast at construction time.
-        self._litert_backend: InferenceBackend = self._make_litert_backend(preferred_unit)
-        self._onnx_backend: InferenceBackend = ONNXBackend()
+        # CPU backend is always available — the unconditional fallback.
+        self._litert_cpu_backend: LiteRTBackend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+
+        # Accelerator backend is optional — None if the delegate is missing.
+        self._litert_accel_backend: LiteRTBackend | None = self._try_make_accel_backend(
+            preferred_unit
+        )
+
+        # ONNX backend is always available (falls back to ImportError at load
+        # time if onnxruntime is not installed).
+        self._onnx_backend: ONNXBackend = ONNXBackend()
 
         logger.info(
-            "QCS6490Backend: preferred=%s, litert_unit=%s",
+            "QCS6490Backend: preferred=%s accel=%s",
             preferred_unit.name,
-            self._litert_backend.get_supported_unit().name,
+            self._litert_accel_backend.get_supported_unit().name
+            if self._litert_accel_backend
+            else "unavailable",
         )
 
     # ------------------------------------------------------------------
@@ -97,23 +105,23 @@ class QCS6490Backend(InferenceBackend):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _make_litert_backend(unit: ComputeUnit) -> InferenceBackend:
-        """Create the best TFLite sub-backend for *unit*.
+    def _try_make_accel_backend(unit: ComputeUnit) -> LiteRTBackend | None:
+        """Try to create an NPU/GPU LiteRT backend; return ``None`` on failure.
 
-        Tries NPU/GPU first; silently falls back to ``LiteRTBackend(CPU)``
-        if the hardware delegate is unavailable (e.g. dev machine, CI).
-        ``LiteRTBackend`` handles CPU natively — no separate class needed.
+        CPU is not an accelerator — if *unit* is ``CPU``, returns ``None``
+        immediately so that ``_cpu_backend`` is used directly.
         """
+        if unit not in (ComputeUnit.NPU, ComputeUnit.GPU):
+            return None
         try:
-            if unit in (ComputeUnit.NPU, ComputeUnit.GPU):
-                return LiteRTBackend(compute_unit=unit)
+            return LiteRTBackend(compute_unit=unit)
         except Exception as e:  # noqa: BLE001
             logger.warning(
-                "%s delegate unavailable (%s) — falling back to CPU",
+                "%s delegate unavailable (%s) — TFLite will run on CPU",
                 unit.name,
                 e,
             )
-        return LiteRTBackend(compute_unit=ComputeUnit.CPU)
+            return None
 
     # ------------------------------------------------------------------
     # InferenceBackend interface
@@ -122,9 +130,8 @@ class QCS6490Backend(InferenceBackend):
     def load_model(self, path: str) -> Any:
         """Load a model, routing by file extension.
 
-        ``.tflite`` files are loaded by the LiteRT/CPU sub-backend.  If the
-        accelerated backend fails, loading is retried on CPU.  ``.onnx`` files
-        are loaded by the ONNX sub-backend (created on first use).
+        ``.tflite`` files are tried on the accelerator first, then CPU.
+        ``.onnx`` files go directly to the ONNX sub-backend.
 
         Args:
             path: Filesystem path to the model file.
@@ -163,33 +170,34 @@ class QCS6490Backend(InferenceBackend):
         return h.backend.run(h.raw, inputs)
 
     def get_supported_unit(self) -> ComputeUnit:
-        """Return the compute unit of the LiteRT sub-backend.
+        """Return the best compute unit available.
 
-        This reflects the *actual* unit in use (may be CPU even if NPU was
-        requested, due to fallback).
+        Returns the accelerator unit if the delegate loaded successfully,
+        otherwise ``CPU``.
         """
-        return self._litert_backend.get_supported_unit()
+        if self._litert_accel_backend is not None:
+            return self._litert_accel_backend.get_supported_unit()
+        return self._litert_cpu_backend.get_supported_unit()
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
     def _load_tflite(self, path: str) -> _ModelHandle:
-        """Load a .tflite model, falling back to CPU on accelerator failure."""
-        try:
-            raw = self._litert_backend.load_model(path)
-            return _ModelHandle(raw=raw, backend=self._litert_backend)
-        except Exception as e:
-            if self._litert_backend.get_supported_unit() != ComputeUnit.CPU:
+        """Load a .tflite model, trying the accelerator then falling back to CPU."""
+        if self._litert_accel_backend is not None:
+            try:
+                raw = self._litert_accel_backend.load_model(path)
+                return _ModelHandle(raw=raw, backend=self._litert_accel_backend)
+            except Exception as e:  # noqa: BLE001
                 logger.warning(
-                    "Model load failed on %s (%s) — retrying on CPU",
-                    self._litert_backend.get_supported_unit().name,
+                    "Accel load failed for %r (%s) — retrying on CPU",
+                    path,
                     e,
                 )
-                self._litert_backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
-                raw = self._litert_backend.load_model(path)
-                return _ModelHandle(raw=raw, backend=self._litert_backend)
-            raise
+
+        raw = self._litert_cpu_backend.load_model(path)
+        return _ModelHandle(raw=raw, backend=self._litert_cpu_backend)
 
     def _load_onnx(self, path: str) -> _ModelHandle:
         """Load an .onnx model via the ONNX sub-backend."""
