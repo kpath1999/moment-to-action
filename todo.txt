@@ -1,0 +1,9 @@
+add a types file to metrics, make all files there private
+
+migrate dataclsases to attrs
+
+have copilot automatically run linting
+
+add pre-commit
+
+copilot instructions
