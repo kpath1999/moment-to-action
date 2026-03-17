@@ -82,11 +82,9 @@ class QCS6490Backend(InferenceBackend):
     def __init__(self, preferred_unit: ComputeUnit = ComputeUnit.NPU) -> None:
         self._preferred_unit = preferred_unit
 
-        # Sub-backend for .tflite models — set up eagerly.
+        # Sub-backends created eagerly — fail fast at construction time.
         self._litert_backend: InferenceBackend = self._make_litert_backend(preferred_unit)
-
-        # Sub-backend for .onnx models — created lazily on first use.
-        self._onnx_backend: InferenceBackend | None = None
+        self._onnx_backend: InferenceBackend = ONNXBackend()
 
         logger.info(
             "QCS6490Backend: preferred=%s, litert_unit=%s",
@@ -116,12 +114,6 @@ class QCS6490Backend(InferenceBackend):
                 e,
             )
         return LiteRTBackend(compute_unit=ComputeUnit.CPU)
-
-    def _get_onnx_backend(self) -> InferenceBackend:
-        """Return the ONNX sub-backend, creating it on first call."""
-        if self._onnx_backend is None:
-            self._onnx_backend = ONNXBackend()
-        return self._onnx_backend
 
     # ------------------------------------------------------------------
     # InferenceBackend interface
@@ -200,7 +192,6 @@ class QCS6490Backend(InferenceBackend):
             raise
 
     def _load_onnx(self, path: str) -> _ModelHandle:
-        """Load an .onnx model via the lazily-created ONNX sub-backend."""
-        onnx = self._get_onnx_backend()
-        raw = onnx.load_model(path)
-        return _ModelHandle(raw=raw, backend=onnx)
+        """Load an .onnx model via the ONNX sub-backend."""
+        raw = self._onnx_backend.load_model(path)
+        return _ModelHandle(raw=raw, backend=self._onnx_backend)
