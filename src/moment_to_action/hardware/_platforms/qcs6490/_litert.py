@@ -187,12 +187,15 @@ class LiteRTBackend(InferenceBackend):
             KeyError: If a named input is not found in the model.
             TypeError: If a tensor dtype does not match the model's expected dtype.
         """
+        # Fetch once — a list of dicts with 'index', 'name', 'dtype', 'shape', etc.
         input_details = interp.get_input_details()
 
+        # Fast path: single-input model — skip name lookup and feed directly to slot 0.
         if isinstance(inputs, np.ndarray):
             interp.set_tensor(input_details[0]["index"], inputs)
             return
 
+        # Multi-input path: build a name → detail map for O(1) lookup per tensor.
         name_to_detail = {d["name"]: d for d in input_details}
         for name, tensor in inputs.items():
             if name not in name_to_detail:
@@ -200,6 +203,8 @@ class LiteRTBackend(InferenceBackend):
                 msg = f"Input name '{name}' not found in model. Available: {available}"
                 raise KeyError(msg)
             detail = name_to_detail[name]
+            # Guard against silent precision loss — TFLite will happily accept the
+            # wrong dtype and produce garbage outputs without raising on its own.
             expected_dtype = detail["dtype"]
             if tensor.dtype != expected_dtype:
                 msg = (
