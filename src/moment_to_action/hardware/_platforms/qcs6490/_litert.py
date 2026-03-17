@@ -37,7 +37,7 @@ except ImportError:
     from tensorflow.lite.python.interpreter import load_delegate as _load_delegate
 
     _have_ai_edge_litert = False
-    logger.debug("ai_edge_litert not available — using tf.lite as fallback")
+    logger.warning("ai_edge_litert not available — using tf.lite as fallback")
 
 
 class LiteRTBackend(InferenceBackend):
