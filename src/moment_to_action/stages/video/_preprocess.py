@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -100,7 +100,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         self,
         config: ImagePreprocessConfig | None = None,
         compute_unit: ComputeUnit = ComputeUnit.CPU,
-        metrics: Any = None,
+        metrics: object = None,
     ) -> None:
         self._config = config or ImagePreprocessConfig()
         super().__init__(compute_unit=compute_unit, metrics=metrics)

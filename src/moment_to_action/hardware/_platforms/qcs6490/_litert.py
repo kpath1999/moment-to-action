@@ -11,7 +11,6 @@ Design note — no silent CPU fallback:
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import numpy as np
 
@@ -53,9 +52,9 @@ class LiteRTBackend(InferenceBackend):
 
     def __init__(self, compute_unit: ComputeUnit = ComputeUnit.NPU) -> None:
         self._unit = compute_unit
-        self._interpreter_cache: dict[str, Any] = {}
+        self._interpreter_cache: dict[str, object] = {}
 
-    def load_model(self, path: str) -> Any:
+    def load_model(self, path: str) -> object:
         """Load a TFLite model, caching interpreters by path.
 
         Args:
@@ -76,7 +75,7 @@ class LiteRTBackend(InferenceBackend):
         logger.info("Loaded %s on %s", path, self._unit.name)
         return interp
 
-    def run(self, handle: Any, inputs: ModelInput) -> list[np.ndarray]:
+    def run(self, handle: object, inputs: ModelInput) -> list[np.ndarray]:
         """Run inference and return all output tensors.
 
         Args:
@@ -90,7 +89,7 @@ class LiteRTBackend(InferenceBackend):
         handle.invoke()
         return [handle.get_tensor(d["index"]) for d in handle.get_output_details()]
 
-    def get_input_details(self, handle: Any) -> list[dict]:
+    def get_input_details(self, handle: object) -> list[dict]:
         """Return the model's input tensor metadata.
 
         Args:
@@ -98,7 +97,7 @@ class LiteRTBackend(InferenceBackend):
         """
         return handle.get_input_details()
 
-    def get_output_details(self, handle: Any) -> list[dict]:
+    def get_output_details(self, handle: object) -> list[dict]:
         """Return the model's output tensor metadata.
 
         Args:
@@ -142,7 +141,7 @@ class LiteRTBackend(InferenceBackend):
         # GPU and other units: no delegate implemented yet.
         return []
 
-    def _load_interpreter(self, model_path: str) -> Any:
+    def _load_interpreter(self, model_path: str) -> object:
         """Load and allocate a TFLite interpreter.
 
         Calls :meth:`_get_delegates` internally to obtain the right delegate
@@ -172,7 +171,7 @@ class LiteRTBackend(InferenceBackend):
         return interp
 
     @staticmethod
-    def _set_inputs(interp: Any, inputs: ModelInput) -> None:
+    def _set_inputs(interp: object, inputs: ModelInput) -> None:
         """Feed input tensors into an interpreter.
 
         For single-input models pass a plain ndarray (fed to slot 0).

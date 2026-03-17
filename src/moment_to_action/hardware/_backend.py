@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -149,7 +149,7 @@ class ComputeBackend:
     # Delegation — every call forwards to the platform backend
     # ------------------------------------------------------------------
 
-    def load_model(self, model_path: str) -> Any:
+    def load_model(self, model_path: str) -> object:
         """Load a model (delegates to the platform backend).
 
         Args:
@@ -160,7 +160,7 @@ class ComputeBackend:
         """
         return self._backend.load_model(model_path)
 
-    def run(self, model_handle: Any, inputs: ModelInput) -> list[np.ndarray]:
+    def run(self, model_handle: object, inputs: ModelInput) -> list[np.ndarray]:
         """Run inference (delegates to the platform backend).
 
         Args:
@@ -172,7 +172,7 @@ class ComputeBackend:
         """
         return self._backend.run(model_handle, inputs)
 
-    def get_input_details(self, model_handle: Any) -> list[dict]:
+    def get_input_details(self, model_handle: object) -> list[dict]:
         """Inspect model input slots (delegates to the platform backend).
 
         Args:
@@ -180,7 +180,7 @@ class ComputeBackend:
         """
         return self._backend.get_input_details(model_handle)
 
-    def get_output_details(self, model_handle: Any) -> list[dict]:
+    def get_output_details(self, model_handle: object) -> list[dict]:
         """Inspect model output slots (delegates to the platform backend).
 
         Args:
@@ -194,7 +194,7 @@ class ComputeBackend:
 
     def benchmark(
         self,
-        model_handle: Any,
+        model_handle: object,
         inputs: ModelInput,
         n_runs: int = 20,
     ) -> BenchmarkResult:

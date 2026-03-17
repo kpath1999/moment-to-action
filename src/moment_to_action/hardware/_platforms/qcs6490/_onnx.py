@@ -8,7 +8,6 @@ are rare in this codebase and CPU is sufficient.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import numpy as np
 import onnxruntime as ort
@@ -27,9 +26,9 @@ class ONNXBackend(InferenceBackend):
     """
 
     def __init__(self) -> None:
-        self._session_cache: dict[str, Any] = {}
+        self._session_cache: dict[str, object] = {}
 
-    def load_model(self, path: str) -> Any:
+    def load_model(self, path: str) -> object:
         """Load an ONNX model, caching sessions by path.
 
         Args:
@@ -47,7 +46,7 @@ class ONNXBackend(InferenceBackend):
         logger.info("Loaded %s via onnxruntime", path)
         return session
 
-    def run(self, handle: Any, inputs: ModelInput) -> list[np.ndarray]:
+    def run(self, handle: object, inputs: ModelInput) -> list[np.ndarray]:
         """Run ONNX inference and return output tensors.
 
         Args:
@@ -62,7 +61,7 @@ class ONNXBackend(InferenceBackend):
         feed = {input_details[0].name: inputs} if isinstance(inputs, np.ndarray) else inputs
         return handle.run(None, feed)
 
-    def get_input_details(self, handle: Any) -> list[dict]:
+    def get_input_details(self, handle: object) -> list[dict]:
         """Return the model's input metadata as a list of dicts.
 
         Args:
@@ -72,7 +71,7 @@ class ONNXBackend(InferenceBackend):
             {"name": inp.name, "shape": inp.shape, "dtype": inp.type} for inp in handle.get_inputs()
         ]
 
-    def get_output_details(self, handle: Any) -> list[dict]:
+    def get_output_details(self, handle: object) -> list[dict]:
         """Return the model's output metadata as a list of dicts.
 
         Args:

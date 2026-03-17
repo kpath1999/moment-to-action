@@ -1,19 +1,8 @@
-add a types file to metrics, make all files there private
-
-migrate dataclsases to attrs
-
-have copilot automatically run linting
-
 add pre-commit
 
 copilot instructions
-
-get rid of any types
-
-dict returns
 
 logging
 
 yeet old files
 
-metriuc collector gets stage name and index from pipeline

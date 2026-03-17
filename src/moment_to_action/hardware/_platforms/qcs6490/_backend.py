@@ -127,7 +127,7 @@ class QCS6490Backend(InferenceBackend):
     # InferenceBackend interface
     # ------------------------------------------------------------------
 
-    def load_model(self, path: str) -> Any:
+    def load_model(self, path: str) -> object:
         """Load a model, routing by file extension.
 
         ``.tflite`` files are tried on the accelerator first, then CPU.
@@ -153,7 +153,7 @@ class QCS6490Backend(InferenceBackend):
         )
         raise ValueError(msg)
 
-    def run(self, handle: Any, inputs: ModelInput) -> list[np.ndarray]:
+    def run(self, handle: object, inputs: ModelInput) -> list[np.ndarray]:
         """Run inference via the sub-backend that loaded the model.
 
         O(1) dispatch — no isinstance checks.  The handle already knows which
@@ -169,7 +169,7 @@ class QCS6490Backend(InferenceBackend):
         h: _ModelHandle = handle
         return h.backend.run(h.raw, inputs)
 
-    def get_input_details(self, handle: Any) -> list[dict]:
+    def get_input_details(self, handle: object) -> list[dict]:
         """Return input tensor metadata, delegating to the owning sub-backend.
 
         Args:
@@ -178,7 +178,7 @@ class QCS6490Backend(InferenceBackend):
         h: _ModelHandle = handle
         return h.backend.get_input_details(h.raw)
 
-    def get_output_details(self, handle: Any) -> list[dict]:
+    def get_output_details(self, handle: object) -> list[dict]:
         """Return output tensor metadata, delegating to the owning sub-backend.
 
         Args:

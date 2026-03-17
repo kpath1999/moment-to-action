@@ -8,7 +8,7 @@ not on concrete implementations, to stay portable across hardware platforms.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -44,7 +44,7 @@ class InferenceBackend(ABC):
     """
 
     @abstractmethod
-    def load_model(self, path: str) -> Any:
+    def load_model(self, path: str) -> object:
         """Load a model from *path* and return an opaque handle.
 
         Args:
@@ -56,7 +56,7 @@ class InferenceBackend(ABC):
         ...
 
     @abstractmethod
-    def run(self, handle: Any, inputs: ModelInput) -> list[np.ndarray]:
+    def run(self, handle: object, inputs: ModelInput) -> list[np.ndarray]:
         """Run inference and return all output tensors.
 
         Args:
@@ -70,7 +70,7 @@ class InferenceBackend(ABC):
         ...
 
     @abstractmethod
-    def get_input_details(self, handle: Any) -> list[dict]:
+    def get_input_details(self, handle: object) -> list[dict]:
         """Return metadata for each input tensor of the loaded model.
 
         Args:
@@ -83,7 +83,7 @@ class InferenceBackend(ABC):
         ...
 
     @abstractmethod
-    def get_output_details(self, handle: Any) -> list[dict]:
+    def get_output_details(self, handle: object) -> list[dict]:
         """Return metadata for each output tensor of the loaded model.
 
         Args:

@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -85,7 +85,7 @@ class BasePreprocessor[InputT, OutputT](ABC):
     def __init__(
         self,
         compute_unit: ComputeUnit = ComputeUnit.CPU,
-        metrics: Any = None,
+        metrics: object = None,
     ) -> None:
         self._compute_unit = compute_unit
         self._metrics = metrics
@@ -163,7 +163,7 @@ class BasePreprocessor[InputT, OutputT](ABC):
     # Protected helpers subclasses can use
     # ------------------------------------------------------------------
 
-    def _dispatch(self, fn: Callable, *args: Any, **kwargs: Any) -> Any:
+    def _dispatch(self, fn: Callable, *args: object, **kwargs: object) -> object:
         """Route a computation to DSP or CPU.
 
         Subclasses call this instead of calling fn() directly.
