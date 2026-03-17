@@ -122,7 +122,7 @@ class LatencyBudget:
     """Latency budget analysis measured against the configured target."""
 
     total_mean_ms: float
-    """Sum of stage-1 and stage-2 mean latencies."""
+    """Mean end-to-end pipeline latency in milliseconds."""
 
     budget_ms: float
     """Target latency budget in milliseconds."""
