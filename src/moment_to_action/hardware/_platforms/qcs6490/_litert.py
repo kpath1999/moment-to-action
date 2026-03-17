@@ -31,17 +31,13 @@ try:
 
     _have_ai_edge_litert = True
 except ImportError:
+    # ai_edge_litert is absent (dev machine / older TF install) — fall back to
+    # the legacy tf.lite runtime, which is assumed to always be present.
+    from tensorflow.lite.python.interpreter import Interpreter as _Interpreter
+    from tensorflow.lite.python.interpreter import load_delegate as _load_delegate
+
     _have_ai_edge_litert = False
-    logger.debug("ai_edge_litert not available — will use tf.lite as fallback")
-
-# tf.lite fallback — only needed when ai_edge_litert is absent.
-try:
-    from tensorflow.lite.python.interpreter import Interpreter as _TFInterpreter
-    from tensorflow.lite.python.interpreter import load_delegate as _tf_load_delegate
-
-    _have_tf_lite = True
-except ImportError:
-    _have_tf_lite = False
+    logger.debug("ai_edge_litert not available — using tf.lite as fallback")
 
 
 class LiteRTBackend(InferenceBackend):
@@ -135,10 +131,7 @@ class LiteRTBackend(InferenceBackend):
         # decide whether to retry on CPU.
         if self._unit == ComputeUnit.NPU:
             try:
-                if _have_ai_edge_litert:
-                    qnn = _load_delegate(_QNN_DELEGATE_PATH)
-                else:
-                    qnn = _tf_load_delegate(_QNN_DELEGATE_PATH)
+                qnn = _load_delegate(_QNN_DELEGATE_PATH)
             except Exception as e:
                 msg = f"NPU delegate unavailable: {e}"
                 raise RuntimeError(msg) from e
@@ -152,7 +145,8 @@ class LiteRTBackend(InferenceBackend):
     def _load_interpreter(self, model_path: str, delegates: list) -> Any:
         """Load and allocate a TFLite interpreter.
 
-        Prefers ``ai_edge_litert`` when available; falls back to ``tf.lite``.
+        Uses ``ai_edge_litert`` when available, otherwise ``tf.lite`` — both
+        are imported at module load time under the same ``_Interpreter`` name.
         Raises ``RuntimeError`` if a non-empty delegate list fails to apply,
         so the caller decides the retry strategy.
 
@@ -167,12 +161,7 @@ class LiteRTBackend(InferenceBackend):
             RuntimeError: If a delegate fails to apply to the model.
         """
         try:
-            if _have_ai_edge_litert:
-                interp = _Interpreter(model_path=model_path, experimental_delegates=delegates)
-                logger.info("Loaded %s via ai_edge_litert", model_path)
-            else:
-                logger.warning("ai_edge_litert not installed — using tf.lite")
-                interp = _TFInterpreter(model_path=model_path, experimental_delegates=delegates)
+            interp = _Interpreter(model_path=model_path, experimental_delegates=delegates)
         except RuntimeError as e:
             if delegates:
                 msg = f"Delegate failed: {e}"
