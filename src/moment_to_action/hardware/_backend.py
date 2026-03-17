@@ -1,57 +1,95 @@
-"""Hardware Abstraction Layer — orchestrator.
+"""Hardware Abstraction Layer — public entry point.
 
-``ComputeBackend`` is the single entry point that models call.  It handles:
-- Platform detection and backend instantiation
-- Fallback logic: NPU/GPU → CPU on failure
-- ONNX model routing
-- Benchmarking
+``ComputeBackend`` is the **only** class the rest of the codebase imports.
+It is intentionally thin — three private fields and pure delegation:
 
-Design rationale — fallback lives here, not in backends:
-    Individual backends (``LiteRTBackend``, etc.) raise immediately when they
-    cannot use their designated accelerator.  ``ComputeBackend`` catches those
-    errors and decides whether to retry with a cheaper backend.  This keeps
-    each backend simple and single-purpose while giving the orchestrator full
-    visibility over the fallback chain.
+    _preferred_unit   the unit the caller asked for
+    _power_monitor    platform-appropriate power monitor
+    _backend          platform-appropriate unified inference backend
+
+All format routing (``.tflite`` vs ``.onnx``), sub-backend management,
+and accelerator → CPU fallback logic live inside the platform backend
+(e.g. :class:`QCS6490Backend`).  ``ComputeBackend`` just picks the right
+platform at construction time and forwards every call.
 """
 
 from __future__ import annotations
 
 import logging
+import platform
 import time
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
+    from moment_to_action.hardware._platforms._base import (
+        InferenceBackend,
+        ModelInput,
+        PowerMonitor,
+    )
 
-from moment_to_action.hardware._platforms.qcs6490 import (
-    CPUBackend,
-    LiteRTBackend,
-    ONNXBackend,
-    QCS6490PowerMonitor,
-)
 from moment_to_action.hardware._types import ComputeUnit
 
 logger = logging.getLogger(__name__)
 
+# CPU architectures where hardware accelerators (NPU/GPU) may be present.
+# On other arches (x86_64 dev machines, CI) we tell the platform backend
+# to target CPU directly — avoids noisy delegate-loading failures.
+_ACCELERATOR_ARCHES: frozenset[str] = frozenset({"aarch64", "armv8l"})
 
-def _make_power_monitor() -> QCS6490PowerMonitor:
-    """Instantiate the power monitor appropriate for the current platform.
 
-    Currently only QCS6490 is supported; more platforms can be added here
-    as ``elif platform.machine() == ...`` branches.
+# ---------------------------------------------------------------------------
+# Platform-aware factory helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_power_monitor() -> PowerMonitor:
+    """Return the power monitor appropriate for the current host.
+
+    Currently all platforms map to :class:`QCS6490PowerMonitor`, which
+    gracefully falls back to static estimates when sysfs is absent.
+    Extend with ``elif`` branches as new platforms are added.
     """
-    # Future: add platform detection here for other chips.
+    from moment_to_action.hardware._platforms.qcs6490 import QCS6490PowerMonitor
+
+    machine = platform.machine().lower()
+    if machine not in _ACCELERATOR_ARCHES:
+        logger.debug(
+            "Platform %r: no accelerator expected — power monitor will use estimates",
+            machine,
+        )
     return QCS6490PowerMonitor()
+
+
+def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
+    """Return the platform backend for the current host.
+
+    On non-accelerator architectures the backend is told to use CPU
+    regardless of what *preferred_unit* says, so that delegate-loading
+    failures never surface in dev/CI environments.
+    """
+    from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend
+
+    machine = platform.machine().lower()
+
+    # On dev machines force CPU to avoid noisy delegate warnings.
+    if machine not in _ACCELERATOR_ARCHES and preferred_unit != ComputeUnit.CPU:
+        logger.info("Platform %r: %s not available, using CPU", machine, preferred_unit.name)
+        return QCS6490Backend(preferred_unit=ComputeUnit.CPU)
+
+    return QCS6490Backend(preferred_unit=preferred_unit)
+
+
+# ---------------------------------------------------------------------------
+# ComputeBackend — public API
+# ---------------------------------------------------------------------------
 
 
 class ComputeBackend:
     """Hardware Abstraction Layer entry point.
 
-    Models call this class — never LiteRT, ONNX, or SNPE directly.  Swapping
-    the underlying runtime or the chip requires changes only in this module
-    and the platform-specific backends.
+    Models call this class — never LiteRT, ONNX, or SNPE directly.
 
     Usage::
 
@@ -61,81 +99,59 @@ class ComputeBackend:
             'serving_default_args_0:0': image_tensor,
             'serving_default_args_1:0': token_tensor,
         })
-        image_emb = outputs[1]   # [1, 512]
-        text_emb  = outputs[0]   # [1, 512]
 
     Attributes:
         preferred_unit: The compute unit requested at construction time.
-        power_monitor: Platform power monitor instance.
+        power_monitor: Platform power monitor instance (read-only).
     """
 
     def __init__(self, preferred_unit: ComputeUnit = ComputeUnit.NPU) -> None:
-        self.preferred_unit = preferred_unit
-        self.power_monitor = _make_power_monitor()
-        # _select_backend handles fallback internally; _backend is always valid.
-        self._backend: InferenceBackend = self._select_backend(preferred_unit)
-        self._onnx_backend = ONNXBackend()
-        logger.info("ComputeBackend: active unit = %s", self._backend.get_supported_unit().name)
+        self._preferred_unit = preferred_unit
+        self._power_monitor: PowerMonitor = _make_power_monitor()
+        self._backend: InferenceBackend = _make_backend(preferred_unit)
+        logger.info(
+            "ComputeBackend: preferred=%s active=%s platform=%s",
+            preferred_unit.name,
+            self._backend.get_supported_unit().name,
+            platform.machine(),
+        )
 
-    def _select_backend(self, unit: ComputeUnit) -> InferenceBackend:
-        """Try to create the requested backend; fall back to CPU on failure.
+    # ------------------------------------------------------------------
+    # Public properties
+    # ------------------------------------------------------------------
 
-        Backends raise ``RuntimeError`` when their accelerator is unavailable
-        (e.g. missing delegate library, unsupported model format).  We catch
-        those errors here and gracefully degrade to CPU rather than crashing
-        the whole inference pipeline.
+    @property
+    def preferred_unit(self) -> ComputeUnit:
+        """The compute unit originally requested."""
+        return self._preferred_unit
 
-        Args:
-            unit: The desired compute unit.
+    @property
+    def power_monitor(self) -> PowerMonitor:
+        """The platform power monitor."""
+        return self._power_monitor
 
-        Returns:
-            The best available ``InferenceBackend`` for *unit*.
-        """
-        try:
-            if unit == ComputeUnit.NPU:
-                return LiteRTBackend(compute_unit=ComputeUnit.NPU)
-            if unit == ComputeUnit.GPU:
-                return LiteRTBackend(compute_unit=ComputeUnit.GPU)
-        except Exception as e:  # noqa: BLE001
-            logger.warning(
-                "Backend for %s unavailable (%s) — falling back to CPU",
-                unit.name,
-                e,
-            )
-        return CPUBackend()
+    @property
+    def active_unit(self) -> ComputeUnit:
+        """The compute unit actually in use (may differ from preferred after fallback)."""
+        return self._backend.get_supported_unit()
+
+    # ------------------------------------------------------------------
+    # Delegation — every call forwards to the platform backend
+    # ------------------------------------------------------------------
 
     def load_model(self, model_path: str) -> Any:
-        """Load a model, routing ONNX files to the ONNX backend.
-
-        If the primary backend (NPU/GPU) fails to load the model, the call is
-        retried on CPU so that inference can continue.
+        """Load a model (delegates to the platform backend).
 
         Args:
-            model_path: Filesystem path to the model file (``.tflite`` or ``.onnx``).
+            model_path: Path to a ``.tflite`` or ``.onnx`` file.
 
         Returns:
-            An opaque model handle suitable for :meth:`run`.
+            An opaque model handle — pass it back to :meth:`run`.
         """
-        if model_path and model_path.endswith(".onnx"):
-            return self._onnx_backend.load_model(model_path)
-
-        try:
-            return self._backend.load_model(model_path)
-        except Exception as e:
-            if not isinstance(self._backend, CPUBackend):
-                logger.warning(
-                    "Model load failed on %s (%s) — retrying on CPU",
-                    self._backend.get_supported_unit().name,
-                    e,
-                )
-                self._backend = CPUBackend()
-                return self._backend.load_model(model_path)
-            raise
+        return self._backend.load_model(model_path)
 
     def run(self, model_handle: Any, inputs: ModelInput) -> list[np.ndarray]:
-        """Run inference, routing to the correct backend.
-
-        ONNX sessions are detected by type and routed to ``_onnx_backend``.
+        """Run inference (delegates to the platform backend).
 
         Args:
             model_handle: Handle returned by :meth:`load_model`.
@@ -144,41 +160,27 @@ class ComputeBackend:
         Returns:
             List of output tensors.
         """
-        try:
-            import onnxruntime as ort
-
-            if isinstance(model_handle, ort.InferenceSession):
-                return self._onnx_backend.run(model_handle, inputs)
-        except ImportError:
-            pass
         return self._backend.run(model_handle, inputs)
 
     def get_input_details(self, model_handle: Any) -> list[dict]:
-        """Inspect model input slots.
+        """Inspect model input slots (TFLite-specific).
 
         Args:
             model_handle: Handle returned by :meth:`load_model`.
-
-        Returns:
-            List of input detail dicts (index, name, shape, dtype).
         """
-        return model_handle.get_input_details()
+        return model_handle.raw.get_input_details()
 
     def get_output_details(self, model_handle: Any) -> list[dict]:
-        """Inspect model output slots.
+        """Inspect model output slots (TFLite-specific).
 
         Args:
             model_handle: Handle returned by :meth:`load_model`.
-
-        Returns:
-            List of output detail dicts.
         """
-        return model_handle.get_output_details()
+        return model_handle.raw.get_output_details()
 
-    @property
-    def active_unit(self) -> ComputeUnit:
-        """The compute unit of the currently active backend."""
-        return self._backend.get_supported_unit()
+    # ------------------------------------------------------------------
+    # Benchmarking
+    # ------------------------------------------------------------------
 
     def benchmark(
         self,
@@ -197,7 +199,7 @@ class ComputeBackend:
             Dict with keys ``mean_ms``, ``p50_ms``, ``p95_ms``, ``p99_ms``,
             ``min_ms``, ``max_ms``, ``compute_unit``, ``n_runs``.
         """
-        latencies = []
+        latencies: list[float] = []
         for _ in range(n_runs):
             t = time.perf_counter()
             self._backend.run(model_handle, inputs)
