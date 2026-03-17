@@ -7,11 +7,8 @@ inside containers and cross-compiled environments.
 
 Usage::
 
-    match detect_platform():
-        case Platform.QCS6490:
-            backend = QCS6490Backend(preferred_unit)
-        case Platform.UNKNOWN:
-            backend = QCS6490Backend(preferred_unit=ComputeUnit.CPU)
+    platform = detect_platform()  # raises RuntimeError if unrecognised
+    backend = QCS6490Backend(preferred_unit)
 """
 
 from __future__ import annotations
@@ -32,27 +29,27 @@ class Platform(Enum):
     QCS6490 = auto()
     """Qualcomm QCS6490 (Snapdragon 778G) — Hexagon HTP NPU, Adreno 642L GPU."""
 
-    UNKNOWN = auto()
-    """Unrecognised or development host — CPU inference only."""
-
 
 def detect_platform() -> Platform:
     """Detect the current hardware platform via sysfs.
 
     Reads ``/sys/devices/soc0/machine`` (Qualcomm SOC name file) and maps
-    the value to a :class:`Platform` enum member.  Falls back to
-    ``Platform.UNKNOWN`` when the file is absent (dev machine, CI) or the
-    SoC name is not recognised.
+    the value to a :class:`Platform` enum member.
 
     Returns:
         The detected :class:`Platform`.
+
+    Raises:
+        RuntimeError: If the sysfs file is absent or the SoC name is not
+            recognised.  This is intentional — callers must handle unsupported
+            hardware explicitly rather than silently running on a wrong platform.
     """
     if not _QCOM_SOC_NAME_FILE.exists():
-        logger.debug(
-            "Sysfs file %s not found — assuming non-target host (Platform.UNKNOWN)",
-            _QCOM_SOC_NAME_FILE,
+        msg = (
+            f"Platform detection failed: {_QCOM_SOC_NAME_FILE} not found. "
+            "Are you running on supported hardware?"
         )
-        return Platform.UNKNOWN
+        raise RuntimeError(msg)
 
     soc_name = _QCOM_SOC_NAME_FILE.read_text().strip().upper()
     logger.debug("Detected SoC: %r", soc_name)
@@ -60,5 +57,8 @@ def detect_platform() -> Platform:
     if "QCS6490" in soc_name:
         return Platform.QCS6490
 
-    logger.warning("Unrecognised SoC %r — falling back to Platform.UNKNOWN", soc_name)
-    return Platform.UNKNOWN
+    msg = (
+        f"Unrecognised SoC {soc_name!r}. "
+        "Add a new Platform member and backend to support this hardware."
+    )
+    raise RuntimeError(msg)

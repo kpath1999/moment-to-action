@@ -83,24 +83,13 @@ def _make_power_monitor() -> PowerMonitor:
     match detect_platform():
         case Platform.QCS6490:
             return QCS6490PowerMonitor()
-        case Platform.UNKNOWN:
-            logger.debug("Unknown platform — power monitor will use estimates")
-            return QCS6490PowerMonitor()
 
 
 def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
-    """Return the platform backend for the detected platform.
-
-    On unknown platforms (dev machines, CI) the backend always targets CPU
-    so that delegate-loading failures never surface in local development.
-    """
+    """Return the platform backend for the detected platform."""
     match detect_platform():
         case Platform.QCS6490:
             return QCS6490Backend(preferred_unit=preferred_unit)
-        case Platform.UNKNOWN:
-            if preferred_unit != ComputeUnit.CPU:
-                logger.info("Unknown platform: %s not available, using CPU", preferred_unit.name)
-            return QCS6490Backend(preferred_unit=ComputeUnit.CPU)
 
 
 # ---------------------------------------------------------------------------

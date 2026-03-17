@@ -34,6 +34,15 @@ except ImportError:
     _have_ai_edge_litert = False
     logger.debug("ai_edge_litert not available — will use tf.lite as fallback")
 
+# tf.lite fallback — only needed when ai_edge_litert is absent.
+try:
+    from tensorflow.lite.python.interpreter import Interpreter as _TFInterpreter
+    from tensorflow.lite.python.interpreter import load_delegate as _tf_load_delegate
+
+    _have_tf_lite = True
+except ImportError:
+    _have_tf_lite = False
+
 
 class LiteRTBackend(InferenceBackend):
     """TFLite runtime that supports CPU, NPU, and GPU inference.
@@ -129,9 +138,7 @@ class LiteRTBackend(InferenceBackend):
                 if _have_ai_edge_litert:
                     qnn = _load_delegate(_QNN_DELEGATE_PATH)
                 else:
-                    import tensorflow as tf
-
-                    qnn = tf.lite.experimental.load_delegate(_QNN_DELEGATE_PATH)
+                    qnn = _tf_load_delegate(_QNN_DELEGATE_PATH)
             except Exception as e:
                 msg = f"NPU delegate unavailable: {e}"
                 raise RuntimeError(msg) from e
@@ -164,12 +171,8 @@ class LiteRTBackend(InferenceBackend):
                 interp = _Interpreter(model_path=model_path, experimental_delegates=delegates)
                 logger.info("Loaded %s via ai_edge_litert", model_path)
             else:
-                import tensorflow as tf
-
                 logger.warning("ai_edge_litert not installed — using tf.lite")
-                interp = tf.lite.Interpreter(
-                    model_path=model_path, experimental_delegates=delegates
-                )
+                interp = _TFInterpreter(model_path=model_path, experimental_delegates=delegates)
         except RuntimeError as e:
             if delegates:
                 msg = f"Delegate failed: {e}"
