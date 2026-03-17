@@ -28,7 +28,8 @@ from moment_to_action.hardware import ComputeUnit
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import FrameTensorMessage  # renamed from TensorMessage
 from moment_to_action.stages._base import Stage
-from moment_to_action.stages._preprocess import BasePreprocessor, BufferSpec
+from moment_to_action.stages._preprocess import BasePreprocessor
+from moment_to_action.utils import BufferSpec
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message

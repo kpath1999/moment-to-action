@@ -9,11 +9,13 @@ for including directly in your paper's results section.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from pathlib import Path
 
 import numpy as np
 
@@ -45,11 +47,22 @@ class InferenceRecord:
     """Record of a single model inference."""
 
     timestamp: float
+    """Unix epoch timestamp when the inference ran."""
+
     model_name: str
+    """Short name identifying the model (e.g. ``"yolo"``)."""
+
     latency_ms: float
+    """Wall-clock inference time in milliseconds."""
+
     label: str
+    """Top predicted class label."""
+
     confidence: float
+    """Confidence score for ``label`` in ``[0, 1]``."""
+
     compute_unit: ComputeUnit
+    """Hardware unit that executed the inference."""
 
 
 @dataclass
@@ -57,10 +70,144 @@ class PipelineRecord:
     """Record of a pipeline-level event."""
 
     timestamp: float
+    """Unix epoch timestamp of the event."""
+
     event_type: EventType
-    stage_idx: int  # 1 or 2
+    """Category of pipeline event."""
+
+    stage_idx: int
+    """Pipeline stage index (1 or 2)."""
+
     latency_ms: float
+    """End-to-end latency for this event in milliseconds."""
+
     metadata: dict = field(default_factory=dict)
+    """Arbitrary key/value context for this event."""
+
+
+@dataclass
+class StageRecord:
+    """Record of a single stage execution (logged by the Stage wrapper)."""
+
+    timestamp: float
+    """Unix epoch timestamp when the stage ran."""
+
+    stage_name: str
+    """Class name of the stage."""
+
+    latency_ms: float
+    """Wall-clock time for this stage in milliseconds."""
+
+    metadata: dict = field(default_factory=dict)
+    """Arbitrary key/value context attached at log time."""
+
+
+@dataclass
+class EventRecord:
+    """General-purpose event record (load times, config changes, etc.)."""
+
+    timestamp: float
+    """Unix epoch timestamp of the event."""
+
+    event_type: str
+    """Free-form event category string."""
+
+    data: dict = field(default_factory=dict)
+    """Arbitrary payload for this event."""
+
+
+@dataclass
+class ModelStats:
+    """Latency statistics for a single model across all recorded inferences."""
+
+    n_inferences: int
+    """Number of inferences included in these statistics."""
+
+    mean_ms: float
+    """Mean inference latency in milliseconds."""
+
+    p50_ms: float
+    """Median (50th percentile) latency in milliseconds."""
+
+    p95_ms: float
+    """95th percentile latency in milliseconds."""
+
+    min_ms: float
+    """Minimum observed latency in milliseconds."""
+
+    max_ms: float
+    """Maximum observed latency in milliseconds."""
+
+
+@dataclass
+class PipelineStats:
+    """High-level statistics over all recorded pipeline events."""
+
+    total_triggers: int
+    """Number of trigger-fired events."""
+
+    total_detections: int
+    """Number of detection events."""
+
+    trigger_rate: float
+    """Fraction of pipeline events that were triggers (0-1)."""
+
+
+@dataclass
+class StageLatencyStats:
+    """Latency summary for one pipeline stage."""
+
+    mean_ms: float
+    """Mean latency in milliseconds."""
+
+    p95_ms: float
+    """95th percentile latency in milliseconds."""
+
+
+@dataclass
+class LatencyBudget:
+    """Latency budget analysis measured against the configured target."""
+
+    stage1: StageLatencyStats | None
+    """Stage-1 (sensor/trigger model) latency statistics, or ``None`` if no data."""
+
+    stage2: StageLatencyStats | None
+    """Stage-2 (vision/LLM model) latency statistics, or ``None`` if no data."""
+
+    total_mean_ms: float
+    """Sum of stage-1 and stage-2 mean latencies."""
+
+    budget_ms: float
+    """Target latency budget in milliseconds."""
+
+    headroom_ms: float
+    """Remaining budget: ``budget_ms - total_mean_ms``."""
+
+    within_budget: bool
+    """``True`` when ``total_mean_ms < budget_ms``."""
+
+
+@dataclass
+class CollectorReport:
+    """Full summary report produced by :meth:`MetricsCollector.report`."""
+
+    session_id: str
+    """Unique identifier for this collection session."""
+
+    total_inferences: int
+    """Total number of model inferences recorded."""
+
+    total_pipeline_events: int
+    """Total number of pipeline-level events recorded."""
+
+    per_model: dict[str, ModelStats]
+    """Per-model latency statistics keyed by model name."""
+
+    pipeline: PipelineStats
+    """Aggregate pipeline event statistics."""
+
+    latency_budget: LatencyBudget
+    """Latency budget analysis."""
 
 
 class MetricsCollector:
@@ -78,7 +225,8 @@ class MetricsCollector:
         self._latency_budget_ms = latency_budget_ms
         self._inference_log: list[InferenceRecord] = []
         self._pipeline_log: list[PipelineRecord] = []
-        self._event_log: list[dict] = []
+        self._stage_log: list[StageRecord] = []
+        self._event_log: list[EventRecord] = []
         self._timers: dict[str, float] = {}
 
     @property
@@ -135,24 +283,23 @@ class MetricsCollector:
         metadata: dict | None = None,
     ) -> None:
         """Record a single stage execution."""
-        self._event_log.append(
-            {
-                "timestamp": time.time(),
-                "type": "stage",
-                "stage_name": stage_name,
-                "latency_ms": latency_ms,
-                **(metadata or {}),
-            }
+        self._stage_log.append(
+            StageRecord(
+                timestamp=time.time(),
+                stage_name=stage_name,
+                latency_ms=latency_ms,
+                metadata=metadata or {},
+            )
         )
 
     def log_event(self, event_type: str, data: dict) -> None:
         """General purpose event log for load times, config changes, etc."""
         self._event_log.append(
-            {
-                "timestamp": time.time(),
-                "type": event_type,
-                **data,
-            }
+            EventRecord(
+                timestamp=time.time(),
+                event_type=event_type,
+                data=data,
+            )
         )
 
     # ------------------------------------------------------------------
@@ -164,7 +311,7 @@ class MetricsCollector:
         self._timers[name] = time.perf_counter()
 
     def stop_timer(self, name: str) -> float:
-        """Returns elapsed ms since start_timer(name) was called."""
+        """Return elapsed ms since :meth:`start_timer` was called."""
         if name not in self._timers:
             msg = f"Timer '{name}' was never started"
             raise KeyError(msg)
@@ -176,21 +323,18 @@ class MetricsCollector:
     # Reporting
     # ------------------------------------------------------------------
 
-    def report(self) -> dict:
-        """Generate a summary report across all collected metrics.
+    def report(self) -> CollectorReport:
+        """Generate a summary report across all collected metrics."""
+        return CollectorReport(
+            session_id=self.session_id,
+            total_inferences=len(self._inference_log),
+            total_pipeline_events=len(self._pipeline_log),
+            per_model=self._per_model_stats(),
+            pipeline=self._pipeline_stats(),
+            latency_budget=self._latency_budget_analysis(),
+        )
 
-        This is your results table.
-        """
-        return {
-            "session_id": self.session_id,
-            "total_inferences": len(self._inference_log),
-            "total_pipeline_events": len(self._pipeline_log),
-            "per_model": self._per_model_stats(),
-            "pipeline": self._pipeline_stats(),
-            "latency_budget": self._latency_budget_analysis(),
-        }
-
-    def _per_model_stats(self) -> dict:
+    def _per_model_stats(self) -> dict[str, ModelStats]:
         if not self._inference_log:
             return {}
 
@@ -198,104 +342,99 @@ class MetricsCollector:
         for record in self._inference_log:
             by_model.setdefault(record.model_name, []).append(record.latency_ms)
 
-        stats = {}
-        for model, latencies in by_model.items():
-            arr = np.array(latencies)
-            stats[model] = {
-                "n_inferences": len(latencies),
-                "mean_ms": float(np.mean(arr)),
-                "p50_ms": float(np.percentile(arr, 50)),
-                "p95_ms": float(np.percentile(arr, 95)),
-                "min_ms": float(np.min(arr)),
-                "max_ms": float(np.max(arr)),
-            }
-        return stats
-
-    def _pipeline_stats(self) -> dict:
-        triggers = [r for r in self._pipeline_log if r.event_type == EventType.TRIGGER_FIRED]
-        detections = [r for r in self._pipeline_log if r.event_type == EventType.DETECTION]
-
         return {
-            "total_triggers": len(triggers),
-            "total_detections": len(detections),
-            "trigger_rate": len(triggers) / max(1, len(self._pipeline_log)),
+            model: ModelStats(
+                n_inferences=len(latencies),
+                mean_ms=float(np.mean(arr := np.array(latencies))),
+                p50_ms=float(np.percentile(arr, 50)),
+                p95_ms=float(np.percentile(arr, 95)),
+                min_ms=float(np.min(arr)),
+                max_ms=float(np.max(arr)),
+            )
+            for model, latencies in by_model.items()
         }
 
-    def _latency_budget_analysis(self) -> dict:
-        """Break down latency against the <5s target.
+    def _pipeline_stats(self) -> PipelineStats:
+        triggers = [r for r in self._pipeline_log if r.event_type == EventType.TRIGGER_FIRED]
+        detections = [r for r in self._pipeline_log if r.event_type == EventType.DETECTION]
+        return PipelineStats(
+            total_triggers=len(triggers),
+            total_detections=len(detections),
+            trigger_rate=len(triggers) / max(1, len(self._pipeline_log)),
+        )
 
-        Shows exactly where time is spent in the pipeline.
-        """
-        stage1 = [
+    def _latency_budget_analysis(self) -> LatencyBudget:
+        """Break down latency against the configured budget target."""
+        stage1_records = [
             r
             for r in self._inference_log
             if any(name in r.model_name.lower() for name in _STAGE1_MODEL_NAMES)
         ]
-        stage2 = [
+        stage2_records = [
             r
             for r in self._inference_log
             if any(name in r.model_name.lower() for name in _STAGE2_MODEL_NAMES)
         ]
 
-        def stats(records: list[InferenceRecord]) -> dict[str, float]:
+        def _stats(records: list[InferenceRecord]) -> StageLatencyStats | None:
             if not records:
-                return {}
+                return None
             arr = np.array([r.latency_ms for r in records])
-            return {"mean_ms": float(np.mean(arr)), "p95_ms": float(np.percentile(arr, 95))}
+            return StageLatencyStats(
+                mean_ms=float(np.mean(arr)),
+                p95_ms=float(np.percentile(arr, 95)),
+            )
 
-        s1 = stats(stage1)
-        s2 = stats(stage2)
-        total_mean = s1.get("mean_ms", 0) + s2.get("mean_ms", 0)
+        s1 = _stats(stage1_records)
+        s2 = _stats(stage2_records)
+        total_mean = (s1.mean_ms if s1 else 0.0) + (s2.mean_ms if s2 else 0.0)
 
-        return {
-            "stage1": s1,
-            "stage2": s2,
-            "total_mean_ms": total_mean,
-            "budget_ms": self._latency_budget_ms,
-            "headroom_ms": self._latency_budget_ms - total_mean,
-            "within_budget": total_mean < self._latency_budget_ms,
-        }
+        return LatencyBudget(
+            stage1=s1,
+            stage2=s2,
+            total_mean_ms=total_mean,
+            budget_ms=self._latency_budget_ms,
+            headroom_ms=self._latency_budget_ms - total_mean,
+            within_budget=total_mean < self._latency_budget_ms,
+        )
 
     def print_stage_latencies(self) -> None:
         """Print latency table for the most recent pipeline run."""
-        stage_records = [e for e in self._event_log if e.get("type") == "stage"]
-        if not stage_records:
+        if not self._stage_log:
             logger.info("No stage latencies recorded.")
             return
-        total = sum(e["latency_ms"] for e in stage_records)
+        total = sum(r.latency_ms for r in self._stage_log)
         logger.info("\n%-25s %10s", "Stage", "Latency")
         logger.info("─" * 37)
-        for e in stage_records:
-            logger.info("  %-23s %8.1fms", e["stage_name"], e["latency_ms"])
+        for r in self._stage_log:
+            logger.info("  %-23s %8.1fms", r.stage_name, r.latency_ms)
         logger.info("─" * 37)
         logger.info("  %-23s %8.1fms", "Total", total)
 
     def save(self, path: str) -> None:
         """Save full report to JSON."""
-        from pathlib import Path
-
-        Path(path).write_text(json.dumps(self.report(), indent=2))
+        Path(path).write_text(json.dumps(dataclasses.asdict(self.report()), indent=2))
         logger.info("Metrics saved to %s", path)
 
     def print_summary(self) -> None:
         """Log a human-readable summary."""
         r = self.report()
         logger.info("\n%s", "=" * 50)
-        logger.info("METRICS SUMMARY  |  session: %s", r["session_id"])
+        logger.info("METRICS SUMMARY  |  session: %s", r.session_id)
         logger.info("=" * 50)
-        logger.info("Total inferences: %d", r["total_inferences"])
+        logger.info("Total inferences: %d", r.total_inferences)
         logger.info("\nPer-model latency:")
-        for model, stats in r["per_model"].items():
+        for model, stats in r.per_model.items():
             logger.info(
                 "  %-20s  mean=%.1fms  p95=%.1fms",
                 model,
-                stats["mean_ms"],
-                stats["p95_ms"],
+                stats.mean_ms,
+                stats.p95_ms,
             )
-        budget = r["latency_budget"]
-        logger.info("\nLatency budget (target <%dms):", self._latency_budget_ms)
-        logger.info("  Stage 1: %.1fms", budget.get("stage1", {}).get("mean_ms", 0))
-        logger.info("  Stage 2: %.1fms", budget.get("stage2", {}).get("mean_ms", 0))
-        status = "✓ within budget" if budget["within_budget"] else "✗ over budget"
-        logger.info("  Total:   %.1fms  (%s)", budget["total_mean_ms"], status)
+        budget = r.latency_budget
+        logger.info("\nLatency budget (target <%.0fms):", budget.budget_ms)
+        logger.info("  Stage 1: %.1fms", budget.stage1.mean_ms if budget.stage1 else 0.0)
+        logger.info("  Stage 2: %.1fms", budget.stage2.mean_ms if budget.stage2 else 0.0)
+        status = "✓ within budget" if budget.within_budget else "✗ over budget"
+        logger.info("  Total:   %.1fms  (%s)", budget.total_mean_ms, status)
         logger.info("=" * 50)
