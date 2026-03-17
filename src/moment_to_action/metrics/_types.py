@@ -75,7 +75,7 @@ class EventRecord:
 
 
 @dataclass
-class ModelStats:
+class StageStats:
     """Latency statistics for a single stage across all recorded executions."""
 
     n_inferences: int
@@ -126,11 +126,8 @@ class StageLatencyStats:
 class LatencyBudget:
     """Latency budget analysis measured against the configured target."""
 
-    stage1: StageLatencyStats | None
-    """Stage-1 (sensor/trigger) latency statistics, or ``None`` if no data."""
-
-    stage2: StageLatencyStats | None
-    """Stage-2 (vision/LLM) latency statistics, or ``None`` if no data."""
+    stages: dict[int, StageLatencyStats]
+    """Per-stage latency statistics keyed by ``stage_idx``."""
 
     total_mean_ms: float
     """Sum of stage-1 and stage-2 mean latencies."""
@@ -158,7 +155,7 @@ class CollectorReport:
     total_pipeline_events: int
     """Total number of pipeline-level events recorded."""
 
-    per_stage: dict[str, ModelStats]
+    per_stage: dict[str, StageStats]
     """Per-stage latency statistics keyed by stage name."""
 
     pipeline: PipelineStats

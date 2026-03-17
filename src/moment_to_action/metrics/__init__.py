@@ -6,11 +6,11 @@ from moment_to_action.metrics._types import (
     EventRecord,
     EventType,
     LatencyBudget,
-    ModelStats,
     PipelineRecord,
     PipelineStats,
     StageLatencyStats,
     StageRecord,
+    StageStats,
 )
 
 __all__ = [
@@ -19,9 +19,9 @@ __all__ = [
     "EventType",
     "LatencyBudget",
     "MetricsCollector",
-    "ModelStats",
     "PipelineRecord",
     "PipelineStats",
     "StageLatencyStats",
     "StageRecord",
+    "StageStats",
 ]

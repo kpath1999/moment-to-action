@@ -22,11 +22,11 @@ from moment_to_action.metrics._types import (
     EventRecord,
     EventType,
     LatencyBudget,
-    ModelStats,
     PipelineRecord,
     PipelineStats,
     StageLatencyStats,
     StageRecord,
+    StageStats,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,7 +124,7 @@ class MetricsCollector:
             latency_budget=self._latency_budget_analysis(),
         )
 
-    def _per_stage_stats(self) -> dict[str, ModelStats]:
+    def _per_stage_stats(self) -> dict[str, StageStats]:
         """Compute per-stage latency statistics from the stage log."""
         if not self._stage_log:
             return {}
@@ -134,7 +134,7 @@ class MetricsCollector:
             by_stage.setdefault(record.stage_name, []).append(record.latency_ms)
 
         return {
-            stage: ModelStats(
+            stage: StageStats(
                 n_inferences=len(latencies),
                 mean_ms=float(np.mean(arr := np.array(latencies))),
                 p50_ms=float(np.percentile(arr, 50)),
@@ -155,33 +155,23 @@ class MetricsCollector:
         )
 
     def _latency_budget_analysis(self) -> LatencyBudget:
-        """Break down latency against the configured budget target.
+        """Break down latency per stage_idx against the configured budget target."""
+        # Group stage records by stage_idx.
+        by_idx: dict[int, list[StageRecord]] = {}
+        for r in self._stage_log:
+            by_idx.setdefault(r.stage_idx, []).append(r)
 
-        Callers pass ``metadata={"stage_idx": 1}`` or ``{"stage_idx": 2}``
-        to :meth:`log_stage`; records without a ``stage_idx`` are counted
-        in the total but not bucketed into stage-1 or stage-2.
-        """
-        stage1_idx = 1
-        stage2_idx = 2
-        stage1_records = [r for r in self._stage_log if r.stage_idx == stage1_idx]
-        stage2_records = [r for r in self._stage_log if r.stage_idx == stage2_idx]
-
-        def _stats(records: list[StageRecord]) -> StageLatencyStats | None:
-            if not records:
-                return None
+        stages: dict[int, StageLatencyStats] = {}
+        for idx, records in by_idx.items():
             arr = np.array([r.latency_ms for r in records])
-            return StageLatencyStats(
+            stages[idx] = StageLatencyStats(
                 mean_ms=float(np.mean(arr)),
                 p95_ms=float(np.percentile(arr, 95)),
             )
 
-        s1 = _stats(stage1_records)
-        s2 = _stats(stage2_records)
-        total_mean = (s1.mean_ms if s1 else 0.0) + (s2.mean_ms if s2 else 0.0)
-
+        total_mean = sum(s.mean_ms for s in stages.values())
         return LatencyBudget(
-            stage1=s1,
-            stage2=s2,
+            stages=stages,
             total_mean_ms=total_mean,
             budget_ms=self._latency_budget_ms,
             headroom_ms=self._latency_budget_ms - total_mean,
@@ -223,8 +213,8 @@ class MetricsCollector:
             )
         budget = r.latency_budget
         logger.info("\nLatency budget (target <%.0fms):", budget.budget_ms)
-        logger.info("  Stage 1: %.1fms", budget.stage1.mean_ms if budget.stage1 else 0.0)
-        logger.info("  Stage 2: %.1fms", budget.stage2.mean_ms if budget.stage2 else 0.0)
+        for idx, stats in sorted(budget.stages.items()):
+            logger.info("  Stage %d: %.1fms", idx, stats.mean_ms)
         status = "✓ within budget" if budget.within_budget else "✗ over budget"
         logger.info("  Total:   %.1fms  (%s)", budget.total_mean_ms, status)
         logger.info("=" * 50)
