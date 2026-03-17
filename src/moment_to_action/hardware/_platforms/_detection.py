@@ -33,31 +33,27 @@ class Platform(Enum):
 def detect_platform() -> Platform:
     """Detect the current hardware platform via sysfs.
 
-    Reads ``/sys/devices/soc0/machine`` (Qualcomm SOC name file) and maps
-    the value to a :class:`Platform` enum member.  If the file is absent the
-    host is not a Qualcomm device; if the SoC name is unrecognised the device
-    is not yet supported — both are hard errors.
+    Reads ``/sys/devices/soc0/machine`` if present and maps the SoC name to a
+    :class:`Platform` member.  If the file is absent or the name is not
+    recognised, raises ``RuntimeError`` with a consistent "Unrecognised SoC"
+    message.
 
     Returns:
         The detected :class:`Platform`.
 
     Raises:
-        RuntimeError: If the host is not a supported Qualcomm device.
+        RuntimeError: If the SoC cannot be identified.
     """
-    try:
+    soc_name = None
+    if _QCOM_SOC_NAME_FILE.exists():
         soc_name = _QCOM_SOC_NAME_FILE.read_text().strip().upper()
-    except FileNotFoundError:
-        # sysfs file absent → definitely not a Qualcomm SoC.
-        msg = "Unsupported platform: not running on a Qualcomm device (sysfs machine file absent)."
-        raise RuntimeError(msg) from None
+        logger.debug("Detected SoC: %r", soc_name)
 
-    logger.debug("Detected SoC: %r", soc_name)
-
-    if "QCS6490" in soc_name:
-        return Platform.QCS6490
+        if "QCS6490" in soc_name:
+            return Platform.QCS6490
 
     msg = (
-        f"Unsupported Qualcomm SoC {soc_name!r}. "
+        f"Unrecognised SoC {soc_name!r}. "
         "Add a new Platform member and backend to support this hardware."
     )
     raise RuntimeError(msg)
