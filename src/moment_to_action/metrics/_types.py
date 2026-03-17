@@ -51,7 +51,7 @@ class StageRecord:
     """Class name of the stage."""
 
     stage_idx: int
-    """Pipeline stage index (1 = trigger/sensor, 2 = vision/LLM)."""
+    """Pipeline stage index."""
 
     latency_ms: float
     """Wall-clock time for this stage in milliseconds."""
