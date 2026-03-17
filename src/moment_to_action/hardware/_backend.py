@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         PowerMonitor,
     )
 
+from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
 from moment_to_action.hardware._types import ComputeUnit
 
 logger = logging.getLogger(__name__)
@@ -51,8 +52,6 @@ def _make_power_monitor() -> PowerMonitor:
     gracefully falls back to static estimates when sysfs is absent.
     Extend with ``elif`` branches as new platforms are added.
     """
-    from moment_to_action.hardware._platforms.qcs6490 import QCS6490PowerMonitor
-
     machine = platform.machine().lower()
     if machine not in _ACCELERATOR_ARCHES:
         logger.debug(
@@ -69,8 +68,6 @@ def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
     regardless of what *preferred_unit* says, so that delegate-loading
     failures never surface in dev/CI environments.
     """
-    from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend
-
     machine = platform.machine().lower()
 
     # On dev machines force CPU to avoid noisy delegate warnings.

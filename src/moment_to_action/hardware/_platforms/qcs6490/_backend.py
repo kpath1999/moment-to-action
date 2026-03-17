@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     import numpy as np
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
+from moment_to_action.hardware._platforms.qcs6490._litert import LiteRTBackend
+from moment_to_action.hardware._platforms.qcs6490._onnx import ONNXBackend
 from moment_to_action.hardware._types import ComputeUnit
 
 logger = logging.getLogger(__name__)
@@ -104,8 +106,6 @@ class QCS6490Backend(InferenceBackend):
         if the hardware delegate is unavailable (e.g. dev machine, CI).
         ``LiteRTBackend`` handles CPU natively — no separate class needed.
         """
-        from moment_to_action.hardware._platforms.qcs6490._litert import LiteRTBackend
-
         try:
             if unit in (ComputeUnit.NPU, ComputeUnit.GPU):
                 return LiteRTBackend(compute_unit=unit)
@@ -120,8 +120,6 @@ class QCS6490Backend(InferenceBackend):
     def _get_onnx_backend(self) -> InferenceBackend:
         """Return the ONNX sub-backend, creating it on first call."""
         if self._onnx_backend is None:
-            from moment_to_action.hardware._platforms.qcs6490._onnx import ONNXBackend
-
             self._onnx_backend = ONNXBackend()
         return self._onnx_backend
 
@@ -186,8 +184,6 @@ class QCS6490Backend(InferenceBackend):
 
     def _load_tflite(self, path: str) -> _ModelHandle:
         """Load a .tflite model, falling back to CPU on accelerator failure."""
-        from moment_to_action.hardware._platforms.qcs6490._litert import LiteRTBackend
-
         try:
             raw = self._litert_backend.load_model(path)
             return _ModelHandle(raw=raw, backend=self._litert_backend)
