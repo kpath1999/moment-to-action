@@ -18,8 +18,9 @@ orchestrator) can be a three-field thin wrapper.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+import attrs
 
 if TYPE_CHECKING:
     import numpy as np
@@ -41,7 +42,7 @@ _ONNX_SUFFIX = ".onnx"
 # ---------------------------------------------------------------------------
 
 
-@dataclass(slots=True)
+@attrs.define(slots=True)
 class _ModelHandle:
     """Opaque model handle that pairs a raw runtime object with its backend.
 
@@ -49,8 +50,8 @@ class _ModelHandle:
     ``QCS6490Backend.run()`` and friends.
     """
 
-    raw: Any = field(repr=False)
-    backend: InferenceBackend = field(repr=False)
+    raw: Any = attrs.field(repr=False)
+    backend: InferenceBackend = attrs.field(repr=False)
 
 
 # ---------------------------------------------------------------------------

@@ -9,12 +9,12 @@ for including directly in your paper's results section.
 
 from __future__ import annotations
 
-import dataclasses
 import json
 import logging
 import time
 from pathlib import Path
 
+import attrs
 import numpy as np
 
 from moment_to_action.metrics._types import (
@@ -187,7 +187,7 @@ class MetricsCollector:
 
     def save(self, path: str) -> None:
         """Save full report to JSON."""
-        Path(path).write_text(json.dumps(dataclasses.asdict(self.report()), indent=2))
+        Path(path).write_text(json.dumps(attrs.asdict(self.report()), indent=2))
         logger.info("Metrics saved to %s", path)
 
     def print_summary(self) -> None:

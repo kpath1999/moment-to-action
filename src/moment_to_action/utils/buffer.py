@@ -7,15 +7,15 @@ buffer reuse on the hot inference path.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 
+import attrs
 import numpy as np
 import numpy.typing as npt
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@attrs.define
 class BufferSpec:
     """Describes a pre-allocated output buffer."""
 

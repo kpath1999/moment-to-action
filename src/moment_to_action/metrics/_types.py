@@ -6,8 +6,9 @@ and surfaced to callers that consume reports.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import Enum, auto
+
+import attrs
 
 
 class EventType(Enum):
@@ -23,7 +24,7 @@ class EventType(Enum):
     """A detection was later determined to be incorrect."""
 
 
-@dataclass
+@attrs.define
 class PipelineRecord:
     """Record of a pipeline-level event."""
 
@@ -36,11 +37,11 @@ class PipelineRecord:
     latency_ms: float
     """End-to-end latency for this event in milliseconds."""
 
-    metadata: dict = field(default_factory=dict)
+    metadata: dict = attrs.Factory(dict)
     """Arbitrary key/value context for this event."""
 
 
-@dataclass
+@attrs.define
 class StageRecord:
     """Record of a single stage execution (logged by the Stage wrapper)."""
 
@@ -56,11 +57,11 @@ class StageRecord:
     latency_ms: float
     """Wall-clock time for this stage in milliseconds."""
 
-    metadata: dict = field(default_factory=dict)
+    metadata: dict = attrs.Factory(dict)
     """Arbitrary key/value context attached at log time."""
 
 
-@dataclass
+@attrs.define
 class EventRecord:
     """General-purpose event record (load times, config changes, etc.)."""
 
@@ -70,11 +71,11 @@ class EventRecord:
     event_type: str
     """Free-form event category string."""
 
-    data: dict = field(default_factory=dict)
+    data: dict = attrs.Factory(dict)
     """Arbitrary payload for this event."""
 
 
-@dataclass
+@attrs.define
 class StageStats:
     """Latency statistics for a single stage across all recorded executions."""
 
@@ -97,7 +98,7 @@ class StageStats:
     """Maximum observed latency in milliseconds."""
 
 
-@dataclass
+@attrs.define
 class PipelineStats:
     """High-level statistics over all recorded pipeline events."""
 
@@ -117,7 +118,7 @@ class PipelineStats:
     """Fraction of detections that were false positives (0-1)."""
 
 
-@dataclass
+@attrs.define
 class LatencyBudget:
     """Latency budget analysis measured against the configured target."""
 
@@ -134,7 +135,7 @@ class LatencyBudget:
     """``True`` when ``total_mean_ms < budget_ms``."""
 
 
-@dataclass
+@attrs.define
 class CollectorReport:
     """Full summary report produced by :meth:`MetricsCollector.report`."""
 

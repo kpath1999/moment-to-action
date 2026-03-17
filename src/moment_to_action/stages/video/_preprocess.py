@@ -19,9 +19,9 @@ Model-specific operations (stay inside model classes):
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import attrs
 import numpy as np
 
 from moment_to_action.hardware import ComputeUnit
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@attrs.define
 class ProcessedFrame:
     """Single preprocessed frame ready for model-specific tensor conversion.
 
@@ -59,7 +59,7 @@ class ProcessedFrame:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@attrs.define
 class ImagePreprocessConfig:
     """Tunable parameters for image preprocessing.
 

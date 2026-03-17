@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import attrs
 import numpy as np
 
 if TYPE_CHECKING:
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
+@attrs.frozen
 class BenchmarkResult:
     """Latency statistics from a :meth:`ComputeBackend.benchmark` run.
 
