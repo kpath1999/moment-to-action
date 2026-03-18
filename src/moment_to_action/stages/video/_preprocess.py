@@ -33,6 +33,7 @@ from moment_to_action.utils import BufferSpec
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
+    from moment_to_action.metrics._collector import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         self,
         config: ImagePreprocessConfig | None = None,
         compute_unit: ComputeUnit = ComputeUnit.CPU,
-        metrics: object = None,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         self._config = config or ImagePreprocessConfig()
         super().__init__(compute_unit=compute_unit, metrics=metrics)

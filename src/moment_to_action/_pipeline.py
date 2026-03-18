@@ -34,8 +34,8 @@ class Pipeline:
     def run(self, msg: Message) -> Message | None:
         """Run the message through all stages sequentially."""
         current: Message | None = msg
-        for stage in self._stages:
-            current = stage.process(current, metrics=self._metrics)  # type: ignore[arg-type]
+        for idx, stage in enumerate(self._stages):
+            current = stage.process(current, stage_idx=idx, metrics=self._metrics)  # type: ignore[arg-type]
             if current is None:
                 return None
         return current

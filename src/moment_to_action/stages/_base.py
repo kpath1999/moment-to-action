@@ -21,31 +21,25 @@ logger = logging.getLogger(__name__)
 class Stage(ABC):
     """Abstract base for all pipeline stages."""
 
-    def __init__(self, stage_idx: int) -> None:
-        """Initialise the stage.
-
-        Args:
-            stage_idx: Pipeline stage index passed to the metrics collector
-                       on every call (1 = trigger/sensor, 2 = vision/LLM, …).
-        """
-        self._stage_idx = stage_idx
-
     @property
     def name(self) -> str:
         """Return the class name as the stage identifier."""
         return self.__class__.__name__
 
-    @property
-    def stage_idx(self) -> int:
-        """Return the pipeline stage index."""
-        return self._stage_idx
-
     def process(
         self,
         msg: Message,
+        stage_idx: int = 0,
         metrics: MetricsCollector | None = None,
     ) -> Message | None:
-        """Execute the stage, timing it, setting latency on the result, and logging to metrics."""
+        """Execute the stage, timing it, setting latency on the result, and logging to metrics.
+
+        Args:
+            msg:       Incoming message to process.
+            stage_idx: Zero-based position of this stage in the pipeline, assigned
+                       by the pipeline itself — not stored on the stage.
+            metrics:   Optional collector; receives a ``log_stage`` call when provided.
+        """
         t = time.perf_counter()
         result = self._process(msg)
         elapsed_ms = (time.perf_counter() - t) * 1000
@@ -55,7 +49,7 @@ class Stage(ABC):
             result = result.model_copy(update={"latency_ms": elapsed_ms})
 
         if metrics is not None:
-            metrics.log_stage(self.name, self._stage_idx, elapsed_ms)
+            metrics.log_stage(self.name, stage_idx, elapsed_ms)
 
         status = "→ None (stopped)" if result is None else f"→ {type(result).__name__}"
         logger.debug("%s: %.1fms  %s", self.name, elapsed_ms, status)

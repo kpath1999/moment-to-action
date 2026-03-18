@@ -32,10 +32,13 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable  # noqa: TC003
-from typing import ParamSpec, TypeVar
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 from moment_to_action.hardware import ComputeUnit
 from moment_to_action.utils import BufferPool, ComputeDispatcher
+
+if TYPE_CHECKING:
+    from moment_to_action.metrics._collector import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +88,7 @@ class BasePreprocessor[InputT, OutputT](ABC):
     def __init__(
         self,
         compute_unit: ComputeUnit = ComputeUnit.CPU,
-        metrics: object = None,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         self._compute_unit = compute_unit
         self._metrics = metrics

@@ -32,9 +32,8 @@ class ReasoningStage(Stage):
         self,
         model_path: str | None = None,
         system_prompt: str = "",
-        stage_idx: int = 2,
     ) -> None:
-        super().__init__(stage_idx)
+        super().__init__()
         self._handle = None
         if model_path:
             self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
