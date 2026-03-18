@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
-    from moment_to_action.messages.sensor import RawFrameMessage
+    from moment_to_action.messages import Message
 
 
 class BaseSensor(ABC):
@@ -14,7 +14,7 @@ class BaseSensor(ABC):
 
     Sensors are the entry point for raw data into the pipeline. Each
     concrete sensor wraps a single data source (file, camera, network
-    stream, etc.) and normalises its output into a ``RawFrameMessage``.
+    stream, etc.) and produces a :data:`~moment_to_action.messages.Message`.
 
     Use as a context manager to ensure ``open``/``close`` are paired:
 
@@ -24,11 +24,11 @@ class BaseSensor(ABC):
     """
 
     @abstractmethod
-    def read(self) -> RawFrameMessage:
+    def read(self) -> Message:
         """Read one frame/sample from the sensor.
 
         Returns:
-            A ``RawFrameMessage`` containing the captured frame and metadata.
+            A :data:`~moment_to_action.messages.Message` produced by this sensor.
 
         Raises:
             IOError: If the frame cannot be read.
