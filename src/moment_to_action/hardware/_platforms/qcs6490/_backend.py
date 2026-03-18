@@ -18,7 +18,7 @@ orchestrator) can be a three-field thin wrapper.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import attrs
 
@@ -167,7 +167,7 @@ class QCS6490Backend(InferenceBackend):
         Returns:
             List of output tensors, one per model output slot.
         """
-        h: _ModelHandle = handle
+        h = cast("_ModelHandle", handle)
         return h.backend.run(h.raw, inputs)
 
     def get_input_details(self, handle: object) -> list[dict]:
@@ -176,7 +176,7 @@ class QCS6490Backend(InferenceBackend):
         Args:
             handle: Handle returned by :meth:`load_model`.
         """
-        h: _ModelHandle = handle
+        h = cast("_ModelHandle", handle)
         return h.backend.get_input_details(h.raw)
 
     def get_output_details(self, handle: object) -> list[dict]:
@@ -185,7 +185,7 @@ class QCS6490Backend(InferenceBackend):
         Args:
             handle: Handle returned by :meth:`load_model`.
         """
-        h: _ModelHandle = handle
+        h = cast("_ModelHandle", handle)
         return h.backend.get_output_details(h.raw)
 
     def get_supported_unit(self) -> ComputeUnit:

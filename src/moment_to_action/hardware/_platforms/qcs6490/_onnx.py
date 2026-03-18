@@ -8,6 +8,7 @@ are rare in this codebase and CPU is sufficient.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import numpy as np
 import onnxruntime as ort
@@ -57,9 +58,10 @@ class ONNXBackend(InferenceBackend):
         Returns:
             List of output tensors.
         """
-        input_details = handle.get_inputs()
+        session = cast("ort.InferenceSession", handle)
+        input_details = session.get_inputs()
         feed = {input_details[0].name: inputs} if isinstance(inputs, np.ndarray) else inputs
-        return handle.run(None, feed)
+        return session.run(None, feed)
 
     def get_input_details(self, handle: object) -> list[dict]:
         """Return the model's input metadata as a list of dicts.
@@ -67,8 +69,10 @@ class ONNXBackend(InferenceBackend):
         Args:
             handle: Session returned by :meth:`load_model`.
         """
+        session = cast("ort.InferenceSession", handle)
         return [
-            {"name": inp.name, "shape": inp.shape, "dtype": inp.type} for inp in handle.get_inputs()
+            {"name": inp.name, "shape": inp.shape, "dtype": inp.type}
+            for inp in session.get_inputs()
         ]
 
     def get_output_details(self, handle: object) -> list[dict]:
@@ -77,9 +81,10 @@ class ONNXBackend(InferenceBackend):
         Args:
             handle: Session returned by :meth:`load_model`.
         """
+        session = cast("ort.InferenceSession", handle)
         return [
             {"name": out.name, "shape": out.shape, "dtype": out.type}
-            for out in handle.get_outputs()
+            for out in session.get_outputs()
         ]
 
     def get_supported_unit(self) -> ComputeUnit:

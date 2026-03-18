@@ -11,6 +11,7 @@ Design note — no silent CPU fallback:
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import numpy as np
 
@@ -85,9 +86,10 @@ class LiteRTBackend(InferenceBackend):
         Returns:
             List of output tensors, one per output slot.
         """
-        self._set_inputs(handle, inputs)
-        handle.invoke()
-        return [handle.get_tensor(d["index"]) for d in handle.get_output_details()]
+        interp = cast("_Interpreter", handle)
+        self._set_inputs(interp, inputs)
+        interp.invoke()
+        return [interp.get_tensor(d["index"]) for d in interp.get_output_details()]
 
     def get_input_details(self, handle: object) -> list[dict]:
         """Return the model's input tensor metadata.
@@ -95,7 +97,7 @@ class LiteRTBackend(InferenceBackend):
         Args:
             handle: Interpreter returned by :meth:`load_model`.
         """
-        return handle.get_input_details()
+        return cast("_Interpreter", handle).get_input_details()
 
     def get_output_details(self, handle: object) -> list[dict]:
         """Return the model's output tensor metadata.
@@ -103,7 +105,7 @@ class LiteRTBackend(InferenceBackend):
         Args:
             handle: Interpreter returned by :meth:`load_model`.
         """
-        return handle.get_output_details()
+        return cast("_Interpreter", handle).get_output_details()
 
     def get_supported_unit(self) -> ComputeUnit:
         """Return the compute unit this backend targets."""
@@ -171,7 +173,7 @@ class LiteRTBackend(InferenceBackend):
         return interp
 
     @staticmethod
-    def _set_inputs(interp: object, inputs: ModelInput) -> None:
+    def _set_inputs(interp: _Interpreter, inputs: ModelInput) -> None:
         """Feed input tensors into an interpreter.
 
         For single-input models pass a plain ndarray (fed to slot 0).
