@@ -1,8 +1,0 @@
-add pre-commit
-
-copilot instructions
-
-logging
-
-yeet old files
-

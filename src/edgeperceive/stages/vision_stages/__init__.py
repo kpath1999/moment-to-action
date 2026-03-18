@@ -1,1 +1,0 @@
-"""Vision-specific pipeline stages."""
