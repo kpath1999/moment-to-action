@@ -26,8 +26,8 @@ if TYPE_CHECKING:
     import numpy as np
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
-from moment_to_action.hardware._platforms.qcs6490._litert import LiteRTBackend
-from moment_to_action.hardware._platforms.qcs6490._onnx import ONNXBackend
+from moment_to_action.hardware._platforms.qcs6490._litert import QCS6490LiteRTBackend
+from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
 from moment_to_action.hardware._types import ComputeUnit
 
 logger = logging.getLogger(__name__)
@@ -82,16 +82,18 @@ class QCS6490Backend(InferenceBackend):
         self._preferred_unit = preferred_unit
 
         # CPU backend is always available — the unconditional fallback.
-        self._litert_cpu_backend: LiteRTBackend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        self._litert_cpu_backend: QCS6490LiteRTBackend = QCS6490LiteRTBackend(
+            compute_unit=ComputeUnit.CPU
+        )
 
         # Accelerator backend is optional — None if the delegate is missing.
-        self._litert_accel_backend: LiteRTBackend | None = self._try_make_accel_backend(
+        self._litert_accel_backend: QCS6490LiteRTBackend | None = self._try_make_accel_backend(
             preferred_unit
         )
 
         # ONNX backend is always available (falls back to ImportError at load
         # time if onnxruntime is not installed).
-        self._onnx_backend: ONNXBackend = ONNXBackend()
+        self._onnx_backend: QCS6490ONNXBackend = QCS6490ONNXBackend()
 
         logger.info(
             "QCS6490Backend: preferred=%s accel=%s",
@@ -106,7 +108,7 @@ class QCS6490Backend(InferenceBackend):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _try_make_accel_backend(unit: ComputeUnit) -> LiteRTBackend | None:
+    def _try_make_accel_backend(unit: ComputeUnit) -> QCS6490LiteRTBackend | None:
         """Try to create an NPU/GPU LiteRT backend; return ``None`` on failure.
 
         CPU is not an accelerator — if *unit* is ``CPU``, returns ``None``
@@ -115,7 +117,7 @@ class QCS6490Backend(InferenceBackend):
         if unit not in (ComputeUnit.NPU, ComputeUnit.GPU):
             return None
         try:
-            return LiteRTBackend(compute_unit=unit)
+            return QCS6490LiteRTBackend(compute_unit=unit)
         except Exception as e:  # noqa: BLE001
             logger.warning(
                 "%s delegate unavailable (%s) — TFLite will run on CPU",
