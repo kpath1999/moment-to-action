@@ -13,18 +13,15 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from typing import TYPE_CHECKING
 
 import cv2
 
-from moment_to_action.hardware import ComputeUnit
+from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import DetectionMessage, RawFrameMessage
-from moment_to_action.sensors import FileSensor
-from moment_to_action.stages import Pipeline, PreprocessorStage, YOLOStage
+from moment_to_action.sensors import FileImageSensor as FileSensor
+from moment_to_action.stages import Pipeline
 from moment_to_action.stages._base import Stage
-
-if TYPE_CHECKING:
-    from moment_to_action.messages import Message
+from moment_to_action.stages.video import PreprocessorStage, YOLOStage
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -44,7 +41,7 @@ class CaptureStage(Stage):
     def __init__(self) -> None:
         self.detections: DetectionMessage | None = None
 
-    def process(self, msg: Message) -> DetectionMessage:
+    def _process(self, msg: object) -> DetectionMessage:
         """Capture the detection message and pass it through."""
         if not isinstance(msg, DetectionMessage):
             err = f"CaptureStage expects DetectionMessage, got {type(msg).__name__}"
@@ -59,7 +56,9 @@ pipeline = Pipeline(
     [
         PreprocessorStage(target_size=(640, 640), letterbox=True),
         YOLOStage(
-            model_path=args.model, confidence_threshold=args.conf, compute_unit=ComputeUnit.CPU
+            model_path=args.model,
+            backend=ComputeBackend(preferred_unit=ComputeUnit.CPU),
+            confidence_threshold=args.conf,
         ),
         capture,
     ]
@@ -67,7 +66,10 @@ pipeline = Pipeline(
 
 # ── load frame via FileSensor, then run pipeline ───────────────────
 with FileSensor(args.image) as sensor:
-    msg: RawFrameMessage = sensor.read()
+    msg = sensor.read()
+    if not isinstance(msg, RawFrameMessage):
+        err = f"Expected RawFrameMessage, got {type(msg).__name__}"
+        raise TypeError(err)
 
 pipeline.run(msg)
 

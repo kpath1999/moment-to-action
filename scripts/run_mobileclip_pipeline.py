@@ -14,15 +14,13 @@ from __future__ import annotations
 import argparse
 import logging
 
-from moment_to_action.hardware import ComputeUnit
+from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import ClassificationMessage, RawFrameMessage
-from moment_to_action.metrics.collector import MetricsCollector
-from moment_to_action.sensors import FileSensor
-from moment_to_action.stages import (
-    MobileCLIPStage,
-    Pipeline,
-    PreprocessorStage,
-)
+from moment_to_action.metrics import MetricsCollector
+from moment_to_action.sensors import FileImageSensor as FileSensor
+from moment_to_action.stages import Pipeline
+from moment_to_action.stages.video import PreprocessorStage
+from moment_to_action.stages.vlm import MobileCLIPStage
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -55,7 +53,7 @@ pipeline = Pipeline(
         MobileCLIPStage(
             model_path=args.model,
             text_prompts=PROMPTS,
-            compute_unit=device,
+            backend=ComputeBackend(preferred_unit=device),
         ),
     ],
     metrics=metrics,
@@ -63,7 +61,10 @@ pipeline = Pipeline(
 
 # ── load frame via FileSensor, then run pipeline ───────────────────
 with FileSensor(args.image) as sensor:
-    msg: RawFrameMessage = sensor.read()
+    msg = sensor.read()
+    if not isinstance(msg, RawFrameMessage):
+        err = f"Expected RawFrameMessage, got {type(msg).__name__}"
+        raise TypeError(err)
 
 result = pipeline.run(msg)
 

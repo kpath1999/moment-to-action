@@ -14,16 +14,13 @@ import argparse
 import logging
 import time
 
-from moment_to_action.hardware import ComputeUnit
+from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import RawFrameMessage, ReasoningMessage
-from moment_to_action.metrics.collector import MetricsCollector
-from moment_to_action.sensors import FileSensor
-from moment_to_action.stages import (
-    Pipeline,
-    PreprocessorStage,
-    ReasoningStage,
-    YOLOStage,
-)
+from moment_to_action.metrics import MetricsCollector
+from moment_to_action.sensors import FileImageSensor as FileSensor
+from moment_to_action.stages import Pipeline
+from moment_to_action.stages.llm import ReasoningStage
+from moment_to_action.stages.video import PreprocessorStage, YOLOStage
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -43,7 +40,11 @@ metrics = MetricsCollector()
 pipeline = Pipeline(
     stages=[
         PreprocessorStage(target_size=(640, 640), letterbox=True),
-        YOLOStage(model_path=args.model, confidence_threshold=args.conf, compute_unit=device),
+        YOLOStage(
+            model_path=args.model,
+            backend=ComputeBackend(preferred_unit=device),
+            confidence_threshold=args.conf,
+        ),
         ReasoningStage(model_path=None),
     ],
     metrics=metrics,
@@ -51,7 +52,10 @@ pipeline = Pipeline(
 
 # ── load frame via FileSensor, then run pipeline ───────────────────
 with FileSensor(args.image) as sensor:
-    msg: RawFrameMessage = sensor.read()
+    msg = sensor.read()
+    if not isinstance(msg, RawFrameMessage):
+        err = f"Expected RawFrameMessage, got {type(msg).__name__}"
+        raise TypeError(err)
 
 t_total = time.perf_counter()
 result = pipeline.run(msg)
