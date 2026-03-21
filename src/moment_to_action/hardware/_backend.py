@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
 from moment_to_action.hardware._platforms._detection import Platform, detect_platform
 from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
+from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64PowerMonitor
 from moment_to_action.hardware._types import ComputeUnit
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,8 @@ def _make_power_monitor() -> PowerMonitor:
     match detect_platform():
         case Platform.QCS6490:
             return QCS6490PowerMonitor()
+        case Platform.X86_64:
+            return X86_64PowerMonitor()
 
 
 def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
@@ -90,6 +93,8 @@ def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
     match detect_platform():
         case Platform.QCS6490:
             return QCS6490Backend(preferred_unit=preferred_unit)
+        case Platform.X86_64:
+            return X86_64Backend()
 
 
 # ---------------------------------------------------------------------------

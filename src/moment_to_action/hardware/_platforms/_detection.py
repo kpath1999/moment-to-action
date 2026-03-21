@@ -14,6 +14,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import platform
 from enum import Enum, auto
 from pathlib import Path
 
@@ -29,14 +30,19 @@ class Platform(Enum):
     QCS6490 = auto()
     """Qualcomm QCS6490 (Snapdragon 778G) — Hexagon HTP NPU, Adreno 642L GPU."""
 
+    X86_64 = auto()
+    """Standard x86_64 laptop/desktop CPU (Intel/AMD)."""
+
 
 def detect_platform() -> Platform:
-    """Detect the current hardware platform via sysfs.
+    """Detect the current hardware platform.
 
     Reads ``/sys/devices/soc0/machine`` if present and maps the SoC name to a
     :class:`Platform` member.  If the file is absent or the name is not
     recognised, raises ``RuntimeError`` with a consistent "Unrecognised SoC"
-    message.
+    message. This is only for Qualcomm devices.
+
+    If that is not possible, the ``platform`` module is used as a fallback.
 
     Returns:
         The detected :class:`Platform`.
@@ -44,16 +50,35 @@ def detect_platform() -> Platform:
     Raises:
         RuntimeError: If the SoC cannot be identified.
     """
+    #
+    # Try qualcomm SoCs
+    #
     soc_name = None
+
     if _QCOM_SOC_NAME_FILE.exists():
+        # Read SoC name from sysfs
         soc_name = _QCOM_SOC_NAME_FILE.read_text().strip().upper()
         logger.debug("Detected SoC: %r", soc_name)
 
         if "QCS6490" in soc_name:
             return Platform.QCS6490
 
+    #
+    # Fallback: use platform module
+    #
+    machine = platform.machine().lower()
+    logger.debug("CPU architecture: %r", machine)
+
+    # Check for x86
+    if machine in {"x86_64", "amd64"}:
+        logger.info("Detected x86_64 architecture")
+        return Platform.X86_64
+
+    #
+    # Not found/unknown
+    #
     msg = (
-        f"Unrecognised SoC {soc_name!r}. "
+        f"Unrecognised platform. SoC={soc_name!r}, arch={machine!r}. "
         "Add a new Platform member and backend to support this hardware."
     )
     raise RuntimeError(msg)
