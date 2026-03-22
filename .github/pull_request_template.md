@@ -5,6 +5,8 @@
 Implementation details or architectural decisions (if needed).
 
 ## Verification
+- [ ] Unit tests
+- [ ] Integration tests
 - [ ] Manual testing (describe below)
   - [ ] 
 
