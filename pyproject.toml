@@ -108,7 +108,7 @@ markers = [
     "integration: integration tests",
     "slow: slow tests (disabled by default)",
 ]
-addopts = "-m 'not slow'"
+addopts = "-m 'not slow' -rs"
 
 [tool.coverage.run]
 source = ["src"]
