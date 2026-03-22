@@ -38,6 +38,9 @@ dev = [
     "python-lsp-ruff>=2.3.0",
     "python-lsp-server[all]>=1.14.0",
     "ruff>=0.15.4",
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "platformdirs>=4.0.0",
 ]
 
 [tool.ruff]
@@ -65,6 +68,32 @@ ignore = [
 # scripts/ is not a package — INP001 (implicit namespace) doesn't apply
 "scripts/*.py" = ["INP001"]
 
+# Tests: exceptions for the many things that are OK in tests
+"tests/**/*.py" = [
+    # assertions (S101)
+    "S101",
+    # magic numbers (PLR2004)
+    "PLR2004",
+    # private member access (SLF001)
+    "SLF001",
+    # missing annotations on pytest hooks (ANN*)
+    "ANN001", "ANN002", "ANN201", "ANN202", "ANN206",
+    # pytest imports outside type-checking (TC002)
+    "TC002",
+    # numpy legacy API (NPY002)
+    "NPY002",
+    # nested context managers (SIM117)
+    "SIM117",
+    # hardcoded temp files (S108)
+    "S108",
+    # naming convention (N801)
+    # "N801",
+    # unused noqa directives (RUF100)
+    "RUF100",
+    # undocumented public packages (D104)
+    "D104",
+]
+
 [tool.ruff.lint.pydocstyle]
 # Use Google-style docstrings.
 convention = "google"
@@ -79,3 +108,36 @@ exclude = ['.mypy_cache', '.venv']
 ignore_missing_imports = true
 ignore_missing_imports_per_module = true
 show_error_codes = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: unit tests",
+    "integration: integration tests",
+    "slow: slow tests (disabled by default)",
+]
+addopts = "-m 'not slow'"
+
+[tool.coverage.run]
+source = ["src"]
+source_pkgs = ["moment_to_action"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+    "*/__init__.py",
+    "*/edgeperceive/*",
+]
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 0
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
