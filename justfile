@@ -1,3 +1,5 @@
+cov_path_html := "/tmp/" + `whoami` + "-coverage-html"
+
 # Run all tests (unit + integration, excludes slow) with coverage
 test *args:
     uv run pytest -m "unit or integration" --cov --cov-report=term-missing {{args}}
@@ -20,9 +22,9 @@ test-k expr *args:
 
 # Generate HTML coverage report and serve it on localhost:8000
 coverage-html *args:
-    @just --justfile {{justfile()}} test-all --cov-report=html:/tmp/`whoami`-coverage-html {{args}}
+    @just --justfile {{justfile()}} test-all --cov-report=html:{{cov_path_html}} {{args}}
     @echo "Coverage report at http://localhost:8000 — Ctrl-C to stop"
-    cd /tmp/coverage-html && python -m http.server 8000
+    cd {{cov_path_html}} && python -m http.server 8000
 
 # lint source + tests
 lint:

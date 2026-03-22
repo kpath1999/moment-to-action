@@ -101,12 +101,9 @@ class TestFileImageSensor:
 
     def test_read_with_real_test_image(self) -> None:
         """Test FileImageSensor.read() with real test image from tests/int/images/."""
-        # Use one of the real test images if available
-        test_image = pathlib.Path(
-            "/home/nikola/code/moment-to-action/tests/int/images/pedestrian.jpg"
-        )
-        if not test_image.exists():
-            pytest.skip("Real test image not found")
+        # Use one of the real test images
+        test_image = pathlib.Path(__file__).parents[2] / "int" / "images" / "pedestrian.jpg"
+        assert test_image.exists(), "Real test image not found"
 
         with FileImageSensor(test_image) as sensor:
             msg = sensor.read()
