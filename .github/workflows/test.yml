@@ -45,8 +45,8 @@ jobs:
         if: always()
         uses: MishaKav/pytest-coverage-comment@v1.1.52
         with:
-          junit-xml-path: pytest-results.xml
-          cov-xml-path: coverage.xml
+          junitxml-path: pytest-results.xml
+          pytest-xml-coverage-path: coverage.xml
 
       - name: Upload test results
         if: always()
