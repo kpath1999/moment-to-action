@@ -13,7 +13,10 @@ dependencies = [
     "onnxruntime>=1.24.3",
     "open-clip-torch>=3.3.0",
     "opencv-python>=4.13.0.92",
+    "pydantic>=2.0",
+    "psutil>=6.0",
     "tensorflow>=2.21.0",
+    "attrs>=25.4.0",
 ]
 
 [project.scripts]
@@ -57,6 +60,10 @@ ignore = [
     # __init__ docstrings are redundant when classes have docstrings
     "D107",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# scripts/ is not a package — INP001 (implicit namespace) doesn't apply
+"scripts/*.py" = ["INP001"]
 
 [tool.ruff.lint.pydocstyle]
 # Use Google-style docstrings.
