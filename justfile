@@ -4,7 +4,7 @@ test *args:
 
 # Run all tests including slow (e.g. MobileCLIP) with coverage
 test-all *args:
-    uv run pytest -m "unit or integration or slow" --run-slow --cov --cov-report=term-missing {{ args }}
+    uv run pytest -m "unit or integration or slow" --cov --cov-report=term-missing {{ args }}
 
 # Run only unit tests with coverage
 test-unit *args:
