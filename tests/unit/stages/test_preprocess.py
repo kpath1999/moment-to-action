@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest import mock
 
 import numpy as np
@@ -122,7 +123,7 @@ class TestBasePreprocessor:
 
         # Pass invalid input (not an array)
         with pytest.raises(TypeError, match="Input must be a numpy array"):
-            preprocessor.process("not an array")
+            preprocessor.process(cast("np.ndarray", "not an array"))
 
     def test_preprocessor_process_returns_correct_output(
         self, concrete_preprocessor_class: type[BasePreprocessor[np.ndarray, np.ndarray]]

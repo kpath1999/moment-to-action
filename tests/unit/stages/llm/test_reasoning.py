@@ -224,6 +224,8 @@ class TestReasoningStage:
         result = stage.process(sample_detection_message)
 
         # Extract char count from response
+        assert result is not None
+        assert isinstance(result, ReasoningMessage)
         response_text = result.response
         assert "[LLM stub]" in response_text
 
@@ -252,6 +254,8 @@ class TestReasoningStage:
 
         result = stage.process(sample_detection_message)
 
+        assert result is not None
+        assert isinstance(result, ReasoningMessage)
         assert result.prompt is not None
         assert len(result.prompt) > 0
         # Prompt should contain system prompt and detections
@@ -265,6 +269,8 @@ class TestReasoningStage:
 
         result = stage.process(sample_detection_message)
 
+        assert result is not None
+        assert isinstance(result, ReasoningMessage)
         assert result.timestamp == sample_detection_message.timestamp
 
     def test_reasoning_stage_rejects_non_detection_message(self) -> None:
@@ -339,6 +345,8 @@ class TestReasoningStage:
 
         result = stage.process(sample_detection_message)
 
+        assert result is not None
+        assert isinstance(result, ReasoningMessage)
         assert result.latency_ms >= 0.0
 
     def test_system_prompt_consistency_across_calls(
@@ -351,6 +359,10 @@ class TestReasoningStage:
         result1 = stage.process(sample_detection_message)
         result2 = stage.process(sample_detection_message)
 
+        assert result1 is not None
+        assert isinstance(result1, ReasoningMessage)
+        assert result2 is not None
+        assert isinstance(result2, ReasoningMessage)
         assert custom_prompt in result1.prompt
         assert custom_prompt in result2.prompt
 

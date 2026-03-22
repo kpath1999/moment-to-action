@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from moment_to_action.hardware import ComputeBackend
-from moment_to_action.messages import ClassificationMessage
+from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.sensors import FileImageSensor
 from moment_to_action.stages.video import PreprocessorStage
 from moment_to_action.stages.vlm import MobileCLIPStage
@@ -151,6 +151,7 @@ def test_mobileclip_swappable_prompts(
     )
     result1 = mobileclip_stage.process(tensor_msg, stage_idx=1)
     assert result1 is not None
+    assert isinstance(result1, ClassificationMessage)
     assert result1.label in initial_prompts
 
     # Swap prompts
@@ -160,6 +161,7 @@ def test_mobileclip_swappable_prompts(
     # Second classification with same image, different prompts
     result2 = mobileclip_stage.process(tensor_msg, stage_idx=1)
     assert result2 is not None
+    assert isinstance(result2, ClassificationMessage)
     assert result2.label in new_prompts, (
         f"After update_prompts, label should be in {new_prompts}, got {result2.label}"
     )
@@ -201,6 +203,7 @@ def test_mobileclip_preprocessing_shapes(
     tensor_msg = preprocess_stage.process(raw_msg, stage_idx=0)
 
     assert tensor_msg is not None
+    assert isinstance(tensor_msg, FrameTensorMessage)
 
     # Check shape
     assert tensor_msg.tensor.shape == (1, 3, 256, 256), (

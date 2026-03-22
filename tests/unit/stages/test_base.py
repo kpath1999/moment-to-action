@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 from unittest import mock
 
 import numpy as np
@@ -10,6 +11,9 @@ import pytest
 
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.stages._base import Stage
+
+if TYPE_CHECKING:
+    from moment_to_action.messages import Message
 
 
 @pytest.mark.unit
@@ -34,7 +38,7 @@ class TestStage:
         class ConcreteStage(Stage):
             """A concrete stage that passes through the message unchanged."""
 
-            def _process(self, msg: RawFrameMessage) -> RawFrameMessage:
+            def _process(self, msg: Message) -> Message | None:
                 # Simulate some minimal work
                 time.sleep(0.001)
                 return msg
@@ -95,7 +99,7 @@ class TestStage:
         class NoneStage(Stage):
             """A stage that returns None."""
 
-            def _process(self, msg: RawFrameMessage) -> None:  # noqa: ARG002
+            def _process(self, msg: Message) -> Message | None:  # noqa: ARG002
                 return None
 
         import time
@@ -133,7 +137,7 @@ class TestStage:
         """Test that stage_idx is passed correctly to metrics."""
 
         class MockedStage(Stage):
-            def _process(self, msg: RawFrameMessage) -> RawFrameMessage:
+            def _process(self, msg: Message) -> Message | None:
                 return msg
 
         stage = MockedStage()
@@ -160,17 +164,21 @@ class TestStage:
         result = stage.process(original_message)
 
         # Verify data is preserved
+        assert result is not None
+        assert isinstance(result, RawFrameMessage)
         assert result.source == "test_source"
         assert result.width == 640
         assert result.height == 480
         assert result.timestamp == 12345.0
+        assert result.frame is not None
+        assert original_message.frame is not None
         assert np.array_equal(result.frame, original_message.frame)
 
     def test_stage_process_timing_accuracy(self, sample_message: RawFrameMessage) -> None:
         """Test that Stage.process() measures latency accurately."""
 
         class SlowStage(Stage):
-            def _process(self, msg: RawFrameMessage) -> RawFrameMessage:
+            def _process(self, msg: Message) -> Message | None:
                 time.sleep(0.05)  # 50ms
                 return msg
 
@@ -178,6 +186,7 @@ class TestStage:
         result = stage.process(sample_message)
 
         # Verify latency is approximately 50ms (allow 10ms margin)
+        assert result is not None
         assert 40.0 <= result.latency_ms <= 100.0
 
     def test_stage_process_returns_same_message_type(

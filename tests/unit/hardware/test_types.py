@@ -136,6 +136,6 @@ class TestPowerSample:
             "power_mw": 120.0,
             "utilization_pct": 60.0,
         }
-        sample = PowerSample(**data)
+        sample = PowerSample.model_validate(data)
         assert sample.timestamp == 456.78
         assert sample.compute_unit == ComputeUnit.DSP

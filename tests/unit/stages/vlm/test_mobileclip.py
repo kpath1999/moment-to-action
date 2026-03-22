@@ -319,6 +319,8 @@ class TestMobileCLIPStage:
 
             result = stage.process(sample_frame_tensor)
 
+            assert result is not None
+            assert isinstance(result, ClassificationMessage)
             assert result.timestamp == sample_frame_tensor.timestamp
 
     def test_mobileclip_high_confidence_prediction(
@@ -353,6 +355,8 @@ class TestMobileCLIPStage:
 
             result = stage.process(sample_frame_tensor)
 
+            assert result is not None
+            assert isinstance(result, ClassificationMessage)
             assert result.label == text_prompts[0]
             assert result.confidence > 0.5  # Should be high confidence
 

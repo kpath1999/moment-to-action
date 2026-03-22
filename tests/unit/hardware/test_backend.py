@@ -51,7 +51,7 @@ class TestBenchmarkResult:
         )
 
         with pytest.raises(AttributeError):
-            result.mean_ms = 11.0
+            result.mean_ms = 11.0  # type: ignore[misc]
 
 
 @pytest.mark.unit

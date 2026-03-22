@@ -313,6 +313,7 @@ class TestPreprocessorStageE2E:
         )
         result = stage.process(msg)
 
+        assert isinstance(result, FrameTensorMessage)
         assert result.tensor.shape == (1, 3, 256, 256)
         assert result.tensor.ndim == 4
         assert result.tensor.dtype == np.float32
@@ -335,6 +336,7 @@ class TestPreprocessorStageE2E:
         )
         result = stage.process(msg)
 
+        assert isinstance(result, FrameTensorMessage)
         assert result.tensor.shape == (1, 256, 256, 3)
         assert result.tensor.ndim == 4
         assert result.tensor.dtype == np.float32
@@ -358,6 +360,7 @@ class TestPreprocessorStageE2E:
         )
         result = stage.process(msg)
 
+        assert isinstance(result, FrameTensorMessage)
         assert result.tensor.shape == (1, 3, 640, 640)
 
     def test_preprocessor_stage_none_frame(self) -> None:
@@ -428,6 +431,7 @@ class TestPreprocessorStageE2E:
         )
         result = stage.process(msg)
 
+        assert isinstance(result, FrameTensorMessage)
         assert result.tensor.ndim == 4
         assert result.tensor.shape[0] == 1
         assert result.tensor.shape[1] == 3
@@ -452,6 +456,7 @@ class TestPreprocessorStageE2E:
         )
         result = stage.process(msg)
 
+        assert isinstance(result, FrameTensorMessage)
         assert result.tensor.ndim == 4
         assert result.tensor.shape[0] == 1
         assert result.tensor.shape[1] == 640

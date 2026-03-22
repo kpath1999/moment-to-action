@@ -44,7 +44,7 @@ class TestYOLOParseOutputs:
         scores = np.array([[0.9, 0.7]], dtype=np.float32)
         class_ids = np.array([[0, 1]], dtype=np.uint8)  # person, bicycle
 
-        outputs = [boxes, scores, class_ids]
+        outputs: list[np.ndarray] = [boxes, scores, class_ids]
         original_size = (480, 640)
 
         result = stage._parse_outputs(outputs, original_size)
@@ -67,7 +67,7 @@ class TestYOLOParseOutputs:
         scores = np.array([[0.95]], dtype=np.float32)
         class_ids = np.array([[0]], dtype=np.uint8)
 
-        outputs = [boxes, scores, class_ids]
+        outputs: list[np.ndarray] = [boxes, scores, class_ids]
         original_size = (480, 640)
 
         result = stage._parse_outputs(outputs, original_size)
@@ -89,7 +89,7 @@ class TestYOLOParseOutputs:
         scores = np.array(np.zeros((1, 0)), dtype=np.float32)
         class_ids = np.array(np.zeros((1, 0)), dtype=np.uint8)
 
-        outputs = [boxes, scores, class_ids]
+        outputs: list[np.ndarray] = [boxes, scores, class_ids]
         original_size = (480, 640)
 
         result = stage._parse_outputs(outputs, original_size)
@@ -124,7 +124,7 @@ class TestYOLOParseOutputs:
         scores = np.array([[0.9]], dtype=np.float32)
         class_ids = np.array([[0]], dtype=np.uint8)
 
-        outputs = [boxes, scores, class_ids]
+        outputs: list[np.ndarray] = [boxes, scores, class_ids]
         original_size = (240, 320)  # Half the size
 
         result = stage._parse_outputs(outputs, original_size)
@@ -283,7 +283,7 @@ class TestYOLOConfidenceFiltering:
         scores = np.array([[0.9, 0.5, 0.7]], dtype=np.float32)
         class_ids = np.array([[0, 1, 2]], dtype=np.uint8)
 
-        outputs = [boxes[np.newaxis, :], scores, class_ids]
+        outputs: list[np.ndarray] = [boxes[np.newaxis, :], scores, class_ids]
         result = stage._parse_outputs(outputs, (480, 640))
 
         # Only boxes with confidence >= 0.6 should remain
@@ -308,7 +308,7 @@ class TestYOLOConfidenceFiltering:
         scores = np.array([[0.5, 0.7]], dtype=np.float32)
         class_ids = np.array([[0, 1]], dtype=np.uint8)
 
-        outputs = [boxes[np.newaxis, :], scores, class_ids]
+        outputs: list[np.ndarray] = [boxes[np.newaxis, :], scores, class_ids]
         result = stage._parse_outputs(outputs, (480, 640))
 
         assert len(result) == 0
@@ -331,7 +331,7 @@ class TestYOLOConfidenceFiltering:
         scores = np.array([[0.01, 0.02]], dtype=np.float32)
         class_ids = np.array([[0, 1]], dtype=np.uint8)
 
-        outputs = [boxes[np.newaxis, :], scores, class_ids]
+        outputs: list[np.ndarray] = [boxes[np.newaxis, :], scores, class_ids]
         result = stage._parse_outputs(outputs, (480, 640))
 
         assert len(result) == 2
@@ -398,7 +398,7 @@ class TestYOLOLabels:
         scores = np.array([[0.9, 0.85, 0.8]], dtype=np.float32)
         class_ids = np.array([[0, 16, 17]], dtype=np.uint8)
 
-        outputs = [boxes[np.newaxis, :], scores, class_ids]
+        outputs: list[np.ndarray] = [boxes[np.newaxis, :], scores, class_ids]
         result = stage._parse_outputs(outputs, (480, 640))
 
         assert result[0].label == "person"
@@ -421,7 +421,7 @@ class TestYOLOLabels:
         scores = np.array([[0.9]], dtype=np.float32)
         class_ids = np.array([[99]], dtype=np.uint8)
 
-        outputs = [boxes, scores, class_ids]
+        outputs: list[np.ndarray] = [boxes, scores, class_ids]
         result = stage._parse_outputs(outputs, (480, 640))
 
         assert len(result) == 1
@@ -552,7 +552,7 @@ class TestYOLOStageE2E:
         scores = np.array([[0.95]], dtype=np.float32)
         class_ids = np.array([[0]], dtype=np.uint8)
 
-        outputs = [boxes, scores, class_ids]
+        outputs: list[np.ndarray] = [boxes, scores, class_ids]
         # Original size (480, 640) means scale factors are (640/640=1.0, 480/640=0.75)
         result = stage._parse_outputs(outputs, (480, 640))
 
