@@ -28,15 +28,12 @@ def _get_model_cache_dir() -> Path:
 
 
 @pytest.fixture(scope="session")
-def yolo_model_path() -> Generator[Path, None, None]:
-    """Return the path to the YOLO ONNX model.
+def yolo_model_path() -> Path:
+    """Return the path to the vendored YOLO ONNX model.
 
-    Uses the model already present in models/yolo/model.onnx (with its
-    external .data file) since that matches the output format expected by
-    YOLOStage: outputs[0]=[1,N,4] boxes, outputs[1]=[1,N] scores.
+    Uses the model in tests/int/models/yolo/ which is already in the
+    correct output format for YOLOStage.
     """
-    # Use the vendored model in tests/int/models/yolo/ — small enough to commit
-    # and already in the correct output format for YOLOStage.
     vendored = Path(__file__).parent / "models" / "yolo" / "model.onnx"
     logger.info("Using vendored YOLO model: %s", vendored)
     return vendored

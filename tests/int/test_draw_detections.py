@@ -23,10 +23,12 @@ if TYPE_CHECKING:
 def _detection_pipeline(yolo_model_path: Path) -> Pipeline:
     """Return a preprocess → YOLO pipeline ready to produce DetectionMessages."""
     backend = ComputeBackend()
-    return Pipeline([
-        PreprocessorStage(target_size=(640, 640), letterbox=True, channels_first=True),
-        YOLOStage(model_path=str(yolo_model_path), backend=backend),
-    ])
+    return Pipeline(
+        [
+            PreprocessorStage(target_size=(640, 640), letterbox=True, channels_first=True),
+            YOLOStage(model_path=str(yolo_model_path), backend=backend),
+        ]
+    )
 
 
 @pytest.mark.integration
@@ -79,7 +81,7 @@ def test_draw_detections(
             (0, 255, 0),
             -1,
         )
-        cv2.putText(  # noqa: E501 (line is long but clear)
+        cv2.putText(
             frame_with_boxes, label, (text_x, text_y), font, font_scale, (0, 0, 0), thickness
         )
 

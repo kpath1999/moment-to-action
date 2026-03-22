@@ -455,7 +455,9 @@ class TestYOLOStageE2E:
         class_ids = np.array([[0, 1]], dtype=np.uint8)
         mock_backend.run.return_value = [boxes, scores, class_ids]
 
-        tensor = np.random.randn(1, 3, 640, 640).astype(np.float32)
+        rng = np.random.default_rng()
+
+        tensor = rng.standard_normal((1, 3, 640, 640)).astype(np.float32)
         msg = FrameTensorMessage(
             tensor=tensor,
             timestamp=time.time(),
@@ -482,7 +484,9 @@ class TestYOLOStageE2E:
         class_ids = np.array([[0]], dtype=np.uint8)
         mock_backend.run.return_value = [boxes, scores, class_ids]
 
-        tensor = np.random.randn(1, 3, 640, 640).astype(np.float32)
+        rng = np.random.default_rng()
+
+        tensor = rng.standard_normal((1, 3, 640, 640)).astype(np.float32)
         msg = FrameTensorMessage(
             tensor=tensor,
             timestamp=time.time(),
@@ -503,7 +507,9 @@ class TestYOLOStageE2E:
             confidence_threshold=0.5,
         )
 
-        img_array = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),

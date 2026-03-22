@@ -14,6 +14,7 @@ from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.sensors._file_image import FileImageSensor
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
     from pathlib import Path
 
 
@@ -22,7 +23,7 @@ class TestFileImageSensor:
     """Tests for FileImageSensor class."""
 
     @pytest.fixture
-    def temp_image_file(self) -> Path:
+    def temp_image_file(self) -> Generator[Path, None, None]:
         """Create a temporary image file for testing.
 
         Yields:
@@ -30,7 +31,8 @@ class TestFileImageSensor:
         """
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             # Create a simple 480x640 BGR image
-            image = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+            rng = np.random.default_rng()
+            image = rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
             cv2.imwrite(tmp.name, image)
             yield pathlib.Path(tmp.name)
         # Clean up after test

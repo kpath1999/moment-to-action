@@ -49,11 +49,13 @@ def test_yolo_pipeline_full(yolo_model_path: Path, test_image_path: Path) -> Non
     sensor.close()
 
     backend = ComputeBackend()
-    pipeline = Pipeline([
-        _preprocess_stage(),
-        YOLOStage(model_path=str(yolo_model_path), backend=backend),
-        ReasoningStage(model_path=None),
-    ])
+    pipeline = Pipeline(
+        [
+            _preprocess_stage(),
+            YOLOStage(model_path=str(yolo_model_path), backend=backend),
+            ReasoningStage(model_path=None),
+        ]
+    )
 
     result = pipeline.run(raw_msg)
 
@@ -82,10 +84,12 @@ def test_yolo_detections(yolo_model_path: Path, test_image_path: Path) -> None:
     sensor.close()
 
     backend = ComputeBackend()
-    pipeline = Pipeline([
-        _preprocess_stage(),
-        YOLOStage(model_path=str(yolo_model_path), backend=backend),
-    ])
+    pipeline = Pipeline(
+        [
+            _preprocess_stage(),
+            YOLOStage(model_path=str(yolo_model_path), backend=backend),
+        ]
+    )
 
     result = pipeline.run(raw_msg)
 

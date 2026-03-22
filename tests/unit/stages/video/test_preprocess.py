@@ -95,7 +95,9 @@ class TestImagePreprocessorDefault:
 
     def test_output_shape_and_dtype(self) -> None:
         """Test output shape and dtype."""
-        img_array = np.random.randint(0, 256, (100, 200, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (100, 200, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),
@@ -270,7 +272,9 @@ class TestPreprocessorStageE2E:
 
     def test_preprocessor_stage_basic(self) -> None:
         """Test basic PreprocessorStage operation."""
-        img_array = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),
@@ -293,7 +297,9 @@ class TestPreprocessorStageE2E:
 
     def test_preprocessor_stage_channels_first(self) -> None:
         """Test PreprocessorStage with channels_first=True."""
-        img_array = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),
@@ -313,7 +319,9 @@ class TestPreprocessorStageE2E:
 
     def test_preprocessor_stage_channels_last(self) -> None:
         """Test PreprocessorStage with channels_first=False."""
-        img_array = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),
@@ -333,7 +341,9 @@ class TestPreprocessorStageE2E:
 
     def test_preprocessor_stage_with_letterbox(self) -> None:
         """Test PreprocessorStage with letterbox option."""
-        img_array = np.random.randint(0, 256, (480, 960, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (480, 960, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),
@@ -368,7 +378,9 @@ class TestPreprocessorStageE2E:
         """Test PreprocessorStage rejects non-RawFrameMessage."""
         from moment_to_action.messages.video import FrameTensorMessage
 
-        tensor = np.random.randn(1, 3, 256, 256).astype(np.float32)
+        rng = np.random.default_rng()
+
+        tensor = rng.standard_normal((1, 3, 256, 256)).astype(np.float32)
         msg = FrameTensorMessage(
             tensor=tensor,
             timestamp=time.time(),
@@ -382,7 +394,9 @@ class TestPreprocessorStageE2E:
 
     def test_preprocessor_stage_output_type_name(self) -> None:
         """Test that FrameTensorMessage type is correct."""
-        img_array = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),
@@ -398,7 +412,9 @@ class TestPreprocessorStageE2E:
 
     def test_output_shape_is_correct_channels_first(self) -> None:
         """Test output shape is (1, C, H, W) when channels_first=True."""
-        img_array = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),
@@ -420,7 +436,9 @@ class TestPreprocessorStageE2E:
 
     def test_output_shape_is_correct_channels_last(self) -> None:
         """Test output shape is (1, H, W, C) when channels_first=False."""
-        img_array = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        rng = np.random.default_rng()
+
+        img_array = rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
         msg = RawFrameMessage(
             frame=img_array,
             timestamp=time.time(),

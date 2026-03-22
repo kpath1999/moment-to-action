@@ -12,13 +12,15 @@ import pytest
 @pytest.fixture
 def sample_image_array() -> np.ndarray:
     """Return a sample 480x640x3 BGR image array (uint8)."""
-    return np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+    rng = np.random.default_rng()
+    return rng.integers(0, 256, (480, 640, 3), dtype=np.uint8)
 
 
 @pytest.fixture
 def sample_frame_tensor() -> np.ndarray:
     """Return a sample 1x3x256x256 normalized float32 tensor (channels-first)."""
-    return np.random.randn(1, 3, 256, 256).astype(np.float32)
+    rng = np.random.default_rng()
+    return rng.standard_normal((1, 3, 256, 256)).astype(np.float32)
 
 
 @pytest.fixture

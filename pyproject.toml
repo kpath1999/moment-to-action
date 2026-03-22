@@ -76,20 +76,12 @@ ignore = [
     "PLR2004",
     # private member access (SLF001)
     "SLF001",
-    # missing annotations on pytest hooks (ANN*)
-    "ANN001", "ANN002", "ANN201", "ANN202", "ANN206",
     # pytest imports outside type-checking (TC002)
     "TC002",
-    # numpy legacy API (NPY002)
-    "NPY002",
     # nested context managers (SIM117)
     "SIM117",
     # hardcoded temp files (S108)
     "S108",
-    # naming convention (N801)
-    # "N801",
-    # unused noqa directives (RUF100)
-    "RUF100",
     # undocumented public packages (D104)
     "D104",
 ]
