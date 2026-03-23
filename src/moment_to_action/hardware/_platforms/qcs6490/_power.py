@@ -51,6 +51,11 @@ class QCS6490PowerMonitor(PowerMonitor):
     def __init__(self) -> None:
         self._hw_available = Path(self.SYSFS_POWER_PATH).exists()
 
+        if self._hw_available:
+            logger.info("SoC power info available at %s", self.SYSFS_POWER_PATH)
+        else:
+            logger.warning("SoC power info not available - using utilization-based estimates")
+
     def sample(self, unit: ComputeUnit) -> PowerSample:
         """Take a power measurement for *unit*.
 
@@ -74,7 +79,7 @@ class QCS6490PowerMonitor(PowerMonitor):
             power_uw = int(Path(f"{self.SYSFS_POWER_PATH}/battery/power_now").read_text().strip())
             return PowerSample(
                 timestamp=time.time(),
-                compute_unit=unit,
+                device=unit,
                 power_mw=power_uw / 1000.0,
                 utilization_pct=self._read_utilization(unit),
             )
@@ -85,7 +90,7 @@ class QCS6490PowerMonitor(PowerMonitor):
     def _estimate(self, unit: ComputeUnit) -> PowerSample:
         return PowerSample(
             timestamp=time.time(),
-            compute_unit=unit,
+            device=unit,
             power_mw=self._ESTIMATES.get(unit, 300.0),
             utilization_pct=self._read_utilization(unit),
         )

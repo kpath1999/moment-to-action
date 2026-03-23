@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from moment_to_action._pipeline import Pipeline
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import DetectionMessage, FrameTensorMessage, ReasoningMessage
+from moment_to_action.pipeline import Pipeline
 from moment_to_action.sensors import FileImageSensor
 from moment_to_action.stages.llm import ReasoningStage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage

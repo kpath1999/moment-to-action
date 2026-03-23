@@ -13,6 +13,7 @@ Usage::
 
 from __future__ import annotations
 
+import functools
 import logging
 import platform
 from enum import Enum, auto
@@ -34,6 +35,7 @@ class Platform(Enum):
     """Standard x86_64 laptop/desktop CPU (Intel/AMD)."""
 
 
+@functools.cache
 def detect_platform() -> Platform:
     """Detect the current hardware platform.
 

@@ -6,28 +6,29 @@ import ``ComputeUnit`` from here, not from the backend module.
 
 from __future__ import annotations
 
-from enum import Enum, auto
+from enum import StrEnum
 
-from pydantic import BaseModel
+import attrs
 
 
-class ComputeUnit(Enum):
+class ComputeUnit(StrEnum):
     """Available compute units on a hardware accelerator platform."""
 
-    CPU = auto()
-    NPU = auto()
-    GPU = auto()
-    DSP = auto()
+    CPU = "CPU"
+    GPU = "GPU"
+    NPU = "NPU"
+    DSP = "DSP"
 
 
-class PowerSample(BaseModel):
+@attrs.frozen
+class PowerSample:
     """A single power measurement snapshot for one compute unit."""
 
     timestamp: float
     """Unix timestamp of the measurement (seconds)."""
 
-    compute_unit: ComputeUnit
-    """The unit that was active during sampling."""
+    device: ComputeUnit
+    """The device that was active during sampling."""
 
     power_mw: float
     """Power draw in milliwatts."""
