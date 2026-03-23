@@ -56,3 +56,16 @@ class TestCliUtils:
         ctx = _make_ctx()
         ctx_set_seed(ctx, 99)
         assert ctx_get_seed(ctx) == 99
+
+    def test_format_size_exact_bytes(self) -> None:
+        """Test format_size with exact byte amount."""
+        from moment_to_action.utils.cli import format_size
+
+        assert format_size(512) == "512 B"
+
+    def test_format_size_terabytes(self) -> None:
+        """Test format_size with terabyte amount."""
+        from moment_to_action.utils.cli import format_size
+
+        result = format_size(1024 * 1024 * 1024 * 1024)
+        assert "1.0 TB" in result
