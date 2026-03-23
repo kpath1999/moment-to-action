@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import platformdirs
 
@@ -12,6 +13,11 @@ from ._types import (
     ModelStatus,
     VendoredSource,
 )
+
+if TYPE_CHECKING:
+    from typing import IO
+
+    import httpx
 
 
 class ModelManager:
@@ -28,18 +34,21 @@ class ModelManager:
     to avoid re-downloading.
     """
 
-    def __init__(self, cache_dir: Path | None = None) -> None:
+    def __init__(self, cache_dir: Path | None = None, *, show_progress: bool = True) -> None:
         """Initialize the model manager.
 
         Args:
             cache_dir: Override the default cache directory. If None, uses
                 platformdirs.user_cache_path("moment_to_action", "GATech") / "models".
+            show_progress: Show a Rich progress bar during model downloads.
+                Set to False in tests or non-interactive environments.
         """
         if cache_dir is None:
             cache_dir = platformdirs.user_cache_path("moment_to_action", "GATech") / "models"
 
         self._cache_dir = cache_dir
         self._vendored_dir = Path(__file__).parent / "_vendored"
+        self._show_progress = show_progress
 
     @property
     def cache_dir(self) -> Path:
@@ -88,15 +97,20 @@ class ModelManager:
             return False
 
     def list_models(self) -> list[ModelStatus]:
-        """Return status of all known models.
+        """Return status of all known models without triggering downloads.
+
+        Reports the current availability of each model: vendored models are
+        always available if the package is intact; downloadable models are
+        available only if already cached locally.
 
         Returns:
             List of ModelStatus for each model in the registry.
         """
         statuses = []
         for info in MODEL_REGISTRY.values():
+            # Resolve the local path without triggering a download
             try:
-                path = self._resolve_path(info)
+                path = self._resolve_path_local(info)
                 available = path.exists()
                 size = path.stat().st_size if available else None
             except FileNotFoundError:
@@ -182,6 +196,32 @@ class ModelManager:
                 self._download_from_hf(repo, hf_filename, cache_path)
                 return cache_path
 
+    def _resolve_path_local(self, info: ModelInfo) -> Path:
+        """Resolve the local path for a model without triggering a download.
+
+        For vendored models, returns the embedded path. For downloadable models,
+        returns the cache path (whether or not the file exists yet).
+
+        Args:
+            info: The ModelInfo to resolve.
+
+        Returns:
+            Local path where the model file is (or would be).
+
+        Raises:
+            FileNotFoundError: If the model is vendored but missing from the
+                package (corrupt/incomplete installation).
+        """
+        match info.source:
+            case VendoredSource(subdir=subdir):
+                path = self._vendored_dir / subdir / info.filename
+                if not path.exists():
+                    msg = f"Vendored model not found: {path}"
+                    raise FileNotFoundError(msg)
+                return path
+            case DownloadSource():
+                return self._cache_dir / info.id.value / info.filename
+
     def _resolve_path_vendored_only(self, info: ModelInfo) -> Path:
         """Resolve path for vendored models only (no download).
 
@@ -202,7 +242,11 @@ class ModelManager:
                 raise FileNotFoundError(msg)
 
     def _download_from_hf(self, repo_id: str, filename: str, dest_path: Path) -> None:
-        """Download a model from HuggingFace Hub.
+        """Download a model from HuggingFace Hub with a Rich progress bar.
+
+        Resolves the download URL and file size via the HuggingFace Hub API,
+        then streams the file directly using httpx, updating a Rich progress
+        bar as bytes arrive.
 
         Args:
             repo_id: HuggingFace repo ID (e.g.,
@@ -211,28 +255,75 @@ class ModelManager:
             dest_path: Where to save the file.
 
         Raises:
-            RuntimeError: If download fails or huggingface_hub is not
+            RuntimeError: If download fails or required dependencies are not
                 installed.
         """
         try:
-            from huggingface_hub import hf_hub_download
-        except ImportError:
-            msg = "huggingface_hub not installed"
+            import httpx
+            from huggingface_hub import get_hf_file_metadata, hf_hub_url
+        except ImportError as exc:
+            msg = f"Required dependency not available: {exc.name}"
             raise RuntimeError(msg) from None
 
         try:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
-            downloaded_path = hf_hub_download(
-                repo_id=repo_id,
-                filename=filename,
-                local_dir=str(dest_path.parent),
-                local_files_only=False,
-            )
-            # Ensure the file is at the expected path
-            if Path(downloaded_path) != dest_path:
-                downloaded_path_obj = Path(downloaded_path)
-                if downloaded_path_obj.exists():
-                    downloaded_path_obj.rename(dest_path)
+
+            # Resolve the CDN download URL and fetch metadata (file size)
+            url = hf_hub_url(repo_id=repo_id, filename=filename)
+            metadata = get_hf_file_metadata(url)
+
+            with (
+                dest_path.open("wb") as fh,
+                httpx.stream("GET", metadata.location, follow_redirects=True) as resp,
+            ):
+                resp.raise_for_status()
+                self._stream_with_progress(resp, fh, filename, metadata.size)
+
         except Exception as e:
+            # Remove partial download so the next attempt starts fresh
+            if dest_path.exists():
+                dest_path.unlink()
             msg = f"Failed to download {repo_id}/{filename}: {e}"
             raise RuntimeError(msg) from e
+
+    def _stream_with_progress(
+        self,
+        response: httpx.Response,
+        dest: IO[bytes],
+        description: str,
+        total: int | None,
+    ) -> None:
+        """Write response bytes to dest, optionally showing a Rich progress bar.
+
+        Args:
+            response: The streaming httpx response to read from.
+            dest: File-like object to write downloaded bytes into.
+            description: Label shown next to the progress bar (e.g., filename).
+            total: Expected total bytes, or None for indeterminate progress.
+        """
+        if self._show_progress:
+            from rich.progress import (
+                BarColumn,
+                DownloadColumn,
+                Progress,
+                SpinnerColumn,
+                TextColumn,
+                TimeRemainingColumn,
+                TransferSpeedColumn,
+            )
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold]{task.description}"),
+                BarColumn(),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                TimeRemainingColumn(),
+            ) as progress:
+                task = progress.add_task(description, total=total)
+                for chunk in response.iter_bytes(chunk_size=8192):
+                    dest.write(chunk)
+                    progress.update(task, advance=len(chunk))
+        else:
+            for chunk in response.iter_bytes(chunk_size=8192):
+                dest.write(chunk)
