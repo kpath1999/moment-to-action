@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
@@ -112,6 +113,76 @@ class TestLiteRTBackend:
         details = backend.get_output_details(handle)
 
         assert details == output_details
+
+    def test_litert_import_error_fallback(self) -> None:
+        """Test _have_ai_edge_litert=False fallback when ImportError occurs."""
+        with patch.dict("sys.modules", {"ai_edge_litert": None}):
+            import moment_to_action.hardware._platforms._runtimes._litert as litert_module
+
+            importlib.reload(litert_module)
+            # Verify module fell back to tf.lite
+            assert hasattr(litert_module, "_have_ai_edge_litert")
+
+    @patch("moment_to_action.hardware._platforms._runtimes._litert._Interpreter")
+    def test_litert_load_interpreter_delegate_failure(self, mock_interpreter_class: Mock) -> None:
+        """Test _load_interpreter raises RuntimeError when delegate fails."""
+        mock_interpreter_class.side_effect = RuntimeError("Delegate failed to apply")
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.NPU)
+        # Mock _get_delegates to return a non-empty list via patch
+        with patch.object(backend, "_get_delegates", return_value=["mock_delegate"]):
+            with pytest.raises(RuntimeError, match="Delegate failed"):
+                backend._load_interpreter("/tmp/model.tflite")
+
+    @patch("moment_to_action.hardware._platforms._runtimes._litert._Interpreter")
+    def test_litert_set_inputs_key_error_multi_input(self, mock_interpreter_class: Mock) -> None:
+        """Test _set_inputs raises KeyError for missing input name in multi-input model."""
+        mock_interp = MagicMock()
+        mock_interpreter_class.return_value = mock_interp
+
+        # Setup a multi-input model with two inputs
+        input_details = [
+            {"name": "input1", "dtype": np.float32, "index": 0},
+            {"name": "input2", "dtype": np.float32, "index": 1},
+        ]
+        mock_interp.get_input_details.return_value = input_details
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        handle = backend.load_model("/tmp/model.tflite")
+
+        # Try to set input with wrong name
+        inputs = {
+            "wrong_name": np.array([1.0, 2.0], dtype=np.float32),
+        }
+
+        with pytest.raises(KeyError, match="Input name 'wrong_name' not found"):
+            backend.run(handle, inputs)
+
+    @patch("moment_to_action.hardware._platforms._runtimes._litert._Interpreter")
+    def test_litert_set_inputs_type_error_dtype_mismatch(
+        self, mock_interpreter_class: Mock
+    ) -> None:
+        """Test _set_inputs raises TypeError for dtype mismatch in multi-input model."""
+        mock_interp = MagicMock()
+        mock_interpreter_class.return_value = mock_interp
+
+        # Setup a multi-input model expecting float32
+        input_details = [
+            {"name": "input1", "dtype": np.float32, "index": 0},
+            {"name": "input2", "dtype": np.float32, "index": 1},
+        ]
+        mock_interp.get_input_details.return_value = input_details
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        handle = backend.load_model("/tmp/model.tflite")
+
+        # Try to set input with wrong dtype (int32 instead of float32)
+        inputs = {
+            "input1": np.array([1, 2], dtype=np.int32),
+        }
+
+        with pytest.raises(TypeError, match="Input 'input1' dtype mismatch"):
+            backend.run(handle, inputs)
 
 
 @pytest.mark.unit

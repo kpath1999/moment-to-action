@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import pytest
 
 from moment_to_action.hardware import ComputeUnit
 from moment_to_action.utils.compute import ComputeDispatcher
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @pytest.mark.unit
@@ -87,3 +92,49 @@ class TestComputeDispatcher:
 
         assert isinstance(result_float, float)
         assert isinstance(result_string, str)
+
+    def test_dsp_available_active_unit_returns_dsp(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """active_unit should return DSP when _unit=DSP and _dsp_available=True."""
+        monkeypatch.setattr(ComputeDispatcher, "_probe_dsp", lambda _: True)
+        dispatcher = ComputeDispatcher(compute_unit=ComputeUnit.DSP)
+        assert dispatcher.active_unit == ComputeUnit.DSP
+
+    def test_dispatch_dsp_available_calls_dispatch_dsp(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dispatch() should call _dispatch_dsp when DSP is available."""
+        monkeypatch.setattr(ComputeDispatcher, "_probe_dsp", lambda _: True)
+        dispatcher = ComputeDispatcher(compute_unit=ComputeUnit.DSP)
+
+        call_log: list[str] = []
+
+        def mock_dispatch_dsp(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+            call_log.append("_dispatch_dsp_called")
+            return fn(*args, **kwargs)
+
+        monkeypatch.setattr(dispatcher, "_dispatch_dsp", mock_dispatch_dsp)
+
+        def add(a: int, b: int) -> int:
+            return a + b
+
+        result = dispatcher.dispatch(add, 5, 7)
+        assert result == 12
+        assert call_log == ["_dispatch_dsp_called"]
+
+    def test_dispatch_dsp_logs_debug_message(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """_dispatch_dsp should log a debug message."""
+        import logging
+
+        monkeypatch.setattr(ComputeDispatcher, "_probe_dsp", lambda _: True)
+        dispatcher = ComputeDispatcher(compute_unit=ComputeUnit.DSP)
+
+        def test_fn(x: int) -> int:
+            return x * 2
+
+        with caplog.at_level(logging.DEBUG):
+            result = dispatcher.dispatch(test_fn, 5)
+
+        assert result == 10
+        assert "DSP dispatch requested for test_fn — falling back to CPU" in caplog.text

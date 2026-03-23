@@ -28,6 +28,9 @@ class ReasoningStage(Stage):
     Output: ReasoningMessage
     """
 
+    _backend: ComputeBackend | None
+    _handle: object | None
+
     def __init__(
         self,
         model_path: str | None = None,
@@ -40,6 +43,7 @@ class ReasoningStage(Stage):
             self._handle = self._backend.load_model(model_path)
             logger.info("ReasoningStage: loaded %s", model_path)
         else:
+            self._backend = None
             logger.info("ReasoningStage: running in stub mode (no model loaded)")
         self._system_prompt = system_prompt or (
             "You are analyzing detections from a wearable device. "

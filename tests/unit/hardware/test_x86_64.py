@@ -283,3 +283,58 @@ class TestX86_64PowerMonitor:  # noqa: N801
 
             assert sample1.power_mw >= 0.0
             assert sample2.power_mw >= 0.0
+
+    def test_x86_64_power_monitor_rapl_delta_power_calculation(self) -> None:
+        """Test RAPL delta power calculation (lines 103-107).
+
+        Call sample() twice: first initializes _last_energy_uj and _last_time,
+        second computes delta_energy and delta_time, then power_mw.
+        """
+        mock_rapl_path = MagicMock()
+        mock_rapl_path.exists.return_value = True
+        # First call returns 1000000 μJ, second call returns 2000000 μJ
+        mock_rapl_path.read_text.side_effect = ["1000000\n", "2000000\n"]
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+                mock_rapl_path,
+            ),
+            patch("psutil.cpu_percent", return_value=50.0),
+            patch("time.time") as mock_time,
+        ):
+            # First call at t=0, second call at t=1 (1 second elapsed)
+            mock_time.side_effect = [0.0, 1.0, 1.0]
+
+            monitor = X86_64PowerMonitor()
+            # First call: initializes _last_energy_uj and _last_time
+            sample1 = monitor.sample(ComputeUnit.CPU)
+            assert sample1.power_mw == 0.0  # No previous reading yet
+
+            # Second call: computes delta_energy (1000000 μJ) and delta_time (1.0 s)
+            # power_mw = (1000000 / 1000.0) / 1.0 = 1000.0 mW
+            sample2 = monitor.sample(ComputeUnit.CPU)
+            assert sample2.power_mw == 1000.0
+
+    def test_x86_64_power_monitor_estimate_fallback_on_freq_error(self) -> None:
+        """Test _estimate fallback when psutil.cpu_freq() raises (lines 133-134).
+
+        Patch psutil.cpu_freq to raise OSError, verify fallback freq_ghz=2.0
+        is used in the power estimate.
+        """
+        mock_rapl_path = MagicMock()
+        mock_rapl_path.exists.return_value = False
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+                mock_rapl_path,
+            ),
+            patch("psutil.cpu_percent", return_value=100.0),
+            patch("psutil.cpu_freq", side_effect=OSError("cpu_freq unavailable")),
+        ):
+            monitor = X86_64PowerMonitor()
+            sample = monitor.sample(ComputeUnit.CPU)
+
+            # With fallback freq_ghz=2.0, util=100%, base=50.0 mW:
+            # power_mw = 50.0 + (2.0 * 100.0 * 0.6) = 50.0 + 120.0 = 170.0 mW
+            assert sample.power_mw == 170.0
+            assert sample.utilization_pct == 100.0

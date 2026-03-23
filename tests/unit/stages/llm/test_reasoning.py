@@ -91,6 +91,30 @@ class TestReasoningStage:
         assert stage._system_prompt is not None
         assert len(stage._system_prompt) > 0
 
+    def test_reasoning_stage_stub_mode_full(
+        self, sample_detection_message: DetectionMessage
+    ) -> None:
+        """Test ReasoningStage in stub mode: initialization and processing.
+
+        Covers initialization without model_path, verifying backend is None,
+        handle is None, and stub response is generated correctly.
+        """
+        # Test 1: Initialize without error
+        stage = ReasoningStage()
+
+        # Test 2: Verify _backend is None
+        assert stage._backend is None
+
+        # Test 3: Verify _handle is None
+        assert stage._handle is None
+
+        # Test 4: Running in stub mode returns ReasoningMessage with stub response
+        result = stage.process(sample_detection_message)
+
+        assert isinstance(result, ReasoningMessage)
+        assert "[LLM stub]" in result.response
+        assert "chars" in result.response.lower()
+
     def test_reasoning_stage_default_system_prompt(self) -> None:
         """Test ReasoningStage uses default system prompt when not provided."""
         stage = ReasoningStage(model_path=None)
@@ -415,3 +439,27 @@ class TestReasoningStage:
         assert "  - " in prompt
         assert "confidence:" in prompt.lower()
         assert "position:" in prompt.lower()
+
+    def test_reasoning_stage_with_model_path_mocked(self) -> None:
+        """Test ReasoningStage initialisation with a model path (mocked backend).
+
+        Covers lines 42-44 — the if-model_path branch that constructs a
+        ComputeBackend and loads the model.  The ComputeBackend is mocked so
+        no real model file is needed.
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_backend = MagicMock()
+        mock_handle = MagicMock()
+        mock_backend.load_model.return_value = mock_handle
+
+        with patch(
+            "moment_to_action.stages.llm._reasoning.ComputeBackend",
+            return_value=mock_backend,
+        ):
+            stage = ReasoningStage(model_path="/fake/model.onnx")
+
+        # Backend and handle should be set (not stub mode).
+        assert stage._backend is mock_backend
+        assert stage._handle is mock_handle
+        mock_backend.load_model.assert_called_once_with("/fake/model.onnx")

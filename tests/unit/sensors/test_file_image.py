@@ -134,3 +134,23 @@ class TestFileImageSensor:
         # Both should produce same dimensions
         assert msg_str.width == msg_path.width
         assert msg_str.height == msg_path.height
+
+    def test_read_with_cv2_imread_returns_none(
+        self, temp_image_file: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test FileImageSensor.read() when cv2.imread returns None — raises OSError.
+
+        This covers the case where cv2.imread fails due to unsupported format,
+        corrupt file, or permission error.
+        """
+        sensor = FileImageSensor(temp_image_file)
+        sensor.open()
+
+        # Mock cv2.imread to return None
+        monkeypatch.setattr(cv2, "imread", lambda *_args, **_kwargs: None)
+
+        # Should raise OSError with message about not being able to load the image
+        with pytest.raises(OSError, match="could not load image"):
+            sensor.read()
+
+        sensor.close()

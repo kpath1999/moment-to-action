@@ -7,7 +7,14 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from moment_to_action.hardware._backend import BenchmarkResult, ComputeBackend
+from moment_to_action.hardware._backend import (
+    BenchmarkResult,
+    ComputeBackend,
+    _make_backend,
+    _make_power_monitor,
+)
+from moment_to_action.hardware._platforms._detection import Platform
+from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
 from moment_to_action.hardware._types import ComputeUnit
 
 
@@ -112,6 +119,24 @@ class TestComputeBackendConstruction:
                     backend = ComputeBackend()
 
                     assert backend.power_monitor is mock_power_monitor
+
+    def test_make_power_monitor_qcs6490(self) -> None:
+        """Test that _make_power_monitor returns QCS6490PowerMonitor for QCS6490 platform."""
+        with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
+            mock_detect.return_value = Platform.QCS6490
+
+            power_monitor = _make_power_monitor()
+
+            assert isinstance(power_monitor, QCS6490PowerMonitor)
+
+    def test_make_backend_qcs6490(self) -> None:
+        """Test that _make_backend returns QCS6490Backend for QCS6490 platform."""
+        with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
+            mock_detect.return_value = Platform.QCS6490
+
+            backend = _make_backend(ComputeUnit.NPU)
+
+            assert isinstance(backend, QCS6490Backend)
 
 
 @pytest.mark.unit

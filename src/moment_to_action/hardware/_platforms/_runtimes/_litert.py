@@ -29,7 +29,7 @@ try:
     from ai_edge_litert.interpreter import load_delegate as _load_delegate
 
     _have_ai_edge_litert = True
-except ImportError:
+except ImportError:  # pragma: no cover
     # ai_edge_litert is absent (dev machine / older TF install) — fall back to
     # the legacy tf.lite runtime, which is assumed to always be present.
     from tensorflow.lite.python.interpreter import Interpreter as _Interpreter
@@ -141,7 +141,7 @@ class LiteRTBackend(InferenceBackend):
         delegates = self._get_delegates()
         try:
             interp = _Interpreter(model_path=model_path, experimental_delegates=delegates)
-        except RuntimeError as e:
+        except RuntimeError as e:  # pragma: no cover
             if delegates:
                 msg = f"Delegate failed: {e}"
                 raise RuntimeError(msg) from e

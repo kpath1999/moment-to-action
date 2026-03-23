@@ -22,7 +22,7 @@ try:
     from ai_edge_litert.interpreter import load_delegate as _load_delegate
 
     _have_ai_edge_litert = True
-except ImportError:
+except ImportError:  # pragma: no cover
     from tensorflow.lite.python.interpreter import load_delegate as _load_delegate
 
     _have_ai_edge_litert = False
