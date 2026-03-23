@@ -2,7 +2,8 @@
 
 Consumers import from the submodules directly::
 
-    from moment_to_action.stages.video import YOLOStage, PreprocessorStage
+    from moment_to_action.stages.video import YOLOStage, PreprocessorStage, ClipBufferStage
+    from moment_to_action.stages.video import TemporalActionStage
     from moment_to_action.stages.vlm import MobileCLIPStage
     from moment_to_action.stages.llm import ReasoningStage
 """
