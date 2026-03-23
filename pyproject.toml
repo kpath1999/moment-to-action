@@ -25,6 +25,7 @@ dependencies = [
     "platformdirs>=4.0.0",
     "huggingface_hub>=0.18.0",
     "num2words>=0.5.14",
+    "llama-cpp-python>=0.3.16",
 ]
 
 [project.scripts]
