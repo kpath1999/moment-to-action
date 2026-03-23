@@ -1,0 +1,79 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Cache models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/moment-to-action/models
+          key: models-${{ hashFiles('tests/int/conftest.py') }}
+          restore-keys: models-
+
+      - name: Run tests
+        run: |
+          uv run pytest tests/ -v \
+              -m "unit or integration or slow" \
+              --junitxml=pytest-results.xml \
+              --cov=src/moment_to_action \
+              --cov-report=xml:coverage.xml \
+              --cov-report=term-missing \
+              --cov-report=html:htmlcov 
+
+      - name: Publish coverage comment
+        if: always()
+        uses: MishaKav/pytest-coverage-comment@v1.1.52
+        with:
+          junitxml-path: pytest-results.xml
+          pytest-xml-coverage-path: coverage.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: pytest-results.xml
+
+      - name: Upload coverage report (XML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+      - name: Upload coverage report (HTML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov/
