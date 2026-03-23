@@ -8,6 +8,7 @@ are rare in this codebase and CPU is sufficient.
 from __future__ import annotations
 
 import logging
+import os
 from typing import cast
 
 import numpy as np
@@ -29,7 +30,7 @@ class ONNXBackend(InferenceBackend):
     def __init__(self) -> None:
         self._session_cache: dict[str, object] = {}
 
-    def load_model(self, path: str) -> object:
+    def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load an ONNX model, caching sessions by path.
 
         Args:
@@ -38,6 +39,7 @@ class ONNXBackend(InferenceBackend):
         Returns:
             A cached or freshly created ``onnxruntime.InferenceSession``.
         """
+        path = os.fspath(path)  # normalise to str for cache key and ort API
         if path in self._session_cache:
             logger.debug("ONNX cache hit: %s", path)
             return self._session_cache[path]

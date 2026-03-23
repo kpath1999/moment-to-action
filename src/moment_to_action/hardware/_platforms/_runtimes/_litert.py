@@ -13,6 +13,7 @@ Design note — no silent CPU fallback:
 from __future__ import annotations
 
 import logging
+import os
 from typing import cast
 
 import numpy as np
@@ -29,7 +30,7 @@ try:
     from ai_edge_litert.interpreter import load_delegate as _load_delegate
 
     _have_ai_edge_litert = True
-except ImportError:
+except ImportError:  # pragma: no cover
     # ai_edge_litert is absent (dev machine / older TF install) — fall back to
     # the legacy tf.lite runtime, which is assumed to always be present.
     from tensorflow.lite.python.interpreter import Interpreter as _Interpreter
@@ -53,7 +54,7 @@ class LiteRTBackend(InferenceBackend):
         self._unit = compute_unit
         self._interpreter_cache: dict[str, object] = {}
 
-    def load_model(self, path: str) -> object:
+    def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load a TFLite model, caching interpreters by path.
 
         Args:
@@ -65,6 +66,7 @@ class LiteRTBackend(InferenceBackend):
         Raises:
             RuntimeError: If the delegate fails to load or apply.
         """
+        path = os.fspath(path)  # normalise to str for cache key
         if path in self._interpreter_cache:
             logger.debug("Model cache hit: %s", path)
             return self._interpreter_cache[path]
@@ -141,7 +143,7 @@ class LiteRTBackend(InferenceBackend):
         delegates = self._get_delegates()
         try:
             interp = _Interpreter(model_path=model_path, experimental_delegates=delegates)
-        except RuntimeError as e:
+        except RuntimeError as e:  # pragma: no cover
             if delegates:
                 msg = f"Delegate failed: {e}"
                 raise RuntimeError(msg) from e
