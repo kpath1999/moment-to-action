@@ -12,6 +12,7 @@ import pytest
 
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import DetectionMessage
+from moment_to_action.models import ModelManager
 from moment_to_action.pipeline import Pipeline
 from moment_to_action.sensors import FileImageSensor
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
@@ -20,20 +21,21 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _detection_pipeline(yolo_model_path: Path) -> Pipeline:
+def _detection_pipeline() -> Pipeline:
     """Return a preprocess → YOLO pipeline ready to produce DetectionMessages."""
     backend = ComputeBackend()
+    manager = ModelManager()
     return Pipeline(
         [
             PreprocessorStage(target_size=(640, 640), letterbox=True, channels_first=True),
-            YOLOStage(model_path=str(yolo_model_path), backend=backend),
+            # Stage resolves its own model path via ModelManager.
+            YOLOStage(backend=backend, manager=manager),
         ]
     )
 
 
 @pytest.mark.integration
 def test_draw_detections(
-    yolo_model_path: Path,
     test_image_path: Path,
     tmp_path: Path,
 ) -> None:
@@ -56,7 +58,7 @@ def test_draw_detections(
     assert raw_msg.frame is not None
     input_frame = raw_msg.frame.copy()
 
-    result = _detection_pipeline(yolo_model_path).run(raw_msg)
+    result = _detection_pipeline().run(raw_msg)
 
     assert isinstance(result, DetectionMessage), "pedestrian.jpg should yield detections"
     assert len(result.boxes) > 0

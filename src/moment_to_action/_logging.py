@@ -27,3 +27,6 @@ def init_logging(*, verbose: bool) -> None:
             ),
         ],
     )
+
+    # Fix loggers
+    logging.getLogger("httpx").setLevel(logging.WARNING)

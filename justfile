@@ -11,13 +11,13 @@ help:
 setup:
     @./scripts/repo_setup.sh
 
-# Run all tests (unit + integration, excludes slow) with coverage
-test *args:
-    uv run pytest -m "unit or integration" --cov --cov-report=term-missing {{args}}
-
 # Run all tests including slow (e.g. MobileCLIP) with coverage
-test-all *args:
-    uv run pytest -m "unit or integration or slow" --cov --cov-report=term-missing {{args}}
+test *args:
+    uv run pytest -m "" --cov --cov-report=term-missing {{args}}
+
+# Run all tests (unit + integration, excludes slow) with coverage
+test-fast *args:
+    uv run pytest -m "not slow and (unit or integration)" --cov --cov-report=term-missing {{args}}
 
 # Run only unit tests with coverage
 test-unit *args:
