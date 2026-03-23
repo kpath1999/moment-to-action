@@ -431,7 +431,7 @@ class TestQCS6490PowerMonitor:
             sample = monitor.sample(ComputeUnit.CPU)
 
             assert isinstance(sample, PowerSample)
-            assert sample.compute_unit == ComputeUnit.CPU
+            assert sample.device == ComputeUnit.CPU
             assert sample.power_mw == 5000.0
             assert sample.utilization_pct == 50.0
 
@@ -451,7 +451,7 @@ class TestQCS6490PowerMonitor:
             sample = monitor.sample(ComputeUnit.CPU)
 
             assert isinstance(sample, PowerSample)
-            assert sample.compute_unit == ComputeUnit.CPU
+            assert sample.device == ComputeUnit.CPU
             assert sample.power_mw == 300.0
             assert sample.utilization_pct == 25.0
 
@@ -479,7 +479,7 @@ class TestQCS6490PowerMonitor:
             sample = monitor.sample(ComputeUnit.CPU)
 
             assert isinstance(sample, PowerSample)
-            assert sample.compute_unit == ComputeUnit.CPU
+            assert sample.device == ComputeUnit.CPU
             assert sample.power_mw == 300.0
             assert sample.utilization_pct == 30.0
 
@@ -552,8 +552,8 @@ class TestQCS6490PowerMonitor:
 
             assert sample1.power_mw == 500.0
             assert sample2.power_mw == 500.0
-            assert sample1.compute_unit == ComputeUnit.NPU
-            assert sample2.compute_unit == ComputeUnit.NPU
+            assert sample1.device == ComputeUnit.NPU
+            assert sample2.device == ComputeUnit.NPU
 
     def test_qcs6490_power_monitor_multiple_samples_gpu(self) -> None:
         """Test PowerMonitor returns consistent samples for GPU."""
@@ -570,8 +570,8 @@ class TestQCS6490PowerMonitor:
 
             assert sample1.power_mw == 800.0
             assert sample2.power_mw == 800.0
-            assert sample1.compute_unit == ComputeUnit.GPU
-            assert sample2.compute_unit == ComputeUnit.GPU
+            assert sample1.device == ComputeUnit.GPU
+            assert sample2.device == ComputeUnit.GPU
 
     def test_qcs6490_load_tflite_accel_success_path(self) -> None:
         """Test .tflite loading uses accel backend when it succeeds.

@@ -1570,12 +1570,15 @@ source = { editable = "." }
 dependencies = [
     { name = "ai-edge-litert" },
     { name = "attrs" },
+    { name = "click" },
     { name = "numpy" },
     { name = "onnxruntime" },
     { name = "open-clip-torch" },
     { name = "opencv-python" },
     { name = "psutil" },
     { name = "pydantic" },
+    { name = "rich" },
+    { name = "rich-click" },
     { name = "tensorflow" },
 ]
 
@@ -1587,6 +1590,7 @@ dev = [
     { name = "pre-commit" },
     { name = "pylsp-mypy" },
     { name = "pytest" },
+    { name = "pytest-antilru" },
     { name = "pytest-cov" },
     { name = "python-lsp-ruff" },
     { name = "python-lsp-server", extra = ["all"] },
@@ -1597,12 +1601,15 @@ dev = [
 requires-dist = [
     { name = "ai-edge-litert", specifier = ">=2.1.3" },
     { name = "attrs", specifier = ">=25.4.0" },
+    { name = "click", specifier = ">=8.3.1" },
     { name = "numpy", specifier = ">=2.4.3" },
     { name = "onnxruntime", specifier = ">=1.24.3" },
     { name = "open-clip-torch", specifier = ">=3.3.0" },
     { name = "opencv-python", specifier = ">=4.13.0.92" },
     { name = "psutil", specifier = ">=6.0" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "rich", specifier = ">=14.3.3" },
+    { name = "rich-click", specifier = ">=1.9.7" },
     { name = "tensorflow", specifier = ">=2.21.0" },
 ]
 
@@ -1614,6 +1621,7 @@ dev = [
     { name = "pre-commit", specifier = ">=4.0.0" },
     { name = "pylsp-mypy", specifier = ">=0.7.1" },
     { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-antilru", specifier = ">=2.0.0" },
     { name = "pytest-cov", specifier = ">=5.0.0" },
     { name = "python-lsp-ruff", specifier = ">=2.3.0" },
     { name = "python-lsp-server", extras = ["all"], specifier = ">=1.14.0" },
@@ -2551,6 +2559,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-antilru"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c6/01/0b5ef3f143f335b5cb1c1e8e6497769dfb48aed5a791b5dfd119151e2b15/pytest_antilru-2.0.0.tar.gz", hash = "sha256:48cff342648b6a1ce4e5398cf203966905d546b3f2bee7bb55d7cb3ec87a85fb", size = 5569, upload-time = "2024-07-28T08:04:58.568Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/23/f0/fc9f5aaaf2818a7d7f795e99fcf59719dd6ec5f98005e642e1efd63ad2a4/pytest_antilru-2.0.0-py3-none-any.whl", hash = "sha256:cf1d97db0e7b17ef568c1f0bf4c89b8748053fe07546f4eb2558bebf64c1ad33", size = 6301, upload-time = "2024-07-28T08:04:57.421Z" },
+]
+
+[[package]]
 name = "pytest-cov"
 version = "7.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2970,6 +2990,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b3/c6/f3b320c27991c46f43ee9d856302c70dc2d0fb2dba4842ff739d5f46b393/rich-14.3.3.tar.gz", hash = "sha256:b8daa0b9e4eef54dd8cf7c86c03713f53241884e814f4e2f5fb342fe520f639b", size = 230582, upload-time = "2026-02-19T17:23:12.474Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/14/25/b208c5683343959b670dc001595f2f3737e051da617f66c31f7c4fa93abc/rich-14.3.3-py3-none-any.whl", hash = "sha256:793431c1f8619afa7d3b52b2cdec859562b950ea0d4b6b505397612db8d5362d", size = 310458, upload-time = "2026-02-19T17:23:13.732Z" },
+]
+
+[[package]]
+name = "rich-click"
+version = "1.9.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/27/091e140ea834272188e63f8dd6faac1f5c687582b687197b3e0ec3c78ebf/rich_click-1.9.7.tar.gz", hash = "sha256:022997c1e30731995bdbc8ec2f82819340d42543237f033a003c7b1f843fc5dc", size = 74838, upload-time = "2026-01-31T04:29:27.707Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/e5/d708d262b600a352abe01c2ae360d8ff75b0af819b78e9af293191d928e6/rich_click-1.9.7-py3-none-any.whl", hash = "sha256:2f99120fca78f536e07b114d3b60333bc4bb2a0969053b1250869bcdc1b5351b", size = 71491, upload-time = "2026-01-31T04:29:26.777Z" },
 ]
 
 [[package]]

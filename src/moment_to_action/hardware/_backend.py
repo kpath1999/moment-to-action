@@ -125,11 +125,18 @@ class ComputeBackend:
         self._preferred_unit = preferred_unit
         self._power_monitor: PowerMonitor = _make_power_monitor()
         self._backend: InferenceBackend = _make_backend(preferred_unit)
+
         logger.info(
-            "ComputeBackend: preferred=%s active=%s",
-            preferred_unit.name,
-            self._backend.get_supported_unit().name,
+            "ComputeBackend: preferred=%s active=%s", preferred_unit.name, self.active_unit.name
         )
+
+        # Log a warning if we didn't get our prefered backend
+        if self.active_unit != self._preferred_unit:
+            logger.warning(
+                "Preferred compute backend unit %s not available, falling back to %s",
+                preferred_unit.name,
+                self.active_unit.name,
+            )
 
     # ------------------------------------------------------------------
     # Public properties

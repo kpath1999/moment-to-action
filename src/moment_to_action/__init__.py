@@ -1,8 +1,8 @@
 """Moment2Action project."""
 
-import sys
+import click
+import rich.traceback
+import rich_click
 
-
-def main() -> None:
-    """Entrypoint."""
-    sys.stdout.write("Hello from moment-to-action!")
+# Fancy exceptions
+rich.traceback.install(suppress=[click, rich_click])
