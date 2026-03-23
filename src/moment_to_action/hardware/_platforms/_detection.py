@@ -76,6 +76,12 @@ def detect_platform() -> Platform:
         logger.info("Detected x86_64 architecture")
         return Platform.X86_64
 
+    # Apple Silicon / generic ARM64 hosts still run CPU inference via the
+    # generic backend (despite the historical X86_64 enum name).
+    if machine in {"arm64", "aarch64"}:
+        logger.info("Detected arm64 architecture; using CPU-only generic backend")
+        return Platform.X86_64
+
     #
     # Not found/unknown
     #
