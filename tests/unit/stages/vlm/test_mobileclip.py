@@ -6,6 +6,7 @@ Tests zero-shot classification pipeline with mocked backend.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from unittest import mock
 
 import numpy as np
@@ -13,6 +14,7 @@ import pytest
 
 from moment_to_action.messages.video import FrameTensorMessage
 from moment_to_action.messages.vlm import ClassificationMessage
+from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages.vlm._mobileclip import MobileCLIPStage
 
 
@@ -26,6 +28,13 @@ class TestMobileCLIPStage:
         backend = mock.MagicMock()
         backend.load_model.return_value = "mock_model_handle"
         return backend
+
+    @pytest.fixture
+    def mock_manager(self) -> mock.MagicMock:
+        """Create a mock ModelManager that returns a fake model path."""
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.get_path.return_value = Path("/fake/mobileclip.tflite")
+        return manager
 
     @pytest.fixture
     def mock_tokenizer(self) -> mock.MagicMock:
@@ -57,7 +66,11 @@ class TestMobileCLIPStage:
         return ["person", "hand", "face"]
 
     def test_mobileclip_stage_initialization(
-        self, mock_backend: mock.MagicMock, mock_tokenizer: mock.MagicMock, text_prompts: list[str]
+        self,
+        mock_backend: mock.MagicMock,
+        mock_tokenizer: mock.MagicMock,
+        text_prompts: list[str],
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test MobileCLIPStage initialization with mocked backend."""
         with mock.patch(
@@ -66,15 +79,16 @@ class TestMobileCLIPStage:
             mock_get_tokenizer.return_value = mock_tokenizer
 
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=text_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             assert stage._text_prompts == text_prompts
             assert len(stage._text_tokens) == len(text_prompts)
             assert stage._text_tokens.dtype == np.int64
-            mock_backend.load_model.assert_called_once_with("mock_model.tflite")
+            mock_manager.get_path.assert_called_once_with(ModelID.MOBILECLIP_S2)
+            mock_backend.load_model.assert_called_once_with(mock_manager.get_path.return_value)
 
     def test_mobileclip_zero_shot_classification(
         self,
@@ -82,6 +96,7 @@ class TestMobileCLIPStage:
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test zero-shot classification: image → text embeddings → similarity."""
         with mock.patch(
@@ -90,9 +105,9 @@ class TestMobileCLIPStage:
             mock_get_tokenizer.return_value = mock_tokenizer
 
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=text_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             # Mock the backend.run() to return embeddings [image_emb, text_emb]
@@ -122,6 +137,7 @@ class TestMobileCLIPStage:
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test that backend.run() is called with correct inputs for each prompt."""
         with mock.patch(
@@ -130,9 +146,9 @@ class TestMobileCLIPStage:
             mock_get_tokenizer.return_value = mock_tokenizer
 
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=text_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             # Mock backend.run()
@@ -162,7 +178,10 @@ class TestMobileCLIPStage:
                 )
 
     def test_update_prompts_swaps_without_reloading(
-        self, mock_backend: mock.MagicMock, mock_tokenizer: mock.MagicMock
+        self,
+        mock_backend: mock.MagicMock,
+        mock_tokenizer: mock.MagicMock,
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test update_prompts() swaps text prompts without reloading model."""
         with mock.patch(
@@ -172,9 +191,9 @@ class TestMobileCLIPStage:
 
             initial_prompts = ["person", "hand"]
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=initial_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             # Verify model was loaded once
@@ -201,6 +220,7 @@ class TestMobileCLIPStage:
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test that output is ClassificationMessage with label and confidence."""
         with mock.patch(
@@ -209,9 +229,9 @@ class TestMobileCLIPStage:
             mock_get_tokenizer.return_value = mock_tokenizer
 
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=text_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             # Mock backend.run() to return embeddings with high similarity to first prompt
@@ -261,7 +281,11 @@ class TestMobileCLIPStage:
             assert total_score == pytest.approx(1.0, abs=0.01)
 
     def test_mobileclip_rejects_non_frame_tensor_message(
-        self, mock_backend: mock.MagicMock, mock_tokenizer: mock.MagicMock, text_prompts: list[str]
+        self,
+        mock_backend: mock.MagicMock,
+        mock_tokenizer: mock.MagicMock,
+        text_prompts: list[str],
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test that MobileCLIPStage rejects non-FrameTensorMessage input."""
         from moment_to_action.messages.sensor import RawFrameMessage
@@ -272,9 +296,9 @@ class TestMobileCLIPStage:
             mock_get_tokenizer.return_value = mock_tokenizer
 
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=text_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             # Create a non-FrameTensorMessage
@@ -294,6 +318,7 @@ class TestMobileCLIPStage:
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test that timestamp is preserved from input message."""
         with mock.patch(
@@ -302,9 +327,9 @@ class TestMobileCLIPStage:
             mock_get_tokenizer.return_value = mock_tokenizer
 
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=text_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             # Mock backend.run()
@@ -329,6 +354,7 @@ class TestMobileCLIPStage:
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test classification with high confidence for top prediction."""
         with mock.patch(
@@ -337,9 +363,9 @@ class TestMobileCLIPStage:
             mock_get_tokenizer.return_value = mock_tokenizer
 
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=text_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             # Mock embeddings where first prompt is clearly the best match
@@ -361,7 +387,11 @@ class TestMobileCLIPStage:
             assert result.confidence > 0.5  # Should be high confidence
 
     def test_mobileclip_stage_name(
-        self, mock_backend: mock.MagicMock, mock_tokenizer: mock.MagicMock, text_prompts: list[str]
+        self,
+        mock_backend: mock.MagicMock,
+        mock_tokenizer: mock.MagicMock,
+        text_prompts: list[str],
+        mock_manager: mock.MagicMock,
     ) -> None:
         """Test that stage name is correct."""
         with mock.patch(
@@ -370,9 +400,9 @@ class TestMobileCLIPStage:
             mock_get_tokenizer.return_value = mock_tokenizer
 
             stage = MobileCLIPStage(
-                model_path="mock_model.tflite",
                 text_prompts=text_prompts,
                 backend=mock_backend,
+                manager=mock_manager,
             )
 
             assert stage.name == "MobileCLIPStage"

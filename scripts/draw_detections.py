@@ -3,9 +3,8 @@
 Moved from ``src/moment_to_action/edgeperceive/pipeline/draw_detections.py``.
 
 Usage:
-    uv run python scripts/draw_detections.py --image weapon.jpg --model model.onnx
-    uv run python scripts/draw_detections.py --image weapon.jpg --model model.onnx \
-        --conf 0.3 --out result.jpg
+    uv run python scripts/draw_detections.py --image weapon.jpg
+    uv run python scripts/draw_detections.py --image weapon.jpg --conf 0.3 --out result.jpg
 """
 
 from __future__ import annotations
@@ -15,20 +14,30 @@ import logging
 import sys
 
 import cv2
+from rich.console import Console
+from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import DetectionMessage, RawFrameMessage
+from moment_to_action.models import ModelManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages._base import Stage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[
+        RichHandler(rich_tracebacks=True, console=Console(stderr=True)),
+    ],
+)
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--image", required=True)
-parser.add_argument("--model", required=True)
 parser.add_argument("--conf", type=float, default=0.3)
 parser.add_argument("--out", default="detections.jpg")
 args = parser.parse_args()
@@ -51,13 +60,15 @@ class CaptureStage(Stage):
 
 
 capture = CaptureStage()
+manager = ModelManager()
 
 pipeline = Pipeline(
     [
-        PreprocessorStage(target_size=(640, 640), letterbox=True),
+        PreprocessorStage(target_size=(640, 640), letterbox=True, channels_first=True),
+        # Stage resolves the YOLO model path via ModelManager.
         YOLOStage(
-            model_path=args.model,
             backend=ComputeBackend(preferred_unit=ComputeUnit.CPU),
+            manager=manager,
             confidence_threshold=args.conf,
         ),
         capture,

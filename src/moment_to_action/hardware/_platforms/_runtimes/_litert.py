@@ -13,6 +13,7 @@ Design note — no silent CPU fallback:
 from __future__ import annotations
 
 import logging
+import os
 from typing import cast
 
 import numpy as np
@@ -53,7 +54,7 @@ class LiteRTBackend(InferenceBackend):
         self._unit = compute_unit
         self._interpreter_cache: dict[str, object] = {}
 
-    def load_model(self, path: str) -> object:
+    def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load a TFLite model, caching interpreters by path.
 
         Args:
@@ -65,6 +66,7 @@ class LiteRTBackend(InferenceBackend):
         Raises:
             RuntimeError: If the delegate fails to load or apply.
         """
+        path = os.fspath(path)  # normalise to str for cache key
         if path in self._interpreter_cache:
             logger.debug("Model cache hit: %s", path)
             return self._interpreter_cache[path]

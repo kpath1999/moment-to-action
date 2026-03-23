@@ -18,6 +18,7 @@ orchestrator) can be a three-field thin wrapper.
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any, cast
 
 import attrs
@@ -130,7 +131,7 @@ class QCS6490Backend(InferenceBackend):
     # InferenceBackend interface
     # ------------------------------------------------------------------
 
-    def load_model(self, path: str) -> object:
+    def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load a model, routing by file extension.
 
         ``.tflite`` files are tried on the accelerator first, then CPU.
@@ -146,6 +147,7 @@ class QCS6490Backend(InferenceBackend):
             ValueError: If the file extension is unrecognised.
             RuntimeError: If loading fails even on the CPU fallback path.
         """
+        path = os.fspath(path)  # normalise to str for extension checks
         if path.endswith(_TFLITE_SUFFIX):
             return self._load_tflite(path)
         if path.endswith(_ONNX_SUFFIX):
