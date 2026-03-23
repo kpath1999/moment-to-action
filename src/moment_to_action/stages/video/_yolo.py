@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 
 from moment_to_action.messages.video import BoundingBox, DetectionMessage, FrameTensorMessage
+from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
@@ -120,12 +121,14 @@ class YOLOStage(Stage):
 
     def __init__(
         self,
-        model_path: str,
         backend: ComputeBackend,
+        manager: ModelManager,
         confidence_threshold: float = 0.5,
     ) -> None:
         super().__init__()
         self._backend = backend
+        # Resolve the YOLO model path through the manager — downloads/caches as needed.
+        model_path = manager.get_path(ModelID.YOLO_V8)
         self._handle = self._backend.load_model(model_path)
         self._confidence_threshold = confidence_threshold
         logger.info("YOLOStage: loaded %s", model_path)

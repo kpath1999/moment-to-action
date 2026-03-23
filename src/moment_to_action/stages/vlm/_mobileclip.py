@@ -16,6 +16,7 @@ import numpy as np
 import open_clip
 
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
+from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 from moment_to_action.utils.ml import cosine_similarity, softmax
 
@@ -42,12 +43,14 @@ class MobileCLIPStage(Stage):
 
     def __init__(
         self,
-        model_path: str,
         text_prompts: list[str],
         backend: ComputeBackend,
+        manager: ModelManager,
     ) -> None:
         super().__init__()
         self._backend = backend
+        # Resolve the MobileCLIP model path through the manager — downloads/caches as needed.
+        model_path = manager.get_path(ModelID.MOBILECLIP_S2)
         self._handle = self._backend.load_model(model_path)
         self._text_prompts = text_prompts
         self._text_tokens = self._tokenize(text_prompts)

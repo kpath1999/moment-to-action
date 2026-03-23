@@ -85,7 +85,7 @@ class TestReasoningStage:
 
     def test_reasoning_stage_stub_mode_initialization(self) -> None:
         """Test ReasoningStage initialization in stub mode (no model)."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         assert stage._handle is None
         assert stage._system_prompt is not None
@@ -117,7 +117,7 @@ class TestReasoningStage:
 
     def test_reasoning_stage_default_system_prompt(self) -> None:
         """Test ReasoningStage uses default system prompt when not provided."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         assert "analyzing detections" in stage._system_prompt.lower()
         assert "wearable device" in stage._system_prompt.lower()
@@ -125,7 +125,7 @@ class TestReasoningStage:
     def test_reasoning_stage_custom_system_prompt(self) -> None:
         """Test ReasoningStage uses custom system prompt when provided."""
         custom_prompt = "You are a robot analyzing scenes."
-        stage = ReasoningStage(model_path=None, system_prompt=custom_prompt)
+        stage = ReasoningStage(system_prompt=custom_prompt)
 
         assert stage._system_prompt == custom_prompt
 
@@ -134,7 +134,7 @@ class TestReasoningStage:
     ) -> None:
         """Test that _build_prompt includes system prompt at the beginning."""
         custom_prompt = "Custom system message"
-        stage = ReasoningStage(model_path=None, system_prompt=custom_prompt)
+        stage = ReasoningStage(system_prompt=custom_prompt)
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -144,7 +144,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that _build_prompt includes detection information."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -157,7 +157,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that _build_prompt includes confidence scores in detection output."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -169,7 +169,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that _build_prompt includes bounding box coordinates."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -182,7 +182,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that _build_prompt uses top 5 detections by confidence."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -196,7 +196,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that top 5 detections are sorted by confidence (descending)."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -221,7 +221,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that _build_prompt includes the scene analysis question."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -231,7 +231,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that stub response includes '[LLM stub]' marker and char count."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         result = stage.process(sample_detection_message)
 
@@ -243,7 +243,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that stub response includes the character count of the prompt."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         result = stage.process(sample_detection_message)
 
@@ -260,7 +260,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that _process() returns ReasoningMessage with correct structure."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         result = stage.process(sample_detection_message)
 
@@ -274,7 +274,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that ReasoningMessage contains the exact prompt sent to LLM."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         result = stage.process(sample_detection_message)
 
@@ -289,7 +289,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that ReasoningMessage preserves timestamp from input."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         result = stage.process(sample_detection_message)
 
@@ -301,7 +301,7 @@ class TestReasoningStage:
         """Test that ReasoningStage rejects non-DetectionMessage input."""
         from moment_to_action.messages.sensor import RawFrameMessage
 
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         wrong_msg = RawFrameMessage(
             frame=np.zeros((480, 640, 3), dtype=np.uint8),
@@ -315,7 +315,7 @@ class TestReasoningStage:
 
     def test_reasoning_stage_with_empty_detections(self) -> None:
         """Test ReasoningStage with DetectionMessage containing no boxes."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         msg = DetectionMessage(
             boxes=[],
@@ -331,7 +331,7 @@ class TestReasoningStage:
 
     def test_reasoning_stage_with_single_detection(self) -> None:
         """Test ReasoningStage with DetectionMessage containing single box."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         boxes = [
             BoundingBox(
@@ -357,7 +357,7 @@ class TestReasoningStage:
 
     def test_reasoning_stage_name(self) -> None:
         """Test that stage name is correct."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         assert stage.name == "ReasoningStage"
 
@@ -365,7 +365,7 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that latency_ms is stamped on the result."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         result = stage.process(sample_detection_message)
 
@@ -378,7 +378,7 @@ class TestReasoningStage:
     ) -> None:
         """Test that system prompt is consistent across multiple calls."""
         custom_prompt = "Analyze the scene carefully."
-        stage = ReasoningStage(model_path=None, system_prompt=custom_prompt)
+        stage = ReasoningStage(system_prompt=custom_prompt)
 
         result1 = stage.process(sample_detection_message)
         result2 = stage.process(sample_detection_message)
@@ -392,7 +392,7 @@ class TestReasoningStage:
 
     def test_build_prompt_with_low_confidence_detections(self) -> None:
         """Test _build_prompt with detections having low confidence scores."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         boxes = [
             BoundingBox(
@@ -417,7 +417,7 @@ class TestReasoningStage:
 
     def test_prompt_formatting_structure(self, sample_detection_message: DetectionMessage) -> None:
         """Test that prompt has proper formatting with lines and structure."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -432,7 +432,7 @@ class TestReasoningStage:
 
     def test_detection_format_in_prompt(self, sample_detection_message: DetectionMessage) -> None:
         """Test that each detection is formatted correctly in the prompt."""
-        stage = ReasoningStage(model_path=None)
+        stage = ReasoningStage()
 
         prompt = stage._build_prompt(sample_detection_message)
 
@@ -440,14 +440,31 @@ class TestReasoningStage:
         assert "confidence:" in prompt.lower()
         assert "position:" in prompt.lower()
 
-    def test_reasoning_stage_with_model_path_mocked(self) -> None:
-        """Test ReasoningStage initialisation with a model path (mocked backend).
+    def test_manager_required_with_model_id(self) -> None:
+        """Test that an error is thrown if a model ID is provided but not the manager."""
+        from moment_to_action.models import ModelID
 
-        Covers lines 42-44 — the if-model_path branch that constructs a
-        ComputeBackend and loads the model.  The ComputeBackend is mocked so
+        with pytest.raises(ValueError, match="Model manager is required"):
+            ReasoningStage(model_id=ModelID.YOLO_V8)
+
+        with pytest.raises(ValueError, match="Model manager is required"):
+            ReasoningStage(model_id=ModelID.YOLO_V8, manager=None)
+
+    def test_reasoning_stage_with_model_id_mocked(self) -> None:
+        """Test ReasoningStage initialisation with a model_id (mocked backend + manager).
+
+        Covers the if-model_id branch that constructs a ComputeBackend and
+        loads the model.  Both ComputeBackend and ModelManager are mocked so
         no real model file is needed.
         """
+        from pathlib import Path
         from unittest.mock import MagicMock, patch
+
+        from moment_to_action.models import ModelID
+
+        fake_path = Path("/fake/model.onnx")
+        mock_manager = MagicMock()
+        mock_manager.get_path.return_value = fake_path
 
         mock_backend = MagicMock()
         mock_handle = MagicMock()
@@ -457,9 +474,10 @@ class TestReasoningStage:
             "moment_to_action.stages.llm._reasoning.ComputeBackend",
             return_value=mock_backend,
         ):
-            stage = ReasoningStage(model_path="/fake/model.onnx")
+            stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
 
         # Backend and handle should be set (not stub mode).
         assert stage._backend is mock_backend
         assert stage._handle is mock_handle
-        mock_backend.load_model.assert_called_once_with("/fake/model.onnx")
+        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
+        mock_backend.load_model.assert_called_once_with(fake_path)

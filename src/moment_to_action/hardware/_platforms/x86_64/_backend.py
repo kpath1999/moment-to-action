@@ -15,6 +15,7 @@ orchestrator) can be a three-field thin wrapper.
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any, cast
 
 import attrs
@@ -87,7 +88,7 @@ class X86_64Backend(InferenceBackend):  # noqa: N801
     # InferenceBackend interface
     # ------------------------------------------------------------------
 
-    def load_model(self, path: str) -> object:
+    def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load a model, routing by file extension.
 
         ``.tflite`` files go to the LiteRT sub-backend.
@@ -103,6 +104,7 @@ class X86_64Backend(InferenceBackend):  # noqa: N801
             ValueError: If the file extension is unrecognised.
             RuntimeError: If loading fails.
         """
+        path = os.fspath(path)  # normalise to str for extension checks
         if path.endswith(_TFLITE_SUFFIX):
             return self._load_tflite(path)
         if path.endswith(_ONNX_SUFFIX):

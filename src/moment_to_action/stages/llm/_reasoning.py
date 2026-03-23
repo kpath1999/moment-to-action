@@ -17,6 +17,7 @@ from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
+    from moment_to_action.models import ModelID, ModelManager
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +34,19 @@ class ReasoningStage(Stage):
 
     def __init__(
         self,
-        model_path: str | None = None,
+        model_id: ModelID | None = None,
         system_prompt: str = "",
+        manager: ModelManager | None = None,
     ) -> None:
         super().__init__()
         self._handle = None
-        if model_path:
+        if model_id is not None:
+            # Resolve model path through the manager — downloads/caches as needed.
+            if manager is None:
+                msg = "Model manager is required when a model ID is provided!"
+                raise ValueError(msg)
+
+            model_path = manager.get_path(model_id)
             self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
             self._handle = self._backend.load_model(model_path)
             logger.info("ReasoningStage: loaded %s", model_path)

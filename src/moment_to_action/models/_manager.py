@@ -141,16 +141,30 @@ class ModelManager:
             if not isinstance(info.source, DownloadSource):
                 continue  # Skip vendored models
 
-            model_cache_dir = self._cache_dir / model_id.value
+            model_cache_dir = self._cache_dir / info.id.value
             if model_cache_dir.exists():
-                for item in model_cache_dir.rglob("*"):
-                    if item.is_file():
-                        total_bytes += item.stat().st_size
-                        item.unlink()
-                model_cache_dir.rmdir()
+                total_bytes += self._rmdir_with_size(model_cache_dir)
                 removed_ids.append(model_id)
 
         return (total_bytes, removed_ids)
+
+    @staticmethod
+    def _rmdir_with_size(dir_: Path) -> int:
+        """Remove a directory, returning its size.
+
+        The directory should exist.
+        """
+        size = 0
+
+        for item in dir_.glob("*"):
+            if item.is_file():
+                size += item.stat().st_size
+                item.unlink()
+            else:
+                size += ModelManager._rmdir_with_size(item)
+
+        dir_.rmdir()
+        return size
 
     def _get_model_info(self, model: ModelID) -> ModelInfo:
         """Get ModelInfo for a model ID.
