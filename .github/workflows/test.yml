@@ -48,7 +48,7 @@ jobs:
               --cov=src/moment_to_action \
               --cov-report=xml:coverage.xml \
               --cov-report=term-missing \
-              --cov-report=html:htmlcov 
+              --cov-report=html:htmlcov
 
       - name: Publish coverage comment
         if: always()

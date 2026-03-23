@@ -1,5 +1,16 @@
 cov_path_html := "/tmp/" + `whoami` + "-coverage-html"
 
+# Show help for all available recipes (default)
+[default]
+help:
+    @echo "moment-to-action - AI inference pipeline"
+    @echo ""
+    @just --list --unsorted --justfile {{justfile()}}
+
+# Set up development environment (install uv, sync deps, install pre-commit)
+setup:
+    @./scripts/repo_setup.sh
+
 # Run all tests (unit + integration, excludes slow) with coverage
 test *args:
     uv run pytest -m "unit or integration" --cov --cov-report=term-missing {{args}}
