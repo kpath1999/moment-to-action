@@ -1,6 +1,6 @@
 """LLM reasoning stage.
 
-ReasoningStage formats YOLO detections into a prompt and runs an LLM.
+LLMStage process Vision Stage prompts (structured as JSON) and runs an LLM (typically, an output in JSON format).
 
 Input:  DetectionMessage
 Output: ReasoningMessage
@@ -11,8 +11,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+#LLAMA library
+from llama_cpp import Llama
+
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import DetectionMessage, ReasoningMessage
+from moment_to_action.messages import DetectionMessage, ClassificationMessage, ReasoningMessage
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
@@ -22,7 +25,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ReasoningStage(Stage):
+class LLMStage(Stage):
     """Formats YOLO detections into a prompt and runs an LLM.
 
     Input:  DetectionMessage
@@ -53,23 +56,55 @@ class ReasoningStage(Stage):
         else:
             self._backend = None
             logger.info("ReasoningStage: running in stub mode (no model loaded)")
+        '''
+        if model_path:
+            #self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
+            #self._handle = self._backend.load_model(model_path)
+            logger.info("LLMStage: loaded %s", model_path)
+        else:
+            logger.info("LLMStage: running in stub mode (no model loaded)")
+        '''
         self._system_prompt = system_prompt or (
             "You are analyzing detections from a wearable device. "
             "Based on the detected objects and their positions, assess the scene briefly."
         )
+        self.llm = Llama(
+                model_path = model_path,
+                n_ctx = 512,
+                n_threads = 6,
+                n_gpu_layers = 0,
+                verbose = False
+        )
 
     def _process(self, msg: Message) -> ReasoningMessage | None:
         """Format detections into a prompt and run the LLM."""
-        if not isinstance(msg, DetectionMessage):
-            err = f"ReasoningStage expects DetectionMessage, got {type(msg).__name__}"
+        """I think another Stage will be useful, which takes the DetectionMessage,
+        structures it as a JSON/XML message and passes it to the LLM"""
+        if not isinstance(msg, DetectionMessage | ClassificationMessage):
+            err = f"LLMStage expects DetectionMessage, got {type(msg).__name__}"
             raise TypeError(err)
-        prompt = self._build_prompt(msg)
+        #prompt = self._build_prompt(msg)
+        #TODO##Testing!!!##Replace!!#
+        prompt = "hello LLM!"
+
         # LLM inference — tokenize, run, decode
         # Placeholder until Qwen is wired in
-        response = self._run_llm(prompt)
+        #response = self._run_llm(prompt)
+        response = self.llm.create_chat_completion(
+                messages = [
+                {"role": "system", "content": "You are a concise decision assistant. Reply in one sentence."},
+                {"role": "user",   "content": prompt}
+            ],
+                max_tokens=64,
+                temperature=0.0, ##TODO Where should temperature and other LLM tuning be performed?
+                stop=["</s>", "\n\n"]
+        )
+
+        decision = response["choices"][0]["message"]["content"].strip()
+
         # latency_ms is stamped by Stage.process() via model_copy
         return ReasoningMessage(
-            response=response,
+            response=decision,
             prompt=prompt,
             timestamp=msg.timestamp,
         )

@@ -22,6 +22,7 @@ dependencies = [
     "rich-click>=1.9.7",
     "platformdirs>=4.0.0",
     "huggingface_hub>=0.18.0",
+    "llama-cpp-python>=0.3.16",
 ]
 
 [project.scripts]
