@@ -222,3 +222,4 @@ src/moment_to_action/models/
 /models/
 /detections.jpg
 archive/
+pytest-*
