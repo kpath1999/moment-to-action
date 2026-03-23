@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,9 @@ if TYPE_CHECKING:
     from typing import IO
 
     import httpx
+
+
+logger = logging.getLogger(__name__)
 
 
 class ModelManager:
@@ -50,6 +54,12 @@ class ModelManager:
         self._vendored_dir = Path(__file__).parent / "_vendored"
         self._show_progress = show_progress
 
+        logger.info(
+            "ModelManager initialized: cache_dir=%s, show_progress=%s",
+            cache_dir,
+            show_progress,
+        )
+
     @property
     def cache_dir(self) -> Path:
         """Get the cache directory path.
@@ -73,8 +83,11 @@ class ModelManager:
                 downloaded.
             RuntimeError: If model ID is not in registry.
         """
+        logger.debug("Resolving model path: %s", model.value)
         info = self._get_model_info(model)
-        return self._resolve_path(info)
+        path = self._resolve_path(info)
+        logger.debug("Model path resolved: %s → %s", model.value, path)
+        return path
 
     def is_available(self, model: ModelID) -> bool:
         """Check if model is available without downloading.
@@ -88,13 +101,21 @@ class ModelManager:
         info = self._get_model_info(model)
         try:
             path = self._resolve_path_vendored_only(info)
-            return path.exists()
+            available = path.exists()
+            logger.debug("Model %s availability (vendored): %s", model.value, available)
+            if available:
+                return True
         except FileNotFoundError:
-            # Vendored model not found; check cache
-            if isinstance(info.source, DownloadSource):
-                cache_path = self._cache_dir / model.value / info.filename
-                return cache_path.exists()
-            return False
+            pass
+
+        # Vendored model not found; check cache
+        if isinstance(info.source, DownloadSource):
+            cache_path = self._cache_dir / model.value / info.filename
+            available = cache_path.exists()
+            logger.debug("Model %s availability (cached): %s", model.value, available)
+            return available
+        logger.debug("Model %s not available", model.value)
+        return False
 
     def list_models(self) -> list[ModelStatus]:
         """Return status of all known models without triggering downloads.
@@ -134,6 +155,7 @@ class ModelManager:
         Returns:
             Tuple of (total_bytes_freed, list_of_model_ids_removed).
         """
+        logger.info("Clearing model cache at: %s", self._cache_dir)
         removed_ids = []
         total_bytes = 0
 
@@ -143,9 +165,14 @@ class ModelManager:
 
             model_cache_dir = self._cache_dir / info.id.value
             if model_cache_dir.exists():
-                total_bytes += self._rmdir_with_size(model_cache_dir)
+                bytes_freed = self._rmdir_with_size(model_cache_dir)
+                total_bytes += bytes_freed
                 removed_ids.append(model_id)
+                logger.debug("Removed cached model %s (%d bytes)", model_id.value, bytes_freed)
 
+        logger.info(
+            "Cache cleared: removed %d models, %d bytes freed", len(removed_ids), total_bytes
+        )
         return (total_bytes, removed_ids)
 
     @staticmethod
@@ -197,17 +224,22 @@ class ModelManager:
             case VendoredSource(subdir=subdir):
                 path = self._vendored_dir / subdir / info.filename
                 if not path.exists():
+                    logger.error("Vendored model not found: %s", path)
                     msg = f"Vendored model not found: {path}"
                     raise FileNotFoundError(msg)
+                logger.debug("Using vendored model: %s", path)
                 return path
 
             case DownloadSource(hf_repo_id=repo, hf_filename=hf_filename):
                 cache_path = self._cache_dir / info.id.value / info.filename
                 if cache_path.exists():
+                    logger.debug("Using cached model: %s", cache_path)
                     return cache_path
 
                 # Download from HuggingFace Hub
+                logger.info("Downloading model %s from %s", info.id.value, repo)
                 self._download_from_hf(repo, hf_filename, cache_path)
+                logger.info("Model downloaded successfully: %s", cache_path)
                 return cache_path
 
     def _resolve_path_local(self, info: ModelInfo) -> Path:
@@ -281,10 +313,12 @@ class ModelManager:
 
         try:
             dest_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.debug("Downloading %s from %s to %s", filename, repo_id, dest_path)
 
             # Resolve the CDN download URL and fetch metadata (file size)
             url = hf_hub_url(repo_id=repo_id, filename=filename)
             metadata = get_hf_file_metadata(url)
+            logger.debug("HF file size: %d bytes", metadata.size)
 
             with (
                 dest_path.open("wb") as fh,
@@ -297,6 +331,7 @@ class ModelManager:
             # Remove partial download so the next attempt starts fresh
             if dest_path.exists():
                 dest_path.unlink()
+            logger.exception("Download failed for %s/%s", repo_id, filename)
             msg = f"Failed to download {repo_id}/{filename}: {e}"
             raise RuntimeError(msg) from e
 
@@ -338,6 +373,18 @@ class ModelManager:
                 for chunk in response.iter_bytes(chunk_size=8192):
                     dest.write(chunk)
                     progress.update(task, advance=len(chunk))
+            logger.debug(
+                "Download completed with progress bar: %s (%d bytes)",
+                description,
+                total or 0,
+            )
         else:
+            bytes_written = 0
             for chunk in response.iter_bytes(chunk_size=8192):
                 dest.write(chunk)
+                bytes_written += len(chunk)
+            logger.debug(
+                "Download completed (silent mode): %s (%d bytes)",
+                description,
+                bytes_written,
+            )

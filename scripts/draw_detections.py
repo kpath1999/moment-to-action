@@ -14,6 +14,8 @@ import logging
 import sys
 
 import cv2
+from rich.console import Console
+from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import DetectionMessage, RawFrameMessage
@@ -23,8 +25,16 @@ from moment_to_action.stages import Pipeline
 from moment_to_action.stages._base import Stage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[
+        RichHandler(rich_tracebacks=True, console=Console(stderr=True)),
+    ],
+)
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--image", required=True)
