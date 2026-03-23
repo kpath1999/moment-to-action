@@ -23,6 +23,8 @@ import attrs
 import numpy as np
 
 if TYPE_CHECKING:
+    import os
+
     from moment_to_action.hardware._platforms._base import (
         InferenceBackend,
         ModelInput,
@@ -161,7 +163,7 @@ class ComputeBackend:
     # Delegation — every call forwards to the platform backend
     # ------------------------------------------------------------------
 
-    def load_model(self, model_path: str) -> object:
+    def load_model(self, model_path: str | os.PathLike[str]) -> object:
         """Load a model (delegates to the platform backend).
 
         Args:

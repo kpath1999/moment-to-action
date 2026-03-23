@@ -12,6 +12,7 @@ import pytest
 
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import DetectionMessage, FrameTensorMessage, ReasoningMessage
+from moment_to_action.models import ModelManager
 from moment_to_action.pipeline import Pipeline
 from moment_to_action.sensors import FileImageSensor
 from moment_to_action.stages.llm import ReasoningStage
@@ -33,7 +34,7 @@ def _preprocess_stage() -> PreprocessorStage:
 
 
 @pytest.mark.integration
-def test_yolo_pipeline_full(yolo_model_path: Path, test_image_path: Path) -> None:
+def test_yolo_pipeline_full(test_image_path: Path) -> None:
     """Test the complete YOLO pipeline from image load to reasoning output.
 
     Uses pedestrian.jpg which produces a person detection at 0.91 confidence,
@@ -49,11 +50,13 @@ def test_yolo_pipeline_full(yolo_model_path: Path, test_image_path: Path) -> Non
     sensor.close()
 
     backend = ComputeBackend()
+    manager = ModelManager()
+    # Stages resolve their own model paths via ModelManager.
     pipeline = Pipeline(
         [
             _preprocess_stage(),
-            YOLOStage(model_path=str(yolo_model_path), backend=backend),
-            ReasoningStage(model_path=None),
+            YOLOStage(backend=backend, manager=manager),
+            ReasoningStage(),
         ]
     )
 
@@ -67,7 +70,7 @@ def test_yolo_pipeline_full(yolo_model_path: Path, test_image_path: Path) -> Non
 
 
 @pytest.mark.integration
-def test_yolo_detections(yolo_model_path: Path, test_image_path: Path) -> None:
+def test_yolo_detections(test_image_path: Path) -> None:
     """Test that the preprocess → YOLO pipeline detects objects in pedestrian.jpg.
 
     pedestrian.jpg produces a person detection at 0.91 confidence,
@@ -84,10 +87,11 @@ def test_yolo_detections(yolo_model_path: Path, test_image_path: Path) -> None:
     sensor.close()
 
     backend = ComputeBackend()
+    manager = ModelManager()
     pipeline = Pipeline(
         [
             _preprocess_stage(),
-            YOLOStage(model_path=str(yolo_model_path), backend=backend),
+            YOLOStage(backend=backend, manager=manager),
         ]
     )
 

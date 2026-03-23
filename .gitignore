@@ -207,14 +207,3 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,python
-
-#Ignore the trash folder in edgeperceive
-src/moment_to_action/edgeperceive/trash/
-
-# Ignore large ML models
-src/moment_to_action/edgeperceive/models/
-
-# Ignore research models and HuggingFace weights
-src/moment_to_action/models/
-/models/
-/detections.jpg

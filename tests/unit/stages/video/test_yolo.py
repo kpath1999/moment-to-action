@@ -7,6 +7,8 @@ and COCO label mapping. ComputeBackend is mocked to avoid real model loading.
 from __future__ import annotations
 
 import time
+from pathlib import Path
+from unittest import mock
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -17,6 +19,7 @@ from moment_to_action.messages.video import (
     DetectionMessage,
     FrameTensorMessage,
 )
+from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages.video._yolo import YOLOStage
 
 
@@ -31,11 +34,18 @@ class TestYOLOParseOutputs:
         backend.load_model.return_value = MagicMock()
         return backend
 
-    def test_parse_outputs_basic(self, mock_backend: MagicMock) -> None:
+    @pytest.fixture
+    def mock_manager(self) -> MagicMock:
+        """Create a mock ModelManager that returns a fake model path."""
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.get_path.return_value = Path("/fake/model.onnx")
+        return manager
+
+    def test_parse_outputs_basic(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test parsing basic YOLO outputs."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -55,11 +65,13 @@ class TestYOLOParseOutputs:
         assert result[0].confidence == pytest.approx(0.9)
         assert result[1].confidence == pytest.approx(0.7)
 
-    def test_parse_outputs_single_box(self, mock_backend: MagicMock) -> None:
+    def test_parse_outputs_single_box(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test parsing a single bounding box."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -77,11 +89,11 @@ class TestYOLOParseOutputs:
         assert result[0].class_id == 0
         assert result[0].label == "person"
 
-    def test_parse_outputs_empty(self, mock_backend: MagicMock) -> None:
+    def test_parse_outputs_empty(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test parsing empty outputs returns empty list."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -97,11 +109,13 @@ class TestYOLOParseOutputs:
         assert isinstance(result, list)
         assert len(result) == 0
 
-    def test_parse_outputs_insufficient_outputs(self, mock_backend: MagicMock) -> None:
+    def test_parse_outputs_insufficient_outputs(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test with fewer than 3 outputs returns empty list."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -111,11 +125,13 @@ class TestYOLOParseOutputs:
 
         assert len(result) == 0
 
-    def test_parse_outputs_coordinate_scaling(self, mock_backend: MagicMock) -> None:
+    def test_parse_outputs_coordinate_scaling(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test that coordinates are scaled from 640x640 to original size."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -148,11 +164,20 @@ class TestYOLONMS:
         backend.load_model.return_value = MagicMock()
         return backend
 
-    def test_nms_removes_overlapping_boxes(self, mock_backend: MagicMock) -> None:
+    @pytest.fixture
+    def mock_manager(self) -> MagicMock:
+        """Create a mock ModelManager that returns a fake model path."""
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.get_path.return_value = Path("/fake/model.onnx")
+        return manager
+
+    def test_nms_removes_overlapping_boxes(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test NMS removes boxes with high IoU overlap."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -173,11 +198,13 @@ class TestYOLONMS:
         assert len(keep) == 1
         assert keep[0] == 0  # Higher confidence box kept
 
-    def test_nms_keeps_non_overlapping_boxes(self, mock_backend: MagicMock) -> None:
+    def test_nms_keeps_non_overlapping_boxes(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test NMS keeps non-overlapping boxes."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -197,11 +224,11 @@ class TestYOLONMS:
         assert 0 in keep
         assert 1 in keep
 
-    def test_nms_empty_input(self, mock_backend: MagicMock) -> None:
+    def test_nms_empty_input(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test NMS with empty input."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -212,11 +239,11 @@ class TestYOLONMS:
 
         assert len(keep) == 0
 
-    def test_nms_single_box(self, mock_backend: MagicMock) -> None:
+    def test_nms_single_box(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test NMS with single box."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -228,11 +255,13 @@ class TestYOLONMS:
         assert len(keep) == 1
         assert keep[0] == 0
 
-    def test_nms_respects_score_ordering(self, mock_backend: MagicMock) -> None:
+    def test_nms_respects_score_ordering(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test NMS processes boxes in order of descending score."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -264,12 +293,21 @@ class TestYOLOConfidenceFiltering:
         backend.load_model.return_value = MagicMock()
         return backend
 
-    def test_confidence_threshold_filtering(self, mock_backend: MagicMock) -> None:
+    @pytest.fixture
+    def mock_manager(self) -> MagicMock:
+        """Create a mock ModelManager that returns a fake model path."""
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.get_path.return_value = Path("/fake/model.onnx")
+        return manager
+
+    def test_confidence_threshold_filtering(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test that boxes below threshold are filtered."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
             confidence_threshold=0.6,
+            manager=mock_manager,
         )
 
         boxes = np.array(
@@ -290,12 +328,14 @@ class TestYOLOConfidenceFiltering:
         assert len(result) == 2
         assert all(b.confidence >= 0.6 for b in result)
 
-    def test_all_boxes_below_threshold(self, mock_backend: MagicMock) -> None:
+    def test_all_boxes_below_threshold(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test when all boxes are below confidence threshold."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
             confidence_threshold=0.9,
+            manager=mock_manager,
         )
 
         boxes = np.array(
@@ -313,12 +353,14 @@ class TestYOLOConfidenceFiltering:
 
         assert len(result) == 0
 
-    def test_no_filtering_at_zero_threshold(self, mock_backend: MagicMock) -> None:
+    def test_no_filtering_at_zero_threshold(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test with confidence threshold = 0."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
             confidence_threshold=0.0,
+            manager=mock_manager,
         )
 
         boxes = np.array(
@@ -348,41 +390,50 @@ class TestYOLOLabels:
         backend.load_model.return_value = MagicMock()
         return backend
 
-    def test_coco_labels_count(self, mock_backend: MagicMock) -> None:
+    @pytest.fixture
+    def mock_manager(self) -> MagicMock:
+        """Create a mock ModelManager that returns a fake model path."""
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.get_path.return_value = Path("/fake/model.onnx")
+        return manager
+
+    def test_coco_labels_count(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test that COCO labels has correct count (80 classes)."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
         assert len(stage.COCO_LABELS) == 80
 
-    def test_coco_label_person(self, mock_backend: MagicMock) -> None:
+    def test_coco_label_person(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test that class 0 is 'person'."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
         assert stage.COCO_LABELS[0] == "person"
 
-    def test_coco_label_dog(self, mock_backend: MagicMock) -> None:
+    def test_coco_label_dog(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test that class 16 is 'dog'."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
         assert stage.COCO_LABELS[16] == "dog"
 
-    def test_label_mapping_in_parse_outputs(self, mock_backend: MagicMock) -> None:
+    def test_label_mapping_in_parse_outputs(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test that labels are correctly assigned in _parse_outputs."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -408,11 +459,13 @@ class TestYOLOLabels:
         assert result[2].label == "horse"
         assert result[2].class_id == 17
 
-    def test_invalid_class_id_fallback(self, mock_backend: MagicMock) -> None:
+    def test_invalid_class_id_fallback(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test handling of out-of-range class IDs."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -441,11 +494,20 @@ class TestYOLOStageE2E:
         backend.load_model.return_value = MagicMock()
         return backend
 
-    def test_yolo_stage_process_valid_input(self, mock_backend: MagicMock) -> None:
+    @pytest.fixture
+    def mock_manager(self) -> MagicMock:
+        """Create a mock ModelManager that returns a fake model path."""
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.get_path.return_value = Path("/fake/model.onnx")
+        return manager
+
+    def test_yolo_stage_process_valid_input(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test YOLOStage.process with valid input."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -470,12 +532,14 @@ class TestYOLOStageE2E:
         assert len(result.boxes) == 2
         assert all(isinstance(b, BoundingBox) for b in result.boxes)
 
-    def test_yolo_stage_process_no_detections(self, mock_backend: MagicMock) -> None:
+    def test_yolo_stage_process_no_detections(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test YOLOStage returns None when no detections above threshold."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
             confidence_threshold=0.9,
+            manager=mock_manager,
         )
 
         # All boxes below threshold
@@ -497,13 +561,15 @@ class TestYOLOStageE2E:
 
         assert result is None
 
-    def test_yolo_stage_invalid_input_type(self, mock_backend: MagicMock) -> None:
+    def test_yolo_stage_invalid_input_type(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test YOLOStage rejects non-FrameTensorMessage input."""
         from moment_to_action.messages.sensor import RawFrameMessage
 
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
@@ -520,31 +586,39 @@ class TestYOLOStageE2E:
         with pytest.raises(TypeError, match="expects FrameTensorMessage"):
             stage.process(msg)
 
-    def test_yolo_stage_confidence_property(self, mock_backend: MagicMock) -> None:
+    def test_yolo_stage_confidence_property(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test confidence_threshold property."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
             confidence_threshold=0.75,
+            manager=mock_manager,
         )
 
         assert stage.confidence_threshold == 0.75
 
-    def test_yolo_stage_model_loading(self, mock_backend: MagicMock) -> None:
-        """Test that YOLOStage calls backend.load_model during init."""
+    def test_yolo_stage_model_loading(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
+        """Test that YOLOStage calls backend.load_model with the path from ModelManager."""
         _stage = YOLOStage(
-            model_path="test_model.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
-        mock_backend.load_model.assert_called_once_with("test_model.onnx")
+        # ModelManager.get_path should be called, and load_model receives its result as str.
+        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
+        mock_backend.load_model.assert_called_once_with(mock_manager.get_path.return_value)
 
-    def test_yolo_stage_box_attributes(self, mock_backend: MagicMock) -> None:
+    def test_yolo_stage_box_attributes(
+        self, mock_backend: MagicMock, mock_manager: MagicMock
+    ) -> None:
         """Test that BoundingBox attributes are set correctly."""
         stage = YOLOStage(
-            model_path="dummy.onnx",
             backend=mock_backend,
+            manager=mock_manager,
             confidence_threshold=0.5,
         )
 
