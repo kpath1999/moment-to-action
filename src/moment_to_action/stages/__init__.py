@@ -9,7 +9,7 @@ Consumers import from the submodules directly::
 
 from __future__ import annotations
 
-from moment_to_action._pipeline import Pipeline
+from moment_to_action.pipeline import Pipeline
 
 from . import llm, video, vlm
 from ._base import Stage

@@ -56,7 +56,7 @@ class X86_64PowerMonitor(PowerMonitor):  # noqa: N801
         if self._rapl_available:
             logger.info("Intel RAPL available at %s", _RAPL_ENERGY_PATH)
         else:
-            logger.debug("Intel RAPL not available — using psutil estimates")
+            logger.warning("Intel RAPL not available - using psutil estimates")
 
     def sample(self, unit: ComputeUnit) -> PowerSample:
         """Take a power measurement for *unit*.
@@ -74,7 +74,7 @@ class X86_64PowerMonitor(PowerMonitor):  # noqa: N801
             # x86_64 is CPU-only; other units return zero.
             return PowerSample(
                 timestamp=time.time(),
-                compute_unit=unit,
+                device=unit,
                 power_mw=0.0,
                 utilization_pct=0.0,
             )
@@ -111,7 +111,7 @@ class X86_64PowerMonitor(PowerMonitor):  # noqa: N801
 
             return PowerSample(
                 timestamp=now,
-                compute_unit=ComputeUnit.CPU,
+                device=ComputeUnit.CPU,
                 power_mw=power_mw,
                 utilization_pct=psutil.cpu_percent(interval=None),
             )
@@ -139,7 +139,7 @@ class X86_64PowerMonitor(PowerMonitor):  # noqa: N801
 
         return PowerSample(
             timestamp=time.time(),
-            compute_unit=ComputeUnit.CPU,
+            device=ComputeUnit.CPU,
             power_mw=base_power + load_power,
             utilization_pct=cpu_util,
         )

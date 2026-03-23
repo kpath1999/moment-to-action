@@ -202,7 +202,7 @@ class TestX86_64PowerMonitor:  # noqa: N801
             sample = monitor.sample(ComputeUnit.CPU)
 
             assert isinstance(sample, PowerSample)
-            assert sample.compute_unit == ComputeUnit.CPU
+            assert sample.device == ComputeUnit.CPU
             assert sample.power_mw >= 0.0
             assert 0.0 <= sample.utilization_pct <= 100.0
             assert sample.timestamp > 0.0
@@ -224,7 +224,7 @@ class TestX86_64PowerMonitor:  # noqa: N801
             sample = monitor.sample(ComputeUnit.CPU)
 
             assert isinstance(sample, PowerSample)
-            assert sample.compute_unit == ComputeUnit.CPU
+            assert sample.device == ComputeUnit.CPU
             assert sample.power_mw >= 0.0
             assert sample.utilization_pct == 25.0
 
@@ -239,7 +239,7 @@ class TestX86_64PowerMonitor:  # noqa: N801
             monitor = X86_64PowerMonitor()
             sample = monitor.sample(ComputeUnit.NPU)
 
-            assert sample.compute_unit == ComputeUnit.NPU
+            assert sample.device == ComputeUnit.NPU
             assert sample.power_mw == 0.0
             assert sample.utilization_pct == 0.0
 

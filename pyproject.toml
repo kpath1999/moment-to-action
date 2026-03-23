@@ -17,10 +17,13 @@ dependencies = [
     "psutil>=6.0",
     "tensorflow>=2.21.0",
     "attrs>=25.4.0",
+    "click>=8.3.1",
+    "rich>=14.3.3",
+    "rich-click>=1.9.7",
 ]
 
 [project.scripts]
-m2a = "moment_to_action:main"
+m2a = "moment_to_action._cli:cli"
 
 [build-system]
 requires = ["uv_build>=0.10.8,<0.11.0"]
@@ -42,6 +45,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "platformdirs>=4.0.0",
     "pre-commit>=4.0.0",
+    "pytest-antilru>=2.0.0",
 ]
 
 [tool.ruff]

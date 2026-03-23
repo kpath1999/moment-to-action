@@ -6,8 +6,8 @@ from unittest import mock
 
 import pytest
 
-from moment_to_action._pipeline import Pipeline
 from moment_to_action.messages.sensor import RawFrameMessage
+from moment_to_action.pipeline import Pipeline
 
 
 @pytest.mark.unit
