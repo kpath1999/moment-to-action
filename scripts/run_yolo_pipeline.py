@@ -13,6 +13,9 @@ import argparse
 import logging
 import time
 
+from rich.console import Console
+from rich.logging import RichHandler
+
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import RawFrameMessage, ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
@@ -22,8 +25,16 @@ from moment_to_action.stages import Pipeline
 from moment_to_action.stages.llm import ReasoningStage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[
+        RichHandler(rich_tracebacks=True, console=Console(stderr=True)),
+    ],
+)
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--image", required=True)
