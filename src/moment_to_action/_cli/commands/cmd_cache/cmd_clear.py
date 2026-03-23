@@ -37,7 +37,7 @@ def clear(ctx: click.Context, *, json_output: bool, force: bool) -> None:
         console = Console()
         try:
             confirmed = console.input(
-                "[yellow]This will remove all downloaded models. Continue? [y/N][/yellow] "
+                "[yellow]This will remove all downloaded models. Continue? \\[y/N][/yellow] "
             )
             if confirmed.lower() not in ("y", "yes"):
                 console.print("[cyan]Cache clear cancelled.[/cyan]")

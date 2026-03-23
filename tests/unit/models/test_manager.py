@@ -350,6 +350,31 @@ class TestModelManagerClearCache:
         assert ModelID.MOBILECLIP_S2 in removed_ids
         assert bytes_freed == len("content1") + len("content2")
 
+    def test_clear_cache_with_folders(self, tmp_path: Path) -> None:
+        """Test clear_cache() with multiple files in cache."""
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        manager = ModelManager(cache_dir=cache_dir)
+
+        # Create a cached model with multiple files
+        model_cache = cache_dir / ModelID.MOBILECLIP_S2.value
+        model_cache.mkdir(parents=True)
+        file1 = model_cache / "mobileclip_s2_datacompdr_last.tflite"
+        file2 = model_cache / "metadata.json"
+        file1.write_text("content1")
+        file2.write_text("content2")
+
+        mc_dir2 = model_cache / "foo"
+        mc_dir2.mkdir()
+        f3 = mc_dir2 / "foo.dat"
+        f3.write_text("content3")
+
+        bytes_freed, removed_ids = manager.clear_cache()
+
+        assert not model_cache.exists()
+        assert ModelID.MOBILECLIP_S2 in removed_ids
+        assert bytes_freed == len("content1") + len("content2") + len("content3")
+
 
 @pytest.mark.unit
 class TestModelManagerGetModelInfo:

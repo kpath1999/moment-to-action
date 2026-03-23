@@ -3,9 +3,8 @@
 Moved from ``src/moment_to_action/edgeperceive/pipeline/run_yolo_pipeline.py``.
 
 Usage:
-    uv run python scripts/run_yolo_pipeline.py --image weapon.jpg --model yolo11n.tflite
-    uv run python scripts/run_yolo_pipeline.py --image weapon.jpg --model yolo11n.tflite \
-        --device npu
+    uv run python scripts/run_yolo_pipeline.py --image weapon.jpg
+    uv run python scripts/run_yolo_pipeline.py --image weapon.jpg --device npu
 """
 
 from __future__ import annotations
@@ -17,6 +16,7 @@ import time
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import RawFrameMessage, ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
+from moment_to_action.models import ModelManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages.llm import ReasoningStage
@@ -27,25 +27,25 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--image", required=True)
-parser.add_argument("--model", required=True, help="Path to YOLO tflite")
 parser.add_argument("--device", choices=["cpu", "npu"], default="cpu")
 parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold")
 args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
 metrics = MetricsCollector()
+manager = ModelManager()
 
 # ── build pipeline ─────────────────────────────────────────────────
-# build a pipeline as a sequence of stages
+# Stages resolve their own model paths via ModelManager.
 pipeline = Pipeline(
     stages=[
         PreprocessorStage(target_size=(640, 640), letterbox=True),
         YOLOStage(
-            model_path=args.model,
             backend=ComputeBackend(preferred_unit=device),
+            manager=manager,
             confidence_threshold=args.conf,
         ),
-        ReasoningStage(model_path=None),
+        ReasoningStage(),
     ],
     metrics=metrics,
 )

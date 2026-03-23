@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
+    import os
+
     from moment_to_action.hardware._types import ComputeUnit, PowerSample
 
 # Type alias: single tensor (most models) or named dict (multi-input models).
@@ -44,7 +46,7 @@ class InferenceBackend(ABC):
     """
 
     @abstractmethod
-    def load_model(self, path: str) -> object:
+    def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load a model from *path* and return an opaque handle.
 
         Args:

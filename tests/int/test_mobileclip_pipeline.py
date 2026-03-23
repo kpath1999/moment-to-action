@@ -12,6 +12,7 @@ import pytest
 
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
+from moment_to_action.models import ModelManager
 from moment_to_action.sensors import FileImageSensor
 from moment_to_action.stages.video import PreprocessorStage
 from moment_to_action.stages.vlm import MobileCLIPStage
@@ -23,7 +24,6 @@ if TYPE_CHECKING:
 @pytest.mark.integration
 @pytest.mark.slow
 def test_mobileclip_pipeline(
-    mobileclip_model_path: Path,
     test_image_path: Path,
 ) -> None:
     """Test MobileCLIP zero-shot classification pipeline end-to-end.
@@ -61,7 +61,7 @@ def test_mobileclip_pipeline(
     tensor_msg = preprocess_stage.process(raw_msg, stage_idx=0)
     assert tensor_msg is not None, "Preprocessing should succeed"
 
-    # Run MobileCLIP
+    # Run MobileCLIP — stage resolves its own model path via ModelManager.
     text_prompts = [
         "a person grabbing a collar",
         "a dog playing",
@@ -69,10 +69,11 @@ def test_mobileclip_pipeline(
         "an outdoor scene",
     ]
     backend = ComputeBackend()
+    manager = ModelManager()
     mobileclip_stage = MobileCLIPStage(
-        model_path=str(mobileclip_model_path),
         text_prompts=text_prompts,
         backend=backend,
+        manager=manager,
     )
     classification_msg = mobileclip_stage.process(tensor_msg, stage_idx=1)
 
@@ -112,7 +113,6 @@ def test_mobileclip_pipeline(
 @pytest.mark.integration
 @pytest.mark.slow
 def test_mobileclip_swappable_prompts(
-    mobileclip_model_path: Path,
     test_image_path: Path,
 ) -> None:
     """Test that MobileCLIP prompts can be updated at runtime.
@@ -141,13 +141,14 @@ def test_mobileclip_swappable_prompts(
     tensor_msg = preprocess_stage.process(raw_msg, stage_idx=0)
     assert tensor_msg is not None
 
-    # First classification
+    # First classification — stage resolves its own model path via ModelManager.
     initial_prompts = ["a person", "an animal", "a landscape"]
     backend = ComputeBackend()
+    manager = ModelManager()
     mobileclip_stage = MobileCLIPStage(
-        model_path=str(mobileclip_model_path),
         text_prompts=initial_prompts,
         backend=backend,
+        manager=manager,
     )
     result1 = mobileclip_stage.process(tensor_msg, stage_idx=1)
     assert result1 is not None

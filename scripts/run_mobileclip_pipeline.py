@@ -5,8 +5,7 @@ Frame loading is now handled by ``FileSensor`` before entering the pipeline.
 
 Usage::
 
-    uv run python scripts/run_mobileclip_pipeline.py --image weapon.jpg \
-        --model mobileclip_s2_datacompdr_last.tflite
+    uv run python scripts/run_mobileclip_pipeline.py --image weapon.jpg
 """
 
 from __future__ import annotations
@@ -17,6 +16,7 @@ import logging
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import ClassificationMessage, RawFrameMessage
 from moment_to_action.metrics import MetricsCollector
+from moment_to_action.models import ModelManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages.video import PreprocessorStage
@@ -27,7 +27,6 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--image", required=True)
-parser.add_argument("--model", required=True)
 parser.add_argument("--device", choices=["cpu", "npu"], default="cpu")
 args = parser.parse_args()
 
@@ -41,6 +40,7 @@ PROMPTS = [
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
 metrics = MetricsCollector()
+manager = ModelManager()
 
 pipeline = Pipeline(
     stages=[
@@ -50,10 +50,11 @@ pipeline = Pipeline(
             std=(1.0, 1.0, 1.0),
             letterbox=False,
         ),
+        # Stage resolves the MobileCLIP model path via ModelManager.
         MobileCLIPStage(
-            model_path=args.model,
             text_prompts=PROMPTS,
             backend=ComputeBackend(preferred_unit=device),
+            manager=manager,
         ),
     ],
     metrics=metrics,
