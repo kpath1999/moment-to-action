@@ -1,5 +1,5 @@
 ## Changes
-- 
+-
 
 ## Technical Details
 Implementation details or architectural decisions (if needed).
@@ -8,7 +8,7 @@ Implementation details or architectural decisions (if needed).
 - [ ] Unit tests
 - [ ] Integration tests
 - [ ] Manual testing (describe below)
-  - [ ] 
+  - [ ]
 
 ## Related Issues
 Closes #X
