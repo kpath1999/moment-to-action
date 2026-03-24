@@ -52,7 +52,7 @@ jobs:
               --cov-report=html:htmlcov
 
       - name: Publish coverage comment
-        if: always()
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: MishaKav/pytest-coverage-comment@v1.1.52
         with:
           junitxml-path: pytest-results.xml
