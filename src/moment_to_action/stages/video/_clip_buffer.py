@@ -82,6 +82,8 @@ class ClipBufferStage(Stage):
         self._buffer: deque[RawFrameMessage] = deque(maxlen=clip_len)
         # How many new frames have arrived since the last emission.
         self._new_since_emit: int = 0
+        # First clip should emit as soon as the buffer is full.
+        self._has_emitted: bool = False
 
     # ------------------------------------------------------------------
     # Stage interface
@@ -118,12 +120,14 @@ class ClipBufferStage(Stage):
             )
             return None
 
-        # Enough frames, but stride not reached yet.
-        if self._new_since_emit < self._stride:
+        # Emit first clip immediately once the buffer is full. Apply stride only
+        # for subsequent clip emissions.
+        if self._has_emitted and self._new_since_emit < self._stride:
             return None
 
         # --- ready to emit ---
         self._new_since_emit = 0
+        self._has_emitted = True
         frames = [f.frame for f in self._buffer]  # oldest first (deque order)
 
         # FPS guard: reject abnormally slow clips.
@@ -169,4 +173,5 @@ class ClipBufferStage(Stage):
         """
         self._buffer.clear()
         self._new_since_emit = 0
+        self._has_emitted = False
         logger.debug("ClipBufferStage: buffer reset")
