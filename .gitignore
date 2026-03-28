@@ -219,3 +219,22 @@ pyrightconfig.json
 
 # Ignore log outputs
 logs/
+
+#Ignore the trash folder in edgeperceive
+#DON'T EXIST ANYMORE
+#src/moment_to_action/edgeperceive/trash/
+
+# Ignore large ML models
+#DON'T EXIST ANYMORE
+#src/moment_to_action/edgeperceive/models/
+
+# Ignore research models and HuggingFace weights
+src/moment_to_action/models/
+/models/
+/detections.jpg
+
+# Ignore the llama.cpp toolchain
+llama.cpp
+
+# Ignore the directory to hold slm/llm models
+slm_models
