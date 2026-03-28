@@ -68,7 +68,8 @@ pipeline = Pipeline(
             backend=ComputeBackend(preferred_unit=device),
             manager=manager,
         ),
-        LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"),
+        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"),
+        LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/qwen2.5-1.5b-instruct-q5_k_m.gguf"),
     ],
     metrics=metrics,
 )
