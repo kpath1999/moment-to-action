@@ -32,7 +32,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable  # noqa: TC003
-from typing import TYPE_CHECKING, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Generic, ParamSpec, TypeVar
 
 from moment_to_action.hardware import ComputeUnit
 from moment_to_action.utils import BufferPool, ComputeDispatcher
@@ -54,7 +54,7 @@ _R = TypeVar("_R")
 # ---------------------------------------------------------------------------
 
 
-class BasePreprocessor[InputT, OutputT](ABC):
+class BasePreprocessor(ABC, Generic[InputT, OutputT]):
     """Abstract base for all preprocessors.
 
     Subclasses implement:

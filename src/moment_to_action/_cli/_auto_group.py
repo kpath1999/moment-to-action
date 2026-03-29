@@ -1,12 +1,13 @@
 import importlib
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast, overload
+from typing import Any, TypeVar, cast, overload
 
 import rich_click as click
 from rich_click import Group, RichGroup, command
 
 _AnyCallable = Callable[..., Any]
+_GroupT = TypeVar("_GroupT", bound=Group)
 
 PACKAGE_NAME = "moment_to_action"
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
@@ -71,21 +72,21 @@ def auto_group(name: _AnyCallable) -> RichGroup: ...
 # variant: with positional name and with positional or keyword cls argument:
 # @group(namearg, GroupCls, ...) or @group(namearg, cls=GroupCls, ...)
 @overload
-def auto_group[G: Group](
+def auto_group(
     name: str | None,
-    cls: type[G],
+    cls: type[_GroupT],
     **attrs: Any,
-) -> Callable[[_AnyCallable], G]: ...
+) -> Callable[[_AnyCallable], _GroupT]: ...
 
 
 # variant: name omitted, cls _must_ be a keyword argument, @group(cmd=GroupCls, ...)
 @overload
-def auto_group[G: Group](
+def auto_group(
     name: None = None,
     *,
-    cls: type[G],
+    cls: type[_GroupT],
     **attrs: Any,
-) -> Callable[[_AnyCallable], G]: ...
+) -> Callable[[_AnyCallable], _GroupT]: ...
 
 
 # variant: with optional string name, no cls argument provided.
@@ -97,17 +98,17 @@ def auto_group(
 ) -> Callable[[_AnyCallable], RichGroup]: ...
 
 
-def auto_group[G: Group](
+def auto_group(
     name: str | _AnyCallable | None = None,
-    cls: type[G] | None = None,
+    cls: type[_GroupT] | None = None,
     **attrs: Any,
-) -> Group | Callable[[_AnyCallable], RichGroup | G]:
+) -> Group | Callable[[_AnyCallable], RichGroup | _GroupT]:
     """Group decorator function.
 
     Defines the group() function so that it uses the AutoRichGroup class by default.
     """
     if cls is None:
-        cls = cast("type[G]", AutoRichGroup)
+        cls = cast("type[_GroupT]", AutoRichGroup)
 
     if callable(name):
         return command(cls=cls, **attrs)(name)

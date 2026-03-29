@@ -48,6 +48,47 @@ uv run python scripts/run_smolvlm2_pipeline.py \
   --device images/smoke_test.mp4
 ```
 
+### for smolvlm2 video on Jetson Nano (CUDA)
+
+First, install `uv` if it is not already present (the setup script does this
+automatically, but you can also run it manually):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.zshrc   # or ~/.bashrc / restart the shell
+```
+
+At the moment, direct `uv sync` on Jetson is blocked by an ABI mismatch:
+NVIDIA's JetPack PyTorch index currently publishes only a `cp310` wheel for
+`aarch64`.
+
+Note: NVIDIA's Jetson PyTorch wheel is published as a prerelease-looking build
+(`2.5.0a0+...nv...`). The project is configured to allow that build on
+`aarch64` while using normal stable `torch` releases on other platforms.
+Also note that `open-clip-torch` is excluded on Jetson for now because its
+`torchvision` dependency does not resolve against NVIDIA's CUDA-enabled PyTorch
+wheel. This does not affect the SmolVLM2 pipeline, but MobileCLIP is not
+currently supported in this Jetson environment.
+
+Current status for Jetson CUDA:
+
+- NVIDIA publishes `torch-...-cp310-cp310-linux_aarch64.whl` for this index.
+- This repo now supports Python `>=3.10,<3.14` and pins `.python-version` to `3.10`.
+- `uv` will provision Python 3.10 and install the CUDA-enabled NVIDIA torch wheel on Jetson.
+- Jetson torch wheel metadata has a known filename/version mismatch, so use
+  `UV_SKIP_WHEEL_FILENAME_CHECK=1` for both `uv sync` and `uv run`.
+
+```
+export UV_SKIP_WHEEL_FILENAME_CHECK=1
+uv sync
+uv run python scripts/run_smolvlm2_pipeline.py \
+  --device images/smoke_test.mp4 \
+  --torch-device cuda \
+  --max-new-tokens 128 \
+  --clip-len 16 \
+  --max-images 4
+```
+
 ### yolo plus reasoning
 
 ```

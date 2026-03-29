@@ -6,7 +6,10 @@ import ``ComputeUnit`` from here, not from the backend module.
 
 from __future__ import annotations
 
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:  # pragma: no cover - Python 3.10 fallback
+    from backports.strenum import StrEnum
 
 import attrs
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
@@ -54,7 +54,7 @@ class BaseSensor(ABC):
         """
         ...
 
-    def __enter__(self) -> Self:
+    def __enter__(self) -> BaseSensor:
         """Open the sensor and return self for use in a ``with`` block."""
         self.open()
         return self

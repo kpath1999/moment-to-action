@@ -11,8 +11,8 @@ into the configured model cache directory. Authentication supports ``HF_TOKEN``.
 
 Examples:
     # Describe a video file
-    PYTHONPATH=src uv run python scripts/run_smolvlm2_pipeline.py \\
-        --device images/smoke_test.mp4 \\
+    PYTHONPATH=src uv run python scripts/run_smolvlm2_pipeline.py \
+        --device images/smoke_test.mp4 \
         --max-new-tokens 256
 
     # Use explicit model override (default is SmolVLM2-2.2B-Instruct)
@@ -21,18 +21,33 @@ Examples:
         --device images/smoke_test.mp4
 
     # Webcam capture and describe
-    PYTHONPATH=src uv run python scripts/run_smolvlm2_pipeline.py \\
+    PYTHONPATH=src uv run python scripts/run_smolvlm2_pipeline.py \
         --device 0 --max-frames 160
+
+    # Jetson Orin/Nano CUDA (Python 3.10)
+    # Ensure `.python-version` is 3.10 so uv resolves NVIDIA's cp310 torch wheel.
+    # NVIDIA's torch wheel has metadata mismatch, so export:
+    # export UV_SKIP_WHEEL_FILENAME_CHECK=1
+    # uv sync
+    PYTHONPATH=src UV_SKIP_WHEEL_FILENAME_CHECK=1 uv run python scripts/run_smolvlm2_pipeline.py \
+        --device images/smoke_test.mp4 \
+        --torch-device cuda \
+        --max-new-tokens 128 \
+        --clip-len 16 \
+        --max-images 4
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
+import glob
 import logging
 import pathlib
 import signal
+import sys
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import cv2
 
@@ -40,10 +55,31 @@ from moment_to_action.messages import ClassificationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager
+from moment_to_action.pipeline import Pipeline
 from moment_to_action.sensors import CameraStreamSensor
-from moment_to_action.stages import Pipeline
-from moment_to_action.stages.video import ClipBufferStage
-from moment_to_action.stages.vlm import SmolVLM2Stage
+from moment_to_action.stages.video._clip_buffer import ClipBufferStage
+
+
+def _preload_cusparselt() -> None:
+    """Pre-load libcusparseLt from the pip-installed nvidia-cusparselt-cu12 package.
+
+    On Jetson (aarch64), torch._C links against libcusparseLt.so.0 but the system
+    CUDA toolkit does not ship it.  The nvidia-cusparselt-cu12 pip wheel provides it
+    under site-packages/nvidia/cusparselt/lib/ and must be loaded into the process
+    before torch._C is imported, otherwise the dynamic linker cannot find it.
+    """
+    for search_path in sys.path:
+        candidates = glob.glob(
+            str(pathlib.Path(search_path) / "nvidia" / "cusparselt" / "lib" / "libcusparseLt.so*")
+        )
+        if candidates:
+            ctypes.CDLL(candidates[0])
+            return
+
+
+_preload_cusparselt()
+
+from moment_to_action.stages.vlm._smolvlm2 import SmolVLM2Stage  # noqa: E402
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -70,7 +106,7 @@ def _parse_device(value: str) -> int | str:
 
 def _default_run_id() -> str:
     """Return a timestamped run identifier for output artifacts."""
-    return datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+    return datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
 def _append_text_line(path: pathlib.Path, line: str) -> None:

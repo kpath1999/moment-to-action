@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 import attrs
 
@@ -50,7 +50,7 @@ class DownloadSource:
     hf_filename: str
 
 
-type ModelSource = VendoredSource | DownloadSource
+ModelSource: TypeAlias = VendoredSource | DownloadSource
 
 
 @attrs.frozen

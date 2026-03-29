@@ -9,9 +9,19 @@ Consumers import from the submodules directly::
 
 from __future__ import annotations
 
+import importlib
+
 from moment_to_action.pipeline import Pipeline
 
-from . import llm, video, vlm
 from ._base import Stage
 
 __all__ = ["Pipeline", "Stage", "llm", "video", "vlm"]
+
+
+def __getattr__(name: str) -> object:
+    """Load stage subpackages lazily."""
+    if name not in {"llm", "video", "vlm"}:
+        msg = f"module {__name__!r} has no attribute {name!r}"
+        raise AttributeError(msg)
+
+    return importlib.import_module(f"{__name__}.{name}")
