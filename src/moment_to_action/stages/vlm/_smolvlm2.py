@@ -127,7 +127,7 @@ class SmolVLM2Stage(Stage):
         )
         self._model = AutoModelForImageTextToText.from_pretrained(
             model_name,
-            torch_dtype=dtype,
+            dtype=dtype,
             trust_remote_code=True,
             **cache_kwargs,
         ).to(device)  # type: ignore[arg-type]
@@ -146,6 +146,14 @@ class SmolVLM2Stage(Stage):
             raise TypeError(err)
 
         sampled = _sample_frames(msg.frames, self._max_images)  # type: ignore[arg-type]
+        logger.info(
+            "SmolVLM2Stage: sampled %d/%d frames (max_images=%d)",
+            len(sampled),
+            len(msg.frames),
+            self._max_images,
+        )
+
+        t_prepare = time.perf_counter()
         images = [_to_pil_rgb(f) for f in sampled]
 
         user_content: list[dict[str, object]] = [{"type": "text", "text": self._prompt}]
@@ -164,25 +172,60 @@ class SmolVLM2Stage(Stage):
         )
         inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
         input_len = inputs["input_ids"].shape[1]
+        prepare_ms = (time.perf_counter() - t_prepare) * 1000.0
+        logger.info(
+            "SmolVLM2Stage: prepare %.1fms (device=%s, prompt_tokens=%d, max_new_tokens=%d)",
+            prepare_ms,
+            self._model.device,
+            input_len,
+            self._max_new_tokens,
+        )
 
         t0 = time.perf_counter()
-        with torch.inference_mode():
-            generated_ids = self._model.generate(
-                **inputs,
-                do_sample=False,
-                max_new_tokens=self._max_new_tokens,
+        try:
+            with torch.inference_mode():
+                generated_ids = self._model.generate(
+                    **inputs,
+                    do_sample=False,
+                    max_new_tokens=self._max_new_tokens,
+                )
+        except RuntimeError as exc:
+            if (
+                "out of memory" not in str(exc).lower()
+                and "failed to allocate" not in str(exc).lower()
+            ):
+                raise
+            logger.warning(
+                "SmolVLM2Stage: device %s ran out of memory — retrying on CPU. "
+                "Use --max-images or --torch-device cpu to avoid this.",
+                self._model.device,
             )
+            self._model = self._model.to("cpu")
+            inputs = {k: v.to("cpu") for k, v in inputs.items()}
+            with torch.inference_mode():
+                generated_ids = self._model.generate(
+                    **inputs,
+                    do_sample=False,
+                    max_new_tokens=self._max_new_tokens,
+                )
         inference_ms = (time.perf_counter() - t0) * 1000.0
 
+        t_decode = time.perf_counter()
         new_tokens = generated_ids[:, input_len:]
         decoded = self._processor.batch_decode(new_tokens, skip_special_tokens=True)
+        decode_ms = (time.perf_counter() - t_decode) * 1000.0
         caption = self._clean_generation(decoded[0]) if decoded else ""
 
         if not caption:
             logger.debug("SmolVLM2Stage: empty caption")
             return None
 
-        logger.info("SmolVLM2Stage: %.1fms — %s", inference_ms, caption[:80])
+        logger.info(
+            "SmolVLM2Stage: generate %.1fms, decode %.1fms, output_chars=%d",
+            inference_ms,
+            decode_ms,
+            len(caption),
+        )
         return ClassificationMessage(
             label=caption,
             confidence=1.0,

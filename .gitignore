@@ -223,3 +223,4 @@ src/moment_to_action/models/
 /detections.jpg
 archive/
 pytest-*
+logs/

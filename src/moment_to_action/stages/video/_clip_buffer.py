@@ -84,6 +84,8 @@ class ClipBufferStage(Stage):
         self._new_since_emit: int = 0
         # First clip should emit as soon as the buffer is full.
         self._has_emitted: bool = False
+        # Total number of non-dropped frames observed by this stage.
+        self._frames_seen: int = 0
 
     # ------------------------------------------------------------------
     # Stage interface
@@ -110,14 +112,18 @@ class ClipBufferStage(Stage):
 
         self._buffer.append(msg)
         self._new_since_emit += 1
+        self._frames_seen += 1
 
         # Not enough frames yet — keep accumulating.
         if len(self._buffer) < self._clip_len:
-            logger.debug(
-                "ClipBufferStage: buffering %d/%d frames",
-                len(self._buffer),
-                self._clip_len,
-            )
+            milestone = max(1, self._clip_len // 4)
+            if len(self._buffer) == 1 or len(self._buffer) % milestone == 0:
+                logger.info(
+                    "ClipBufferStage: buffering %d/%d frames (seen=%d)",
+                    len(self._buffer),
+                    self._clip_len,
+                    self._frames_seen,
+                )
             return None
 
         # Emit first clip immediately once the buffer is full. Apply stride only
@@ -148,10 +154,11 @@ class ClipBufferStage(Stage):
 
         # Use the most recent frame's metadata as clip provenance.
         latest: RawFrameMessage = self._buffer[-1]
-        logger.debug(
-            "ClipBufferStage: emitting clip of %d frames from %s",
+        logger.info(
+            "ClipBufferStage: emitting clip of %d frames from %s (seen=%d)",
             self._clip_len,
             latest.source,
+            self._frames_seen,
         )
         return VideoClipMessage(
             frames=frames,  # type: ignore[arg-type]  # frames are non-None (checked above)
@@ -174,4 +181,5 @@ class ClipBufferStage(Stage):
         self._buffer.clear()
         self._new_since_emit = 0
         self._has_emitted = False
+        self._frames_seen = 0
         logger.debug("ClipBufferStage: buffer reset")
