@@ -45,13 +45,7 @@ To contribute code to this repository, do the following (assuming you've already
 ```
 uv sync
 uv run python scripts/run_smolvlm2_pipeline.py \
-  --device images/smoke_test.mp4 \
-  --clip-len 16 \
-  --stride 16 \
-  --max-frames 32 \
-  --max-images 8 \
-  --max-new-tokens 128 \
-  --torch-device auto
+  --device images/smoke_test.mp4
 ```
 
 ### yolo plus reasoning
