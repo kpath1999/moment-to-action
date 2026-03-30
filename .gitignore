@@ -167,6 +167,8 @@ venv.bak/
 
 # large mp4 files
 images/*.mp4
+# Allow test videos
+!images/*test*.mp4
 
 # Spyder project settings
 .spyderproject
