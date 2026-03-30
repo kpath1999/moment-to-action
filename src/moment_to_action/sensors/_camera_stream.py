@@ -23,35 +23,19 @@ import logging
 import time
 from typing import Literal
 
+import cv2
+
 from moment_to_action.messages.sensor import RawFrameMessage
 
 from ._base import BaseSensor
 
 logger = logging.getLogger(__name__)
 
-# VideoCapture is imported lazily so that cv2 is not a hard import-time
-# requirement (mirrors the pattern in FileImageSensor and SensorStage).
-
 
 class CameraStreamSensor(BaseSensor):
     """Live camera sensor that yields one ``RawFrameMessage`` per :meth:`read` call.
 
-    Wraps :class:`~moment_to_action.messages.sensor.RawFrameMessage`.
-
-    Args:
-        device: Camera index (``0`` for the default webcam) **or** a video
-            stream URL / file path accepted by ``cv2.VideoCapture``.
-        width:  Requested capture width in pixels.  The actual width may
-            differ if the device does not support the requested resolution.
-        height: Requested capture height in pixels.
-        fps:    Requested frame-rate.  ``0`` keeps the device default.
-        backend: OpenCV ``CAP_*`` backend constant.  ``"auto"`` lets OpenCV
-            pick the best backend for *device*.
-
-    Example:
-        >>> with CameraStreamSensor(device=0, width=1280, height=720) as cam:
-        ...     msg = cam.read()
-        ...     print(msg.width, msg.height)
+    Wraps OpenCV ``VideoCapture`` and converts captured frames into ``RawFrameMessage`` objects.
     """
 
     def __init__(
@@ -63,12 +47,29 @@ class CameraStreamSensor(BaseSensor):
         fps: float = 0.0,
         backend: int | Literal["auto"] = "auto",
     ) -> None:
+        """Initialize the camera sensor.
+
+        Args:
+            device: Camera index (``0`` for the default webcam) **or** a video
+                stream URL / file path accepted by ``cv2.VideoCapture``.
+            width:  Requested capture width in pixels.  The actual width may
+                differ if the device does not support the requested resolution.
+            height: Requested capture height in pixels.
+            fps:    Requested frame-rate.  ``0`` keeps the device default.
+            backend: OpenCV ``CAP_*`` backend constant.  ``"auto"`` lets OpenCV
+                pick the best backend for *device*.
+
+        Example:
+            >>> with CameraStreamSensor(device=0, width=1280, height=720) as cam:
+            ...     msg = cam.read()
+            ...     print(msg.width, msg.height)
+        """
         self._device = device
         self._requested_width = width
         self._requested_height = height
         self._requested_fps = fps
         self._backend = backend
-        self._cap: object = None  # cv2.VideoCapture — type hidden to avoid hard import
+        self._cap: cv2.VideoCapture | None = None
 
     # ------------------------------------------------------------------
     # BaseSensor interface
@@ -78,15 +79,8 @@ class CameraStreamSensor(BaseSensor):
         """Open the capture device and apply the requested resolution / fps.
 
         Raises:
-            RuntimeError: If ``opencv-python`` is not installed.
-            OSError: If the device cannot be opened.
+            OSError: If the camera or stream cannot be opened.
         """
-        try:
-            import cv2
-        except ImportError as exc:
-            msg = "CameraStreamSensor requires opencv-python: pip install opencv-python"
-            raise RuntimeError(msg) from exc
-
         if self._backend == "auto":
             cap = cv2.VideoCapture(self._device)
         else:
@@ -133,8 +127,7 @@ class CameraStreamSensor(BaseSensor):
             msg = "CameraStreamSensor: call open() before read()"
             raise OSError(msg)
 
-        cap = self._cap  # type: ignore[assignment]
-        ok, frame = cap.read()  # type: ignore[attr-defined]
+        ok, frame = self._cap.read()
         ts = time.time()
 
         if not ok or frame is None:
@@ -157,7 +150,7 @@ class CameraStreamSensor(BaseSensor):
     def close(self) -> None:
         """Release the capture device."""
         if self._cap is not None:
-            self._cap.release()  # type: ignore[attr-defined]
+            self._cap.release()
             logger.info("CameraStreamSensor: released device %r", self._device)
             self._cap = None
 
@@ -170,17 +163,13 @@ class CameraStreamSensor(BaseSensor):
         """Actual capture frame-rate reported by the device; ``0.0`` before open."""
         if self._cap is None:
             return 0.0
-        import cv2
-
-        return float(self._cap.get(cv2.CAP_PROP_FPS))  # type: ignore[attr-defined]
+        return float(self._cap.get(cv2.CAP_PROP_FPS))
 
     @property
     def resolution(self) -> tuple[int, int]:
         """``(width, height)`` reported by the device; ``(0, 0)`` before open."""
         if self._cap is None:
             return (0, 0)
-        import cv2
-
-        w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # type: ignore[attr-defined]
-        h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))  # type: ignore[attr-defined]
+        w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         return (w, h)

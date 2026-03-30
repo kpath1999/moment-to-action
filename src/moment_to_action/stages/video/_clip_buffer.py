@@ -43,23 +43,9 @@ logger = logging.getLogger(__name__)
 class ClipBufferStage(Stage):
     """Collects raw frames into a temporal clip window.
 
-    Args:
-        clip_len: Number of frames in each emitted clip.  Must be >= 1.
-        stride:   How many *new* frames must arrive between emissions.
-            Defaults to ``clip_len`` (non-overlapping windows).
-            Set to ``1`` for a maximally-sliding window.
-        min_fps:  If the clip's effective frame-rate (``clip_len / duration``)
-            falls below this value the clip is discarded (late-arriving bursts
-            can otherwise skew temporal models).  ``0.0`` disables the check.
-
     Input:  :class:`~moment_to_action.messages.sensor.RawFrameMessage`
     Output: :class:`~moment_to_action.messages.video.VideoClipMessage` (once
             the buffer has ``clip_len`` valid frames), or ``None`` while filling.
-
-    Example:
-        >>> stage = ClipBufferStage(clip_len=16, stride=8)
-        >>> # After 16 frames arrive, emits a VideoClipMessage.
-        >>> # After every subsequent 8 new frames, emits another.
     """
 
     def __init__(
@@ -68,6 +54,25 @@ class ClipBufferStage(Stage):
         stride: int | None = None,
         min_fps: float = 0.0,
     ) -> None:
+        """Initialize the clip buffer stage.
+
+        Args:
+            clip_len: Number of frames in each emitted clip.  Must be >= 1.
+            stride:   How many *new* frames must arrive between emissions.
+                Defaults to ``clip_len`` (non-overlapping windows).
+                Set to ``1`` for a maximally-sliding window.
+            min_fps:  If the clip's effective frame-rate (``clip_len / duration``)
+                falls below this value the clip is discarded (late-arriving bursts
+                can otherwise skew temporal models).  ``0.0`` disables the check.
+
+        Raises:
+            ValueError: If ``clip_len`` or ``stride`` is less than 1.
+
+        Example:
+            >>> stage = ClipBufferStage(clip_len=16, stride=8)
+            >>> # After 16 frames arrive, emits a VideoClipMessage.
+            >>> # After every subsequent 8 new frames, emits another.
+        """
         if clip_len < 1:
             msg = f"clip_len must be >= 1, got {clip_len}"
             raise ValueError(msg)
@@ -82,8 +87,8 @@ class ClipBufferStage(Stage):
         self._buffer: deque[RawFrameMessage] = deque(maxlen=clip_len)
         # How many new frames have arrived since the last emission.
         self._new_since_emit: int = 0
-        # First clip should emit as soon as the buffer is full.
-        self._has_emitted: bool = False
+        # First clip should emit as soon as the buffer is full, ignoring stride.
+        self._has_emitted_once: bool = False
         # Total number of non-dropped frames observed by this stage.
         self._frames_seen: int = 0
 
@@ -128,13 +133,16 @@ class ClipBufferStage(Stage):
 
         # Emit first clip immediately once the buffer is full. Apply stride only
         # for subsequent clip emissions.
-        if self._has_emitted and self._new_since_emit < self._stride:
+        if self._has_emitted_once and self._new_since_emit < self._stride:
             return None
 
         # --- ready to emit ---
         self._new_since_emit = 0
-        self._has_emitted = True
-        frames = [f.frame for f in self._buffer]  # oldest first (deque order)
+        self._has_emitted_once = True
+        frames = [f.frame for f in self._buffer if f.frame is not None]
+        if len(frames) != len(self._buffer):
+            err = "Unexpected None frame in buffer"
+            raise RuntimeError(err)
 
         # FPS guard: reject abnormally slow clips.
         _min_buffer_for_fps_check = 2
@@ -161,7 +169,7 @@ class ClipBufferStage(Stage):
             self._frames_seen,
         )
         return VideoClipMessage(
-            frames=frames,  # type: ignore[arg-type]  # frames are non-None (checked above)
+            frames=frames,
             timestamp=latest.timestamp,
             source=latest.source,
             width=latest.width,
@@ -180,6 +188,6 @@ class ClipBufferStage(Stage):
         """
         self._buffer.clear()
         self._new_since_emit = 0
-        self._has_emitted = False
+        self._has_emitted_once = False
         self._frames_seen = 0
         logger.debug("ClipBufferStage: buffer reset")
