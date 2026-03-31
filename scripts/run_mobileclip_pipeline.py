@@ -22,7 +22,7 @@ from rich.logging import RichHandler
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import ClassificationMessage, RawFrameMessage, ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
-from moment_to_action.models import ModelManager
+from moment_to_action.models import ModelManager, ModelID
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages.video import PreprocessorStage
@@ -73,7 +73,11 @@ pipeline = Pipeline(
             manager=manager,
         ),
         #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"),
-        LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/qwen2.5-1.5b-instruct-q5_k_m.gguf"),
+        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/qwen2.5-1.5b-instruct-q5_k_m.gguf"),
+        LLMStage(
+            model_id=ModelID.QWEN_2_5,
+            manager=manager,
+            ),
     ],
 )
 
