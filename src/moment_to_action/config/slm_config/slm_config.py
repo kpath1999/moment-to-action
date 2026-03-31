@@ -20,7 +20,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict, YamlConfigSettingsSource
 
-_CONFIG_PATH = Path(__file__).parent / "config.yaml"
+_CONFIG_PATH = Path(__file__).parent / "slm_config.yaml"
 
 ##Loud failure. Required? or just skip to defaults if not found?
 if not _CONFIG_PATH.exists():

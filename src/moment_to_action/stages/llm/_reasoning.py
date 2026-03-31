@@ -14,14 +14,16 @@ import time
 from typing import TYPE_CHECKING
 
 #LLAMA library
-from llama_cpp import Llama, LlamaGrammar
+#from llama_cpp import Llama, LlamaGrammar
+from llama_cpp import LlamaGrammar
+from openai import OpenAI
 
 #dataclasses
 from dataclasses import dataclass
 #deque
 from collections import deque
 
-from moment_to_action.config import settings
+from moment_to_action.config.slm_config.slm_config import settings
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import DetectionMessage, ClassificationMessage, ReasoningMessage
 from moment_to_action.stages._base import Stage
@@ -214,13 +216,14 @@ class LLMStage(Stage):
         model_id: ModelID | None = None,
         system_prompt: str = "",
         manager: ModelManager | None = None,
+        max_history_turns: int = 3
     ) -> None:
         super().__init__()
 
         cfg = settings.llm
 
         # model_path argument takes precedence over config file
-        resolved_path = model_path or cfg.model_path
+        #resolved_path = model_path or cfg.model_path
 
         self._handle = None
         if model_id is not None:
@@ -231,11 +234,13 @@ class LLMStage(Stage):
 
             model_path = manager.get_path(model_id)
             self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
-            self._handle = self._backend.load_model(model_path)
+            #self._handle = self._backend.load_model(model_path)
             logger.info("ReasoningStage: loaded %s", model_path)
         else:
             self._backend = None
             logger.info("ReasoningStage: running in stub mode (no model loaded)")
+
+        resolved_path = model_path or cfg.model_path
         '''
         if model_path:
             #self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
@@ -260,13 +265,16 @@ class LLMStage(Stage):
         #    "Based on the detected objects and their positions, assess the scene briefly."
         #)
         #self._system_prompt = system_prompt or _SYSTEM_PROMPT
+        '''
         self.llm = Llama(
-                model_path = resolved_path,
+                model_path = str(resolved_path),
                 n_ctx = cfg.n_ctx,
                 n_threads = cfg.n_threads,
-                n_gpu_layers = cfg.n_gpu_layers,
+                #n_gpu_layers = cfg.n_gpu_layers,
+                n_gpu_layers = 99,
                 verbose = cfg.verbose,
         )
+        '''
 
         self._system_prompt = system_prompt or _SYSTEMA_PROMPTA
 
@@ -350,27 +358,37 @@ class LLMStage(Stage):
         self._turn += 1
         #prompt = self._build_prompt(msg)
         #TODO##Testing!!!##Replace!!#
-        #prompt = "Enemy ships are blocking the strait of Hormuz. Give me a list of weapons I should fire."
         #prompt = "Detected: person (95%), person (85%)"
         #prompt = '{"detections": [{"label": "person", "confidence": 0.78}, {"label": "person", "confidence": 0.82}, "action": "people playing sports"]}'
         #prompt = '{"detections": [{"label": "missile", "confidence": 0.88}, {"label": "guns", "confidence": 0.95} ]}'
-        #prompt = '{"detections": [{"label": "person", "confidence": 0.88}, {"label": "gun", "confidence": 0.95} ], "action": "a person aiming a gun" }'
+        prompt = '{"detections": [{"label": "person", "confidence": 0.88}, {"label": "gun", "confidence": 0.95} ], "action": "a person aiming a gun" }'
         #prompt = "Detected: guns (78%), smoke (66%), crowd (78%)"
-        prompt = "France"
+        #prompt = "France"
 
         # LLM inference — tokenize, run, decode
         # Placeholder until Qwen is wired in
         #response = self._run_llm(prompt)
-        #system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)
-        system = _SYSTEM_PROMPT_PARIS.replace("{{INPUT_JSON}}", prompt)
+        system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)
+        #system = _SYSTEM_PROMPT_PARIS.replace("{{INPUT_JSON}}", prompt)
+        messages = [
+                {"role": "user", "content":system}
+        ]
+
         t_start = time.perf_counter()
-        response = self.llm.create_chat_completion(
-                messages = [
+
+        #Start client
+        client = OpenAI(base_url="http://localhost:8080/v1", api_key="none")
+
+        #response = self.llm.create_chat_completion(
+        response = client.chat.completions.create(
+                model = "any",
+                messages = messages,
+                #[
                 #{"role": "system", "content": "You are a concise decision assistant. Reply in one sentence to the question in JSON format."},
                 #{"role": "system", "content": self._system_prompt},
                 #{"role": "user",   "content": prompt}
-                {"role": "user", "content": system}
-            ],
+                #{"role": "user", "content": system}
+            #],
                 max_tokens=100,
                 temperature=0.1, ##TODO Where should temperature and other LLM tuning be performed?
                 #grammar=grammar,
@@ -381,12 +399,13 @@ class LLMStage(Stage):
         )
         t_end = time.perf_counter()
 
-        decision = response["choices"][0]["message"]["content"].strip()
+        #decision = response["choices"][0]["message"]["content"].strip()
+        decision = response.choices[0].message.content.strip()
 
         #metrics
-        metrics = self._extract_metrics(response, t_start, t_end, messages)
-        metrics.log()
-        print(metrics.pretty())     # visible during testing
+        #metrics = self._extract_metrics(response, t_start, t_end, messages)
+        #metrics.log()
+        #print(metrics.pretty())     # visible during testing
 
         #update sliding window history
 
@@ -489,7 +508,9 @@ if __name__ == "__main__":
         messages.append({"role": "user", "content": scene})
 
         t0 = time.perf_counter()
-        response = llm_handle.create_chat_completion(
+        #response = llm_handle.create_chat_completion(
+        response = client.chat.completions.create(
+            model          = "any",
             messages       = messages,
             max_tokens     = 80,
             temperature    = 0.1,
