@@ -220,7 +220,8 @@ src/moment_to_action/edgeperceive/trash/
 src/moment_to_action/edgeperceive/models/
 
 # Ignore research models and HuggingFace weights
-src/moment_to_action/models/
+src/moment_to_action/models/models--*/
+src/moment_to_action/models/.locks/
 /models/
 /detections.jpg
 archive/

@@ -35,3 +35,19 @@ class PowerSample:
 
     utilization_pct: float
     """Utilisation percentage (0-100)."""
+
+
+@attrs.frozen
+class TorchExecutionPolicy:
+    """Resolved torch execution configuration for model loading and inference.
+
+    Attributes:
+        device: Torch device string (for example ``"cpu"``, ``"cuda"``, ``"mps"``).
+        dtype: Torch dtype attribute name (for example ``"float32"``, ``"float16"``).
+    """
+
+    device: str
+    """Resolved torch device string."""
+
+    dtype: str
+    """Resolved torch dtype attribute name."""

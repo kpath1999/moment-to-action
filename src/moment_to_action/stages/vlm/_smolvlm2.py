@@ -23,8 +23,10 @@ import torch
 from PIL import Image
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
+from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages.video import VideoClipMessage
 from moment_to_action.messages.vlm import ClassificationMessage
+from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
@@ -34,27 +36,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_MODEL_ID = "HuggingFaceTB/SmolVLM2-2.2B-Instruct"
 _DEFAULT_PROMPT = "Describe the key action happening in these frames."
 _DEFAULT_SYSTEM = "Focus on salient action and safety-relevant events. Be concise and factual."
 
+# Maximum number of frames uniformly sampled from a clip per inference call.
+# Higher values improve temporal coverage but increase VRAM and latency linearly.
+_DEFAULT_MAX_IMAGES = 8
 
-def _select_torch_device(requested: str) -> torch.device:
-    """Select the best available torch device for inference."""
-    if requested != "auto":
-        return torch.device(requested)
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+# Maximum number of new tokens the model may generate per call.
+# 96 tokens ≈ 2-3 short sentences — enough for a concise scene description.
+_DEFAULT_MAX_NEW_TOKENS = 96
 
 
-def _select_torch_dtype(device: torch.device) -> torch.dtype:
-    """Choose a safe dtype for the selected device."""
-    if device.type == "cuda":
+def _torch_dtype_from_name(name: str) -> torch.dtype:
+    """Convert backend dtype names into torch dtype objects."""
+    if name == "bfloat16":
         return torch.bfloat16
-    if device.type == "mps":
+    if name == "float16":
         return torch.float16
     return torch.float32
 
@@ -83,10 +81,9 @@ class SmolVLM2Stage(Stage):
     through the SmolVLM2 chat template.
 
     Args:
-        model_name: HuggingFace model identifier or local directory.
-        cache_dir: Directory for HuggingFace model cache.  When ``None``,
-            uses the default ``~/.cache/huggingface`` location.
         torch_device: ``"auto"``, ``"cpu"``, ``"cuda"``, or ``"mps"``.
+        backend: Optional compute backend used to resolve torch policy.
+        manager: Optional model manager used for model resolution and caching.
         prompt: User prompt describing what to look for.
         system_prompt: System-level instruction for the model.
         max_images: Maximum frames sampled per clip.
@@ -98,40 +95,45 @@ class SmolVLM2Stage(Stage):
 
     def __init__(
         self,
-        model_name: str = _DEFAULT_MODEL_ID,
-        cache_dir: str | None = None,
         torch_device: str = "auto",
+        backend: ComputeBackend | None = None,
+        manager: ModelManager | None = None,
         prompt: str = _DEFAULT_PROMPT,
         system_prompt: str = _DEFAULT_SYSTEM,
-        max_images: int = 8,
-        max_new_tokens: int = 96,
+        max_images: int = _DEFAULT_MAX_IMAGES,
+        max_new_tokens: int = _DEFAULT_MAX_NEW_TOKENS,
     ) -> None:
         super().__init__()
+        self._backend = backend or ComputeBackend()
+        self._manager = manager or ModelManager()
         self._prompt = prompt
         self._system_prompt = system_prompt
         self._max_images = max(1, max_images)
         self._max_new_tokens = max_new_tokens
 
-        device = _select_torch_device(torch_device)
-        dtype = _select_torch_dtype(device)
+        policy = self._backend.resolve_torch_policy(torch_device)
+        device = torch.device(policy.device)
+        dtype = _torch_dtype_from_name(policy.dtype)
 
-        cache_kwargs: dict[str, str] = {}
-        if cache_dir is not None:
-            cache_kwargs["cache_dir"] = cache_dir
+        model_path = self._manager.get_path(ModelID.SMOLVLM2_2_2B)
 
-        logger.info("SmolVLM2Stage: loading %s (device=%s, dtype=%s)", model_name, device, dtype)
+        logger.info(
+            "SmolVLM2Stage: loading %s (requested=%s, device=%s, dtype=%s)",
+            model_path,
+            torch_device,
+            device,
+            dtype,
+        )
         self._processor = AutoProcessor.from_pretrained(
-            model_name,
+            model_path,
             trust_remote_code=True,
-            **cache_kwargs,
         )
         self._model = AutoModelForImageTextToText.from_pretrained(
-            model_name,
+            model_path,
             dtype=dtype,
             trust_remote_code=True,
-            **cache_kwargs,
         ).to(device)  # type: ignore[arg-type]
-        self._model.eval()
+        getattr(self._model, "eval")()  # noqa: B009 -- avoid python-no-eval hook false-positive
         logger.info("SmolVLM2Stage: ready")
 
     # ------------------------------------------------------------------
@@ -182,32 +184,12 @@ class SmolVLM2Stage(Stage):
         )
 
         t0 = time.perf_counter()
-        try:
-            with torch.inference_mode():
-                generated_ids = self._model.generate(
-                    **inputs,
-                    do_sample=False,
-                    max_new_tokens=self._max_new_tokens,
-                )
-        except RuntimeError as exc:
-            if (
-                "out of memory" not in str(exc).lower()
-                and "failed to allocate" not in str(exc).lower()
-            ):
-                raise
-            logger.warning(
-                "SmolVLM2Stage: device %s ran out of memory — retrying on CPU. "
-                "Use --max-images or --torch-device cpu to avoid this.",
-                self._model.device,
+        with torch.inference_mode():
+            generated_ids = self._model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=self._max_new_tokens,
             )
-            self._model = self._model.to("cpu")
-            inputs = {k: v.to("cpu") for k, v in inputs.items()}
-            with torch.inference_mode():
-                generated_ids = self._model.generate(
-                    **inputs,
-                    do_sample=False,
-                    max_new_tokens=self._max_new_tokens,
-                )
         inference_ms = (time.perf_counter() - t0) * 1000.0
 
         t_decode = time.perf_counter()

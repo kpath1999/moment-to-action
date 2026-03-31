@@ -15,7 +15,7 @@ import numpy as np
 if TYPE_CHECKING:
     import os
 
-    from moment_to_action.hardware._types import ComputeUnit, PowerSample
+    from moment_to_action.hardware._types import ComputeUnit, PowerSample, TorchExecutionPolicy
 
 # Type alias: single tensor (most models) or named dict (multi-input models).
 ModelInput = np.ndarray | dict[str, np.ndarray]
@@ -100,3 +100,18 @@ class InferenceBackend(ABC):
     def get_supported_unit(self) -> ComputeUnit:
         """Return the ``ComputeUnit`` this backend targets."""
         ...
+
+    def resolve_torch_policy(self, requested: str = "auto") -> TorchExecutionPolicy:
+        """Resolve torch device/dtype policy for this backend.
+
+        Platform backends that support torch should override this. Runtime-only
+        backends (for example LiteRT/ONNX wrappers) can inherit this default.
+
+        Args:
+            requested: ``"auto"`` or a string accepted by ``torch.device``.
+
+        Returns:
+            A resolved torch execution policy.
+        """
+        msg = f"{type(self).__name__} does not implement torch policy resolution"
+        raise NotImplementedError(msg)

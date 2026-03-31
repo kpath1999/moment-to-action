@@ -29,7 +29,11 @@ if TYPE_CHECKING:
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
 from moment_to_action.hardware._platforms.qcs6490._litert import QCS6490LiteRTBackend
 from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
+from moment_to_action.hardware._torch_policy import resolve_torch_execution_policy
 from moment_to_action.hardware._types import ComputeUnit
+
+if TYPE_CHECKING:
+    from moment_to_action.hardware._types import TorchExecutionPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +205,10 @@ class QCS6490Backend(InferenceBackend):
         if self._litert_accel_backend is not None:
             return self._litert_accel_backend.get_supported_unit()
         return self._litert_cpu_backend.get_supported_unit()
+
+    def resolve_torch_policy(self, requested: str = "auto") -> TorchExecutionPolicy:
+        """Resolve torch execution policy for this platform."""
+        return resolve_torch_execution_policy(requested)
 
     # ------------------------------------------------------------------
     # Private helpers

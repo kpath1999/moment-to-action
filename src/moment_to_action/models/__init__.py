@@ -32,6 +32,7 @@ from ._types import (
     ModelInfo,
     ModelSource,
     ModelStatus,
+    TransformersSource,
     VendoredSource,
 )
 
@@ -42,5 +43,6 @@ __all__ = [
     "ModelManager",
     "ModelSource",
     "ModelStatus",
+    "TransformersSource",
     "VendoredSource",
 ]

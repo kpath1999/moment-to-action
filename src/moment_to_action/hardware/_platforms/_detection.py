@@ -34,6 +34,9 @@ class Platform(Enum):
     X86_64 = auto()
     """Standard x86_64 laptop/desktop CPU (Intel/AMD)."""
 
+    MACOS_ARM64 = auto()
+    """Apple Silicon macOS host for local development/testing."""
+
 
 @functools.cache
 def detect_platform() -> Platform:
@@ -69,6 +72,7 @@ def detect_platform() -> Platform:
     # Fallback: use platform module
     #
     machine = platform.machine().lower()
+    system = platform.system().lower()
     logger.debug("CPU architecture: %r", machine)
 
     # Check for x86
@@ -76,11 +80,16 @@ def detect_platform() -> Platform:
         logger.info("Detected x86_64 architecture")
         return Platform.X86_64
 
+    # Apple Silicon development host.
+    if machine in {"arm64", "aarch64"} and system == "darwin":
+        logger.info("Detected macOS arm64 architecture")
+        return Platform.MACOS_ARM64
+
     #
     # Not found/unknown
     #
     msg = (
-        f"Unrecognised platform. SoC={soc_name!r}, arch={machine!r}. "
+        f"Unrecognised platform. SoC={soc_name!r}, arch={machine!r}, os={system!r}. "
         "Add a new Platform member and backend to support this hardware."
     )
     raise RuntimeError(msg)

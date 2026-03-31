@@ -201,7 +201,7 @@ class TestModelManagerListModels:
         """Test list_models() returns all models in registry."""
         manager = ModelManager()
         statuses = manager.list_models()
-        assert len(statuses) == 2
+        assert len(statuses) == 3
 
     def test_list_models_yolo_is_available(self) -> None:
         """Test list_models() shows YOLO_V8 as available."""
@@ -263,6 +263,21 @@ class TestModelManagerListModels:
 
         for status in statuses:
             assert isinstance(status, ModelStatus)
+
+    def test_list_models_smolvlm_transformers_not_available_by_default(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test list_models() shows SMOLVLM2 as unavailable when not cached."""
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        manager = ModelManager(cache_dir=cache_dir, show_progress=False)
+
+        statuses = manager.list_models()
+        smol_status = next(s for s in statuses if s.info.id == ModelID.SMOLVLM2_2_2B)
+        assert smol_status.available is False
+        assert smol_status.path is None
+        assert smol_status.size_bytes is None
 
 
 @pytest.mark.unit
@@ -428,6 +443,7 @@ class TestModelManagerResolvePath:
         manager = ModelManager()
         from moment_to_action.models._types import (
             DownloadSource,
+            TransformersSource,
             VendoredSource,
         )
 
@@ -440,6 +456,44 @@ class TestModelManagerResolvePath:
         # Confirm MOBILECLIP_S2 uses DownloadSource
         download_info = manager._get_model_info(ModelID.MOBILECLIP_S2)
         assert isinstance(download_info.source, DownloadSource)
+
+        # Confirm SMOLVLM2 uses TransformersSource
+        smol_info = manager._get_model_info(ModelID.SMOLVLM2_2_2B)
+        assert isinstance(smol_info.source, TransformersSource)
+
+    def test_resolve_path_for_transformers_uses_cache_if_ready(self, tmp_path: Path) -> None:
+        """_resolve_path() returns cached transformers directory when ready."""
+        manager = ModelManager(cache_dir=tmp_path / "cache")
+        info = manager._get_model_info(ModelID.SMOLVLM2_2_2B)
+
+        cache_dir = manager.cache_dir / ModelID.SMOLVLM2_2_2B.value
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "config.json").write_text("{}")
+        (cache_dir / "tokenizer_config.json").write_text("{}")
+
+        with mock.patch.object(manager, "_download_transformers_model") as mock_download:
+            path = manager._resolve_path(info)
+
+        assert path == cache_dir
+        mock_download.assert_not_called()
+
+    def test_resolve_path_for_transformers_downloads_if_not_cached(self, tmp_path: Path) -> None:
+        """_resolve_path() triggers transformers download when cache is missing."""
+        manager = ModelManager(cache_dir=tmp_path / "cache")
+        info = manager._get_model_info(ModelID.SMOLVLM2_2_2B)
+
+        cache_dir = manager.cache_dir / ModelID.SMOLVLM2_2_2B.value
+
+        def fake_download(_repo_id: str, dest_dir: Path) -> None:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            (dest_dir / "config.json").write_text("{}")
+            (dest_dir / "tokenizer_config.json").write_text("{}")
+
+        with mock.patch.object(manager, "_download_transformers_model", side_effect=fake_download):
+            path = manager._resolve_path(info)
+
+        assert path == cache_dir
+        assert (cache_dir / "config.json").exists()
 
     def test_resolve_path_vendored_missing_raises_file_not_found(self, tmp_path: Path) -> None:
         """Test _resolve_path() raises FileNotFoundError for missing vendored."""
@@ -473,6 +527,15 @@ class TestModelManagerResolvePathLocal:
         assert "mobileclip_s2" in str(path)
         assert path.name == info.filename
 
+    def test_resolve_path_local_for_transformers_returns_cache_dir(self, tmp_path: Path) -> None:
+        """_resolve_path_local() returns cache directory for transformers model."""
+        manager = ModelManager(cache_dir=tmp_path / "cache")
+        info = manager._get_model_info(ModelID.SMOLVLM2_2_2B)
+        path = manager._resolve_path_local(info)
+
+        assert "smolvlm2_2_2b" in str(path)
+        assert path.name == ModelID.SMOLVLM2_2_2B.value
+
     def test_resolve_path_local_missing_vendored_raises(self, tmp_path: Path) -> None:
         """_resolve_path_local() raises FileNotFoundError for missing vendored."""
         manager = ModelManager(cache_dir=tmp_path / "cache")
@@ -504,6 +567,45 @@ class TestModelManagerResolvePathVendoredOnly:
         info = manager._get_model_info(ModelID.MOBILECLIP_S2)
         with pytest.raises(FileNotFoundError, match="downloadable, not vendored"):
             manager._resolve_path_vendored_only(info)
+
+    def test_resolve_path_vendored_only_for_transformers_raises_file_not_found(self) -> None:
+        """Test _resolve_path_vendored_only() raises for transformers model."""
+        manager = ModelManager()
+        info = manager._get_model_info(ModelID.SMOLVLM2_2_2B)
+        with pytest.raises(FileNotFoundError, match="downloadable, not vendored"):
+            manager._resolve_path_vendored_only(info)
+
+
+@pytest.mark.unit
+class TestModelManagerTransformersHelpers:
+    """Tests for ModelManager transformers-specific helper methods."""
+
+    def test_is_transformers_cache_ready_true(self, tmp_path: Path) -> None:
+        """_is_transformers_cache_ready returns True with required files present."""
+        cache_dir = tmp_path / "smol"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "config.json").write_text("{}")
+        (cache_dir / "tokenizer_config.json").write_text("{}")
+
+        assert ModelManager._is_transformers_cache_ready(cache_dir) is True
+
+    def test_is_transformers_cache_ready_false_missing_files(self, tmp_path: Path) -> None:
+        """_is_transformers_cache_ready returns False if expected files are missing."""
+        cache_dir = tmp_path / "smol"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "config.json").write_text("{}")
+
+        assert ModelManager._is_transformers_cache_ready(cache_dir) is False
+
+    def test_is_available_for_cached_transformers_returns_true(self, tmp_path: Path) -> None:
+        """is_available returns True for cached transformers models."""
+        manager = ModelManager(cache_dir=tmp_path / "cache")
+        model_dir = manager.cache_dir / ModelID.SMOLVLM2_2_2B.value
+        model_dir.mkdir(parents=True)
+        (model_dir / "config.json").write_text("{}")
+        (model_dir / "tokenizer_config.json").write_text("{}")
+
+        assert manager.is_available(ModelID.SMOLVLM2_2_2B) is True
 
 
 @pytest.mark.unit
@@ -711,8 +813,62 @@ class TestModelManagerStreamWithProgress:
 
             statuses = manager.list_models()
 
-            assert len(statuses) == 2
+            assert len(statuses) == 3
             for status in statuses:
                 assert not status.available
                 assert status.path is None
                 assert status.size_bytes is None
+
+
+@pytest.mark.unit
+class TestDownloadTransformersModel:
+    """Tests for ModelManager._download_transformers_model."""
+
+    def test_import_error_raises_runtime_error(self, tmp_path: Path) -> None:
+        """Missing transformers dependency raises RuntimeError."""
+        manager = ModelManager(cache_dir=tmp_path)
+        dest = tmp_path / "smolvlm2"
+
+        with mock.patch.dict(
+            "sys.modules",
+            {"transformers": None},
+        ):
+            with pytest.raises(RuntimeError, match="Required dependency not available"):
+                manager._download_transformers_model("repo/test", dest)
+
+    def test_successful_download(self, tmp_path: Path) -> None:
+        """Successful download saves processor and model."""
+        manager = ModelManager(cache_dir=tmp_path)
+        dest = tmp_path / "smolvlm2"
+
+        mock_processor = mock.MagicMock()
+        mock_model = mock.MagicMock()
+
+        mock_transformers = mock.MagicMock()
+        mock_transformers.AutoProcessor.from_pretrained.return_value = mock_processor
+        mock_transformers.AutoModelForImageTextToText.from_pretrained.return_value = mock_model
+
+        with mock.patch.dict("sys.modules", {"transformers": mock_transformers}):
+            manager._download_transformers_model("repo/test", dest)
+
+        mock_processor.save_pretrained.assert_called_once_with(dest)
+        mock_model.save_pretrained.assert_called_once_with(dest)
+        assert dest.exists()
+
+    def test_download_failure_cleans_up_dest_dir(self, tmp_path: Path) -> None:
+        """Failed download removes the destination directory."""
+        manager = ModelManager(cache_dir=tmp_path)
+        dest = tmp_path / "smolvlm2"
+        dest.mkdir()
+        (dest / "partial_file").write_text("data")
+
+        mock_transformers = mock.MagicMock()
+        mock_transformers.AutoProcessor.from_pretrained.side_effect = ConnectionError(
+            "Network error"
+        )
+
+        with (
+            mock.patch.dict("sys.modules", {"transformers": mock_transformers}),
+            pytest.raises(RuntimeError, match="Failed to download transformers model"),
+        ):
+            manager._download_transformers_model("repo/test", dest)
