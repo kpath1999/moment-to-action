@@ -15,6 +15,7 @@ __all__ = [
     "ModelInfo",
     "ModelSource",
     "ModelStatus",
+    "TransformersSource",
     "VendoredSource",
 ]
 
@@ -24,6 +25,7 @@ class ModelID(Enum):
 
     YOLO_V8 = "yolo_v8"
     MOBILECLIP_S2 = "mobileclip_s2"
+    SMOLVLM2_2_2B = "smolvlm2_2_2b"
 
 
 @attrs.frozen
@@ -50,7 +52,21 @@ class DownloadSource:
     hf_filename: str
 
 
-type ModelSource = VendoredSource | DownloadSource
+@attrs.frozen
+class TransformersSource:
+    """Transformers-style model repos sourced from HuggingFace Hub.
+
+    These models are stored as a local directory containing model weights,
+    processor/tokenizer assets, and config files.
+
+    Attributes:
+        hf_repo_id: HuggingFace Hub repository identifier (e.g. 'user/repo').
+    """
+
+    hf_repo_id: str
+
+
+type ModelSource = VendoredSource | DownloadSource | TransformersSource
 
 
 @attrs.frozen

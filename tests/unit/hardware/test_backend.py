@@ -15,6 +15,7 @@ from moment_to_action.hardware._backend import (
 )
 from moment_to_action.hardware._platforms._detection import Platform
 from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
+from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64PowerMonitor
 from moment_to_action.hardware._types import ComputeUnit
 
 
@@ -138,6 +139,56 @@ class TestComputeBackendConstruction:
 
             assert isinstance(backend, QCS6490Backend)
 
+    def test_make_power_monitor_macos_arm64(self) -> None:
+        """Test that _make_power_monitor returns x86_64 monitor for macOS arm64."""
+        with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
+            mock_detect.return_value = Platform.MACOS_ARM64
+
+            power_monitor = _make_power_monitor()
+
+            assert isinstance(power_monitor, X86_64PowerMonitor)
+
+    def test_make_backend_macos_arm64(self) -> None:
+        """Test that _make_backend returns x86_64 runtime path for macOS arm64."""
+        with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
+            mock_detect.return_value = Platform.MACOS_ARM64
+
+            backend = _make_backend(ComputeUnit.CPU)
+
+            assert isinstance(backend, X86_64Backend)
+
+    def test_make_power_monitor_x86_64(self) -> None:
+        """Test that _make_power_monitor returns X86_64PowerMonitor for X86_64 platform."""
+        with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
+            mock_detect.return_value = Platform.X86_64
+
+            power_monitor = _make_power_monitor()
+
+            assert isinstance(power_monitor, X86_64PowerMonitor)
+
+    def test_make_backend_x86_64(self) -> None:
+        """Test that _make_backend returns X86_64Backend for X86_64 platform."""
+        with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
+            mock_detect.return_value = Platform.X86_64
+
+            backend = _make_backend(ComputeUnit.CPU)
+
+            assert isinstance(backend, X86_64Backend)
+
+
+@pytest.mark.unit
+class TestInferenceBackendDefaultTorchPolicy:
+    """Tests for InferenceBackend.resolve_torch_policy default."""
+
+    def test_resolve_torch_policy_raises_not_implemented(self) -> None:
+        """Default resolve_torch_policy raises NotImplementedError."""
+        from moment_to_action.hardware._platforms._runtimes._litert import LiteRTBackend
+        from moment_to_action.hardware._types import ComputeUnit
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        with pytest.raises(NotImplementedError, match="does not implement torch policy"):
+            backend.resolve_torch_policy("auto")
+
 
 @pytest.mark.unit
 class TestComputeBackendDelegation:
@@ -214,6 +265,25 @@ class TestComputeBackendDelegation:
 
                     mock_backend.get_output_details.assert_called_once_with("handle")
                     assert details == output_details
+
+    def test_compute_backend_resolve_torch_policy_delegates(self) -> None:
+        """Test ComputeBackend.resolve_torch_policy delegates to backend."""
+        with patch("moment_to_action.hardware._backend.detect_platform"):
+            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+                with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
+                    mock_pm.return_value = MagicMock()
+                    mock_backend = MagicMock()
+                    mock_be.return_value = mock_backend
+                    mock_backend.get_supported_unit.return_value = ComputeUnit.CPU
+                    mock_backend.resolve_torch_policy.return_value.device = "cpu"
+                    mock_backend.resolve_torch_policy.return_value.dtype = "float32"
+
+                    backend = ComputeBackend()
+                    policy = backend.resolve_torch_policy("auto")
+
+                    mock_backend.resolve_torch_policy.assert_called_once_with("auto")
+                    assert policy.device == "cpu"
+                    assert policy.dtype == "float32"
 
 
 @pytest.mark.unit

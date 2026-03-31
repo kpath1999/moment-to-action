@@ -37,3 +37,29 @@ To contribute code to this repository, do the following (assuming you've already
 3. Open a PR to `main` for your branch, following the template that shows up.
 4. Ensure all GitHub Actions pass for tests and linting.
 5. Once approved, merge your code with a *SQUASH commit*.
+
+## Terminal recs
+
+### for smolvlm2 video
+
+```
+uv sync
+uv run python scripts/run_smolvlm2_pipeline.py \
+  --device images/smoke_test.mp4
+```
+
+### yolo plus reasoning
+
+```
+uv run python scripts/run_yolo_pipeline.py \
+  --image images/weapon.jpg \
+  --device cpu
+```
+
+### mobileclip
+
+```
+uv run python scripts/run_mobileclip_pipeline.py \
+  --image images/fighting.jpg \
+  --device cpu
+```

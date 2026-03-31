@@ -12,6 +12,7 @@ from moment_to_action.models._types import (
     ModelID,
     ModelInfo,
     ModelStatus,
+    TransformersSource,
     VendoredSource,
 )
 
@@ -31,14 +32,22 @@ class TestModelID:
         assert ModelID.MOBILECLIP_S2.value == "mobileclip_s2"
 
     def test_model_id_enum_count(self) -> None:
-        """Test that ModelID has exactly two members."""
-        assert len(list(ModelID)) == 2
+        """Test that ModelID has exactly three members."""
+        assert len(list(ModelID)) == 3
 
-    @pytest.mark.parametrize("model_id", [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2])
+    @pytest.mark.parametrize(
+        "model_id",
+        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
+    )
     def test_model_id_has_value(self, model_id: ModelID) -> None:
         """Test that each ModelID has a value."""
         assert isinstance(model_id.value, str)
         assert len(model_id.value) > 0
+
+    def test_model_id_has_smolvlm2_2_2b(self) -> None:
+        """Test that ModelID enum has SMOLVLM2_2_2B."""
+        assert hasattr(ModelID, "SMOLVLM2_2_2B")
+        assert ModelID.SMOLVLM2_2_2B.value == "smolvlm2_2_2b"
 
 
 @pytest.mark.unit
@@ -198,6 +207,37 @@ class TestModelInfo:
         )
         assert isinstance(info.source, DownloadSource)
 
+    def test_model_info_with_transformers_source(self) -> None:
+        """Test ModelInfo with TransformersSource."""
+        source = TransformersSource(hf_repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+        info = ModelInfo(
+            id=ModelID.SMOLVLM2_2_2B,
+            filename="",
+            source=source,
+        )
+        assert isinstance(info.source, TransformersSource)
+
+
+@pytest.mark.unit
+class TestTransformersSource:
+    """Tests for TransformersSource attrs."""
+
+    def test_transformers_source_hf_repo_id_required(self) -> None:
+        """Test that TransformersSource requires hf_repo_id field."""
+        with pytest.raises(TypeError):
+            TransformersSource()  # type: ignore[call-arg]
+
+    def test_transformers_source_stores_hf_repo_id(self) -> None:
+        """Test that TransformersSource stores hf_repo_id correctly."""
+        source = TransformersSource(hf_repo_id="org/repo")
+        assert source.hf_repo_id == "org/repo"
+
+    def test_transformers_source_is_frozen(self) -> None:
+        """Test that TransformersSource is frozen (immutable)."""
+        source = TransformersSource(hf_repo_id="org/repo")
+        with pytest.raises(AttributeError):
+            source.hf_repo_id = "modified"  # type: ignore[misc]
+
 
 @pytest.mark.unit
 class TestModelStatus:
@@ -275,9 +315,15 @@ class TestModelRegistry:
         info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
         assert info.id == ModelID.MOBILECLIP_S2
 
+    def test_registry_contains_smolvlm2_2_2b(self) -> None:
+        """Test that MODEL_REGISTRY contains SMOLVLM2_2_2B."""
+        assert ModelID.SMOLVLM2_2_2B in MODEL_REGISTRY
+        info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
+        assert info.id == ModelID.SMOLVLM2_2_2B
+
     def test_registry_has_exactly_two_entries(self) -> None:
-        """Test that MODEL_REGISTRY has exactly two entries."""
-        assert len(MODEL_REGISTRY) == 2
+        """Test that MODEL_REGISTRY has exactly three entries."""
+        assert len(MODEL_REGISTRY) == 3
 
     def test_yolo_v8_is_vendored(self) -> None:
         """Test that YOLO_V8 has VendoredSource."""
@@ -317,13 +363,35 @@ class TestModelRegistry:
         info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
         assert info.filename == "mobileclip_s2_datacompdr_last.tflite"
 
-    @pytest.mark.parametrize("model_id", [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2])
+    def test_smolvlm2_2_2b_is_transformers_source(self) -> None:
+        """Test that SMOLVLM2_2_2B has TransformersSource."""
+        info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
+        assert isinstance(info.source, TransformersSource)
+
+    def test_smolvlm2_2_2b_has_correct_hf_repo(self) -> None:
+        """Test that SMOLVLM2_2_2B has correct HF repo."""
+        info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
+        assert isinstance(info.source, TransformersSource)
+        assert info.source.hf_repo_id == "HuggingFaceTB/SmolVLM2-2.2B-Instruct"
+
+    def test_smolvlm2_2_2b_has_empty_filename(self) -> None:
+        """Test that SMOLVLM2_2_2B has an empty filename (directory source)."""
+        info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
+        assert info.filename == ""
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
+    )
     def test_registry_entries_are_model_info(self, model_id: ModelID) -> None:
         """Test that all registry entries are ModelInfo instances."""
         info = MODEL_REGISTRY[model_id]
         assert isinstance(info, ModelInfo)
 
-    @pytest.mark.parametrize("model_id", [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2])
+    @pytest.mark.parametrize(
+        "model_id",
+        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
+    )
     def test_registry_entry_id_matches_key(self, model_id: ModelID) -> None:
         """Test that registry entry ID matches its key."""
         info = MODEL_REGISTRY[model_id]

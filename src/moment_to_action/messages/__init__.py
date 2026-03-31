@@ -14,7 +14,7 @@ from __future__ import annotations
 from .audio import AudioTensorMessage
 from .llm import ReasoningMessage
 from .sensor import RawFrameMessage
-from .video import BoundingBox, DetectionMessage, FrameTensorMessage
+from .video import BoundingBox, DetectionMessage, FrameTensorMessage, VideoClipMessage
 from .vlm import ClassificationMessage
 
 # Union of every concrete message type in the pipeline.
@@ -23,6 +23,7 @@ type Message = (
     RawFrameMessage
     | AudioTensorMessage
     | FrameTensorMessage
+    | VideoClipMessage
     | DetectionMessage
     | ReasoningMessage
     | ClassificationMessage
@@ -37,4 +38,5 @@ __all__ = [
     "Message",
     "RawFrameMessage",
     "ReasoningMessage",
+    "VideoClipMessage",
 ]

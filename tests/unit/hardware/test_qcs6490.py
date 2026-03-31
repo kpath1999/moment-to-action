@@ -279,6 +279,35 @@ class TestQCS6490Backend:
 
             assert details == output_details
 
+    def test_qcs6490_resolve_torch_policy_delegates_to_helper(self) -> None:
+        """Test QCS6490 torch policy is resolved by shared helper."""
+        mock_litert_cpu = MagicMock()
+        mock_litert_cpu.get_supported_unit.return_value = ComputeUnit.CPU
+        mock_onnx = MagicMock()
+
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490LiteRTBackend",
+                return_value=mock_litert_cpu,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490ONNXBackend",
+                return_value=mock_onnx,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.resolve_torch_execution_policy"
+            ) as mock_resolve,
+        ):
+            mock_resolve.return_value.device = "cpu"
+            mock_resolve.return_value.dtype = "float32"
+
+            backend = QCS6490Backend()
+            policy = backend.resolve_torch_policy("auto")
+
+            mock_resolve.assert_called_once_with("auto")
+            assert policy.device == "cpu"
+            assert policy.dtype == "float32"
+
     def test_qcs6490_get_supported_unit_with_accel(self) -> None:
         """Test QCS6490Backend.get_supported_unit returns accel unit when available."""
         mock_litert_cpu = MagicMock()

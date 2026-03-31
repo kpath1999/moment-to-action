@@ -165,6 +165,11 @@ ENV/
 env.bak/
 venv.bak/
 
+# large mp4 files
+images/*.mp4
+# Allow test videos
+!images/*test*.mp4
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -207,3 +212,18 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,python
+
+#Ignore the trash folder in edgeperceive
+src/moment_to_action/edgeperceive/trash/
+
+# Ignore large ML models
+src/moment_to_action/edgeperceive/models/
+
+# Ignore research models and HuggingFace weights
+src/moment_to_action/models/models--*/
+src/moment_to_action/models/.locks/
+/models/
+/detections.jpg
+archive/
+pytest-*
+logs/
