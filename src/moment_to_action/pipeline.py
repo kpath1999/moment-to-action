@@ -17,6 +17,7 @@ from moment_to_action.metrics._collector import _rss_mb
 
 logger = logging.getLogger(__name__)
 
+
 class Pipeline:
     """Sequential pipeline of stages."""
 
