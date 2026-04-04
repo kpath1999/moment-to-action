@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from moment_to_action.metrics import NullMetricsCollector, SpanType
@@ -11,6 +12,10 @@ if TYPE_CHECKING:
     from moment_to_action.metrics import MetricsCollector
     from moment_to_action.stages._base import Stage
 
+from moment_to_action.metrics._collector import _rss_mb
+
+
+logger = logging.getLogger(__name__)
 
 class Pipeline:
     """Sequential pipeline of stages."""

@@ -110,3 +110,5 @@ rich.print(metrics_report.summary_full_rich())
 
 with Path("metrics_report.json").open("w") as f:
     json.dump(metrics_report.json(), f, indent=4)
+#metrics.print_stage_latencies()
+#metrics.print_summary()
