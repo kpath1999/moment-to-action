@@ -22,7 +22,8 @@ dependencies = [
     "rich-click>=1.9.7",
     "platformdirs>=4.0.0",
     "huggingface_hub>=0.18.0",
-    "llama-cpp-python>=0.3.16",
+    "openai>=2.30.0",
+    "pydantic-settings>=2.13.1",
 ]
 
 [project.scripts]

@@ -102,4 +102,5 @@ elif isinstance(result, ReasoningMessage):
     logger.info("\nLLM response:")
     logger.info("%s", result.response)
 
-metrics.print_stage_latencies()
+#metrics.print_stage_latencies()
+metrics.print_summary()

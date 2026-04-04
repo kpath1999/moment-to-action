@@ -13,9 +13,13 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+#httpx server for metrics
+import httpx
+import psutil
+
 #LLAMA library
 #from llama_cpp import Llama, LlamaGrammar
-from llama_cpp import LlamaGrammar
+#from llama_cpp import LlamaGrammar
 from openai import OpenAI
 
 #dataclasses
@@ -34,12 +38,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+"""
 grammar = LlamaGrammar.from_string(r'''
 root   ::= "{" ws "\"action\"" ws ":" ws action ws "," ws "\"reason\"" ws ":" ws string ws "}"
 action ::= "\"alert\"" | "\"don't alert\""
 string ::= "\"" [a-zA-Z0-9 _.,'!? -]+ "\""
 ws     ::= [ \t\n]*
 ''')
+"""
 
 # Few-shot system prompt — examples teach the model what each field means
 # and how to reason from detections to a decision.
@@ -208,6 +214,8 @@ class LLMStage(Stage):
     Output: ReasoningMessage
     """
 
+    _LLAMA_BASE_URL = "http://localhost:8080"
+
     _backend: ComputeBackend | None
     _handle: object | None
 
@@ -374,7 +382,6 @@ class LLMStage(Stage):
                 {"role": "user", "content":system}
         ]
 
-        t_start = time.perf_counter()
 
         #Start client
         client = OpenAI(base_url="http://localhost:8080/v1", api_key="none")
@@ -397,7 +404,6 @@ class LLMStage(Stage):
                 #    },
                 stop=["</s>", "\n\n"]
         )
-        t_end = time.perf_counter()
 
         #decision = response["choices"][0]["message"]["content"].strip()
         decision = response.choices[0].message.content.strip()
@@ -413,6 +419,9 @@ class LLMStage(Stage):
         logger.info("LLMStage: decision=%s", decision)
 
         # latency_ms is stamped by Stage.process() via model_copy
+        #self._log_llm_metrics(latency_ms, response, slot, self._server_rss_bytes())
+        #self._log_llm_metrics(0, response, slot, self._server_rss_bytes())
+
         return ReasoningMessage(
             response=decision,
             prompt=prompt,
@@ -440,6 +449,28 @@ class LLMStage(Stage):
         # ingests the message, performs inference dispatched via ComputeBackend.
         # For now return the prompt so the pipeline is runnable end-to-end.
         return f"[LLM stub] Received prompt with {len(prompt)} chars."
+
+    def _server_rss_bytes(self) -> int:
+        for proc in psutil.process_iter(["name", "memory_info"]):
+            if "llama-server" in proc.info["name"]:
+                return proc.info["memory_info"].rss
+        return 0    
+
+    # in LLMStage
+    # These log the metrics specific to the LLM, and send them to the logging method in _base.py
+    def _llm_metrics(self) -> dict:
+        slots = httpx.get(f"{self._LLAMA_BASE_URL}/slots").json()
+        slot = slots[0]
+        return {
+            "prompt_ms": 0.0,
+            #"gen_ms": self._last_latency_ms,       # stored in _process()
+            "gen_ms": 0.0,       # stored in _process()
+            #"prompt_tokens": self._last_usage.prompt_tokens,
+            #"gen_tokens": self._last_usage.completion_tokens,
+            "kv_cache_used": slot.get("n_past", 0),
+            "kv_cache_total": slot.get("n_ctx", 512),
+            "server_rss_bytes": self._server_rss_bytes(),
+            }
 
 
     # ── Standalone test loop ─────────────────────────────────────────────────────

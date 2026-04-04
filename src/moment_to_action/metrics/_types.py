@@ -24,7 +24,6 @@ class EventType(Enum):
     """A detection was later determined to be incorrect."""
 
 
-@attrs.define
 class PipelineRecord:
     """Record of a pipeline-level event."""
 
@@ -41,7 +40,7 @@ class PipelineRecord:
     """Arbitrary key/value context for this event."""
 
 
-@attrs.define
+@attrs.define(kw_only=True)
 class StageRecord:
     """Record of a single stage execution (logged by the Stage wrapper)."""
 
@@ -59,6 +58,39 @@ class StageRecord:
 
     metadata: dict = attrs.Factory(dict)
     """Arbitrary key/value context attached at log time."""
+
+    #init_memory_bytes: int = 0 # set once at stage init time
+    init_memory_bytes: int # set once at stage init time
+    """To measure memory consumed by the stage's models and other helper data"""
+
+    #runtime_memory_bytes: int = 0
+    runtime_memory_bytes: int
+    """To measure the memory consumed by the stage during computation/process"""
+
+
+@attrs.define
+class LLMRecord(StageRecord):
+    """The LLMStage requires a separate class to keep track of its metrics
+    And due to its heavy resource usage. Discuss in PR
+    Per-call record from llama-server, logged by LLMStage."""
+
+    # timing (from /completion timings or measured wall-clock)
+    prompt_ms: float
+    gen_ms: float
+    #TODO total_ms: float
+
+    # token counts
+    prompt_tokens: int
+    gen_tokens: int
+    tokens_per_second: float
+
+    # server state (from /slots)
+    kv_cache_used_tokens: int
+    kv_cache_total_tokens: int
+    kv_cache_ratio: float             # derived: used/total
+
+    # server process memory (from psutil on llama-server pid)
+    server_rss_bytes: int
 
 
 @attrs.define
@@ -97,6 +129,25 @@ class StageStats:
     max_ms: float
     """Maximum observed latency in milliseconds."""
 
+    init_memory_bytes: int        # constant across calls, just store it
+    """Will remain roughly the same, but no harm in collection"""
+    
+    mean_runtime_memory_bytes: int
+
+
+# --- new: aggregate LLM stats for CollectorReport ---
+@attrs.define
+class LLMStats(StageStats):
+    """Aggregated statistics over all LLMRecords in a session."""
+
+    mean_prompt_ms: float
+    mean_gen_ms: float
+    p95_gen_ms: float
+    mean_tokens_per_second: float
+    mean_kv_cache_ratio: float
+    peak_kv_cache_ratio: float        # did we ever get close to OOM?
+    mean_server_rss_bytes: int
+    peak_server_rss_bytes: int
 
 @attrs.define
 class PipelineStats:
