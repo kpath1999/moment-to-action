@@ -26,12 +26,12 @@ from moment_to_action.metrics._types import (
     EventRecord,
     EventType,
     LatencyBudget,
+    LLMRecord,
+    LLMStats,
     PipelineRecord,
     PipelineStats,
     StageRecord,
-    LLMRecord,
     StageStats,
-    LLMStats,
 )
 
 logger = logging.getLogger(__name__)

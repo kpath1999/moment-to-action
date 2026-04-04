@@ -1,6 +1,6 @@
 """LLM reasoning stage.
 
-LLMStage process Vision Stage prompts (structured as JSON) and runs an LLM (typically, an output in JSON format).
+LLMStage process Vision Stage prompts (structured as JSON) and runs an LLM.
 
 Input:  DetectionMessage
 Output: ReasoningMessage
@@ -11,27 +11,23 @@ from __future__ import annotations
 import logging
 
 # time
-import time
+# deque
+from collections import deque
+
+# dataclasses
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 # httpx server for metrics
 import httpx
 import psutil
 
-# LLAMA library
-# from llama_cpp import Llama, LlamaGrammar
-# from llama_cpp import LlamaGrammar
+# OpenAI library for HTTP communication
 from openai import OpenAI
-
-# dataclasses
-from dataclasses import dataclass
-
-# deque
-from collections import deque
 
 from moment_to_action.config.slm_config.slm_config import settings
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import DetectionMessage, ClassificationMessage, ReasoningMessage
+from moment_to_action.messages import ClassificationMessage, DetectionMessage, ReasoningMessage
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
@@ -240,7 +236,6 @@ class LLMStage(Stage):
         cfg = settings.llm
 
         # model_path argument takes precedence over config file
-        # resolved_path = model_path or cfg.model_path
 
         self._handle = None
         if model_id is not None:
@@ -251,47 +246,12 @@ class LLMStage(Stage):
 
             model_path = manager.get_path(model_id)
             self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
-            # self._handle = self._backend.load_model(model_path)
             logger.info("ReasoningStage: loaded %s", model_path)
         else:
             self._backend = None
             logger.info("ReasoningStage: running in stub mode (no model loaded)")
 
         resolved_path = model_path or cfg.model_path
-        """
-        if model_path:
-            #self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
-            #self._handle = self._backend.load_model(model_path)
-            logger.info("LLMStage: loaded %s", model_path)
-        else:
-            logger.info("LLMStage: running in stub mode (no model loaded)")
-        
-        self._system_prompt = system_prompt or (
-            "You are analyzing detections from a wearable device. "
-            "Based on the detected objects and their positions, assess the scene briefly."
-        )
-        """
-        # if model_path:
-        # self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
-        # self._handle = self._backend.load_model(model_path)
-        #    logger.info("LLMStage: loaded %s", model_path)
-        # else:
-        #    logger.info("LLMStage: running in stub mode (no model loaded)")
-        # self._system_prompt = system_prompt or (
-        #    "You are analyzing detections from a wearable device. "
-        #    "Based on the detected objects and their positions, assess the scene briefly."
-        # )
-        # self._system_prompt = system_prompt or _SYSTEM_PROMPT
-        """
-        self.llm = Llama(
-                model_path = str(resolved_path),
-                n_ctx = cfg.n_ctx,
-                n_threads = cfg.n_threads,
-                #n_gpu_layers = cfg.n_gpu_layers,
-                n_gpu_layers = 99,
-                verbose = cfg.verbose,
-        )
-        """
 
         self._system_prompt = system_prompt or _SYSTEMA_PROMPTA
 
@@ -326,6 +286,7 @@ class LLMStage(Stage):
         messages.append({"role": "user", "content": user_content})
         return messages
 
+    """
     def _extract_metrics(
         self,
         response: dict,
@@ -333,7 +294,7 @@ class LLMStage(Stage):
         t_end: float,
         messages: list[dict],
     ) -> InferenceMetrics:
-        """Pull timing data from llama-cpp-python response + wall clock."""
+        #Pull timing data from llama-cpp-python response + wall clock.
         usage = response.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)
         comp_tokens = usage.get("completion_tokens", 0)
@@ -369,6 +330,7 @@ class LLMStage(Stage):
             decode_tps=round(decode_tps, 1),
             kv_cache_tokens=prompt_tokens,
         )
+    """
 
     def _process(self, msg: Message) -> ReasoningMessage | None:
         """Format detections into a prompt and run the LLM."""
@@ -378,9 +340,7 @@ class LLMStage(Stage):
             err = f"LLMStage expects DetectionMessage, got {type(msg).__name__}"
             raise TypeError(err)
 
-        cfg = settings.llm
         self._turn += 1
-        # prompt = self._build_prompt(msg)
         # TODO##Testing!!!##Replace!!#
         # prompt = "Detected: person (95%), person (85%)"
         # prompt = '{"detections": [{"label": "person", "confidence": 0.78}, {"label": "person", "confidence": 0.82}, "action": "people playing sports"]}'
@@ -390,8 +350,6 @@ class LLMStage(Stage):
         # prompt = "France"
 
         # LLM inference — tokenize, run, decode
-        # Placeholder until Qwen is wired in
-        # response = self._run_llm(prompt)
         system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)
         # system = _SYSTEM_PROMPT_PARIS.replace("{{INPUT_JSON}}", prompt)
         messages = [{"role": "user", "content": system}]
@@ -403,12 +361,6 @@ class LLMStage(Stage):
         response = client.chat.completions.create(
             model="any",
             messages=messages,
-            # [
-            # {"role": "system", "content": "You are a concise decision assistant. Reply in one sentence to the question in JSON format."},
-            # {"role": "system", "content": self._system_prompt},
-            # {"role": "user",   "content": prompt}
-            # {"role": "user", "content": system}
-            # ],
             max_tokens=100,
             temperature=0.1,  ##TODO Where should temperature and other LLM tuning be performed?
             # grammar=grammar,
@@ -421,19 +373,8 @@ class LLMStage(Stage):
         # decision = response["choices"][0]["message"]["content"].strip()
         decision = response.choices[0].message.content.strip()
 
-        # metrics
-        # metrics = self._extract_metrics(response, t_start, t_end, messages)
-        # metrics.log()
-        # print(metrics.pretty())     # visible during testing
-
-        # update sliding window history
-
         logger.info("LLMStage: prompt=%r", prompt)
         logger.info("LLMStage: decision=%s", decision)
-
-        # latency_ms is stamped by Stage.process() via model_copy
-        # self._log_llm_metrics(latency_ms, response, slot, self._server_rss_bytes())
-        # self._log_llm_metrics(0, response, slot, self._server_rss_bytes())
 
         return ReasoningMessage(
             response=decision,
@@ -484,127 +425,3 @@ class LLMStage(Stage):
             "kv_cache_total": slot.get("n_ctx", 512),
             "server_rss_bytes": self._server_rss_bytes(),
         }
-
-    # ── Standalone test loop ─────────────────────────────────────────────────────
-
-
-# Run directly:  python _reasoning.py
-# This tests the LLM stage in isolation without the full pipeline.
-
-if __name__ == "__main__":
-    import sys
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stdout,
-    )
-
-    # ── preset scene graphs ──────────────────────────────────────────────────
-    # Replace model_path with your actual path
-    MODEL_PATH = "/home/ubuntu/moment-to-action/llm_models/qwen2.5-1.5b-instruct-q5_k_m.gguf"
-    # MODEL_PATH = "/home/ubuntu/moment-to-action/llm_models/Qwen3.5-0.8B-Q4_K_M.gguf"
-
-    PRESET_SCENES = [
-        # turn 1 — clear threat
-        '{"detections": [{"label": "person", "confidence": 0.91}, '
-        '{"label": "knife", "confidence": 0.83}]}',
-        # turn 2 — same scene, knife more prominent (tests KV cache reuse)
-        '{"detections": [{"label": "person", "confidence": 0.89}, '
-        '{"label": "knife", "confidence": 0.91}, '
-        '{"label": "blood", "confidence": 0.72}]}',
-        # turn 3 — threat resolved
-        '{"detections": [{"label": "person", "confidence": 0.88}]}',
-        # turn 4 — new threat (tests sliding window)
-        '{"detections": [{"label": "person", "confidence": 0.95}, '
-        '{"label": "person", "confidence": 0.87}, '
-        '{"label": "physical-contact", "confidence": 0.79}]}',
-        # turn 5 — benign
-        '{"detections": [{"label": "person", "confidence": 0.92}, '
-        '{"label": "dog", "confidence": 0.88}]}',
-    ]
-
-    # ── init stage directly (bypasses pipeline machinery) ───────────────────
-    # We instantiate Llama directly here to avoid needing settings config.
-    print(f"\nLoading model: {MODEL_PATH}")
-    print("=" * 60)
-
-    llm_handle = Llama(
-        model_path=MODEL_PATH,
-        n_ctx=2048,
-        n_threads=6,
-        n_gpu_layers=0,
-        verbose=True,
-    )
-
-    history: deque[dict] = deque(maxlen=6)  # 3 turns × 2
-    turn = 0
-
-    def run_turn(scene: str) -> None:
-
-        global turn
-        turn += 1
-
-        messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
-        # messages.extend(history)
-        messages.append({"role": "user", "content": scene})
-
-        t0 = time.perf_counter()
-        # response = llm_handle.create_chat_completion(
-        response = client.chat.completions.create(
-            model="any",
-            messages=messages,
-            max_tokens=80,
-            temperature=0.1,
-            top_k=20,
-            top_p=0.8,
-            repeat_penalty=1.5,
-            grammar=grammar,
-            stop=["</s>", "\n\n"],
-        )
-        t1 = time.perf_counter()
-
-        usage = response.get("usage", {})
-        in_tok = usage.get("prompt_tokens", 0)
-        out_tok = usage.get("completion_tokens", 0)
-        wall = t1 - t0
-        decision = response["choices"][0]["message"]["content"].strip()
-
-        # internal timings
-        try:
-            tm = llm_handle._ctx.get_timings()
-            prefill_ms = round(tm.t_p_eval_ms, 1)
-            decode_ms = round(tm.t_eval_ms, 1)
-            # p_tps     = round(tm.n_p_eval / (tm.t_p_eval_ms / 1000), 1) if tm.t_p_eval_ms else 0
-            # d_tps     = round(tm.n_eval   / (tm.t_eval_ms   / 1000), 1) if tm.t_eval_ms   else 0
-        except Exception:
-            prefill_ms = 0.0
-            decode_ms = round(wall * 1000, 1)
-            p_tps = 0.0
-            d_tps = round(out_tok / wall, 1) if wall else 0
-
-        print(f"\n── Turn {turn} ──────────────────────────────────────────")
-        print(f"  input:          {scene[:80]}...")
-        print(f"  decision:       {decision}")
-        print(f"  input_tokens:   {in_tok}")
-        print(f"  output_tokens:  {out_tok}")
-        print(f"  wall_time:      {wall:.3f}s")
-        print(f"  prefill:        {prefill_ms}ms  @ {p_tps} t/s")
-        print(f"  decode:         {decode_ms}ms  @ {d_tps} t/s")
-        print(f"  kv_cache_size:  {in_tok} tokens")
-
-        history.append({"role": "user", "content": scene})
-        history.append({"role": "assistant", "content": decision})
-
-    # ── run all preset scenes ────────────────────────────────────────────────
-    print(f"\nRunning {len(PRESET_SCENES)} preset scenes...\n")
-    for scene in PRESET_SCENES:
-        run_turn(scene)
-
-    print("\n" + "=" * 60)
-    print("Test complete.")
-    print("Key things to observe:")
-    print("  - Turn 1 prefill is highest (system prompt + scene)")
-    print("  - Turn 2-3 prefill grows slightly (history accumulates)")
-    print("  - Turn 4-5 prefill stabilises (sliding window bounded)")
-    print("  - Decode time should stay roughly constant across turns")

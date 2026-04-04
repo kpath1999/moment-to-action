@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 # memory metrics library
-import psutil
 from moment_to_action.metrics._collector import _rss_mb
 
 if TYPE_CHECKING:
