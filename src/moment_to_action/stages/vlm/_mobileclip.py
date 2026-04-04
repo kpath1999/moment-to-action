@@ -19,7 +19,7 @@ from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
-from moment_to_action.utils.ml import cosine_similarity, softmax
+from moment_to_action.utils.ml import softmax
 
 if TYPE_CHECKING:
     from moment_to_action.hardware import ComputeBackend

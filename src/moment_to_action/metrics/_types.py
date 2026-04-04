@@ -436,7 +436,8 @@ class Trace:
 class LLMRecord(StageRecord):
     """The LLMStage requires a separate class to keep track of its metrics
     And due to its heavy resource usage. Discuss in PR
-    Per-call record from llama-server, logged by LLMStage."""
+    Per-call record from llama-server, logged by LLMStage.
+    """
 
     # timing (from /completion timings or measured wall-clock)
     prompt_ms: float
