@@ -11,7 +11,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-#memory metrics library
+# memory metrics library
 import psutil
 from moment_to_action.metrics._collector import _rss_mb
 
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from moment_to_action.metrics._collector import MetricsCollector
 
 logger = logging.getLogger(__name__)
+
 
 class Stage(ABC):
     """Abstract base for all pipeline stages."""
@@ -46,7 +47,7 @@ class Stage(ABC):
                        by the pipeline itself — not stored on the stage.
             metrics:   Optional collector; receives a ``log_stage`` call when provided.
         """
-        #calculate additional memory used by stage (memory used by stage)
+        # calculate additional memory used by stage (memory used by stage)
         mem_before = _rss_mb()
 
         t = time.perf_counter()
@@ -61,25 +62,25 @@ class Stage(ABC):
             result = result.model_copy(update={"latency_ms": elapsed_ms})
 
         if metrics is not None:
-            #If LLMStage is the current stage, then it will have to use log_llm to log LLM related data
+            # If LLMStage is the current stage, then it will have to use log_llm to log LLM related data
             llm_metrics = self._llm_metrics()
             if llm_metrics:
                 metrics.log_llm(
-                        stage_name=self.name,
-                        stage_idx=stage_idx,
-                        latency_ms=elapsed_ms,
-                        init_memory_bytes=0,
-                        runtime_memory_bytes=round(mem_delta,2),
-                        **llm_metrics,
-                        )
+                    stage_name=self.name,
+                    stage_idx=stage_idx,
+                    latency_ms=elapsed_ms,
+                    init_memory_bytes=0,
+                    runtime_memory_bytes=round(mem_delta, 2),
+                    **llm_metrics,
+                )
             else:
                 metrics.log_stage(
-                        stage_name=self.name, 
-                        stage_idx=stage_idx,
-                        latency_ms=elapsed_ms,
-                        init_memory_bytes=0,
-                        runtime_memory_bytes=round(mem_delta,2),
-                        )
+                    stage_name=self.name,
+                    stage_idx=stage_idx,
+                    latency_ms=elapsed_ms,
+                    init_memory_bytes=0,
+                    runtime_memory_bytes=round(mem_delta, 2),
+                )
 
         status = "→ None (stopped)" if result is None else f"→ {type(result).__name__}"
         logger.debug("%s: %.1fms  %s", self.name, elapsed_ms, status)
@@ -93,4 +94,3 @@ class Stage(ABC):
     def _llm_metrics(self) -> dict:
         """The LLM has extra metrics which requires HTTP comm. with the server, hence separating it"""
         return {}
-
