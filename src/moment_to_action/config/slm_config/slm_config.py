@@ -18,7 +18,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict, YamlConfigSettingsSource
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    YamlConfigSettingsSource,
+)
 
 _CONFIG_PATH = Path(__file__).parent / "slm_config.yaml"
 
@@ -31,6 +36,7 @@ if not _CONFIG_PATH.exists():
 
 # ── Sub-models (one per pipeline stage) ──────────────────────────────────────
 
+
 class LLMConfig(BaseModel):
     """Configuration for the LLM inference stage."""
 
@@ -38,18 +44,30 @@ class LLMConfig(BaseModel):
         default="./llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
         description="Path to the GGUF model file.",
     )
-    n_ctx: int = Field(default=512, ge=64, le=8192,
-        description="Context window size. Keep short to limit KV cache RAM.")
-    n_threads: int = Field(default=6, ge=1, le=16,
-        description="CPU threads for inference. Leave 2 cores free for pipeline.")
-    n_gpu_layers: int = Field(default=0, ge=0,
-        description="Layers to offload to GPU. Set to 28 to try Adreno offload.")
-    max_tokens: int = Field(default=80, ge=1, le=512,
-        description="Hard cap on generated tokens per inference call.")
-    temperature: float = Field(default=0.1, ge=0.0, le=2.0,
-        description="Sampling temperature. 0.0 = fully deterministic.")
-    verbose: bool = Field(default=False,
-        description="Enable llama.cpp verbose output (shows memory breakdown).")
+    n_ctx: int = Field(
+        default=512,
+        ge=64,
+        le=8192,
+        description="Context window size. Keep short to limit KV cache RAM.",
+    )
+    n_threads: int = Field(
+        default=6,
+        ge=1,
+        le=16,
+        description="CPU threads for inference. Leave 2 cores free for pipeline.",
+    )
+    n_gpu_layers: int = Field(
+        default=0, ge=0, description="Layers to offload to GPU. Set to 28 to try Adreno offload."
+    )
+    max_tokens: int = Field(
+        default=80, ge=1, le=512, description="Hard cap on generated tokens per inference call."
+    )
+    temperature: float = Field(
+        default=0.1, ge=0.0, le=2.0, description="Sampling temperature. 0.0 = fully deterministic."
+    )
+    verbose: bool = Field(
+        default=False, description="Enable llama.cpp verbose output (shows memory breakdown)."
+    )
 
 
 class YOLOConfig(BaseModel):
@@ -59,10 +77,12 @@ class YOLOConfig(BaseModel):
         default="./models/yolo/model.onnx",
         description="Path to the YOLO ONNX model file.",
     )
-    confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0,
-        description="Minimum confidence to keep a detection.")
-    max_detections: int = Field(default=5, ge=1, le=100,
-        description="Maximum detections to pass to the LLM stage.")
+    confidence_threshold: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Minimum confidence to keep a detection."
+    )
+    max_detections: int = Field(
+        default=5, ge=1, le=100, description="Maximum detections to pass to the LLM stage."
+    )
 
 
 class PipelineConfig(BaseModel):
@@ -72,11 +92,13 @@ class PipelineConfig(BaseModel):
         default="./images/test.jpg",
         description="Input source — image path, mp4 path, or 0 for live camera.",
     )
-    log_level: str = Field(default="INFO",
-        description="Logging level: DEBUG, INFO, WARNING, ERROR.")
+    log_level: str = Field(
+        default="INFO", description="Logging level: DEBUG, INFO, WARNING, ERROR."
+    )
 
 
 # ── Root settings ─────────────────────────────────────────────────────────────
+
 
 class Settings(BaseSettings):
     """Root configuration object. Loaded from config.yaml at project root.

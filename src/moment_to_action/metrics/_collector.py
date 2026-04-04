@@ -39,7 +39,7 @@ _PROCESS = psutil.Process(os.getpid())
 
 def _rss_mb() -> float:
     """Return current process RSS in MB."""
-    return _PROCESS.memory_info().rss / 1024 ** 2
+    return _PROCESS.memory_info().rss / 1024**2
 
 
 class MetricsCollector:
@@ -121,8 +121,7 @@ class MetricsCollector:
             )
         )
 
-
-#Adding a method to keep track of the llm data
+    # Adding a method to keep track of the llm data
     def log_llm(
         self,
         stage_name: str,
@@ -212,14 +211,14 @@ class MetricsCollector:
         """
 
         """Modifying the data structure to included stats in addition to latency, others can be easily added"""
-        by_stage: dict[str,list[StageRecord]] = {}
+        by_stage: dict[str, list[StageRecord]] = {}
         for record in self._stage_log:
             by_stage.setdefault(record.stage_name, []).append(record)
 
         return {
             stage_name: self._compute_stage_stats(records)
             for stage_name, records in by_stage.items()
-            }
+        }
 
     def _compute_stage_stats(self, records: list[StageRecord]) -> StageStats:
         latencies = np.array([r.latency_ms for r in records])
@@ -231,10 +230,8 @@ class MetricsCollector:
             min_ms=float(np.min(latencies)),
             max_ms=float(np.max(latencies)),
             init_memory_bytes=records[0].init_memory_bytes,
-            mean_runtime_memory_bytes=int(
-                np.mean([r.runtime_memory_bytes for r in records])
-                ),
-            )
+            mean_runtime_memory_bytes=int(np.mean([r.runtime_memory_bytes for r in records])),
+        )
 
         if isinstance(records[0], LLMRecord):
             return self._compute_llm_stats(base, records)  # type: ignore[arg-type]
@@ -248,13 +245,13 @@ class MetricsCollector:
             mean_gen_ms=float(np.mean(gen_arr)),
             p95_gen_ms=float(np.percentile(gen_arr, 95)),
             mean_tokens_per_second=float(np.mean([r.tokens_per_second for r in records])),
-            #mean_kv_cache_ratio=float(np.mean([r.kv_cache_ratio for r in records])),
+            # mean_kv_cache_ratio=float(np.mean([r.kv_cache_ratio for r in records])),
             mean_kv_cache_ratio=float(np.mean([r.kv_cache_total_tokens for r in records])),
             peak_kv_cache_ratio=float(np.max([r.kv_cache_ratio for r in records])),
             mean_server_rss_bytes=int(np.mean([r.server_rss_bytes for r in records])),
             peak_server_rss_bytes=int(np.max([r.server_rss_bytes for r in records])),
-            )
-        '''
+        )
+        """
 
         result: dict[str, StageStats] = {}
 
@@ -277,7 +274,7 @@ class MetricsCollector:
             result[stage_name] = StageStats(**base)
 
         return result
-        '''
+        """
 
         """
         return {
@@ -294,7 +291,6 @@ class MetricsCollector:
             for stage, latencies in by_stage.items()
         }
         """
-
 
     def _pipeline_stats(self) -> PipelineStats:
         triggers = [r for r in self._pipeline_log if r.event_type == EventType.TRIGGER_FIRED]
@@ -426,12 +422,29 @@ class MetricsCollector:
             )
 
         if isinstance(stats, LLMStats):
-            logger.info("  %-20s  prompt=%.1fms  gen=%.1fms  p95_gen=%.1fms", "", stats.mean_prompt_ms, stats.mean_gen_ms, stats.p95_gen_ms)
-            logger.info("  %-20s  tok/s=%.1f  kv_mean=%.2f  kv_peak=%.2f", "", stats.mean_tokens_per_second, stats.mean_kv_cache_ratio, stats.peak_kv_cache_ratio)
-            logger.info("  %-20s  server_rss_mean=%.1fMB  server_rss_peak=%.1fMB", "", stats.mean_server_rss_bytes / 1024**2, stats.peak_server_rss_bytes / 1024**2)
+            logger.info(
+                "  %-20s  prompt=%.1fms  gen=%.1fms  p95_gen=%.1fms",
+                "",
+                stats.mean_prompt_ms,
+                stats.mean_gen_ms,
+                stats.p95_gen_ms,
+            )
+            logger.info(
+                "  %-20s  tok/s=%.1f  kv_mean=%.2f  kv_peak=%.2f",
+                "",
+                stats.mean_tokens_per_second,
+                stats.mean_kv_cache_ratio,
+                stats.peak_kv_cache_ratio,
+            )
+            logger.info(
+                "  %-20s  server_rss_mean=%.1fMB  server_rss_peak=%.1fMB",
+                "",
+                stats.mean_server_rss_bytes / 1024**2,
+                stats.peak_server_rss_bytes / 1024**2,
+            )
 
         logger.info("\nPer-stage memory:")
-        #self.print_memory_report()
+        # self.print_memory_report()
 
         budget = r.latency_budget
         logger.info("\nLatency budget (target <%.0fms):", budget.budget_ms)

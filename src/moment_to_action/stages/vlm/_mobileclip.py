@@ -62,7 +62,7 @@ class MobileCLIPStage(Stage):
     def _precompute_text_embeddings(self):
         """Encode all prompts once at startup."""
         dummy_image = np.zeros((1, 3, 256, 256), dtype=np.float32)
-    
+
         text_embeddings = []
         for tokens in self._text_tokens:
             outputs = self._backend.run(
@@ -74,7 +74,7 @@ class MobileCLIPStage(Stage):
             )
             text_emb = outputs[0][0]  # [512]
             text_embeddings.append(text_emb)
-    
+
         text_embeddings = np.stack(text_embeddings)
         # Pre-normalize
         norms = np.linalg.norm(text_embeddings, axis=1, keepdims=True)
@@ -89,7 +89,7 @@ class MobileCLIPStage(Stage):
 
         # Run model ONCE (only image encoder matters)
         dummy_tokens = self._text_tokens[0][np.newaxis, ...].astype(np.int64)
-    
+
         outputs = self._backend.run(
             self._handle,
             {
@@ -98,7 +98,7 @@ class MobileCLIPStage(Stage):
             },
         )
 
-        '''
+        """
         scores = []
         for tokens in self._text_tokens:
             token_tensor = tokens[np.newaxis, ...].astype(np.int64)  # [1, 77]
@@ -129,7 +129,7 @@ class MobileCLIPStage(Stage):
         image_embs = outputs[1]  # [N, 512]
         text_embs = outputs[0]   # [N, 512]
         scores = self._cosine_similarity_batch(image_embs, text_embs)
-        '''
+        """
 
         image_emb = outputs[1][0]  # [512]
         image_emb = image_emb / (np.linalg.norm(image_emb) + 1e-8)

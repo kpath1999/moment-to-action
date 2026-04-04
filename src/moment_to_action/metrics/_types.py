@@ -59,11 +59,11 @@ class StageRecord:
     metadata: dict = attrs.Factory(dict)
     """Arbitrary key/value context attached at log time."""
 
-    #init_memory_bytes: int = 0 # set once at stage init time
-    init_memory_bytes: int # set once at stage init time
+    # init_memory_bytes: int = 0 # set once at stage init time
+    init_memory_bytes: int  # set once at stage init time
     """To measure memory consumed by the stage's models and other helper data"""
 
-    #runtime_memory_bytes: int = 0
+    # runtime_memory_bytes: int = 0
     runtime_memory_bytes: int
     """To measure the memory consumed by the stage during computation/process"""
 
@@ -77,7 +77,7 @@ class LLMRecord(StageRecord):
     # timing (from /completion timings or measured wall-clock)
     prompt_ms: float
     gen_ms: float
-    #TODO total_ms: float
+    # TODO total_ms: float
 
     # token counts
     prompt_tokens: int
@@ -87,7 +87,7 @@ class LLMRecord(StageRecord):
     # server state (from /slots)
     kv_cache_used_tokens: int
     kv_cache_total_tokens: int
-    kv_cache_ratio: float             # derived: used/total
+    kv_cache_ratio: float  # derived: used/total
 
     # server process memory (from psutil on llama-server pid)
     server_rss_bytes: int
@@ -129,9 +129,9 @@ class StageStats:
     max_ms: float
     """Maximum observed latency in milliseconds."""
 
-    init_memory_bytes: int        # constant across calls, just store it
+    init_memory_bytes: int  # constant across calls, just store it
     """Will remain roughly the same, but no harm in collection"""
-    
+
     mean_runtime_memory_bytes: int
 
 
@@ -145,9 +145,10 @@ class LLMStats(StageStats):
     p95_gen_ms: float
     mean_tokens_per_second: float
     mean_kv_cache_ratio: float
-    peak_kv_cache_ratio: float        # did we ever get close to OOM?
+    peak_kv_cache_ratio: float  # did we ever get close to OOM?
     mean_server_rss_bytes: int
     peak_server_rss_bytes: int
+
 
 @attrs.define
 class PipelineStats:
