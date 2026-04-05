@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from moment_to_action.stages._base import Stage
 
 
-
 logger = logging.getLogger(__name__)
 
 
