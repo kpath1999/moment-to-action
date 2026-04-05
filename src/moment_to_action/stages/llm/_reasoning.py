@@ -57,17 +57,11 @@ Respond only in JSON with exactly these fields:
 
 Examples:
 
-Detected: person (94%), dog (87%)
-{"action": "don't alert", "reason": "people and animals present no immediate threat, so no need to alert"}
-
 Detected: person (91%), knife (82%)
 {"action": "alert", "reason": "potential weapon detected near person, so need to alert"}
 
 Detected: person (88%), person (76%)
 {"action": "don't alert", "reason": "two people present no signs of danger, so no need to alert"}
-
-Detected: person (93%), person (85%), physical-contact (79%)
-{"action": "alert", "reason": "physical contact between people detected which is dangerous, so need to alert"}
 
 Now respond the same way for the detections you receive.\
 """
@@ -342,36 +336,23 @@ class LLMStage(Stage):
             raise TypeError(err)
 
         self._turn += 1
-        # TODO##Testing!!!##Replace!!#
-        # prompt = "Detected: person (95%), person (85%)"
-        # prompt = '{"detections": [{"label": "person", "confidence": 0.78}, {"label": "person", "confidence": 0.82}, "action": "people playing sports"]}'
-        # prompt = '{"detections": [{"label": "missile", "confidence": 0.88}, {"label": "guns", "confidence": 0.95} ]}'
         prompt = '{"detections": [{"label": "person", "confidence": 0.88}, {"label": "gun", "confidence": 0.95} ], "action": "a person aiming a gun" }'
-        # prompt = "Detected: guns (78%), smoke (66%), crowd (78%)"
-        # prompt = "France"
 
         # LLM inference — tokenize, run, decode
         system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)
-        # system = _SYSTEM_PROMPT_PARIS.replace("{{INPUT_JSON}}", prompt)
         messages = [{"role": "user", "content": system}]
 
         # Start client
         client = OpenAI(base_url="http://localhost:8080/v1", api_key="none")
 
-        # response = self.llm.create_chat_completion(
         response = client.chat.completions.create(
             model="any",
             messages=messages,
             max_tokens=100,
-            temperature=0.1,  ##TODO Where should temperature and other LLM tuning be performed?
-            # grammar=grammar,
-            # response_format={
-            #    "type": "json_object"
-            #    },
+            temperature=0.1,
             stop=["</s>", "\n\n"],
         )
 
-        # decision = response["choices"][0]["message"]["content"].strip()
         decision = response.choices[0].message.content.strip()
 
         logger.info("LLMStage: prompt=%r", prompt)
@@ -398,12 +379,6 @@ class LLMStage(Stage):
         )
         lines.append("\nWhat is happening in this scene?")
         return "\n".join(lines)
-
-    def _run_llm(self, prompt: str) -> str:
-        # NOTE(kausar): integrate with Kausar's LLM arch. LLM is a stage that
-        # ingests the message, performs inference dispatched via ComputeBackend.
-        # For now return the prompt so the pipeline is runnable end-to-end.
-        return f"[LLM stub] Received prompt with {len(prompt)} chars."
 
     def _server_rss_bytes(self) -> int:
         for proc in psutil.process_iter(["name", "memory_info"]):

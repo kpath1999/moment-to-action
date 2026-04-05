@@ -29,10 +29,10 @@ _CONFIG_PATH = Path(__file__).parent / "slm_config.yaml"
 
 ##Loud failure. Required? or just skip to defaults if not found?
 if not _CONFIG_PATH.exists():
-    raise FileNotFoundError(
-        f"config.yaml not found at {_CONFIG_PATH}. "
+    msg = (f"config.yaml not found at {_CONFIG_PATH}. "
         "Copy config.yaml to the project root before running."
     )
+    raise FileNotFoundError(msg)
 
 # ── Sub-models (one per pipeline stage) ──────────────────────────────────────
 
@@ -126,14 +126,14 @@ class Settings(BaseSettings):
         settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
+        **kwargs: Any,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Define the priority order for loading configuration settings."""
         return (
             init_settings,
             env_settings,
             YamlConfigSettingsSource(settings_cls, yaml_file=_CONFIG_PATH),
-            file_secret_settings,
+            kwargs.get("file_secret_settings"),
         )
 
 

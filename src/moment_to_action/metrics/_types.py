@@ -434,12 +434,10 @@ class Trace:
 
 @attrs.define
 class LLMRecord(StageRecord):
-    """
-    Per-call record from llama-server, logged by LLMStage.
+    #Per-call record from llama-server, logged by LLMStage.
 
-    The LLMStage requires a separate class to track its metrics due to
-    heavy resource usage. See PR discussion for details.
-    """
+    #The LLMStage requires a separate class to track its metrics due to
+    #heavy resource usage. See PR discussion for details.
 
     # timing (from /completion timings or measured wall-clock)
     prompt_ms: float

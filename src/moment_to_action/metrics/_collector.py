@@ -417,8 +417,8 @@ class MetricsCollector:
         stage_name: str,
         stage_idx: int,
         latency_ms: float,
-        init_memory_bytes: int = 0,
-        runtime_memory_bytes: int = 0,
+        init_memory_bytes: int,
+        runtime_memory_bytes: int,
         metadata: dict | None = None,
     ) -> None:
         """Record a single stage execution."""
@@ -435,7 +435,7 @@ class MetricsCollector:
         )
 
     # Adding a method to keep track of the llm data
-    def log_llm(
+    def log_llm( # noqa: PLR0913
         self,
         stage_name: str,
         stage_idx: int,
@@ -507,16 +507,16 @@ class MetricsCollector:
 
     def _compute_stage_stats(self, records: list[StageRecord]) -> StageStats:
         latencies = np.array([r.latency_ms for r in records])
-        base = dict(
-            num_calls=len(records),
-            mean_ms=float(np.mean(latencies)),
-            p50_ms=float(np.percentile(latencies, 50)),
-            p95_ms=float(np.percentile(latencies, 95)),
-            min_ms=float(np.min(latencies)),
-            max_ms=float(np.max(latencies)),
-            init_memory_bytes=records[0].init_memory_bytes,
-            mean_runtime_memory_bytes=int(np.mean([r.runtime_memory_bytes for r in records])),
-        )
+        base = {
+                "num_calls": len(records),
+                "mean_ms": float(np.mean(latencies)),
+                "p50_ms": float(np.percentile(latencies, 50)),
+                "p95_ms": float(np.percentile(latencies, 95)),
+                "min_ms": float(np.min(latencies)),
+                "max_ms": float(np.max(latencies)),
+                "init_memory_bytes": records[0].init_memory_bytes,
+                "mean_runtime_memory_bytes": int(np.mean([r.runtime_memory_bytes for r in records])),
+            }
 
         if isinstance(records[0], LLMRecord):
             return self._compute_llm_stats(base, records)  # type: ignore[arg-type]
@@ -530,12 +530,12 @@ class MetricsCollector:
             mean_gen_ms=float(np.mean(gen_arr)),
             p95_gen_ms=float(np.percentile(gen_arr, 95)),
             mean_tokens_per_second=float(np.mean([r.tokens_per_second for r in records])),
-            # mean_kv_cache_ratio=float(np.mean([r.kv_cache_ratio for r in records])),
-            mean_kv_cache_ratio=float(np.mean([r.kv_cache_total_tokens for r in records])),
+            mean_kv_cache_ratio=float(np.mean([r.kv_cache_ratio for r in records])),
             peak_kv_cache_ratio=float(np.max([r.kv_cache_ratio for r in records])),
             mean_server_rss_bytes=int(np.mean([r.server_rss_bytes for r in records])),
             peak_server_rss_bytes=int(np.max([r.server_rss_bytes for r in records])),
         )
+
         """
 
         result: dict[str, StageStats] = {}
