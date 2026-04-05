@@ -551,47 +551,6 @@ class MetricsCollector:
             peak_server_rss_bytes=int(np.max([r.server_rss_bytes for r in records])),
         )
 
-        """
-
-        result: dict[str, StageStats] = {}
-
-        for stage_name, records in by_stage.items():
-            latencies = np.array([r.latency_ms for r in records])
-
-            base = dict(
-                num_calls=len(records),
-                mean_ms=float(np.mean(latencies)),
-                p50_ms=float(np.percentile(latencies, 50)),
-                p95_ms=float(np.percentile(latencies, 95)),
-                min_ms=float(np.min(latencies)),
-                max_ms=float(np.max(latencies)),
-                init_memory_bytes=records[0].init_memory_bytes,
-                mean_runtime_memory_bytes=int(
-                    np.mean([r.runtime_memory_bytes for r in records])
-                    ),
-                )
-
-            result[stage_name] = StageStats(**base)
-
-        return result
-        """
-
-        """
-        return {
-            stage: StageStats(
-                num_calls=len(latencies),
-                mean_ms=float(np.mean(arr := np.array(latencies))),
-                p50_ms=float(np.percentile(arr, 50)),
-                p95_ms=float(np.percentile(arr, 95)),
-                min_ms=float(np.min(arr)),
-                max_ms=float(np.max(arr)),
-                init_memory_bytes=0,
-                mean_runtime_memory_bytes=0,
-            )
-            for stage, latencies in by_stage.items()
-        }
-        """
-
     def _pipeline_stats(self) -> PipelineStats:
         triggers = [r for r in self._pipeline_log if r.event_type == EventType.TRIGGER_FIRED]
         detections = [r for r in self._pipeline_log if r.event_type == EventType.DETECTION]
