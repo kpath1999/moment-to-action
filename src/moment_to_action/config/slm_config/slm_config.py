@@ -29,7 +29,8 @@ _CONFIG_PATH = Path(__file__).parent / "slm_config.yaml"
 
 ##Loud failure. Required? or just skip to defaults if not found?
 if not _CONFIG_PATH.exists():
-    msg = (f"config.yaml not found at {_CONFIG_PATH}. "
+    msg = (
+        f"config.yaml not found at {_CONFIG_PATH}. "
         "Copy config.yaml to the project root before running."
     )
     raise FileNotFoundError(msg)

@@ -435,7 +435,7 @@ class MetricsCollector:
         )
 
     # Adding a method to keep track of the llm data
-    def log_llm( # noqa: PLR0913
+    def log_llm(  # noqa: PLR0913
         self,
         stage_name: str,
         stage_idx: int,
@@ -508,15 +508,15 @@ class MetricsCollector:
     def _compute_stage_stats(self, records: list[StageRecord]) -> StageStats:
         latencies = np.array([r.latency_ms for r in records])
         base = {
-                "num_calls": len(records),
-                "mean_ms": float(np.mean(latencies)),
-                "p50_ms": float(np.percentile(latencies, 50)),
-                "p95_ms": float(np.percentile(latencies, 95)),
-                "min_ms": float(np.min(latencies)),
-                "max_ms": float(np.max(latencies)),
-                "init_memory_bytes": records[0].init_memory_bytes,
-                "mean_runtime_memory_bytes": int(np.mean([r.runtime_memory_bytes for r in records])),
-            }
+            "num_calls": len(records),
+            "mean_ms": float(np.mean(latencies)),
+            "p50_ms": float(np.percentile(latencies, 50)),
+            "p95_ms": float(np.percentile(latencies, 95)),
+            "min_ms": float(np.min(latencies)),
+            "max_ms": float(np.max(latencies)),
+            "init_memory_bytes": records[0].init_memory_bytes,
+            "mean_runtime_memory_bytes": int(np.mean([r.runtime_memory_bytes for r in records])),
+        }
 
         if isinstance(records[0], LLMRecord):
             return self._compute_llm_stats(base, records)  # type: ignore[arg-type]
