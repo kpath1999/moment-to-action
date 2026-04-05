@@ -203,14 +203,9 @@ class MetricsCollector:
         if not self._stage_log:
             return {}
 
-        """This records the latencies and groups them by stages for a number of pipeline runs"""
-        """
-        by_stage: dict[str, list[float]] = {}
-        for record in self._stage_log:
-            by_stage.setdefault(record.stage_name, []).append(record.latency_ms)        
-        """
+        #This records the latencies and groups them by stages for a number of pipeline runs
 
-        """Modifying the data structure to included stats in addition to latency, others can be easily added"""
+        #Modifying the data structure to include additional stats, others can be easily added
         by_stage: dict[str, list[StageRecord]] = {}
         for record in self._stage_log:
             by_stage.setdefault(record.stage_name, []).append(record)
@@ -413,7 +408,7 @@ class MetricsCollector:
         logger.info("\nPer-stage latency:")
         for stage, stats in r.per_stage.items():
             logger.info(
-                "  %-20s  mean=%.1fms  p95=%.1fms mean_init_memory=%.1fMB mean_runtime_memory=%.1fMB",
+                "%-20s  mean=%.1fms  p95=%.1fms mean_init_mem=%.1fMB mean_runtime_mem=%.1fMB",
                 stage,
                 stats.mean_ms,
                 stats.p95_ms,
@@ -442,9 +437,6 @@ class MetricsCollector:
                 stats.mean_server_rss_bytes / 1024**2,
                 stats.peak_server_rss_bytes / 1024**2,
             )
-
-        logger.info("\nPer-stage memory:")
-        # self.print_memory_report()
 
         budget = r.latency_budget
         logger.info("\nLatency budget (target <%.0fms):", budget.budget_ms)

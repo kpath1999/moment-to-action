@@ -61,7 +61,7 @@ class Stage(ABC):
             result = result.model_copy(update={"latency_ms": elapsed_ms})
 
         if metrics is not None:
-            # If LLMStage is the current stage, then it will have to use log_llm to log LLM related data
+            # If LLMStage is the current stage, then it will have to use log_llm
             llm_metrics = self._llm_metrics()
             if llm_metrics:
                 metrics.log_llm(
@@ -91,5 +91,5 @@ class Stage(ABC):
         ...
 
     def _llm_metrics(self) -> dict:
-        """The LLM has extra metrics which requires HTTP comm. with the server, hence separating it"""
+        #LLM metrics require HTTP communication with the server, hence separating it.
         return {}

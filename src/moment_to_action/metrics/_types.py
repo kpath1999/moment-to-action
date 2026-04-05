@@ -59,26 +59,25 @@ class StageRecord:
     metadata: dict = attrs.Factory(dict)
     """Arbitrary key/value context attached at log time."""
 
-    # init_memory_bytes: int = 0 # set once at stage init time
-    init_memory_bytes: int  # set once at stage init time
+    init_memory_bytes: int
     """To measure memory consumed by the stage's models and other helper data"""
 
-    # runtime_memory_bytes: int = 0
     runtime_memory_bytes: int
     """To measure the memory consumed by the stage during computation/process"""
 
 
 @attrs.define
 class LLMRecord(StageRecord):
-    """The LLMStage requires a separate class to keep track of its metrics
-    And due to its heavy resource usage. Discuss in PR
+    """
     Per-call record from llama-server, logged by LLMStage.
+
+    The LLMStage requires a separate class to track its metrics due to
+    heavy resource usage. See PR discussion for details.
     """
 
     # timing (from /completion timings or measured wall-clock)
     prompt_ms: float
     gen_ms: float
-    # TODO total_ms: float
 
     # token counts
     prompt_tokens: int

@@ -59,7 +59,7 @@ class MobileCLIPStage(Stage):
         self._text_embeddings = self._precompute_text_embeddings()
         logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))
 
-    def _precompute_text_embeddings(self):
+    def _precompute_text_embeddings(self) -> np.ndarray:
         """Encode all prompts once at startup."""
         dummy_image = np.zeros((1, 3, 256, 256), dtype=np.float32)
 
@@ -111,9 +111,7 @@ class MobileCLIPStage(Stage):
             )
             image_emb = outputs[1][0]  # [512]
             text_emb = outputs[0][0]  # [512]
-            scores.append(self._cosine_similarity(image_emb, text_emb))
-        
-        
+            scores.append(self._cosine_similarity(image_emb, text_emb)) 
         num_prompts = len(self._text_tokens)
         image_batch = np.repeat(msg.tensor, num_prompts, axis=0)
         text_batch = self._text_tokens.astype(np.int64)
@@ -124,8 +122,6 @@ class MobileCLIPStage(Stage):
                 "serving_default_args_1:0": text_batch,   # [N, 77]
             },
         )
-        
-
         image_embs = outputs[1]  # [N, 512]
         text_embs = outputs[0]   # [N, 512]
         scores = self._cosine_similarity_batch(image_embs, text_embs)
