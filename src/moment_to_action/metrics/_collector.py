@@ -203,9 +203,9 @@ class MetricsCollector:
         if not self._stage_log:
             return {}
 
-        #This records the latencies and groups them by stages for a number of pipeline runs
+        # This records the latencies and groups them by stages for a number of pipeline runs
 
-        #Modifying the data structure to include additional stats, others can be easily added
+        # Modifying the data structure to include additional stats, others can be easily added
         by_stage: dict[str, list[StageRecord]] = {}
         for record in self._stage_log:
             by_stage.setdefault(record.stage_name, []).append(record)
