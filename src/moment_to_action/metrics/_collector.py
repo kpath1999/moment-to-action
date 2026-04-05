@@ -535,6 +535,9 @@ class MetricsCollector:
         return StageStats(**base)
 
     def _compute_llm_stats(self, base: dict, records: list[LLMRecord]) -> LLMStats:
+        """Compute detailed LLM-specific statistics."""
+        if not records:
+            return LLMStats(**base)  # Explicit return for empty case fixes RET503
         gen_arr = np.array([r.gen_ms for r in records])
         return LLMStats(
             **base,
