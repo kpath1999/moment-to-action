@@ -34,6 +34,8 @@ from threading import Event, Lock, Thread
 from typing import TYPE_CHECKING
 
 import psutil
+import attrs
+import numpy as np
 
 from moment_to_action.hardware._types import ComputeUnit
 
@@ -45,13 +47,7 @@ from ._types import (
     SpanType,
     Trace,
     )
-
-import attrs
-import numpy as np
-import psutil
-
 from pathlib import Path
-
 
 from moment_to_action.metrics._types import (
     CollectorReport,
