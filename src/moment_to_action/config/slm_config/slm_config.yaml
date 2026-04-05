@@ -1,0 +1,21 @@
+# moment-to-action pipeline configuration
+# All values here can be overridden by environment variables prefixed with M2A_
+# e.g. M2A_LLM__MODEL_PATH=/new/path/to/model.gguf
+
+llm:
+  model_path: "./llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+  n_ctx: 1024           # context window — keep short to limit KV cache RAM
+  n_threads: 6         # CPU threads — leave 2 cores free for pipeline/YOLO
+  n_gpu_layers: 99      # set to 28 to try Adreno GPU offload
+  max_tokens: 80       # hard cap on generated tokens per inference call
+  temperature: 0.1     # low = deterministic, high = creative
+  verbose: true       # set true temporarily to see llama.cpp memory breakdown
+
+yolo:
+  model_path: "./models/yolo/model.onnx"
+  confidence_threshold: 0.5
+  max_detections: 5
+
+pipeline:
+  input_source: "./images/test.jpg"   # path to image, mp4, or 0 for camera
+  log_level: "INFO"

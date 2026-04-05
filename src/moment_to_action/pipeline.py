@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
     from moment_to_action.metrics._collector import MetricsCollector
     from moment_to_action.stages._base import Stage
+
+
+logger = logging.getLogger(__name__)
 
 
 class Pipeline:

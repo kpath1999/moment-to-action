@@ -17,13 +17,14 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import ClassificationMessage, RawFrameMessage
+from moment_to_action.messages import ClassificationMessage, RawFrameMessage, ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
-from moment_to_action.models import ModelManager
+from moment_to_action.models import ModelManager, ModelID
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages.video import PreprocessorStage
 from moment_to_action.stages.vlm import MobileCLIPStage
+from moment_to_action.stages.llm import LLMStage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +68,12 @@ pipeline = Pipeline(
             backend=ComputeBackend(preferred_unit=device),
             manager=manager,
         ),
+        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"),
+        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/qwen2.5-1.5b-instruct-q5_k_m.gguf"),
+        LLMStage(
+            model_id=ModelID.QWEN_2_5,
+            manager=manager,
+            ),
     ],
     metrics=metrics,
 )
@@ -82,13 +89,18 @@ result = pipeline.run(msg)
 
 if result is None:
     logger.info("Pipeline returned no result.")
-elif isinstance(result, ClassificationMessage):
+elif isinstance(result, ReasoningMessage):
     logger.info("\nResults:")
     logger.info("-" * 60)
+    '''
     for prompt, score in sorted(result.all_scores.items(), key=lambda x: -x[1]):
         bar = "█" * int(score * 40)
         marker = " ← best" if prompt == result.label else ""
         logger.info("  %.3f  %-40s  %s%s", score, bar, prompt, marker)
+    '''
     logger.info("-" * 60)
+    logger.info("\nLLM response:")
+    logger.info("%s", result.response)
 
-metrics.print_stage_latencies()
+#metrics.print_stage_latencies()
+metrics.print_summary()

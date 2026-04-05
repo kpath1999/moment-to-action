@@ -19,10 +19,10 @@ from rich.logging import RichHandler
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import RawFrameMessage, ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
-from moment_to_action.models import ModelManager
+from moment_to_action.models import ModelManager, ModelID
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
-from moment_to_action.stages.llm import ReasoningStage
+from moment_to_action.stages.llm import LLMStage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
 
 logging.basicConfig(
@@ -56,7 +56,14 @@ pipeline = Pipeline(
             manager=manager,
             confidence_threshold=args.conf,
         ),
-        ReasoningStage(),
+        #Replacing the ReasoningStage() with LLMStage()
+        #ReasoningStage(),
+        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/Qwen3.5-0.8B-Q4_K_M.gguf"),
+        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"),
+        LLMStage(
+            model_id=ModelID.QWEN_2_5,
+            manager=manager,
+        ),
     ],
     metrics=metrics,
 )
