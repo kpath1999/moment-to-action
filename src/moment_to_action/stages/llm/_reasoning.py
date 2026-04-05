@@ -336,7 +336,11 @@ class LLMStage(Stage):
             raise TypeError(err)
 
         self._turn += 1
-        prompt = '{"detections": [{"label": "person", "confidence": 0.88}, {"label": "gun", "confidence": 0.95} ], "action": "a person aiming a gun" }'
+        prompt = (
+            '{"detections": [{"label": "person", "confidence": 0.88}, '
+            '{"label": "gun", "confidence": 0.95} ], '
+            '"action": "a person aiming a gun" }'
+        )
 
         # LLM inference — tokenize, run, decode
         system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)
@@ -393,10 +397,7 @@ class LLMStage(Stage):
         slot = slots[0]
         return {
             "prompt_ms": 0.0,
-            # "gen_ms": self._last_latency_ms,       # stored in _process()
             "gen_ms": 0.0,  # stored in _process()
-            # "prompt_tokens": self._last_usage.prompt_tokens,
-            # "gen_tokens": self._last_usage.completion_tokens,
             "kv_cache_used": slot.get("n_past", 0),
             "kv_cache_total": slot.get("n_ctx", 512),
             "server_rss_bytes": self._server_rss_bytes(),

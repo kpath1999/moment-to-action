@@ -114,7 +114,7 @@ class MobileCLIPStage(Stage):
                 )
             image_emb = outputs[1][0]  # [512]
             text_emb = outputs[0][0]  # [512]
-            scores.append(self._cosine_similarity(image_emb, text_emb)) 
+            scores.append(self._cosine_similarity(image_emb, text_emb))
         num_prompts = len(self._text_tokens)
         image_batch = np.repeat(msg.tensor, num_prompts, axis=0)
         text_batch = self._text_tokens.astype(np.int64)

@@ -421,7 +421,16 @@ class MetricsCollector:
         runtime_memory_bytes: int,
         metadata: dict | None = None,
     ) -> None:
-        """Record a single stage execution."""
+        """Record a single stage execution.
+
+        Args:
+            stage_name: Class name of the stage (e.g. ``"YOLOStage"``).
+            stage_idx: Pipeline stage index (1 = trigger/sensor, 2 = vision/LLM).
+            latency_ms: Wall-clock time for this stage in milliseconds.
+            metadata: Optional extra context to attach to the record.
+            init_memory_bytes: Memory consumed during a stage's setup
+            runtime_memory_bytes: Memory consumed by a stage during its process
+        """
         self._stage_log.append(
             StageRecord(
                 timestamp=time.time(),
@@ -506,6 +515,9 @@ class MetricsCollector:
         }
 
     def _compute_stage_stats(self, records: list[StageRecord]) -> StageStats:
+        # Guard clause: Fixes RET503 and prevents IndexError on empty lists
+        if not records:
+            return StageStats()
         latencies = np.array([r.latency_ms for r in records])
         base = {
             "num_calls": len(records),
