@@ -53,7 +53,8 @@ PROMPTS = [
 ]
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-metrics = MetricsCollector()
+compute_backend = ComputeBackend(preferred_unit=device)
+metrics = MetricsCollector(compute_backend=compute_backend)
 manager = ModelManager()
 
 pipeline = Pipeline(
@@ -67,7 +68,7 @@ pipeline = Pipeline(
         # Stage resolves the MobileCLIP model path via ModelManager.
         MobileCLIPStage(
             text_prompts=PROMPTS,
-            backend=ComputeBackend(preferred_unit=device),
+            backend=compute_backend,
             manager=manager,
         ),
     ],

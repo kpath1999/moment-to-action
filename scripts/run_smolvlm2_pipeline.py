@@ -296,7 +296,7 @@ def main() -> int:  # noqa: C901, PLR0915
 
     manager = ModelManager()
     backend = ComputeBackend()
-    metrics = MetricsCollector(session_id=run_id)
+    metrics = MetricsCollector(compute_backend=backend, session_id=run_id)
 
     # Build the pipeline: ClipBufferStage → SmolVLM2Stage
     pipeline = Pipeline(

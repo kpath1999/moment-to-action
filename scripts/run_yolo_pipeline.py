@@ -46,8 +46,10 @@ parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshol
 args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-metrics = MetricsCollector()
+compute_backend = ComputeBackend(preferred_unit=device)
+metrics = MetricsCollector(compute_backend=compute_backend)
 manager = ModelManager()
+
 
 # ── build pipeline ─────────────────────────────────────────────────
 # Stages resolve their own model paths via ModelManager.
@@ -55,7 +57,7 @@ pipeline = Pipeline(
     stages=[
         PreprocessorStage(target_size=(640, 640), letterbox=True),
         YOLOStage(
-            backend=ComputeBackend(preferred_unit=device),
+            backend=compute_backend,
             manager=manager,
             confidence_threshold=args.conf,
         ),
