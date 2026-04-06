@@ -7,8 +7,12 @@ import ``ComputeUnit`` from here, not from the backend module.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 import attrs
+
+if TYPE_CHECKING:
+    import torch
 
 
 class ComputeUnit(StrEnum):
@@ -42,12 +46,12 @@ class TorchExecutionPolicy:
     """Resolved torch execution configuration for model loading and inference.
 
     Attributes:
-        device: Torch device string (for example ``"cpu"``, ``"cuda"``, ``"mps"``).
-        dtype: Torch dtype attribute name (for example ``"float32"``, ``"float16"``).
+        device: Resolved ``torch.device`` instance.
+        dtype: Resolved ``torch.dtype`` instance.
     """
 
-    device: str
-    """Resolved torch device string."""
+    device: torch.device
+    """Resolved torch device."""
 
-    dtype: str
-    """Resolved torch dtype attribute name."""
+    dtype: torch.dtype
+    """Resolved torch dtype."""

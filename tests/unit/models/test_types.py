@@ -374,10 +374,10 @@ class TestModelRegistry:
         assert isinstance(info.source, TransformersSource)
         assert info.source.hf_repo_id == "HuggingFaceTB/SmolVLM2-2.2B-Instruct"
 
-    def test_smolvlm2_2_2b_has_empty_filename(self) -> None:
-        """Test that SMOLVLM2_2_2B has an empty filename (directory source)."""
+    def test_smolvlm2_2_2b_has_unused_filename_sentinel(self) -> None:
+        """Test that SMOLVLM2_2_2B has '__UNUSED__' filename (directory-based source)."""
         info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
-        assert info.filename == ""
+        assert info.filename == "__UNUSED__"
 
     @pytest.mark.parametrize(
         "model_id",

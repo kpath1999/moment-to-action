@@ -117,7 +117,7 @@ class ModelManager:
             return available
         if isinstance(info.source, TransformersSource):
             cache_path = self._cache_dir / model.value
-            available = self._is_transformers_cache_ready(cache_path)
+            available = cache_path.exists()
             logger.debug("Model %s availability (cached): %s", model.value, available)
             return available
         logger.debug("Model %s not available", model.value)
@@ -250,7 +250,7 @@ class ModelManager:
 
             case TransformersSource(hf_repo_id=repo):
                 cache_dir = self._cache_dir / info.id.value
-                if self._is_transformers_cache_ready(cache_dir):
+                if cache_dir.exists():
                     logger.debug("Using cached transformers repo: %s", cache_dir)
                     return cache_dir
 
@@ -309,18 +309,6 @@ class ModelManager:
                 msg = f"Model {info.id} is downloadable, not vendored"
                 raise FileNotFoundError(msg)
 
-    @staticmethod
-    def _is_transformers_cache_ready(cache_dir: Path) -> bool:
-        """Check whether a cached transformers repo directory looks usable."""
-        if not cache_dir.exists() or not cache_dir.is_dir():
-            return False
-
-        has_model_config = (cache_dir / "config.json").exists()
-        has_processor_config = (cache_dir / "preprocessor_config.json").exists() or (
-            cache_dir / "tokenizer_config.json"
-        ).exists()
-        return has_model_config and has_processor_config
-
     def _download_from_hf(self, repo_id: str, filename: str, dest_path: Path) -> None:
         """Download a model from HuggingFace Hub with a Rich progress bar.
 
@@ -377,13 +365,9 @@ class ModelManager:
             dest_dir: Target directory under the model cache.
 
         Raises:
-            RuntimeError: If download fails or required dependencies are missing.
+            RuntimeError: If download fails.
         """
-        try:
-            from transformers import AutoModelForImageTextToText, AutoProcessor
-        except ImportError as exc:
-            msg = f"Required dependency not available: {exc.name}"
-            raise RuntimeError(msg) from None
+        from transformers import AutoModelForImageTextToText, AutoProcessor
 
         try:
             dest_dir.mkdir(parents=True, exist_ok=True)

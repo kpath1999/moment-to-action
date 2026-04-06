@@ -33,6 +33,10 @@ if TYPE_CHECKING:
     from moment_to_action.hardware._types import TorchExecutionPolicy
 
 from moment_to_action.hardware._platforms._detection import Platform, detect_platform
+from moment_to_action.hardware._platforms.macos_arm64 import (
+    MacOSARM64Backend,
+    MacOSARM64PowerMonitor,
+)
 from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
 from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64PowerMonitor
 from moment_to_action.hardware._types import ComputeUnit
@@ -90,8 +94,7 @@ def _make_power_monitor() -> PowerMonitor:
         case Platform.X86_64:
             return X86_64PowerMonitor()
         case Platform.MACOS_ARM64:
-            # Reuse x86_64 monitor fallback heuristics for local CPU testing.
-            return X86_64PowerMonitor()
+            return MacOSARM64PowerMonitor()
 
 
 def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
@@ -102,8 +105,7 @@ def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
         case Platform.X86_64:
             return X86_64Backend()
         case Platform.MACOS_ARM64:
-            # macOS arm64 currently uses the CPU-oriented runtime path.
-            return X86_64Backend()
+            return MacOSARM64Backend()
 
 
 # ---------------------------------------------------------------------------

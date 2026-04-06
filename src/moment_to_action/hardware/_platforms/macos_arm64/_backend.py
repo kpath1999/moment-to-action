@@ -1,15 +1,9 @@
-"""Unified inference backend for the x86_64 platform.
+"""Unified inference backend for macOS arm64 (Apple Silicon).
 
-``X86_64Backend`` is the single :class:`InferenceBackend` that the platform
-package exposes.  It owns:
-
-- **Format routing** — ``.tflite`` files go to LiteRT, ``.onnx`` files go to
-  ONNX Runtime.  Both sub-backends are created eagerly at construction time.
-- **Model handle tracking** — each loaded model is paired (via ``_ModelHandle``)
-  with the sub-backend that created it, so ``run()`` needs no isinstance checks.
-
-All the complexity lives here so that :class:`ComputeBackend` (the public
-orchestrator) can be a three-field thin wrapper.
+``MacOSARM64Backend`` provides the same CPU-only LiteRT + ONNX Runtime
+inference path as the x86_64 backend.  It is a dedicated class so that
+future x86_64-specific changes (e.g. XNNPACK tuning, AVX flags) do not
+accidentally break the macOS development path.
 """
 
 from __future__ import annotations
@@ -24,11 +18,11 @@ if TYPE_CHECKING:
     import numpy as np
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
+from moment_to_action.hardware._platforms._runtimes._litert import LiteRTBackend
+from moment_to_action.hardware._platforms._runtimes._onnx import ONNXBackend
 from moment_to_action.hardware._platforms._runtimes._torch_policy import (
     resolve_torch_execution_policy,
 )
-from moment_to_action.hardware._platforms.x86_64._litert import X86_64LiteRTBackend
-from moment_to_action.hardware._platforms.x86_64._onnx import X86_64ONNXBackend
 from moment_to_action.hardware._types import ComputeUnit
 
 if TYPE_CHECKING:
@@ -36,7 +30,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Supported model file suffixes.
 _TFLITE_SUFFIX = ".tflite"
 _ONNX_SUFFIX = ".onnx"
 
@@ -48,11 +41,7 @@ _ONNX_SUFFIX = ".onnx"
 
 @attrs.define(slots=True)
 class _ModelHandle:
-    """Opaque model handle that pairs a raw runtime object with its backend.
-
-    Callers treat this as completely opaque — they just pass it back to
-    ``X86_64Backend.run()`` and friends.
-    """
+    """Opaque model handle that pairs a raw runtime object with its backend."""
 
     raw: Any = attrs.field(repr=False)
     backend: InferenceBackend = attrs.field(repr=False)
@@ -63,32 +52,26 @@ class _ModelHandle:
 # ---------------------------------------------------------------------------
 
 
-class X86_64Backend(InferenceBackend):  # noqa: N801
-    """Unified inference backend for x86_64 (CPU-only).
+class MacOSARM64Backend(InferenceBackend):
+    """Unified inference backend for macOS arm64 (CPU-only).
 
-    Internally delegates to format-specific sub-backends, all created eagerly:
+    Internally delegates to format-specific sub-backends:
 
-    - ``.tflite`` → ``_litert_backend`` (CPU via LiteRT/XNNPACK)
-    - ``.onnx``   → ``_onnx_backend`` (CPU via ONNX Runtime)
-
-    Both CPU-only; GPU support (CUDA/ROCm) can be added in the future via
-    sub-backend overrides.
+    - ``.tflite`` → LiteRT (CPU)
+    - ``.onnx``   → ONNX Runtime (CPU)
 
     Usage::
 
-        backend = X86_64Backend()
+        backend = MacOSARM64Backend()
         handle  = backend.load_model("mobileclip.tflite")
         outputs = backend.run(handle, image_tensor)
     """
 
     def __init__(self) -> None:
-        # CPU-only backends — always available.
-        self._litert_backend: X86_64LiteRTBackend = X86_64LiteRTBackend(
-            compute_unit=ComputeUnit.CPU
-        )
-        self._onnx_backend: X86_64ONNXBackend = X86_64ONNXBackend()
+        self._litert_backend: LiteRTBackend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        self._onnx_backend: ONNXBackend = ONNXBackend()
 
-        logger.info("X86_64Backend: CPU-only (LiteRT + ONNX Runtime)")
+        logger.info("MacOSARM64Backend: CPU-only (LiteRT + ONNX Runtime)")
 
     # ------------------------------------------------------------------
     # InferenceBackend interface
@@ -96,9 +79,6 @@ class X86_64Backend(InferenceBackend):  # noqa: N801
 
     def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load a model, routing by file extension.
-
-        ``.tflite`` files go to the LiteRT sub-backend.
-        ``.onnx`` files go directly to the ONNX sub-backend.
 
         Args:
             path: Filesystem path to the model file.
@@ -110,7 +90,7 @@ class X86_64Backend(InferenceBackend):  # noqa: N801
             ValueError: If the file extension is unrecognised.
             RuntimeError: If loading fails.
         """
-        path = os.fspath(path)  # normalise to str for extension checks
+        path = os.fspath(path)
         if path.endswith(_TFLITE_SUFFIX):
             return self._load_tflite(path)
         if path.endswith(_ONNX_SUFFIX):
@@ -123,9 +103,6 @@ class X86_64Backend(InferenceBackend):  # noqa: N801
 
     def run(self, handle: object, inputs: ModelInput) -> list[np.ndarray]:
         """Run inference via the sub-backend that loaded the model.
-
-        O(1) dispatch — no isinstance checks.  The handle already knows which
-        sub-backend owns it.
 
         Args:
             handle: Handle returned by :meth:`load_model`.
@@ -156,7 +133,7 @@ class X86_64Backend(InferenceBackend):  # noqa: N801
         return h.backend.get_output_details(h.raw)
 
     def get_supported_unit(self) -> ComputeUnit:
-        """Return ``ComputeUnit.CPU`` (x86_64 is CPU-only)."""
+        """Return ``ComputeUnit.CPU`` (macOS arm64 is CPU-only)."""
         return ComputeUnit.CPU
 
     def resolve_torch_policy(self, requested: str = "auto") -> TorchExecutionPolicy:

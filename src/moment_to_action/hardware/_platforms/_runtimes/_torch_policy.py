@@ -26,10 +26,10 @@ def resolve_torch_execution_policy(requested: str = "auto") -> TorchExecutionPol
         device = torch.device("cpu")
 
     if device.type == "cuda":
-        dtype = "bfloat16"
+        dtype = torch.bfloat16
     elif device.type == "mps":
-        dtype = "float16"
+        dtype = torch.float16
     else:
-        dtype = "float32"
+        dtype = torch.float32
 
-    return TorchExecutionPolicy(device=str(device), dtype=dtype)
+    return TorchExecutionPolicy(device=device, dtype=dtype)

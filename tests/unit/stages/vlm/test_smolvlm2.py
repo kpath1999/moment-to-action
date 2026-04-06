@@ -11,12 +11,7 @@ import pytest
 import torch
 
 from moment_to_action.models import ModelID, ModelManager
-from moment_to_action.stages.vlm._smolvlm2 import (
-    SmolVLM2Stage,
-    _sample_frames,
-    _to_pil_rgb,
-    _torch_dtype_from_name,
-)
+from moment_to_action.stages.vlm._smolvlm2 import SmolVLM2Stage
 
 
 @pytest.mark.unit
@@ -26,7 +21,10 @@ class TestSmolVLM2StageInit:
     def test_init_uses_model_manager_for_model_path(self) -> None:
         """Stage init should resolve model directory via ModelManager."""
         backend = mock.MagicMock()
-        backend.resolve_torch_policy.return_value = mock.MagicMock(device="cpu", dtype="float32")
+        policy = mock.MagicMock()
+        policy.device = torch.device("cpu")
+        policy.dtype = torch.float32
+        backend.resolve_torch_policy.return_value = policy
 
         manager = mock.MagicMock(spec=ModelManager)
         model_dir = Path("/tmp/smolvlm2")
@@ -36,9 +34,7 @@ class TestSmolVLM2StageInit:
         model.to.return_value = model
 
         with (
-            mock.patch(
-                "moment_to_action.stages.vlm._smolvlm2.AutoProcessor.from_pretrained"
-            ) as _mock_processor,
+            mock.patch("moment_to_action.stages.vlm._smolvlm2.AutoProcessor.from_pretrained"),
             mock.patch(
                 "moment_to_action.stages.vlm._smolvlm2.AutoModelForImageTextToText.from_pretrained",
                 return_value=model,
@@ -56,7 +52,10 @@ class TestSmolVLM2StageInit:
     def test_init_loads_processor_from_resolved_model_directory(self) -> None:
         """Stage init should load processor from manager-resolved directory."""
         backend = mock.MagicMock()
-        backend.resolve_torch_policy.return_value = mock.MagicMock(device="cpu", dtype="bfloat16")
+        policy = mock.MagicMock()
+        policy.device = torch.device("cpu")
+        policy.dtype = torch.bfloat16
+        backend.resolve_torch_policy.return_value = policy
 
         manager = mock.MagicMock(spec=ModelManager)
         model_dir = Path("/tmp/smolvlm2")
@@ -81,39 +80,33 @@ class TestSmolVLM2StageInit:
             trust_remote_code=True,
         )
 
+    def test_init_requires_backend_and_manager(self) -> None:
+        """SmolVLM2Stage requires backend and manager as positional args."""
+        import inspect
 
-@pytest.mark.unit
-class TestTorchDtypeFromName:
-    """Tests for _torch_dtype_from_name helper."""
-
-    def test_bfloat16(self) -> None:
-        """Converts 'bfloat16' to torch.bfloat16."""
-        assert _torch_dtype_from_name("bfloat16") is torch.bfloat16
-
-    def test_float16(self) -> None:
-        """Converts 'float16' to torch.float16."""
-        assert _torch_dtype_from_name("float16") is torch.float16
-
-    def test_float32_default(self) -> None:
-        """Unrecognised names fall back to torch.float32."""
-        assert _torch_dtype_from_name("float32") is torch.float32
-        assert _torch_dtype_from_name("anything") is torch.float32
+        sig = inspect.signature(SmolVLM2Stage.__init__)
+        params = list(sig.parameters.keys())
+        assert "backend" in params
+        assert "manager" in params
+        assert sig.parameters["backend"].default is inspect.Parameter.empty
+        assert sig.parameters["manager"].default is inspect.Parameter.empty
 
 
 @pytest.mark.unit
 class TestToPilRgb:
-    """Tests for _to_pil_rgb helper."""
+    """Tests for to_pil_rgb helper (now in utils.video)."""
 
     def test_converts_bgr_to_rgb_pil(self) -> None:
         """Converts an OpenCV BGR ndarray to a PIL RGB image."""
-        bgr = np.zeros((100, 200, 3), dtype=np.uint8)
-        bgr[:, :, 0] = 255  # Blue channel
+        from moment_to_action.utils.video import to_pil_rgb
 
-        pil_img = _to_pil_rgb(bgr)
+        bgr = np.zeros((100, 200, 3), dtype=np.uint8)
+        bgr[:, :, 0] = 255  # Blue channel in BGR
+
+        pil_img = to_pil_rgb(bgr)
 
         assert pil_img.mode == "RGB"
         assert pil_img.size == (200, 100)
-        # After BGR->RGB, blue channel (index 0 of BGR) becomes index 2 of RGB
         pixel = pil_img.getpixel((0, 0))
         assert isinstance(pixel, tuple)
         r, g, b = pixel
@@ -124,21 +117,24 @@ class TestToPilRgb:
 
 @pytest.mark.unit
 class TestSampleFrames:
-    """Tests for _sample_frames helper."""
+    """Tests for sample_frames helper (now in utils.video)."""
 
     def test_returns_all_when_under_limit(self) -> None:
         """Returns all frames when count is below max_images."""
+        from moment_to_action.utils.video import sample_frames
+
         frames = [np.zeros((10, 10)) for _ in range(3)]
-        result = _sample_frames(frames, max_images=8)
+        result = sample_frames(frames, max_images=8)
         assert len(result) == 3
-        assert result is frames  # no copy
+        assert result is frames
 
     def test_samples_uniformly(self) -> None:
         """Uniformly samples when frame count exceeds max_images."""
+        from moment_to_action.utils.video import sample_frames
+
         frames = [np.full((1, 1), i) for i in range(20)]
-        result = _sample_frames(frames, max_images=4)
+        result = sample_frames(frames, max_images=4)
         assert len(result) == 4
-        # Should include first and last
         np.testing.assert_array_equal(result[0], frames[0])
         np.testing.assert_array_equal(result[-1], frames[-1])
 
@@ -151,7 +147,10 @@ class TestSmolVLM2StageProcess:
     def _make_stage() -> SmolVLM2Stage:
         """Build a SmolVLM2Stage with fully mocked internals."""
         backend = mock.MagicMock()
-        backend.resolve_torch_policy.return_value = mock.MagicMock(device="cpu", dtype="float32")
+        policy = mock.MagicMock()
+        policy.device = torch.device("cpu")
+        policy.dtype = torch.float32
+        backend.resolve_torch_policy.return_value = policy
 
         manager = mock.MagicMock(spec=ModelManager)
         manager.get_path.return_value = Path("/tmp/smolvlm2")
@@ -189,7 +188,6 @@ class TestSmolVLM2StageProcess:
 
         stage = self._make_stage()
 
-        # Mock the processor and model generate/decode
         stage._processor = mock.MagicMock()
         stage._processor.apply_chat_template.return_value = {
             "input_ids": torch.zeros(1, 10, dtype=torch.long),
@@ -213,44 +211,36 @@ class TestSmolVLM2StageProcess:
         from moment_to_action.messages.video import VideoClipMessage
 
         stage = self._make_stage()
-
         stage._processor = mock.MagicMock()
         stage._processor.apply_chat_template.return_value = {
             "input_ids": torch.zeros(1, 10, dtype=torch.long),
         }
         stage._processor.batch_decode.return_value = [""]
-
         stage._model = mock.MagicMock()
         stage._model.device = "cpu"
         stage._model.generate.return_value = torch.zeros(1, 20, dtype=torch.long)
 
         frames = [np.zeros((480, 640, 3), dtype=np.uint8) for _ in range(2)]
         msg = VideoClipMessage(timestamp=time.time(), frames=frames, source="test")
-        result = stage._process(msg)
-
-        assert result is None
+        assert stage._process(msg) is None
 
     def test_process_returns_none_on_empty_decoded_list(self) -> None:
         """Returns None when batch_decode returns an empty list."""
         from moment_to_action.messages.video import VideoClipMessage
 
         stage = self._make_stage()
-
         stage._processor = mock.MagicMock()
         stage._processor.apply_chat_template.return_value = {
             "input_ids": torch.zeros(1, 10, dtype=torch.long),
         }
         stage._processor.batch_decode.return_value = []
-
         stage._model = mock.MagicMock()
         stage._model.device = "cpu"
         stage._model.generate.return_value = torch.zeros(1, 20, dtype=torch.long)
 
         frames = [np.zeros((480, 640, 3), dtype=np.uint8) for _ in range(2)]
         msg = VideoClipMessage(timestamp=time.time(), frames=frames, source="test")
-        result = stage._process(msg)
-
-        assert result is None
+        assert stage._process(msg) is None
 
 
 @pytest.mark.unit
@@ -258,9 +248,9 @@ class TestSmolVLM2CleanGeneration:
     """Tests for SmolVLM2Stage._clean_generation."""
 
     def test_strips_assistant_marker(self) -> None:
-        """Strips 'Assistant:' prefix and leading/trailing whitespace."""
-        result = SmolVLM2Stage._clean_generation("some text Assistant: The answer is here. ")
-        assert result == "The answer is here."
+        """Strips text before and including the last Assistant: marker."""
+        result = SmolVLM2Stage._clean_generation("some text Assistant: The answer. ")
+        assert result == "The answer."
 
     def test_no_marker_returns_stripped(self) -> None:
         """Without marker, returns stripped text."""

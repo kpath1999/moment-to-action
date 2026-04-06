@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=2.4.3",
     "onnxruntime>=1.24.3",
     "open-clip-torch>=3.3.0",
+    "torch>=2.0",
     "opencv-python-headless>=4.13.0.92",
     "pydantic>=2.0",
     "psutil>=6.0",
@@ -23,6 +24,7 @@ dependencies = [
     "rich-click>=1.9.7",
     "platformdirs>=4.0.0",
     "huggingface_hub>=0.18.0",
+    "num2words>=0.5.14",
 ]
 
 [project.scripts]
@@ -48,6 +50,8 @@ dev = [
     "pytest-cov>=5.0.0",
     "pre-commit>=4.0.0",
     "pytest-antilru>=2.0.0",
+    "pytest-randomly>=4.0.1",
+    "pytest-xdist[psutil]>=3.8.0",
 ]
 
 [tool.ruff]
@@ -115,7 +119,7 @@ markers = [
     "integration: integration tests",
     "slow: slow tests (disabled by default)",
 ]
-addopts = "-m 'not slow' -rs"
+addopts = ["-m", "not slow", "-rs", "-n", "auto"]
 
 [tool.coverage.run]
 source = ["src"]

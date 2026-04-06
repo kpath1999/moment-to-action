@@ -140,22 +140,26 @@ class TestComputeBackendConstruction:
             assert isinstance(backend, QCS6490Backend)
 
     def test_make_power_monitor_macos_arm64(self) -> None:
-        """Test that _make_power_monitor returns x86_64 monitor for macOS arm64."""
+        """Test that _make_power_monitor returns MacOSARM64PowerMonitor for macOS arm64."""
+        from moment_to_action.hardware._platforms.macos_arm64 import MacOSARM64PowerMonitor
+
         with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
             mock_detect.return_value = Platform.MACOS_ARM64
 
             power_monitor = _make_power_monitor()
 
-            assert isinstance(power_monitor, X86_64PowerMonitor)
+            assert isinstance(power_monitor, MacOSARM64PowerMonitor)
 
     def test_make_backend_macos_arm64(self) -> None:
-        """Test that _make_backend returns x86_64 runtime path for macOS arm64."""
+        """Test that _make_backend returns MacOSARM64Backend for macOS arm64."""
+        from moment_to_action.hardware._platforms.macos_arm64 import MacOSARM64Backend
+
         with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
             mock_detect.return_value = Platform.MACOS_ARM64
 
             backend = _make_backend(ComputeUnit.CPU)
 
-            assert isinstance(backend, X86_64Backend)
+            assert isinstance(backend, MacOSARM64Backend)
 
     def test_make_power_monitor_x86_64(self) -> None:
         """Test that _make_power_monitor returns X86_64PowerMonitor for X86_64 platform."""

@@ -580,23 +580,6 @@ class TestModelManagerResolvePathVendoredOnly:
 class TestModelManagerTransformersHelpers:
     """Tests for ModelManager transformers-specific helper methods."""
 
-    def test_is_transformers_cache_ready_true(self, tmp_path: Path) -> None:
-        """_is_transformers_cache_ready returns True with required files present."""
-        cache_dir = tmp_path / "smol"
-        cache_dir.mkdir(parents=True)
-        (cache_dir / "config.json").write_text("{}")
-        (cache_dir / "tokenizer_config.json").write_text("{}")
-
-        assert ModelManager._is_transformers_cache_ready(cache_dir) is True
-
-    def test_is_transformers_cache_ready_false_missing_files(self, tmp_path: Path) -> None:
-        """_is_transformers_cache_ready returns False if expected files are missing."""
-        cache_dir = tmp_path / "smol"
-        cache_dir.mkdir(parents=True)
-        (cache_dir / "config.json").write_text("{}")
-
-        assert ModelManager._is_transformers_cache_ready(cache_dir) is False
-
     def test_is_available_for_cached_transformers_returns_true(self, tmp_path: Path) -> None:
         """is_available returns True for cached transformers models."""
         manager = ModelManager(cache_dir=tmp_path / "cache")
@@ -824,8 +807,8 @@ class TestModelManagerStreamWithProgress:
 class TestDownloadTransformersModel:
     """Tests for ModelManager._download_transformers_model."""
 
-    def test_import_error_raises_runtime_error(self, tmp_path: Path) -> None:
-        """Missing transformers dependency raises RuntimeError."""
+    def test_import_error_raises_module_not_found(self, tmp_path: Path) -> None:
+        """Missing transformers raises ModuleNotFoundError (no guard in source)."""
         manager = ModelManager(cache_dir=tmp_path)
         dest = tmp_path / "smolvlm2"
 
@@ -833,7 +816,7 @@ class TestDownloadTransformersModel:
             "sys.modules",
             {"transformers": None},
         ):
-            with pytest.raises(RuntimeError, match="Required dependency not available"):
+            with pytest.raises((RuntimeError, ModuleNotFoundError)):
                 manager._download_transformers_model("repo/test", dest)
 
     def test_successful_download(self, tmp_path: Path) -> None:

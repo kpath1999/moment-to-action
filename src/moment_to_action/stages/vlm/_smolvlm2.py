@@ -18,20 +18,17 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-import cv2
 import torch
-from PIL import Image
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
-from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages.video import VideoClipMessage
 from moment_to_action.messages.vlm import ClassificationMessage
 from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
+from moment_to_action.utils.video import sample_frames, to_pil_rgb
 
 if TYPE_CHECKING:
-    import numpy as np
-
+    from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
 
 logger = logging.getLogger(__name__)
@@ -48,30 +45,6 @@ _DEFAULT_MAX_IMAGES = 8
 _DEFAULT_MAX_NEW_TOKENS = 96
 
 
-def _torch_dtype_from_name(name: str) -> torch.dtype:
-    """Convert backend dtype names into torch dtype objects."""
-    if name == "bfloat16":
-        return torch.bfloat16
-    if name == "float16":
-        return torch.float16
-    return torch.float32
-
-
-def _to_pil_rgb(bgr_frame: np.ndarray) -> Image.Image:
-    """Convert an OpenCV BGR frame into a PIL RGB image."""
-    rgb = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
-    return Image.fromarray(rgb)
-
-
-def _sample_frames(frames: list[np.ndarray], max_images: int) -> list[np.ndarray]:
-    """Uniformly sample up to *max_images* frames, preserving temporal order."""
-    if len(frames) <= max_images:
-        return frames
-    step = (len(frames) - 1) / (max_images - 1)
-    indices = [round(i * step) for i in range(max_images)]
-    return [frames[idx] for idx in indices]
-
-
 class SmolVLM2Stage(Stage):
     """Run SmolVLM2 on sampled video-clip frames and produce a scene description.
 
@@ -81,9 +54,9 @@ class SmolVLM2Stage(Stage):
     through the SmolVLM2 chat template.
 
     Args:
+        backend: Compute backend used to resolve torch policy.
+        manager: Model manager used for model resolution and caching.
         torch_device: ``"auto"``, ``"cpu"``, ``"cuda"``, or ``"mps"``.
-        backend: Optional compute backend used to resolve torch policy.
-        manager: Optional model manager used for model resolution and caching.
         prompt: User prompt describing what to look for.
         system_prompt: System-level instruction for the model.
         max_images: Maximum frames sampled per clip.
@@ -95,25 +68,25 @@ class SmolVLM2Stage(Stage):
 
     def __init__(
         self,
+        backend: ComputeBackend,
+        manager: ModelManager,
         torch_device: str = "auto",
-        backend: ComputeBackend | None = None,
-        manager: ModelManager | None = None,
         prompt: str = _DEFAULT_PROMPT,
         system_prompt: str = _DEFAULT_SYSTEM,
         max_images: int = _DEFAULT_MAX_IMAGES,
         max_new_tokens: int = _DEFAULT_MAX_NEW_TOKENS,
     ) -> None:
         super().__init__()
-        self._backend = backend or ComputeBackend()
-        self._manager = manager or ModelManager()
+        self._backend = backend
+        self._manager = manager
         self._prompt = prompt
         self._system_prompt = system_prompt
         self._max_images = max(1, max_images)
         self._max_new_tokens = max_new_tokens
 
         policy = self._backend.resolve_torch_policy(torch_device)
-        device = torch.device(policy.device)
-        dtype = _torch_dtype_from_name(policy.dtype)
+        device = policy.device
+        dtype = policy.dtype
 
         model_path = self._manager.get_path(ModelID.SMOLVLM2_2_2B)
 
@@ -132,8 +105,8 @@ class SmolVLM2Stage(Stage):
             model_path,
             dtype=dtype,
             trust_remote_code=True,
-        ).to(device)  # type: ignore[arg-type]
-        getattr(self._model, "eval")()  # noqa: B009 -- avoid python-no-eval hook false-positive
+        ).to(device)  # type: ignore[arg-type]  # transformers stubs mis-type .to()
+        self._model.train(mode=False)  # put model in inference mode (training=False)
         logger.info("SmolVLM2Stage: ready")
 
     # ------------------------------------------------------------------
@@ -147,7 +120,7 @@ class SmolVLM2Stage(Stage):
             err = f"SmolVLM2Stage expects VideoClipMessage, got {type_name}"
             raise TypeError(err)
 
-        sampled = _sample_frames(msg.frames, self._max_images)  # type: ignore[arg-type]
+        sampled = sample_frames(msg.frames, self._max_images)
         logger.info(
             "SmolVLM2Stage: sampled %d/%d frames (max_images=%d)",
             len(sampled),
@@ -156,7 +129,7 @@ class SmolVLM2Stage(Stage):
         )
 
         t_prepare = time.perf_counter()
-        images = [_to_pil_rgb(f) for f in sampled]
+        images = [to_pil_rgb(f) for f in sampled]
 
         user_content: list[dict[str, object]] = [{"type": "text", "text": self._prompt}]
         user_content.extend({"type": "image", "image": img} for img in images)

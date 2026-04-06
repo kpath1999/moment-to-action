@@ -3,13 +3,19 @@
 ## Commands
 
 ```bash
-uv run ruff format src          # format
-uv run ruff check src           # lint
-uv run mypy src                 # type-check
-uv run python scripts/<name>.py # run a pipeline script
+just format                      # format
+just lint                        # lint and type-check
+just test                        # run tests
+just test-unit                   # run unit tests
+just test-int                    # run integration tests
+just test-k                      # run a specific test
+uv run python scripts/<name>.py  # run a pipeline script
 ```
 
-There is no test suite. CI runs format + lint + mypy on push/PR to `main`.
+There is a large test suite with 100% coverage that should be maintained.
+Pre-commit runs format + lint + mypy on commit.
+CI runs same plus tests on push/PR to `main`.
+
 
 ## Architecture
 

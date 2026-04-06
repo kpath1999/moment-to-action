@@ -27,9 +27,11 @@ if TYPE_CHECKING:
     import numpy as np
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
+from moment_to_action.hardware._platforms._runtimes._torch_policy import (
+    resolve_torch_execution_policy,
+)
 from moment_to_action.hardware._platforms.qcs6490._litert import QCS6490LiteRTBackend
 from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
-from moment_to_action.hardware._torch_policy import resolve_torch_execution_policy
 from moment_to_action.hardware._types import ComputeUnit
 
 if TYPE_CHECKING:

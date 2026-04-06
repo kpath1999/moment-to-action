@@ -23,7 +23,7 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
     ),
     ModelID.SMOLVLM2_2_2B: ModelInfo(
         id=ModelID.SMOLVLM2_2_2B,
-        filename="",
+        filename="__UNUSED__",
         source=TransformersSource(hf_repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct"),
     ),
 }
