@@ -53,15 +53,6 @@ class TestPipeline:
         stage2.process.assert_called_once()
         stage3.process.assert_called_once()
 
-        # Verify they were called in order with correct stage indices
-        call_args1 = stage1.process.call_args
-        call_args2 = stage2.process.call_args
-        call_args3 = stage3.process.call_args
-
-        assert call_args1.kwargs["stage_idx"] == 0
-        assert call_args2.kwargs["stage_idx"] == 1
-        assert call_args3.kwargs["stage_idx"] == 2
-
         # Verify final result is from last stage
         assert result == result_msg3
         assert result.latency_ms == 30.0
@@ -99,8 +90,8 @@ class TestPipeline:
         stage1.process.return_value = result_msg
         stage2.process.return_value = result_msg
 
-        pipeline = Pipeline([stage1, stage2], metrics=metrics_mock)
-        pipeline.run(sample_message)
+        pipeline = Pipeline([stage1, stage2])
+        pipeline.run(sample_message, metrics=metrics_mock)
 
         # Verify metrics was passed to both stages
         call_args1 = stage1.process.call_args
@@ -119,15 +110,13 @@ class TestPipeline:
         assert result is sample_message
 
     def test_pipeline_properties(self) -> None:
-        """Test Pipeline properties (stages, metrics)."""
+        """Test Pipeline properties (stages)."""
         stage1 = mock.MagicMock()
         stage2 = mock.MagicMock()
-        metrics_mock = mock.MagicMock()
 
-        pipeline = Pipeline([stage1, stage2], metrics=metrics_mock)
+        pipeline = Pipeline([stage1, stage2])
 
         assert pipeline.stages == [stage1, stage2]
-        assert pipeline.metrics is metrics_mock
 
     def test_pipeline_none_metrics_is_optional(self, sample_message: RawFrameMessage) -> None:
         """Test that MetricsCollector is optional (default NullMetricsCollector is passed)."""
@@ -137,9 +126,9 @@ class TestPipeline:
         result_msg = sample_message.model_copy(update={"latency_ms": 10.0})
         stage1.process.return_value = result_msg
 
-        # Create pipeline with metrics=None
-        pipeline = Pipeline([stage1], metrics=None)
-        pipeline.run(sample_message)
+        # Create pipeline and run with metrics=None
+        pipeline = Pipeline([stage1])
+        pipeline.run(sample_message, metrics=None)
 
         # Verify a NullMetricsCollector was passed to stage
         call_args = stage1.process.call_args

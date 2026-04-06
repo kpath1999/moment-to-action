@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
-def __unfreeze[T: Span | Trace](obj: T) -> t.Generator[T, None, None]:
+def _unfreeze[T: Span | Trace](obj: T) -> t.Generator[T, None, None]:
     """Context manager to temporarily unfreeze an attrs object for modification."""
     was_frozen = getattr(obj, "_frozen", None)
     if not was_frozen:
@@ -101,20 +101,22 @@ class MetricsCollector:
 
         # Give the trace back to the user, and time it
         start_ns = time.perf_counter_ns()
-        yield trace
-        end_ns = time.perf_counter_ns()
+        try:
+            yield trace
+        finally:
+            end_ns = time.perf_counter_ns()
 
-        # ensure span stack is empty
-        if self._span_stack:
-            msg = "Span stack is not empty at the end of the trace. Missing span ends?"
-            raise RuntimeError(msg)
+            # ensure span stack is empty
+            if self._span_stack:  # pragma: no cover
+                msg = "Span stack is not empty at the end of the trace. Missing span ends?"
+                raise RuntimeError(msg)
 
-        # Trace is over and we have execution back, end it and clear current
-        with __unfreeze(trace):
-            trace.end = datetime.now(tz=UTC)
-            trace.latency_ns = end_ns - start_ns
+            # Trace is over and we have execution back, end it and clear current
+            with _unfreeze(trace):
+                trace.end = datetime.now(tz=UTC)
+                trace.latency_ns = end_ns - start_ns
 
-        self._current_trace = None
+            self._current_trace = None
 
     @contextlib.contextmanager
     def start_span(
@@ -144,23 +146,25 @@ class MetricsCollector:
 
         # Give the span back to the user, and time it
         start_ns = time.perf_counter_ns()
-        yield span
-        end_ns = time.perf_counter_ns()
+        try:
+            yield span
+        finally:
+            end_ns = time.perf_counter_ns()
 
-        # ensure we are at the end of the current span
-        if self._span_stack[-1].id_ != span.id_:
-            msg = (
-                "Span stack is out of order. "
-                "Spans must be ended in the reverse order they were started."
-            )
-            raise RuntimeError(msg)
+            # ensure we are at the end of the current span
+            if self._span_stack[-1].id_ != span.id_:  # pragma: no cover
+                msg = (
+                    "Span stack is out of order. "
+                    "Spans must be ended in the reverse order they were started."
+                )
+                raise RuntimeError(msg)
 
-        # Span is over, end it and pop from stack
-        with __unfreeze(span):
-            span.end = datetime.now(tz=UTC)
-            span.latency_ns = end_ns - start_ns
+            # Span is over, end it and pop from stack
+            with _unfreeze(span):
+                span.end = datetime.now(tz=UTC)
+                span.latency_ns = end_ns - start_ns
 
-        self._span_stack.pop()
+            self._span_stack.pop()
 
     @property
     def session_id(self) -> str:
@@ -207,12 +211,12 @@ class MetricsCollector:
             raise RuntimeError(msg)
 
         # Check invariants to ensure our internal state is consistent
-        if self._current_trace is None:
+        if self._current_trace is None:  # pragma: no cover
             msg = "Invariant violation: current_trace should not be None if span_stack is not empty"
             raise AssertionError(msg)
 
         # Ensure the span has not ended (invariants should guarantee this but we check to be safe)
-        if self._span_stack[-1].end != datetime(1970, 1, 1, tzinfo=UTC):
+        if self._span_stack[-1].end != datetime(1970, 1, 1, tzinfo=UTC):  # pragma: no cover
             msg = "Invariant violation: current_span has already ended"
             raise AssertionError(msg)
 
@@ -224,7 +228,7 @@ class MetricsCollector:
 
     def set_meta(self, key: str, value: t.Any) -> None:
         """Set metadata value on the current span."""
-        with __unfreeze(self.current_span) as span:
+        with _unfreeze(self.current_span) as span:
             span.metadata[key] = value
 
     def report(self) -> MetricsReport:
@@ -239,6 +243,10 @@ class MetricsCollector:
 
 class NullMetricsCollector(MetricsCollector):
     """A no-op metrics collector that ignores all spans and traces."""
+
+    def __init__(self) -> None:
+        """Initialize a null metrics collector with session_id set to 'null'."""
+        super().__init__(session_id="null", latency_budget=timedelta(seconds=5))
 
     @contextlib.contextmanager
     def start_trace(self) -> t.Generator[Trace, None, None]:
@@ -259,6 +267,22 @@ class NullMetricsCollector(MetricsCollector):
             end=datetime.now(tz=UTC),
             metadata=metadata or {},
         )
+
+    def get_span(self, span_id: int) -> Span:  # noqa: ARG002
+        """Get a span - returns dummy span for null collector."""
+        return Span(
+            id_=0,
+            parent_id=None,
+            type_=SpanType.STAGE,
+            name="null",
+            start=datetime.now(tz=UTC),
+            end=datetime.now(tz=UTC),
+            metadata={},
+        )
+
+    def get_trace(self, trace_id: int) -> Trace:  # noqa: ARG002
+        """Get a trace - returns dummy trace for null collector."""
+        return Trace(id_=0, start=datetime.now(tz=UTC), end=datetime.now(tz=UTC))
 
     def report(self) -> MetricsReport:
         """Generate an empty report."""

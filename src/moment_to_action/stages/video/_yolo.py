@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, ClassVar
 import numpy as np
 
 from moment_to_action.messages.video import BoundingBox, DetectionMessage, FrameTensorMessage
+from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 
@@ -139,13 +140,14 @@ class YOLOStage(Stage):
         """Detection confidence threshold in [0, 1]."""
         return self._confidence_threshold
 
-    def _process(self, msg: Message, _metrics: MetricsCollector) -> DetectionMessage | None:
+    def _process(self, msg: Message, metrics: MetricsCollector) -> DetectionMessage | None:
         """Run YOLO inference and return detections above threshold."""
         # NOTE: input type check uses FrameTensorMessage (renamed from TensorMessage)
         if not isinstance(msg, FrameTensorMessage):
             err = f"YOLOStage expects FrameTensorMessage, got {type(msg).__name__}"
             raise TypeError(err)
-        outputs = self._backend.run(self._handle, msg.tensor)
+        with metrics.start_span(SpanType.MODEL_INFERENCE, "YOLO inference"):
+            outputs = self._backend.run(self._handle, msg.tensor)
 
         boxes = self._parse_outputs(outputs, msg.original_size)
         boxes = [b for b in boxes if b.confidence >= self.confidence_threshold]

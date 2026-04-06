@@ -28,6 +28,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import pathlib
 import signal
@@ -35,6 +36,7 @@ import time
 from datetime import UTC, datetime
 
 import cv2
+import rich
 
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import ClassificationMessage
@@ -309,7 +311,6 @@ def main() -> int:  # noqa: C901, PLR0915
                 max_new_tokens=args.max_new_tokens,
             ),
         ],
-        metrics=metrics,
     )
 
     device = _parse_device(args.device)
@@ -341,7 +342,8 @@ def main() -> int:  # noqa: C901, PLR0915
         logger.info("Extracted %d frames, running pipeline ...", extracted_count)
         t0 = time.perf_counter()
         for msg in frame_msgs:
-            result = pipeline.run(msg)
+            with metrics.start_trace():
+                result = pipeline.run(msg, metrics=metrics)
             frame_count += 1
             if args.progress_every_frames > 0 and frame_count % args.progress_every_frames == 0:
                 logger.info(
@@ -402,7 +404,8 @@ def main() -> int:  # noqa: C901, PLR0915
                 msg = sensor.read()
                 if msg.frame is None:
                     continue
-                result = pipeline.run(msg)
+                with metrics.start_trace():
+                    result = pipeline.run(msg, metrics=metrics)
                 frame_count += 1
                 if args.progress_every_frames > 0 and frame_count % args.progress_every_frames == 0:
                     logger.info(
@@ -439,8 +442,13 @@ def main() -> int:  # noqa: C901, PLR0915
     else:
         logger.warning("No clips were processed.")
 
-    metrics.print_stage_latencies()
-    metrics.save(str(metrics_path))
+    metrics_json = json.dumps(metrics.report().json(), indent=2)
+    metrics_path.write_text(metrics_json, encoding="utf-8")
+
+    # Log metrics summary
+    metrics_report = metrics.report()
+    rich.print("============== Metrics report ==============")
+    rich.print(metrics_report.summary_full_rich())
 
     runtime_s = time.perf_counter() - run_t0
     _append_summary_markdown(

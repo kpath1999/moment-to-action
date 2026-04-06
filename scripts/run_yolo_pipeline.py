@@ -10,14 +10,17 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import time
+from pathlib import Path
 
+import rich
 from rich.console import Console
 from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import RawFrameMessage, ReasoningMessage
+from moment_to_action.messages import ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
@@ -58,18 +61,15 @@ pipeline = Pipeline(
         ),
         ReasoningStage(),
     ],
-    metrics=metrics,
 )
 
 # ── load frame via FileSensor, then run pipeline ───────────────────
 with FileSensor(args.image) as sensor:
     msg = sensor.read()
-    if not isinstance(msg, RawFrameMessage):
-        err = f"Expected RawFrameMessage, got {type(msg).__name__}"
-        raise TypeError(err)
 
 t_total = time.perf_counter()
-result = pipeline.run(msg)
+with metrics.start_trace():
+    result = pipeline.run(msg, metrics=metrics)
 total_ms = (time.perf_counter() - t_total) * 1000
 
 # ── print results ──────────────────────────────────────────────────
@@ -87,4 +87,10 @@ elif isinstance(result, ReasoningMessage):
     logger.info("\nLLM response:")
     logger.info("%s", result.response)
 
-metrics.print_stage_latencies()
+# Log metrics summary
+metrics_report = metrics.report()
+rich.print("============== Metrics report ==============")
+rich.print(metrics_report.summary_full_rich())
+
+with Path("metrics_report.json").open("w") as f:
+    json.dump(metrics_report.json(), f, indent=4)

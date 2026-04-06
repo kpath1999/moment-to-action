@@ -23,6 +23,7 @@ from transformers import AutoModelForImageTextToText, AutoProcessor
 
 from moment_to_action.messages.video import VideoClipMessage
 from moment_to_action.messages.vlm import ClassificationMessage
+from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 from moment_to_action.utils.video import sample_frames, to_pil_rgb
@@ -117,7 +118,7 @@ class SmolVLM2Stage(Stage):
     def _process(
         self,
         msg: Message,
-        _metrics: MetricsCollector,
+        metrics: MetricsCollector,
     ) -> ClassificationMessage | None:
         """Sample frames from a clip, run SmolVLM2, and return a description."""
         if not isinstance(msg, VideoClipMessage):
@@ -162,7 +163,12 @@ class SmolVLM2Stage(Stage):
         )
 
         t0 = time.perf_counter()
-        with torch.inference_mode():
+        with (
+            torch.inference_mode(),
+            metrics.start_span(  # Span around model inference
+                SpanType.MODEL_INFERENCE, "SmolVLM2 generation"
+            ),
+        ):
             generated_ids = self._model.generate(
                 **inputs,
                 do_sample=False,

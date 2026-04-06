@@ -101,10 +101,9 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         self,
         config: ImagePreprocessConfig | None = None,
         compute_unit: ComputeUnit = ComputeUnit.CPU,
-        metrics: MetricsCollector | None = None,
     ) -> None:
         self._config = config or ImagePreprocessConfig()
-        super().__init__(compute_unit=compute_unit, metrics=metrics)
+        super().__init__(compute_unit=compute_unit)
 
     # ------------------------------------------------------------------
     # BasePreprocessor interface
@@ -316,7 +315,7 @@ class PreprocessorStage(Stage):
         )
         self._channels_first = channels_first
 
-    def _process(self, msg: Message, _metrics: MetricsCollector) -> FrameTensorMessage | None:
+    def _process(self, msg: Message, metrics: MetricsCollector) -> FrameTensorMessage | None:
         """Preprocess a raw frame into a model-ready tensor.
 
         Returns a FrameTensorMessage (previously called TensorMessage).
@@ -332,7 +331,7 @@ class PreprocessorStage(Stage):
             width=msg.frame.shape[1],
             height=msg.frame.shape[0],
         )
-        processed = self._preprocessor.process(img)
+        processed = self._preprocessor.process(img, metrics=metrics)
         data = processed.data  # [H, W, C]
         if self._channels_first:
             data = np.transpose(data, (2, 0, 1))  # [H,W,C] → [C,H,W]

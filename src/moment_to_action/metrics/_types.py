@@ -7,13 +7,10 @@ and surfaced to callers that consume reports.
 from __future__ import annotations
 
 import typing as t
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import Enum, auto
 
 import attrs
-
-if t.TYPE_CHECKING:
-    from datetime import datetime
 
 
 # Pylance decided to be difficult today
@@ -99,6 +96,13 @@ class Span:
             f"[{self.type_.name}] {self.name}: {self.latency_ms:.2f}ms (metadata={self.metadata})"
         )
 
+    def summary_rich(self) -> str:
+        """Generate a human-readable summary of this span, with rich formatting."""
+        return (
+            f"[[cyan]{self.type_.name}[/cyan]] [bold]{self.name}[/bold]: "
+            f"[green]{self.latency_ms:.2f}ms[/green] (metadata={self.metadata})"
+        )
+
     def json(self) -> dict[str, t.Any]:
         """Generate a JSON-serializable dictionary representation of this span."""
         return {
@@ -175,9 +179,13 @@ class Trace:
             f"Trace {self.id_}: {self.latency_ms:.2f}ms",
             f"Start: {self.start}",
             f"End: {self.end}",
-            f"Latency: {self.latency}",
+            f"Latency: {self.latency_ms:.2f}ms",
             "Within latency budget: "
-            + ("✅" if latency_budget is not None and self.latency <= latency_budget else "❌"),
+            + (
+                "N/A"
+                if latency_budget is None
+                else ("✅" if self.latency <= latency_budget else "❌")
+            ),
             "",
         ]
 
@@ -188,6 +196,38 @@ class Trace:
         # Recursively add span summaries with indentation based on depth in the trace
         def add_span_summary(span: Span, indent: int = 0) -> None:
             lines.append("  " * indent + span.summary())
+            child_spans = [s for s in self.spans if s.parent_id == span.id_]
+            for child in child_spans:
+                add_span_summary(child, indent + 2)
+
+        for root_span in root_spans:
+            add_span_summary(root_span)
+
+        return "\n".join(lines)
+
+    def summary_rich(self, latency_budget: timedelta | None = None) -> str:
+        """Generate a human-readable summary of this trace and its spans, with rich formatting."""
+        # Get trace summary line
+        lines = [
+            f"[bold]Trace {self.id_}[/bold]: [green]{self.latency_ms:.2f}ms[/green]",
+            f"Start: {self.start}",
+            f"End: {self.end}",
+            f"Latency: {self.latency_ms:.2f}ms",
+            "Within latency budget: "
+            + (
+                "N/A"
+                if latency_budget is None
+                else ("✅" if self.latency <= latency_budget else "❌")
+            ),
+            "",
+        ]
+
+        # Get spans without parents
+        root_spans = [span for span in self.spans if span.parent_id is None]
+
+        # Recursively add span summaries with indentation based on depth in the trace
+        def add_span_summary(span: Span, indent: int = 0) -> None:
+            lines.append("  " * indent + span.summary_rich())
             child_spans = [s for s in self.spans if s.parent_id == span.id_]
             for child in child_spans:
                 add_span_summary(child, indent + 2)
@@ -244,9 +284,34 @@ class MetricsReport:
         ]
 
         if self.slow_traces:
-            lines.append("Slow Traces:")
+            lines.append("Slow Traces:\n")
             for trace in self.slow_traces:
-                lines.append(trace.summary())
+                lines.append("-" * 40)
+                lines.append("")
+                lines.append(trace.summary(self.latency_budget))
+                lines.append("")  # Add extra newline between traces
+
+        return "\n".join(lines)
+
+    def summary_rich(self) -> str:
+        """Generate a human-readable summary of this report, with rich formatting.
+
+        Includes stats and slow traces.
+        """
+        lines = [
+            f"[bold]Metrics Report for session '{self.session_id}'[/bold]",
+            f"Latency budget: [green]{self.latency_budget.total_seconds() * 1000:.2f}ms[/green]",
+            f"Total traces: {len(self.traces)}",
+            f"Slow traces: {len(self.slow_traces)}",
+            "",
+        ]
+
+        if self.slow_traces:
+            lines.append("[bold red]Slow Traces:[/bold red]")
+            for trace in self.slow_traces:
+                lines.append("-" * 40)
+                lines.append("")
+                lines.append(trace.summary_rich(self.latency_budget))
                 lines.append("")  # Add extra newline between traces
 
         return "\n".join(lines)
@@ -263,7 +328,28 @@ class MetricsReport:
         ]
 
         for trace in self.traces:
-            lines.append(trace.summary())
+            lines.append("-" * 40)
+            lines.append("")
+            lines.append(trace.summary(self.latency_budget))
+            lines.append("")  # Add extra newline between traces
+
+        return "\n".join(lines)
+
+    def summary_full_rich(self) -> str:
+        """Generate a full summary of this report, including all traces, with rich formatting."""
+        lines = [
+            f"[bold]Metrics Report for session '{self.session_id}'[/bold]",
+            f"Latency budget: [green]{self.latency_budget.total_seconds() * 1000:.2f}ms[/green]",
+            f"Total traces: {len(self.traces)}",
+            f"Slow traces: {len(self.slow_traces)}",
+            "",
+            "[bold]All Traces:[/bold]",
+        ]
+
+        for trace in self.traces:
+            lines.append("-" * 40)
+            lines.append("")
+            lines.append(trace.summary_rich(self.latency_budget))
             lines.append("")  # Add extra newline between traces
 
         return "\n".join(lines)

@@ -16,6 +16,7 @@ import numpy as np
 import open_clip
 
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
+from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 from moment_to_action.utils.ml import cosine_similarity, softmax
@@ -57,7 +58,7 @@ class MobileCLIPStage(Stage):
         self._text_tokens = self._tokenize(text_prompts)
         logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))
 
-    def _process(self, msg: Message, _metrics: MetricsCollector) -> ClassificationMessage | None:
+    def _process(self, msg: Message, metrics: MetricsCollector) -> ClassificationMessage | None:
         """Run zero-shot classification against all text prompts."""
         # NOTE: input type check uses FrameTensorMessage (renamed from TensorMessage)
         if not isinstance(msg, FrameTensorMessage):
@@ -67,13 +68,14 @@ class MobileCLIPStage(Stage):
         scores = []
         for tokens in self._text_tokens:
             token_tensor = tokens[np.newaxis, ...].astype(np.int64)  # [1, 77]
-            outputs = self._backend.run(
-                self._handle,
-                {
-                    "serving_default_args_0:0": msg.tensor,  # [1, 3, 256, 256]
-                    "serving_default_args_1:0": token_tensor,  # [1, 77]
-                },
-            )
+            with metrics.start_span(SpanType.MODEL_INFERENCE, "MobileCLIP text inference"):
+                outputs = self._backend.run(
+                    self._handle,
+                    {
+                        "serving_default_args_0:0": msg.tensor,  # [1, 3, 256, 256]
+                        "serving_default_args_1:0": token_tensor,  # [1, 77]
+                    },
+                )
             image_emb = outputs[1][0]  # [512]
             text_emb = outputs[0][0]  # [512]
             scores.append(cosine_similarity(image_emb, text_emb))

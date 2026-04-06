@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import cast
-from unittest import mock
 
 import numpy as np
 import pytest
@@ -141,26 +140,26 @@ class TestBasePreprocessor:
     def test_preprocessor_logs_to_metrics_collector(
         self, concrete_preprocessor_class: type[BasePreprocessor[np.ndarray, np.ndarray]]
     ) -> None:
-        """Test that preprocessor.process() logs to MetricsCollector if provided."""
-        metrics_mock = mock.MagicMock()
-        preprocessor = concrete_preprocessor_class(metrics=metrics_mock)
+        """Test that preprocessor.process() creates spans if MetricsCollector is provided."""
+        from moment_to_action.metrics import MetricsCollector
+
+        preprocessor = concrete_preprocessor_class()
 
         input_data = np.array([1.0, 2.0, 3.0])
-        preprocessor.process(input_data)
 
-        # Verify metrics.log_event was called
-        metrics_mock.log_event.assert_called_once()
+        # Create a metrics collector to track spans
+        metrics = MetricsCollector(session_id="test_preprocess")
 
-        # Verify call arguments
-        call_args = metrics_mock.log_event.call_args
-        event_type, data = call_args[0]
+        # Process with metrics - should create spans internally
+        with metrics.start_trace():
+            result = preprocessor.process(input_data, metrics=metrics)
 
-        assert event_type == "preprocess"
-        assert "preprocessor" in data
-        assert data["preprocessor"] == "TestPreprocessor"
-        assert "latency_ms" in data
-        assert "compute_unit" in data
-        assert data["compute_unit"] == "CPU"
+        # Verify processing worked
+        np.testing.assert_array_equal(result, input_data * 2)
+
+        # Verify metrics were collected
+        report = metrics.report()
+        assert len(report.traces) > 0
 
     def test_preprocessor_compute_unit_property(
         self, concrete_preprocessor_class: type[BasePreprocessor[np.ndarray, np.ndarray]]
@@ -214,12 +213,13 @@ class TestBasePreprocessor:
     def test_preprocessor_no_metrics_optional(
         self, concrete_preprocessor_class: type[BasePreprocessor[np.ndarray, np.ndarray]]
     ) -> None:
-        """Test that MetricsCollector is optional."""
-        # Create without metrics (should not raise)
-        preprocessor = concrete_preprocessor_class(metrics=None)
+        """Test that MetricsCollector is optional on process()."""
+        # Create preprocessor without metrics in constructor
+        preprocessor = concrete_preprocessor_class()
 
         input_data = np.array([1.0, 2.0, 3.0])
-        result = preprocessor.process(input_data)
+        # Call process without metrics (should not raise)
+        result = preprocessor.process(input_data, metrics=None)
 
         # Verify result is still correct
         np.testing.assert_array_equal(result, input_data * 2)

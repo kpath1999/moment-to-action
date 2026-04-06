@@ -11,13 +11,16 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+from pathlib import Path
 
+import rich
 from rich.console import Console
 from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import ClassificationMessage, RawFrameMessage
+from moment_to_action.messages import ClassificationMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
@@ -68,17 +71,14 @@ pipeline = Pipeline(
             manager=manager,
         ),
     ],
-    metrics=metrics,
 )
 
 # ── load frame via FileSensor, then run pipeline ───────────────────
 with FileSensor(args.image) as sensor:
     msg = sensor.read()
-    if not isinstance(msg, RawFrameMessage):
-        err = f"Expected RawFrameMessage, got {type(msg).__name__}"
-        raise TypeError(err)
 
-result = pipeline.run(msg)
+with metrics.start_trace():
+    result = pipeline.run(msg, metrics=metrics)
 
 if result is None:
     logger.info("Pipeline returned no result.")
@@ -91,4 +91,10 @@ elif isinstance(result, ClassificationMessage):
         logger.info("  %.3f  %-40s  %s%s", score, bar, prompt, marker)
     logger.info("-" * 60)
 
-metrics.print_stage_latencies()
+# Log metrics summary
+metrics_report = metrics.report()
+rich.print("============== Metrics report ==============")
+rich.print(metrics_report.summary_full_rich())
+
+with Path("metrics_report.json").open("w") as f:
+    json.dump(metrics_report.json(), f, indent=4)
