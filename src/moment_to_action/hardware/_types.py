@@ -6,6 +6,7 @@ import ``ComputeUnit`` from here, not from the backend module.
 
 from __future__ import annotations
 
+import typing as t
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -47,6 +48,17 @@ class ComputeUnitUsageSample:
 
     power_mw: float
     """Power draw in milliwatts."""
+
+    def json(self) -> dict[str, t.Any]:
+        """Generate a JSON-serializable dictionary representation of this sample."""
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "device": self.device,
+            "usage_pct": self.usage_pct,
+            "frequency_mhz": self.frequency_mhz,
+            "memory_mb": self.memory_mb,
+            "power_mw": self.power_mw,
+        }
 
 
 @attrs.frozen

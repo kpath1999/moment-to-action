@@ -123,3 +123,22 @@ class TestComputeUnitUsageSample:
         assert hasattr(sample, "frequency_mhz")
         assert hasattr(sample, "memory_mb")
         assert hasattr(sample, "power_mw")
+
+    def test_sample_json(self) -> None:
+        """Test that json() returns a serializable dict with all fields."""
+        ts = datetime.now(tz=UTC)
+        sample = _make_sample(
+            timestamp=ts,
+            device=ComputeUnit.GPU,
+            usage_pct=42.0,
+            frequency_mhz=1800.0,
+            memory_mb=2048.0,
+            power_mw=75.0,
+        )
+        result = sample.json()
+        assert result["timestamp"] == ts.isoformat()
+        assert result["device"] == ComputeUnit.GPU
+        assert result["usage_pct"] == 42.0
+        assert result["frequency_mhz"] == 1800.0
+        assert result["memory_mb"] == 2048.0
+        assert result["power_mw"] == 75.0

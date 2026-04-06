@@ -7,8 +7,11 @@ from datetime import UTC, datetime, timedelta
 import attrs
 import pytest
 
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 from moment_to_action.metrics._types import (
+    MemoryUsageSample,
     MetricsReport,
+    ResourceUsageSample,
     Span,
     SpanType,
     Trace,
@@ -824,3 +827,121 @@ class TestMetricsReport:
         assert "latency_budget" in as_dict
         assert "traces" in as_dict
         assert "slow_traces" in as_dict
+
+
+def _make_compute_sample(device: ComputeUnit = ComputeUnit.CPU) -> ComputeUnitUsageSample:
+    return ComputeUnitUsageSample(
+        timestamp=datetime.now(tz=UTC),
+        device=device,
+        usage_pct=10.0,
+        frequency_mhz=1000.0,
+        memory_mb=512.0,
+        power_mw=5.0,
+    )
+
+
+def _make_memory_sample() -> MemoryUsageSample:
+    return MemoryUsageSample(
+        rss_bytes=1,
+        vms_bytes=2,
+        shared_bytes=3,
+        text_bytes=4,
+        lib_bytes=5,
+        data_bytes=6,
+        dirty_bytes=7,
+    )
+
+
+@pytest.mark.unit
+class TestMemoryUsageSampleJson:
+    """Tests for MemoryUsageSample.json()."""
+
+    def test_json_returns_all_fields(self) -> None:
+        """MemoryUsageSample.json returns all numeric fields."""
+        sample = _make_memory_sample()
+        result = sample.json()
+        assert result == {
+            "rss_bytes": 1,
+            "vms_bytes": 2,
+            "shared_bytes": 3,
+            "text_bytes": 4,
+            "lib_bytes": 5,
+            "data_bytes": 6,
+            "dirty_bytes": 7,
+        }
+
+
+@pytest.mark.unit
+class TestResourceUsageSampleJson:
+    """Tests for ResourceUsageSample.json()."""
+
+    def test_json_returns_all_fields(self) -> None:
+        """ResourceUsageSample.json returns nested json for sub-objects."""
+        ts = datetime.now(tz=UTC)
+        sample = ResourceUsageSample(
+            timestamp=ts,
+            running_span_id=42,
+            cpu_usage=_make_compute_sample(ComputeUnit.CPU),
+            gpu_usage=_make_compute_sample(ComputeUnit.GPU),
+            npu_usage=_make_compute_sample(ComputeUnit.NPU),
+            dsp_usage=_make_compute_sample(ComputeUnit.DSP),
+            proc_cpu_usage=3.5,
+            mem_usage=_make_memory_sample(),
+        )
+        result = sample.json()
+        assert result["timestamp"] == ts.isoformat()
+        assert result["running_span_id"] == 42
+        assert result["proc_cpu_usage"] == 3.5
+        assert result["cpu_usage"]["device"] == ComputeUnit.CPU
+        assert result["gpu_usage"]["device"] == ComputeUnit.GPU
+        assert result["npu_usage"]["device"] == ComputeUnit.NPU
+        assert result["dsp_usage"]["device"] == ComputeUnit.DSP
+        assert result["mem_usage"]["rss_bytes"] == 1
+
+
+@pytest.mark.unit
+class TestTraceSummaryWithResourceSamples:
+    """Tests for Trace summary methods when resource_usage_samples is populated."""
+
+    def _make_trace_with_samples(self, utc_past: datetime, utc_now: datetime) -> Trace:
+        sample = ResourceUsageSample(
+            timestamp=utc_now,
+            running_span_id=None,
+            cpu_usage=_make_compute_sample(),
+            gpu_usage=_make_compute_sample(ComputeUnit.GPU),
+            npu_usage=_make_compute_sample(ComputeUnit.NPU),
+            dsp_usage=_make_compute_sample(ComputeUnit.DSP),
+            proc_cpu_usage=0.0,
+            mem_usage=_make_memory_sample(),
+        )
+        return Trace(
+            id_=1,
+            start=utc_past,
+            end=utc_now,
+            latency_ns=100_000_000,
+            resource_usage_samples=[sample],
+        )
+
+    def test_summary_includes_resource_sample_count(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """Trace.summary includes the aggregated resource usage block."""
+        trace = self._make_trace_with_samples(utc_past, utc_now)
+        result = trace.summary()
+        assert "Resource usage (1 samples)" in result
+        assert "CPU:" in result
+        assert "GPU:" in result
+        assert "NPU:" in result
+        assert "DSP:" in result
+        assert "proc CPU:" in result
+        assert "RSS:" in result
+
+    def test_summary_rich_includes_resource_sample_count(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """Trace.summary_rich includes the aggregated resource usage block with rich formatting."""
+        trace = self._make_trace_with_samples(utc_past, utc_now)
+        result = trace.summary_rich()
+        assert "Resource usage" in result
+        assert "1 samples" in result
+        assert "[bold]" in result
