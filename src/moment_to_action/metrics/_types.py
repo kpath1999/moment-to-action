@@ -6,153 +6,226 @@ and surfaced to callers that consume reports.
 
 from __future__ import annotations
 
+import typing as t
 from enum import Enum, auto
 
 import attrs
 
-
-class EventType(Enum):
-    """Pipeline event types recorded by :class:`MetricsCollector`."""
-
-    TRIGGER_FIRED = auto()
-    """A pipeline trigger condition was met."""
-
-    DETECTION = auto()
-    """An object or activity was detected by a model."""
-
-    FALSE_POSITIVE = auto()
-    """A detection was later determined to be incorrect."""
+if t.TYPE_CHECKING:
+    from datetime import datetime, timedelta
 
 
-@attrs.define
-class PipelineRecord:
-    """Record of a pipeline-level event."""
-
-    timestamp: float
-    """Unix epoch timestamp of the event."""
-
-    event_type: EventType
-    """Category of pipeline event."""
-
-    latency_ms: float
-    """End-to-end latency for this event in milliseconds."""
-
-    metadata: dict = attrs.Factory(dict)
-    """Arbitrary key/value context for this event."""
+# Pylance decided to be difficult today
+def _meta_dict() -> dict[str, t.Any]:
+    """Factory function for default metadata dictionary."""
+    return {}
 
 
-@attrs.define
-class StageRecord:
-    """Record of a single stage execution (logged by the Stage wrapper)."""
+def _span_list() -> list[Span]:
+    """Factory function for default span list."""
+    return []
 
-    timestamp: float
-    """Unix epoch timestamp when the stage ran."""
 
-    stage_name: str
-    """Class name of the stage."""
+class SpanType(Enum):
+    """Types of spans we might want to track within the pipeline."""
 
-    stage_idx: int
-    """Pipeline stage index."""
+    ### PIPELINE ###
 
-    latency_ms: float
-    """Wall-clock time for this stage in milliseconds."""
+    PIPELINE = auto()
+    """End-to-end pipeline execution span."""
 
-    metadata: dict = attrs.Factory(dict)
-    """Arbitrary key/value context attached at log time."""
+    STAGE = auto()
+    """Individual stage execution span (e.g. trigger, vision, LLM)."""
+
+    MODEL_INFERENCE = auto()
+    """Time taken for a model inference (e.g. vision, LLM)."""
 
 
 @attrs.define
-class EventRecord:
-    """General-purpose event record (load times, config changes, etc.)."""
+class Span:
+    """Represents a single excution span within the pipeline.
 
-    timestamp: float
-    """Unix epoch timestamp of the event."""
+    Contains timing and metadata for that span. Used internally by MetricsCollector.
+    """
 
-    event_type: str
-    """Free-form event category string."""
+    id_: int
+    """Unique identifier for this span."""
 
-    data: dict = attrs.Factory(dict)
-    """Arbitrary payload for this event."""
+    parent_id: int | None
+    """Identifier of the parent span, if any (for nested spans)."""
 
+    type_: SpanType
+    """Type of the span (e.g. SENSOR_READ, MODEL_INFERENCE, OTHER)."""
 
-@attrs.define
-class StageStats:
-    """Latency statistics for a single stage across all recorded executions."""
+    name: str
+    """Name of the span (e.g. "YOLO inference", "camera read")."""
 
-    num_calls: int
-    """Number of executions included in these statistics."""
+    start: datetime
+    """When did this span start?"""
 
-    mean_ms: float
-    """Mean latency in milliseconds."""
+    end: datetime
+    """When did this span end?"""
 
-    p50_ms: float
-    """Median (50th percentile) latency in milliseconds."""
+    metadata: dict[str, t.Any] = attrs.Factory(_meta_dict)
+    """Arbitrary key/value context for this span."""
 
-    p95_ms: float
-    """95th percentile latency in milliseconds."""
+    _frozen: bool = attrs.field(default=False, init=False, repr=False)
+    """Whether this span is frozen and should not be modified."""
 
-    min_ms: float
-    """Minimum observed latency in milliseconds."""
+    @property
+    def latency(self) -> timedelta:
+        """Latency of this span."""
+        return self.end - self.start
 
-    max_ms: float
-    """Maximum observed latency in milliseconds."""
+    @property
+    def latency_ms(self) -> float:
+        """Latency of this span in milliseconds."""
+        return self.latency.total_seconds() * 1000.0
 
+    def summary(self) -> str:
+        """Generate a human-readable summary of this span."""
+        return (
+            f"[{self.type_.name}] {self.name}: {self.latency_ms:.2f}ms (metadata={self.metadata})"
+        )
 
-@attrs.define
-class PipelineStats:
-    """High-level statistics over all recorded pipeline events."""
+    def __attrs_post_init__(self) -> None:
+        self._frozen = True  # Freeze the span after initialization to prevent modifications
 
-    total_triggers: int
-    """Number of trigger-fired events."""
-
-    total_detections: int
-    """Number of detection events."""
-
-    total_false_positives: int
-    """Number of false positive events."""
-
-    trigger_rate: float
-    """Fraction of pipeline events that were triggers (0-1)."""
-
-    false_positive_rate: float
-    """Fraction of detections that were false positives (0-1)."""
-
-
-@attrs.define
-class LatencyBudget:
-    """Latency budget analysis measured against the configured target."""
-
-    total_mean_ms: float
-    """Mean end-to-end pipeline latency in milliseconds."""
-
-    budget_ms: float
-    """Target latency budget in milliseconds."""
-
-    headroom_ms: float
-    """Remaining budget: ``budget_ms - total_mean_ms``."""
-
-    within_budget: bool
-    """``True`` when ``total_mean_ms < budget_ms``."""
+    def __setattr__(self, attr: str, value: t.Any) -> None:
+        if getattr(self, "_frozen", None):
+            msg = (
+                f"Span '{self.name}' is frozen and cannot be modified (tried to set {attr}={value})"
+            )
+            raise AttributeError(msg)
+        return super().__setattr__(attr, value)
 
 
 @attrs.define
-class CollectorReport:
-    """Full summary report produced by :meth:`MetricsCollector.report`."""
+class Trace:
+    """Represents a single end-to-end pipeline execution trace.
+
+    Contains detailed timing and metadata for each stage, as well as
+    overall pipeline events. Used internally by MetricsCollector.
+    """
+
+    id_: int
+    """Unique identifier for this trace."""
+
+    start: datetime
+    """When did this trace start?"""
+
+    end: datetime
+    """When did this trace end?"""
+
+    spans: list[Span] = attrs.Factory(_span_list)
+    """List of spans recorded for this trace."""
+
+    _frozen: bool = attrs.field(default=False, init=False, repr=False)
+    """Whether this trace is frozen and should not be modified."""
+
+    @property
+    def latency(self) -> timedelta:
+        """Latency of the entire trace."""
+        return self.end - self.start
+
+    @property
+    def latency_ms(self) -> float:
+        """Latency of the entire trace in milliseconds."""
+        return self.latency.total_seconds() * 1000.0
+
+    def summary(self, latency_budget: timedelta | None = None) -> str:
+        """Generate a human-readable summary of this trace and its spans.
+
+        Idents spans by depth in the trace (based on parent_id relationships) and includes
+        latency and metadata for each span.
+        """
+        # Get trace summary line
+        lines = [
+            f"Trace {self.id_}: {self.latency_ms:.2f}ms",
+            f"Start: {self.start}",
+            f"End: {self.end}",
+            f"Latency: {self.latency}",
+            "Within latency budget: "
+            + ("✅" if latency_budget is not None and self.latency <= latency_budget else "❌"),
+            "",
+        ]
+
+        # Get root span
+        root_spans = [span for span in self.spans if span.parent_id is None]
+        if len(root_spans) != 1:
+            msg = f"Trace {self.id_} has {len(root_spans)} root spans (expected exactly 1)"
+            raise ValueError(msg)
+
+        root_span = root_spans[0]
+
+        # Recursively add span summaries with indentation based on depth in the trace
+        def add_span_summary(span: Span, indent: int = 0) -> None:
+            lines.append("  " * indent + span.summary())
+            child_spans = [s for s in self.spans if s.parent_id == span.id_]
+            for child in child_spans:
+                add_span_summary(child, indent + 2)
+
+        add_span_summary(root_span)
+
+        return "\n".join(lines)
+
+    def __attrs_post_init__(self) -> None:
+        self._frozen = True  # Freeze the trace after initialization to prevent modifications
+
+    def __setattr__(self, attr: str, value: t.Any) -> None:
+        if getattr(self, "_frozen", None):
+            msg = f"Trace {self.id_} is frozen and cannot be modified (tried to set {attr}={value})"
+            raise AttributeError(msg)
+        return super().__setattr__(attr, value)
+
+
+@attrs.frozen
+class MetricsReport:
+    """Represents a report generated from the collected metrics."""
 
     session_id: str
-    """Unique identifier for this collection session."""
+    """Identifier for the session during which this report was generated."""
 
-    total_stages: int
-    """Total number of stage executions recorded."""
+    latency_budget: timedelta
+    """Latency budget for the pipeline (e.g. 100ms)."""
 
-    total_pipeline_events: int
-    """Total number of pipeline-level events recorded."""
+    traces: list[Trace]
+    """List of traces included in this report."""
 
-    per_stage: dict[str, StageStats]
-    """Per-stage latency statistics keyed by stage name."""
+    slow_traces: list[Trace]
+    """List of traces that exceeded the latency budget."""
 
-    pipeline: PipelineStats
-    """Aggregate pipeline event statistics."""
+    def summary(self) -> str:
+        """Generate a human-readable summary of this report, including stats and slow traces."""
+        lines = [
+            f"Metrics Report for session '{self.session_id}'",
+            f"Latency budget: {self.latency_budget.total_seconds() * 1000:.2f}ms",
+            f"Total traces: {len(self.traces)}",
+            f"Slow traces: {len(self.slow_traces)}",
+            "",
+        ]
 
-    latency_budget: LatencyBudget
-    """Latency budget analysis."""
+        if self.slow_traces:
+            lines.append("Slow Traces:")
+            for trace in self.slow_traces:
+                lines.append(trace.summary())
+                lines.append("")  # Add extra newline between traces
+
+        return "\n".join(lines)
+
+    def summary_full(self) -> str:
+        """Generate a full human-readable summary of this report, including all traces."""
+        lines = [
+            f"Metrics Report for session '{self.session_id}'",
+            f"Latency budget: {self.latency_budget.total_seconds() * 1000:.2f}ms",
+            f"Total traces: {len(self.traces)}",
+            f"Slow traces: {len(self.slow_traces)}",
+            "",
+            "All Traces:",
+        ]
+
+        for trace in self.traces:
+            lines.append(trace.summary())
+            lines.append("")  # Add extra newline between traces
+
+        return "\n".join(lines)
