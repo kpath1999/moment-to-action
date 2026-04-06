@@ -7,9 +7,10 @@ NullMetricsCollector if none is provided to avoid null checks in stage code.
 from __future__ import annotations
 
 import logging
-import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+
+from moment_to_action.metrics import NullMetricsCollector, SpanType
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
@@ -29,35 +30,39 @@ class Stage(ABC):
     def process(
         self,
         msg: Message,
-        stage_idx: int = 0,
         metrics: MetricsCollector | None = None,
     ) -> Message | None:
         """Execute the stage, timing it, setting latency on the result, and logging to metrics.
 
         Args:
             msg:       Incoming message to process.
-            stage_idx: Zero-based position of this stage in the pipeline, assigned
-                       by the pipeline itself — not stored on the stage.
             metrics:   Metrics collector for recording stage latency.
                       If not provided, a default NullMetricsCollector is used.
         """
+        # Ensure we always have a metrics collector to avoid null checks in stage code
+        #
+        # This is done here so that stages can be used standalone, outside of a pipeline, if desired
+        # Could be useful for testing purposes
         if metrics is None:
-            from moment_to_action.metrics import NullMetricsCollector
-
             metrics = NullMetricsCollector()
 
-        t = time.perf_counter()
-        result = self._process(msg, metrics)
-        elapsed_ms = (time.perf_counter() - t) * 1000
+        # Run the stage processing, timing it with the metrics collector
+        with metrics.start_span(SpanType.STAGE, self.name) as span:
+            span_id = span.id_  # save so we can get the latency later
 
-        # Stamp latency on the result so consumers don't need to measure it.
+            # Run the stage's processing logic, which may return None to stop the pipeline
+            result = self._process(msg, metrics)
+
+        # Stamp latency on the result so consumers don't need to measure it themselves
+        elapsed_ms = metrics.get_span(span_id).latency_ms
+
         if result is not None:
             result = result.model_copy(update={"latency_ms": elapsed_ms})
 
-        metrics.log_stage(self.name, stage_idx, elapsed_ms)
-
+        # Log the stage execution and latency
         status = "→ None (stopped)" if result is None else f"→ {type(result).__name__}"
         logger.debug("%s: %.1fms  %s", self.name, elapsed_ms, status)
+
         return result
 
     @abstractmethod

@@ -1,10 +1,24 @@
 """Central metrics collection for the framework.
 
-Every model inference, pipeline trigger, and detection event
-reports here. This is your research results table in code form.
+The MetricsCollector is designed to provide a flexible and extensible way to collect detailed
+metrics across the entire pipeline execution.
 
-At the end of a run, call report() to get a summary suitable
-for including directly in your paper's results section.
+It allows stages to create spans that are automatically associated with the current trace, enabling
+a hierarchical view of the execution. At the end of the pipeline, the MetricsCollector can generate
+a comprehensive report that includes latency information for each span and trace, as well as any
+relevant metadata. This report can be used to identify bottlenecks and optimize performance across
+the pipeline.
+
+The MetricsCollector is implemented as a context manager, allowing for easy integration into the
+pipeline stages. Stages can use the `start_span` method to create spans for specific operations, and
+these spans will be automatically nested under the current trace. The collector also provides
+methods for setting and getting metadata on the current span, allowing stages to add custom
+information that can be included in the final report.
+
+Traces are effectively the "root span" of a section of execution, and all spans created during that
+execution are children of that trace. This allows for a clear hierarchical structure in the
+collected metrics, making it easier to analyze the performance of different stages and identify any
+issues.
 """
 
 from __future__ import annotations
@@ -24,13 +38,15 @@ logger = logging.getLogger(__name__)
 def __unfreeze[T: Span | Trace](obj: T) -> t.Generator[T, None, None]:
     """Context manager to temporarily unfreeze an attrs object for modification."""
     was_frozen = getattr(obj, "_frozen", None)
-    if was_frozen:
-        object.__setattr__(obj, "_frozen", False)
+    if not was_frozen:
+        msg = f"Object {obj} is not frozen, cannot unfreeze"
+        raise ValueError(msg)
+
+    object.__setattr__(obj, "_frozen", False)
     try:
         yield obj
     finally:
-        if was_frozen:
-            object.__setattr__(obj, "_frozen", True)
+        object.__setattr__(obj, "_frozen", True)
 
 
 class MetricsCollector:
@@ -83,8 +99,10 @@ class MetricsCollector:
         self._traces[trace.id_] = trace
         self._current_trace = trace
 
-        # Give the trace back to the user
+        # Give the trace back to the user, and time it
+        start_ns = time.perf_counter_ns()
         yield trace
+        end_ns = time.perf_counter_ns()
 
         # ensure span stack is empty
         if self._span_stack:
@@ -94,6 +112,8 @@ class MetricsCollector:
         # Trace is over and we have execution back, end it and clear current
         with __unfreeze(trace):
             trace.end = datetime.now(tz=UTC)
+            trace.latency_ns = end_ns - start_ns
+
         self._current_trace = None
 
     @contextlib.contextmanager
@@ -122,8 +142,10 @@ class MetricsCollector:
         self._current_trace.spans.append(span)
         self._span_stack.append(span)
 
-        # Give the span back to the user
+        # Give the span back to the user, and time it
+        start_ns = time.perf_counter_ns()
         yield span
+        end_ns = time.perf_counter_ns()
 
         # ensure we are at the end of the current span
         if self._span_stack[-1].id_ != span.id_:
@@ -136,6 +158,8 @@ class MetricsCollector:
         # Span is over, end it and pop from stack
         with __unfreeze(span):
             span.end = datetime.now(tz=UTC)
+            span.latency_ns = end_ns - start_ns
+
         self._span_stack.pop()
 
     @property
@@ -177,9 +201,21 @@ class MetricsCollector:
     @property
     def current_span(self) -> Span:
         """Return the currently active span."""
+        # Ensure we have spans in the stack to return a current span
         if not self._span_stack:
-            msg = "No active span. Cannot access current span."
+            msg = "No spans have been started. Cannot access last span."
             raise RuntimeError(msg)
+
+        # Check invariants to ensure our internal state is consistent
+        if self._current_trace is None:
+            msg = "Invariant violation: current_trace should not be None if span_stack is not empty"
+            raise AssertionError(msg)
+
+        # Ensure the span has not ended (invariants should guarantee this but we check to be safe)
+        if self._span_stack[-1].end != datetime(1970, 1, 1, tzinfo=UTC):
+            msg = "Invariant violation: current_span has already ended"
+            raise AssertionError(msg)
+
         return self._span_stack[-1]
 
     def get_meta(self, key: str) -> t.Any:

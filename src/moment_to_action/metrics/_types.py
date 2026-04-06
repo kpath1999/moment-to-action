@@ -7,12 +7,13 @@ and surfaced to callers that consume reports.
 from __future__ import annotations
 
 import typing as t
+from datetime import timedelta
 from enum import Enum, auto
 
 import attrs
 
 if t.TYPE_CHECKING:
-    from datetime import datetime, timedelta
+    from datetime import datetime
 
 
 # Pylance decided to be difficult today
@@ -36,6 +37,9 @@ class SpanType(Enum):
 
     STAGE = auto()
     """Individual stage execution span (e.g. trigger, vision, LLM)."""
+
+    PREPROCESS = auto()
+    """Time taken for preprocessing steps before a model inference (e.g. resampling audio)."""
 
     MODEL_INFERENCE = auto()
     """Time taken for a model inference (e.g. vision, LLM)."""
@@ -66,6 +70,13 @@ class Span:
     end: datetime
     """When did this span end?"""
 
+    latency_ns: int = -1
+    """Latency of this span in nanoseconds, as measured by time.perf_counter_ns().
+
+    Used for more accurate latency measurement than start/end datetimes.
+    May not match the latency calculated from ``end - start``, as those clocks are not monotonic.
+    """
+
     metadata: dict[str, t.Any] = attrs.Factory(_meta_dict)
     """Arbitrary key/value context for this span."""
 
@@ -75,12 +86,12 @@ class Span:
     @property
     def latency(self) -> timedelta:
         """Latency of this span."""
-        return self.end - self.start
+        return timedelta(microseconds=self.latency_ns / 1000)
 
     @property
     def latency_ms(self) -> float:
         """Latency of this span in milliseconds."""
-        return self.latency.total_seconds() * 1000.0
+        return self.latency_ns / 1_000_000
 
     def summary(self) -> str:
         """Generate a human-readable summary of this span."""
@@ -102,7 +113,7 @@ class Span:
 
 @attrs.define
 class Trace:
-    """Represents a single end-to-end pipeline execution trace.
+    """Represents a single execution trace, with 1+ pipeline inferences.
 
     Contains detailed timing and metadata for each stage, as well as
     overall pipeline events. Used internally by MetricsCollector.
@@ -117,6 +128,13 @@ class Trace:
     end: datetime
     """When did this trace end?"""
 
+    latency_ns: int = -1
+    """Latency of the entire trace in nanoseconds, as measured by time.perf_counter_ns().
+
+    Used for more accurate latency measurement than start/end datetimes.
+    May not match the latency calculated from ``end - start``, as those clocks are not monotonic.
+    """
+
     spans: list[Span] = attrs.Factory(_span_list)
     """List of spans recorded for this trace."""
 
@@ -126,12 +144,12 @@ class Trace:
     @property
     def latency(self) -> timedelta:
         """Latency of the entire trace."""
-        return self.end - self.start
+        return timedelta(microseconds=self.latency_ns / 1000)
 
     @property
     def latency_ms(self) -> float:
         """Latency of the entire trace in milliseconds."""
-        return self.latency.total_seconds() * 1000.0
+        return self.latency_ns / 1_000_000
 
     def summary(self, latency_budget: timedelta | None = None) -> str:
         """Generate a human-readable summary of this trace and its spans.
@@ -150,13 +168,9 @@ class Trace:
             "",
         ]
 
-        # Get root span
+        # Get spans without parents
+        # fundamentally, the trace is the parent of all of these spans
         root_spans = [span for span in self.spans if span.parent_id is None]
-        if len(root_spans) != 1:
-            msg = f"Trace {self.id_} has {len(root_spans)} root spans (expected exactly 1)"
-            raise ValueError(msg)
-
-        root_span = root_spans[0]
 
         # Recursively add span summaries with indentation based on depth in the trace
         def add_span_summary(span: Span, indent: int = 0) -> None:
@@ -165,7 +179,8 @@ class Trace:
             for child in child_spans:
                 add_span_summary(child, indent + 2)
 
-        add_span_summary(root_span)
+        for root_span in root_spans:
+            add_span_summary(root_span)
 
         return "\n".join(lines)
 
