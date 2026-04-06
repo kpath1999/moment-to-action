@@ -24,6 +24,4 @@ def read_power(ctx: click.Context, *, device: ComputeUnit, json_output: bool) ->
         output = attrs.asdict(sample)
         click.echo(json.dumps(output))
     else:
-        click.echo(
-            f"Device {device} is drawing {sample.power_mw} mW at {sample.utilization_pct}% usage."
-        )
+        click.echo(f"Device {device} is drawing {sample.power_mw} mW at {sample.usage_pct}% usage.")

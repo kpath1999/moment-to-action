@@ -25,7 +25,7 @@ from typing import ClassVar
 import psutil
 
 from moment_to_action.hardware._platforms._base import PowerMonitor
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class X86_64PowerMonitor(PowerMonitor):  # noqa: N801
         else:
             logger.warning("Intel RAPL not available - using psutil estimates")
 
-    def sample(self, unit: ComputeUnit) -> PowerSample:
+    def sample(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         """Take a power measurement for *unit*.
 
         Reads from Intel RAPL when available; falls back to psutil-based
@@ -72,18 +72,18 @@ class X86_64PowerMonitor(PowerMonitor):  # noqa: N801
         """
         if unit != ComputeUnit.CPU:
             # x86_64 is CPU-only; other units return zero.
-            return PowerSample(
+            return ComputeUnitUsageSample(
                 timestamp=time.time(),
                 device=unit,
                 power_mw=0.0,
-                utilization_pct=0.0,
+                usage_pct=0.0,
             )
 
         if self._rapl_available:
             return self._read_rapl()
         return self._estimate()
 
-    def _read_rapl(self) -> PowerSample:
+    def _read_rapl(self) -> ComputeUnitUsageSample:
         """Read power from Intel RAPL energy counter.
 
         RAPL reports cumulative energy in microjoules. Compute power as
@@ -109,17 +109,17 @@ class X86_64PowerMonitor(PowerMonitor):  # noqa: N801
             self._last_energy_uj = energy_uj
             self._last_time = now
 
-            return PowerSample(
+            return ComputeUnitUsageSample(
                 timestamp=now,
                 device=ComputeUnit.CPU,
                 power_mw=power_mw,
-                utilization_pct=psutil.cpu_percent(interval=None),
+                usage_pct=psutil.cpu_percent(interval=None),
             )
         except (FileNotFoundError, ValueError, OSError) as e:
             logger.warning("RAPL read failed: %s", e)
             return self._estimate()
 
-    def _estimate(self) -> PowerSample:
+    def _estimate(self) -> ComputeUnitUsageSample:
         """Estimate power using CPU frequency and utilization heuristics.
 
         Rough estimate: base_power + (freq_ghz x util_pct x factor).
@@ -137,9 +137,9 @@ class X86_64PowerMonitor(PowerMonitor):  # noqa: N801
         base_power = self._ESTIMATES[ComputeUnit.CPU]
         load_power = freq_ghz * cpu_util * 0.6  # 0.6 mW per GHz per 1% utilization
 
-        return PowerSample(
+        return ComputeUnitUsageSample(
             timestamp=time.time(),
             device=ComputeUnit.CPU,
             power_mw=base_power + load_power,
-            utilization_pct=cpu_util,
+            usage_pct=cpu_util,
         )

@@ -15,7 +15,7 @@ import numpy as np
 if TYPE_CHECKING:
     import os
 
-    from moment_to_action.hardware._types import ComputeUnit, PowerSample, TorchExecutionPolicy
+    from moment_to_action.hardware import ComputeUnit, ComputeUnitUsageSample, TorchExecutionPolicy
 
 # Type alias: single tensor (most models) or named dict (multi-input models).
 ModelInput = np.ndarray | dict[str, np.ndarray]
@@ -25,14 +25,14 @@ class PowerMonitor(ABC):
     """Abstract power monitor.  Reads power draw for a given compute unit."""
 
     @abstractmethod
-    def sample(self, unit: ComputeUnit) -> PowerSample:
+    def sample(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         """Return a power measurement for *unit*.
 
         Args:
             unit: The compute unit to sample.
 
         Returns:
-            A ``PowerSample`` with current power and utilisation figures.
+            A ``ComputeUnitUsageSample`` with current power and utilisation figures.
         """
         ...
 

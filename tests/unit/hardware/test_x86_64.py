@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64PowerMonitor
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 
 @pytest.mark.unit
@@ -227,10 +227,10 @@ class TestX86_64PowerMonitor:  # noqa: N801
             monitor = X86_64PowerMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
-            assert isinstance(sample, PowerSample)
+            assert isinstance(sample, ComputeUnitUsageSample)
             assert sample.device == ComputeUnit.CPU
             assert sample.power_mw >= 0.0
-            assert 0.0 <= sample.utilization_pct <= 100.0
+            assert 0.0 <= sample.usage_pct <= 100.0
             assert sample.timestamp > 0.0
 
     def test_x86_64_power_monitor_sample_cpu_rapl_fallback(self) -> None:
@@ -249,10 +249,10 @@ class TestX86_64PowerMonitor:  # noqa: N801
             monitor = X86_64PowerMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
-            assert isinstance(sample, PowerSample)
+            assert isinstance(sample, ComputeUnitUsageSample)
             assert sample.device == ComputeUnit.CPU
             assert sample.power_mw >= 0.0
-            assert sample.utilization_pct == 25.0
+            assert sample.usage_pct == 25.0
 
     def test_x86_64_power_monitor_non_cpu_unit_returns_zero(self) -> None:
         """Test X86_64PowerMonitor returns zero power for non-CPU units."""
@@ -267,7 +267,7 @@ class TestX86_64PowerMonitor:  # noqa: N801
 
             assert sample.device == ComputeUnit.NPU
             assert sample.power_mw == 0.0
-            assert sample.utilization_pct == 0.0
+            assert sample.usage_pct == 0.0
 
     def test_x86_64_power_monitor_rapl_read_failure_fallback(self) -> None:
         """Test X86_64PowerMonitor falls back to estimate on RAPL read failure."""
@@ -286,7 +286,7 @@ class TestX86_64PowerMonitor:  # noqa: N801
             monitor = X86_64PowerMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
-            assert isinstance(sample, PowerSample)
+            assert isinstance(sample, ComputeUnitUsageSample)
             assert sample.power_mw >= 0.0
 
     def test_x86_64_power_monitor_multiple_samples(self) -> None:
@@ -363,4 +363,4 @@ class TestX86_64PowerMonitor:  # noqa: N801
             # With fallback freq_ghz=2.0, util=100%, base=50.0 mW:
             # power_mw = 50.0 + (2.0 * 100.0 * 0.6) = 50.0 + 120.0 = 170.0 mW
             assert sample.power_mw == 170.0
-            assert sample.utilization_pct == 100.0
+            assert sample.usage_pct == 100.0

@@ -19,7 +19,7 @@ from typing import ClassVar
 import psutil
 
 from moment_to_action.hardware._platforms._base import PowerMonitor
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class QCS6490PowerMonitor(PowerMonitor):
         else:
             logger.warning("SoC power info not available - using utilization-based estimates")
 
-    def sample(self, unit: ComputeUnit) -> PowerSample:
+    def sample(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         """Take a power measurement for *unit*.
 
         Reads from sysfs when available; falls back to static estimates.
@@ -71,28 +71,28 @@ class QCS6490PowerMonitor(PowerMonitor):
             return self._read_hw_sensor(unit)
         return self._estimate(unit)
 
-    def _read_hw_sensor(self, unit: ComputeUnit) -> PowerSample:
+    def _read_hw_sensor(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         # NOTE: the battery power_now file reports *total* system power draw,
         # not per-unit.  We pass `unit` through so the caller knows which
         # unit was active when the sample was taken.
         try:
             power_uw = int(Path(f"{self.SYSFS_POWER_PATH}/battery/power_now").read_text().strip())
-            return PowerSample(
+            return ComputeUnitUsageSample(
                 timestamp=time.time(),
                 device=unit,
                 power_mw=power_uw / 1000.0,
-                utilization_pct=self._read_utilization(unit),
+                usage_pct=self._read_utilization(unit),
             )
         except (FileNotFoundError, ValueError) as e:
             logger.warning("HW power sensor read failed: %s", e)
             return self._estimate(unit)
 
-    def _estimate(self, unit: ComputeUnit) -> PowerSample:
-        return PowerSample(
+    def _estimate(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
+        return ComputeUnitUsageSample(
             timestamp=time.time(),
             device=unit,
             power_mw=self._ESTIMATES.get(unit, 300.0),
-            utilization_pct=self._read_utilization(unit),
+            usage_pct=self._read_utilization(unit),
         )
 
     @staticmethod

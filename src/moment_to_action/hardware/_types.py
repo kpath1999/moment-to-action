@@ -25,8 +25,8 @@ class ComputeUnit(StrEnum):
 
 
 @attrs.frozen
-class PowerSample:
-    """A single power measurement snapshot for one compute unit."""
+class ComputeUnitUsageSample:
+    """A single compute unit usage measurement snapshot for one compute unit."""
 
     timestamp: float
     """Unix timestamp of the measurement (seconds)."""
@@ -34,11 +34,11 @@ class PowerSample:
     device: ComputeUnit
     """The device that was active during sampling."""
 
+    usage_pct: float
+    """Utilisation percentage (0-100)."""
+
     power_mw: float
     """Power draw in milliwatts."""
-
-    utilization_pct: float
-    """Utilisation percentage (0-100)."""
 
 
 @attrs.frozen

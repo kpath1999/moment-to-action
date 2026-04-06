@@ -18,7 +18,7 @@ from typing import ClassVar
 import psutil
 
 from moment_to_action.hardware._platforms._base import PowerMonitor
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class MacOSARM64PowerMonitor(PowerMonitor):
         ComputeUnit.CPU: 50.0,  # Base estimate for Apple Silicon CPU
     }
 
-    def sample(self, unit: ComputeUnit) -> PowerSample:
+    def sample(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         """Take a power measurement for *unit*.
 
         Args:
@@ -46,16 +46,16 @@ class MacOSARM64PowerMonitor(PowerMonitor):
             A ``PowerSample`` with the estimated power reading.
         """
         if unit != ComputeUnit.CPU:
-            return PowerSample(
+            return ComputeUnitUsageSample(
                 timestamp=time.time(),
                 device=unit,
                 power_mw=0.0,
-                utilization_pct=0.0,
+                usage_pct=0.0,
             )
 
         return self._estimate()
 
-    def _estimate(self) -> PowerSample:
+    def _estimate(self) -> ComputeUnitUsageSample:
         """Estimate power using CPU frequency and utilization heuristics.
 
         Rough estimate: base_power + (freq_ghz x util_pct x factor).
@@ -71,9 +71,9 @@ class MacOSARM64PowerMonitor(PowerMonitor):
         base_power = self._ESTIMATES[ComputeUnit.CPU]
         load_power = freq_ghz * cpu_util * 0.6
 
-        return PowerSample(
+        return ComputeUnitUsageSample(
             timestamp=time.time(),
             device=ComputeUnit.CPU,
             power_mw=base_power + load_power,
-            utilization_pct=cpu_util,
+            usage_pct=cpu_util,
         )

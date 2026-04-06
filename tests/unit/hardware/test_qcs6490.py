@@ -13,7 +13,7 @@ from moment_to_action.hardware._platforms.qcs6490._backend import (
 )
 from moment_to_action.hardware._platforms.qcs6490._litert import QCS6490LiteRTBackend
 from moment_to_action.hardware._platforms.qcs6490._power import QCS6490PowerMonitor
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 
 @pytest.mark.unit
@@ -459,10 +459,10 @@ class TestQCS6490PowerMonitor:
             monitor = QCS6490PowerMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
-            assert isinstance(sample, PowerSample)
+            assert isinstance(sample, ComputeUnitUsageSample)
             assert sample.device == ComputeUnit.CPU
             assert sample.power_mw == 5000.0
-            assert sample.utilization_pct == 50.0
+            assert sample.usage_pct == 50.0
 
     def test_qcs6490_power_monitor_sample_hw_unavailable_fallback(self) -> None:
         """Test sample falls back to estimate when sysfs unavailable."""
@@ -479,10 +479,10 @@ class TestQCS6490PowerMonitor:
             monitor = QCS6490PowerMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
-            assert isinstance(sample, PowerSample)
+            assert isinstance(sample, ComputeUnitUsageSample)
             assert sample.device == ComputeUnit.CPU
             assert sample.power_mw == 300.0
-            assert sample.utilization_pct == 25.0
+            assert sample.usage_pct == 25.0
 
     def test_qcs6490_power_monitor_sample_hw_read_error_fallback(self) -> None:
         """Test sample falls back to estimate on hardware read error."""
@@ -507,10 +507,10 @@ class TestQCS6490PowerMonitor:
             monitor = QCS6490PowerMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
-            assert isinstance(sample, PowerSample)
+            assert isinstance(sample, ComputeUnitUsageSample)
             assert sample.device == ComputeUnit.CPU
             assert sample.power_mw == 300.0
-            assert sample.utilization_pct == 30.0
+            assert sample.usage_pct == 30.0
 
     def test_qcs6490_power_monitor_read_utilization_cpu(self) -> None:
         """Test _read_utilization returns CPU percent for CPU unit."""

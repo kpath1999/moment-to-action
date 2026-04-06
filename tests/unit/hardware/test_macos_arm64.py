@@ -11,7 +11,7 @@ from moment_to_action.hardware._platforms.macos_arm64 import (
     MacOSARM64Backend,
     MacOSARM64PowerMonitor,
 )
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 
 @pytest.mark.unit
@@ -158,10 +158,10 @@ class TestMacOSARM64PowerMonitor:
         with patch("psutil.cpu_percent", return_value=50.0):
             monitor = MacOSARM64PowerMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
-        assert isinstance(sample, PowerSample)
+        assert isinstance(sample, ComputeUnitUsageSample)
         assert sample.device == ComputeUnit.CPU
         assert sample.power_mw >= 0.0
-        assert 0.0 <= sample.utilization_pct <= 100.0
+        assert 0.0 <= sample.usage_pct <= 100.0
         assert sample.timestamp > 0.0
 
     def test_sample_non_cpu_returns_zero_power(self) -> None:
@@ -170,7 +170,7 @@ class TestMacOSARM64PowerMonitor:
         sample = monitor.sample(ComputeUnit.NPU)
         assert sample.device == ComputeUnit.NPU
         assert sample.power_mw == 0.0
-        assert sample.utilization_pct == 0.0
+        assert sample.usage_pct == 0.0
 
     def test_power_increases_with_load(self) -> None:
         """Higher CPU utilization produces higher estimated power."""
@@ -217,4 +217,4 @@ class TestMacOSARM64PowerMonitor:
         with patch("psutil.cpu_percent", return_value=42.0):
             monitor = MacOSARM64PowerMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
-        assert sample.utilization_pct == 42.0
+        assert sample.usage_pct == 42.0
