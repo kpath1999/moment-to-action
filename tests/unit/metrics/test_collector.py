@@ -791,3 +791,70 @@ class TestEdgeCases:
         assert span.id_ == 0
         assert span.type_ == SpanType.STAGE
         assert span.name == "null"
+
+
+@pytest.mark.unit
+class TestResourceSampling:
+    """Tests for resource usage sampling when a compute backend is provided."""
+
+    def test_collector_with_backend_samples_resource_usage(self) -> None:
+        """Test that _sample_resource_usage collects samples when a backend is provided.
+
+        This covers the code path at lines 126-148 of _collector.py where the
+        collector uses the compute backend's resource monitor to sample hardware metrics.
+        """
+        from unittest.mock import MagicMock
+
+        from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
+
+        # Build a ComputeUnitUsageSample mock with the required structure
+        def _make_usage_sample(device: ComputeUnit) -> MagicMock:
+            sample = MagicMock(spec=ComputeUnitUsageSample)
+            sample.device = device
+            sample.power_mw = 100.0
+            sample.usage_pct = 10.0
+            sample.frequency_mhz = 1000.0
+            sample.memory_mb = 512.0
+            return sample
+
+        mock_resource_monitor = MagicMock()
+        mock_resource_monitor.sample.side_effect = _make_usage_sample
+
+        mock_backend = MagicMock()
+        mock_backend.resource_monitor = mock_resource_monitor
+
+        # Use a very short sample interval so we get at least one sample during the trace
+        collector = MetricsCollector(
+            compute_backend=mock_backend,
+            session_id="test-resource-sampling",
+            mem_sample_interval=timedelta(milliseconds=10),
+        )
+
+        with collector.start_trace() as trace:
+            with collector.start_span(SpanType.STAGE, "test"):
+                # Brief sleep to allow at least one resource sample to be collected
+                time.sleep(0.05)
+
+        # The trace should have at least one resource usage sample
+        assert len(trace.resource_usage_samples) >= 1
+        sample = trace.resource_usage_samples[0]
+        assert sample.cpu_usage is not None
+        assert sample.gpu_usage is not None
+
+    def test_collector_no_backend_does_not_sample(self) -> None:
+        """Test that _sample_resource_usage is a no-op when compute_backend is None.
+
+        This covers the early-return at line 124 of _collector.py.
+        """
+        collector = MetricsCollector(
+            compute_backend=None,
+            session_id="test-no-backend",
+            mem_sample_interval=timedelta(milliseconds=10),
+        )
+
+        with collector.start_trace() as trace:
+            with collector.start_span(SpanType.STAGE, "test"):
+                time.sleep(0.05)
+
+        # No resource samples should be collected without a backend
+        assert len(trace.resource_usage_samples) == 0

@@ -3,9 +3,9 @@
 ``ComputeBackend`` is the **only** class the rest of the codebase imports.
 It is intentionally thin — three private fields and pure delegation:
 
-    _preferred_unit   the unit the caller asked for
-    _power_monitor    platform-appropriate power monitor
-    _backend          platform-appropriate unified inference backend
+    _preferred_unit     the unit the caller asked for
+    _resource_monitor   platform-appropriate resource monitor
+    _backend            platform-appropriate unified inference backend
 
 All format routing (``.tflite`` vs ``.onnx``), sub-backend management,
 and accelerator → CPU fallback logic live inside the platform backend
@@ -28,17 +28,17 @@ if TYPE_CHECKING:
     from moment_to_action.hardware._platforms._base import (
         InferenceBackend,
         ModelInput,
-        PowerMonitor,
+        ResourceMonitor,
     )
     from moment_to_action.hardware._types import TorchExecutionPolicy
 
 from moment_to_action.hardware._platforms._detection import Platform, detect_platform
 from moment_to_action.hardware._platforms.macos_arm64 import (
     MacOSARM64Backend,
-    MacOSARM64PowerMonitor,
+    MacOSARM64ResourceMonitor,
 )
-from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
-from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64PowerMonitor
+from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490ResourceMonitor
+from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64ResourceMonitor
 from moment_to_action.hardware._types import ComputeUnit
 
 logger = logging.getLogger(__name__)
@@ -86,15 +86,15 @@ class BenchmarkResult:
 # ---------------------------------------------------------------------------
 
 
-def _make_power_monitor() -> PowerMonitor:
-    """Return the power monitor appropriate for the detected platform."""
+def _make_resource_monitor() -> ResourceMonitor:
+    """Return the resource monitor appropriate for the detected platform."""
     match detect_platform():
         case Platform.QCS6490:
-            return QCS6490PowerMonitor()
+            return QCS6490ResourceMonitor()
         case Platform.X86_64:
-            return X86_64PowerMonitor()
+            return X86_64ResourceMonitor()
         case Platform.MACOS_ARM64:
-            return MacOSARM64PowerMonitor()
+            return MacOSARM64ResourceMonitor()
 
 
 def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
@@ -129,12 +129,12 @@ class ComputeBackend:
 
     Attributes:
         preferred_unit: The compute unit requested at construction time.
-        power_monitor: Platform power monitor instance (read-only).
+        resource_monitor: Platform resource monitor instance (read-only).
     """
 
     def __init__(self, preferred_unit: ComputeUnit = ComputeUnit.NPU) -> None:
         self._preferred_unit = preferred_unit
-        self._power_monitor: PowerMonitor = _make_power_monitor()
+        self._resource_monitor: ResourceMonitor = _make_resource_monitor()
         self._backend: InferenceBackend = _make_backend(preferred_unit)
 
         logger.info(
@@ -159,9 +159,9 @@ class ComputeBackend:
         return self._preferred_unit
 
     @property
-    def power_monitor(self) -> PowerMonitor:
-        """The platform power monitor."""
-        return self._power_monitor
+    def resource_monitor(self) -> ResourceMonitor:
+        """The platform resource monitor."""
+        return self._resource_monitor
 
     @property
     def active_unit(self) -> ComputeUnit:

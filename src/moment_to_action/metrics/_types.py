@@ -12,6 +12,9 @@ from enum import Enum, auto
 
 import attrs
 
+if t.TYPE_CHECKING:  # pragma: no cover
+    from moment_to_action.hardware._types import ComputeUnitUsageSample
+
 
 # Pylance decided to be difficult today
 def _meta_dict() -> dict[str, t.Any]:
@@ -21,6 +24,11 @@ def _meta_dict() -> dict[str, t.Any]:
 
 def _span_list() -> list[Span]:
     """Factory function for default span list."""
+    return []
+
+
+def _resource_usage_sample_list() -> list[ResourceUsageSample]:
+    """Factory function for default resource usage sample list."""
     return []
 
 
@@ -40,6 +48,61 @@ class SpanType(Enum):
 
     MODEL_INFERENCE = auto()
     """Time taken for a model inference (e.g. vision, LLM)."""
+
+
+@attrs.frozen
+class MemoryUsageSample:
+    """Represents a single process memory usage sample taken during a trace execution."""
+
+    rss_bytes: int
+    """Resident Set Size (RSS) in bytes."""
+
+    vms_bytes: int
+    """Virtual Memory Size (VMS) in bytes."""
+
+    shared_bytes: int
+    """Shared memory size in bytes."""
+
+    text_bytes: int
+    """Text (code) memory size in bytes."""
+
+    lib_bytes: int
+    """Library memory size in bytes."""
+
+    data_bytes: int
+    """Data memory size in bytes."""
+
+    dirty_bytes: int
+    """Dirty memory size in bytes."""
+
+
+@attrs.frozen
+class ResourceUsageSample:
+    """Represents a single resource usage sample taken during a trace execution."""
+
+    timestamp: datetime
+    """When was this resource usage sample taken?"""
+
+    running_span_id: int | None
+    """The ID of the span that was running when this resource usage sample was taken, if any."""
+
+    cpu_usage: ComputeUnitUsageSample
+    """CPU usage sample at the time of this resource usage sample."""
+
+    gpu_usage: ComputeUnitUsageSample
+    """GPU usage sample at the time of this resource usage sample."""
+
+    npu_usage: ComputeUnitUsageSample
+    """NPU usage sample at the time of this resource usage sample."""
+
+    dsp_usage: ComputeUnitUsageSample
+    """DSP usage sample at the time of this resource usage sample."""
+
+    proc_cpu_usage: float
+    """Process-specific CPU usage percentage at the time of this resource usage sample."""
+
+    mem_usage: MemoryUsageSample
+    """Process memory usage sample at the time of this resource usage sample."""
 
 
 @attrs.define
@@ -154,6 +217,9 @@ class Trace:
 
     spans: list[Span] = attrs.Factory(_span_list)
     """List of spans recorded for this trace."""
+
+    resource_usage_samples: list[ResourceUsageSample] = attrs.Factory(_resource_usage_sample_list)
+    """List of resource usage samples recorded for this trace."""
 
     _frozen: bool = attrs.field(default=False, init=False, repr=False)
     """Whether this trace is frozen and should not be modified."""

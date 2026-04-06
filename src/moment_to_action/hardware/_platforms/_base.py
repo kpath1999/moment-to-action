@@ -1,4 +1,4 @@
-"""Abstract base classes for platform-agnostic inference backends and power monitors.
+"""Abstract base classes for platform-agnostic inference backends and resource monitors.
 
 All platform-specific implementations live under _platforms/<chip>/ and must
 subclass these ABCs.  Code outside this package should depend on these interfaces,
@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 import numpy as np
+import psutil
 
 if TYPE_CHECKING:
     import os
@@ -21,12 +22,12 @@ if TYPE_CHECKING:
 ModelInput = np.ndarray | dict[str, np.ndarray]
 
 
-class PowerMonitor(ABC):
-    """Abstract power monitor.  Reads power draw for a given compute unit."""
+class ResourceMonitor(ABC):
+    """Abstract resource monitor.  Reads power draw and utilisation for a given compute unit."""
 
     @abstractmethod
     def sample(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
-        """Return a power measurement for *unit*.
+        """Return a resource measurement for *unit*.
 
         Args:
             unit: The compute unit to sample.
@@ -35,6 +36,16 @@ class PowerMonitor(ABC):
             A ``ComputeUnitUsageSample`` with current power and utilisation figures.
         """
         ...
+
+    @staticmethod
+    def used_memory_mb() -> float:
+        """Return used system memory in megabytes.
+
+        Uses ``total - available`` per psutil docs — more accurate than ``.used``
+        because ``.available`` accounts for reclaimable cache pages.
+        """
+        vm = psutil.virtual_memory()
+        return (vm.total - vm.available) / (1024 * 1024)
 
 
 class InferenceBackend(ABC):

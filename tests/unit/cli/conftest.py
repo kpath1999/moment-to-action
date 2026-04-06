@@ -12,9 +12,9 @@ def mock_backend() -> MagicMock:
     """Return a MagicMock ComputeBackend with a usable power monitor."""
     sample = MagicMock()
     sample.power_mw = 100
-    sample.utilization_pct = 10
-    pwr_mon = MagicMock()
-    pwr_mon.sample.return_value = sample
+    sample.usage_pct = 10
+    resource_mon = MagicMock()
+    resource_mon.sample.return_value = sample
     backend = MagicMock()
-    backend.power_monitor = pwr_mon
+    backend.resource_monitor = resource_mon
     return backend

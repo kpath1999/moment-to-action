@@ -1,13 +1,14 @@
-"""Unit tests for x86_64 platform backend and power monitoring."""
+"""Unit tests for x86_64 platform backend and resource monitoring."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64PowerMonitor
+from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64ResourceMonitor
 from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 
@@ -209,44 +210,44 @@ class TestX86_64Backend:  # noqa: N801
 
 
 @pytest.mark.unit
-class TestX86_64PowerMonitor:  # noqa: N801
-    """Test X86_64PowerMonitor power sampling."""
+class TestX86_64ResourceMonitor:  # noqa: N801
+    """Test X86_64ResourceMonitor power sampling."""
 
     def test_x86_64_power_monitor_sample_cpu_rapl_available(self) -> None:
-        """Test X86_64PowerMonitor.sample returns PowerSample for CPU when RAPL available."""
+        """Test X86_64ResourceMonitor.sample returns PowerSample for CPU when RAPL available."""
         mock_rapl_path = MagicMock()
         mock_rapl_path.exists.return_value = True
         mock_rapl_path.read_text.return_value = "1000000\n"
         with (
             patch(
-                "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+                "moment_to_action.hardware._platforms.x86_64._resources._RAPL_ENERGY_PATH",
                 mock_rapl_path,
             ),
             patch("psutil.cpu_percent", return_value=50.0),
         ):
-            monitor = X86_64PowerMonitor()
+            monitor = X86_64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
             assert isinstance(sample, ComputeUnitUsageSample)
             assert sample.device == ComputeUnit.CPU
             assert sample.power_mw >= 0.0
             assert 0.0 <= sample.usage_pct <= 100.0
-            assert sample.timestamp > 0.0
+            assert isinstance(sample.timestamp, datetime)
 
     def test_x86_64_power_monitor_sample_cpu_rapl_fallback(self) -> None:
-        """Test X86_64PowerMonitor.sample falls back to estimate when RAPL unavailable."""
+        """Test X86_64ResourceMonitor.sample falls back to estimate when RAPL unavailable."""
         mock_rapl_path = MagicMock()
         mock_rapl_path.exists.return_value = False
         with (
             patch(
-                "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+                "moment_to_action.hardware._platforms.x86_64._resources._RAPL_ENERGY_PATH",
                 mock_rapl_path,
             ),
             patch("psutil.cpu_percent", return_value=25.0),
             patch("psutil.cpu_freq") as mock_freq,
         ):
             mock_freq.return_value.current = 2400  # 2.4 GHz
-            monitor = X86_64PowerMonitor()
+            monitor = X86_64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
             assert isinstance(sample, ComputeUnitUsageSample)
@@ -255,14 +256,14 @@ class TestX86_64PowerMonitor:  # noqa: N801
             assert sample.usage_pct == 25.0
 
     def test_x86_64_power_monitor_non_cpu_unit_returns_zero(self) -> None:
-        """Test X86_64PowerMonitor returns zero power for non-CPU units."""
+        """Test X86_64ResourceMonitor returns zero power for non-CPU units."""
         mock_rapl_path = MagicMock()
         mock_rapl_path.exists.return_value = True
         with patch(
-            "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+            "moment_to_action.hardware._platforms.x86_64._resources._RAPL_ENERGY_PATH",
             mock_rapl_path,
         ):
-            monitor = X86_64PowerMonitor()
+            monitor = X86_64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.NPU)
 
             assert sample.device == ComputeUnit.NPU
@@ -270,32 +271,32 @@ class TestX86_64PowerMonitor:  # noqa: N801
             assert sample.usage_pct == 0.0
 
     def test_x86_64_power_monitor_rapl_read_failure_fallback(self) -> None:
-        """Test X86_64PowerMonitor falls back to estimate on RAPL read failure."""
+        """Test X86_64ResourceMonitor falls back to estimate on RAPL read failure."""
         mock_rapl_path = MagicMock()
         mock_rapl_path.exists.return_value = True
         mock_rapl_path.read_text.side_effect = FileNotFoundError()
         with (
             patch(
-                "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+                "moment_to_action.hardware._platforms.x86_64._resources._RAPL_ENERGY_PATH",
                 mock_rapl_path,
             ),
             patch("psutil.cpu_percent", return_value=30.0),
             patch("psutil.cpu_freq") as mock_freq,
         ):
             mock_freq.return_value.current = 2000
-            monitor = X86_64PowerMonitor()
+            monitor = X86_64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
             assert isinstance(sample, ComputeUnitUsageSample)
             assert sample.power_mw >= 0.0
 
     def test_x86_64_power_monitor_multiple_samples(self) -> None:
-        """Test X86_64PowerMonitor returns valid samples over multiple calls."""
+        """Test X86_64ResourceMonitor returns valid samples over multiple calls."""
         mock_rapl_path = MagicMock()
         mock_rapl_path.exists.return_value = False
         with (
             patch(
-                "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+                "moment_to_action.hardware._platforms.x86_64._resources._RAPL_ENERGY_PATH",
                 mock_rapl_path,
             ),
             patch("psutil.cpu_percent", return_value=50.0),
@@ -303,7 +304,7 @@ class TestX86_64PowerMonitor:  # noqa: N801
         ):
             mock_freq.return_value.current = 2000
 
-            monitor = X86_64PowerMonitor()
+            monitor = X86_64ResourceMonitor()
             sample1 = monitor.sample(ComputeUnit.CPU)
             sample2 = monitor.sample(ComputeUnit.CPU)
 
@@ -322,7 +323,7 @@ class TestX86_64PowerMonitor:  # noqa: N801
         mock_rapl_path.read_text.side_effect = ["1000000\n", "2000000\n"]
         with (
             patch(
-                "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+                "moment_to_action.hardware._platforms.x86_64._resources._RAPL_ENERGY_PATH",
                 mock_rapl_path,
             ),
             patch("psutil.cpu_percent", return_value=50.0),
@@ -331,7 +332,7 @@ class TestX86_64PowerMonitor:  # noqa: N801
             # First call at t=0, second call at t=1 (1 second elapsed)
             mock_time.side_effect = [0.0, 1.0, 1.0]
 
-            monitor = X86_64PowerMonitor()
+            monitor = X86_64ResourceMonitor()
             # First call: initializes _last_energy_uj and _last_time
             sample1 = monitor.sample(ComputeUnit.CPU)
             assert sample1.power_mw == 0.0  # No previous reading yet
@@ -351,16 +352,41 @@ class TestX86_64PowerMonitor:  # noqa: N801
         mock_rapl_path.exists.return_value = False
         with (
             patch(
-                "moment_to_action.hardware._platforms.x86_64._power._RAPL_ENERGY_PATH",
+                "moment_to_action.hardware._platforms.x86_64._resources._RAPL_ENERGY_PATH",
                 mock_rapl_path,
             ),
             patch("psutil.cpu_percent", return_value=100.0),
             patch("psutil.cpu_freq", side_effect=OSError("cpu_freq unavailable")),
         ):
-            monitor = X86_64PowerMonitor()
+            monitor = X86_64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
             # With fallback freq_ghz=2.0, util=100%, base=50.0 mW:
             # power_mw = 50.0 + (2.0 * 100.0 * 0.6) = 50.0 + 120.0 = 170.0 mW
             assert sample.power_mw == 170.0
             assert sample.usage_pct == 100.0
+
+    def test_x86_64_rapl_freq_error_fallback(self) -> None:
+        """Test that _read_rapl falls back to 2000 MHz when cpu_freq raises.
+
+        Ensures the except branch at lines 119-120 of _power.py is covered.
+        """
+        mock_rapl_path = MagicMock()
+        mock_rapl_path.exists.return_value = True
+        mock_rapl_path.read_text.return_value = "5000000\n"
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._resources._RAPL_ENERGY_PATH",
+                mock_rapl_path,
+            ),
+            patch("psutil.cpu_percent", return_value=50.0),
+            patch("psutil.virtual_memory") as mock_vmem,
+            patch("psutil.cpu_freq", side_effect=OSError("unavailable")),
+        ):
+            mock_vmem.return_value.total = 1024 * 1024 * 4096  # 4 GB total
+            mock_vmem.return_value.available = 1024 * 1024 * 3584  # 512 MB used
+            monitor = X86_64ResourceMonitor()
+            sample = monitor.sample(ComputeUnit.CPU)
+            # RAPL path should succeed; frequency_mhz falls back to 2000.0
+            assert isinstance(sample, ComputeUnitUsageSample)
+            assert sample.frequency_mhz == 2000.0
