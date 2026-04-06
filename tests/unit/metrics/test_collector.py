@@ -631,3 +631,55 @@ class TestIntegrationScenario:
             assert data["latency_budget"]["budget_ms"] == 1500.0
             assert data["total_stages"] == 1
             assert data["total_pipeline_events"] == 1
+
+
+@pytest.mark.unit
+class TestNullMetricsCollector:
+    """Test NullMetricsCollector no-op behavior."""
+
+    def test_null_collector_construction(self) -> None:
+        """Test NullMetricsCollector construction."""
+        from moment_to_action.metrics import NullMetricsCollector
+
+        collector = NullMetricsCollector()
+        assert collector.session_id == "null"
+
+    def test_null_collector_log_stage_noop(self) -> None:
+        """Test that log_stage is a no-op."""
+        from moment_to_action.metrics import NullMetricsCollector
+
+        collector = NullMetricsCollector()
+        # Should not raise
+        collector.log_stage("TestStage", 0, 100.0)
+
+    def test_null_collector_log_pipeline_event_noop(self) -> None:
+        """Test that log_pipeline_event is a no-op."""
+        from moment_to_action.metrics import NullMetricsCollector
+
+        collector = NullMetricsCollector()
+        # Should not raise
+        collector.log_pipeline_event(EventType.TRIGGER_FIRED, 500.0)
+
+    def test_null_collector_log_event_noop(self) -> None:
+        """Test that log_event is a no-op."""
+        from moment_to_action.metrics import NullMetricsCollector
+
+        collector = NullMetricsCollector()
+        # Should not raise
+        collector.log_event("test_event", {"key": "value"})
+
+    def test_null_collector_report_returns_empty(self) -> None:
+        """Test that report returns an empty report."""
+        from moment_to_action.metrics import NullMetricsCollector
+
+        collector = NullMetricsCollector()
+        report = collector.report()
+
+        assert report.session_id == "null"
+        assert report.total_stages == 0
+        assert report.total_pipeline_events == 0
+        assert len(report.per_stage) == 0
+        assert report.pipeline.total_triggers == 0
+        assert report.pipeline.total_detections == 0
+        assert report.pipeline.total_false_positives == 0
+        assert report.latency_budget.within_budget is True

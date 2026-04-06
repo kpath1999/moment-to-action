@@ -17,6 +17,7 @@ from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
+    from moment_to_action.metrics import MetricsCollector
     from moment_to_action.models import ModelID, ModelManager
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ class ReasoningStage(Stage):
             "Based on the detected objects and their positions, assess the scene briefly."
         )
 
-    def _process(self, msg: Message) -> ReasoningMessage | None:
+    def _process(self, msg: Message, _metrics: MetricsCollector) -> ReasoningMessage | None:
         """Format detections into a prompt and run the LLM."""
         if not isinstance(msg, DetectionMessage):
             err = f"ReasoningStage expects DetectionMessage, got {type(msg).__name__}"

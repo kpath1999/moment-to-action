@@ -60,21 +60,21 @@ class TestClipBufferStageInit:
 
 @pytest.mark.unit
 class TestClipBufferStageProcess:
-    """Tests for ClipBufferStage._process()."""
+    """Tests for ClipBufferStage.process()."""
 
     def test_returns_none_while_buffering(self) -> None:
         """Returns None until clip_len frames have accumulated."""
         stage = ClipBufferStage(clip_len=4)
         for _ in range(3):
-            result = stage._process(_make_frame_msg())
+            result = stage.process(_make_frame_msg())
             assert result is None
 
     def test_emits_clip_when_buffer_full(self) -> None:
         """Emits a VideoClipMessage once clip_len frames are accumulated."""
         stage = ClipBufferStage(clip_len=4)
         for _ in range(3):
-            stage._process(_make_frame_msg())
-        result = stage._process(_make_frame_msg())
+            stage.process(_make_frame_msg())
+        result = stage.process(_make_frame_msg())
         assert isinstance(result, VideoClipMessage)
         assert len(result.frames) == 4
 
@@ -86,8 +86,9 @@ class TestClipBufferStageProcess:
             frame = np.full((480, 640, 3), i, dtype=np.uint8)
             msg = _make_frame_msg(frame=frame)
             frames.append(frame)
-            result = stage._process(msg)
+            result = stage.process(msg)
         assert result is not None
+        assert isinstance(result, VideoClipMessage)
         for i in range(3):
             np.testing.assert_array_equal(result.frames[i], frames[i])
 
@@ -96,22 +97,22 @@ class TestClipBufferStageProcess:
         stage = ClipBufferStage(clip_len=4, stride=2)
         # Fill buffer (4 frames -> emit)
         for _ in range(4):
-            result = stage._process(_make_frame_msg())
+            result = stage.process(_make_frame_msg())
         assert isinstance(result, VideoClipMessage)
 
         # Next frame: 1 new, need 2 -> no emit
-        result = stage._process(_make_frame_msg())
+        result = stage.process(_make_frame_msg())
         assert result is None
 
         # 2nd new frame -> emit
-        result = stage._process(_make_frame_msg())
+        result = stage.process(_make_frame_msg())
         assert isinstance(result, VideoClipMessage)
 
     def test_discards_dropped_frames(self) -> None:
         """Dropped frames (frame=None) are discarded, not buffered."""
         stage = ClipBufferStage(clip_len=2)
         dropped = RawFrameMessage(frame=None, timestamp=time.time(), source="test")
-        result = stage._process(dropped)
+        result = stage.process(dropped)
         assert result is None
         assert len(stage._buffer) == 0
 
@@ -124,7 +125,7 @@ class TestClipBufferStageProcess:
             timestamp=time.time(), label="x", confidence=1.0, all_scores={"x": 1.0}
         )
         with pytest.raises(TypeError, match="expects RawFrameMessage"):
-            stage._process(wrong_msg)
+            stage.process(wrong_msg)
 
     def test_unexpected_none_frame_in_buffer_raises(self) -> None:
         """RuntimeError if a None frame is found in the buffer at emit time."""
@@ -146,7 +147,7 @@ class TestClipBufferStageProcess:
         stage._new_since_emit = 2
         stage._frames_seen = 2
         with pytest.raises(RuntimeError, match="Unexpected None frame in buffer"):
-            stage._process(_make_frame_msg(ts=3.0))
+            stage.process(_make_frame_msg(ts=3.0))
 
     def test_fps_guard_discards_slow_clip(self) -> None:
         """Clip is discarded when effective fps < min_fps."""
@@ -154,7 +155,7 @@ class TestClipBufferStageProcess:
         base_ts = 1000.0
         for i in range(4):
             # 1 second apart -> effective fps = 3/3 = 1 fps, far below 30
-            result = stage._process(_make_frame_msg(ts=base_ts + i))
+            result = stage.process(_make_frame_msg(ts=base_ts + i))
         assert result is None
 
     def test_fps_guard_passes_fast_clip(self) -> None:
@@ -163,13 +164,13 @@ class TestClipBufferStageProcess:
         base_ts = 1000.0
         for i in range(4):
             # 0.01s apart -> effective fps = 3/0.03 = 100 fps
-            result = stage._process(_make_frame_msg(ts=base_ts + i * 0.01))
+            result = stage.process(_make_frame_msg(ts=base_ts + i * 0.01))
         assert isinstance(result, VideoClipMessage)
 
     def test_clip_metadata_from_latest_frame(self) -> None:
         """Emitted clip uses metadata from the most recent frame."""
         stage = ClipBufferStage(clip_len=2)
-        stage._process(
+        stage.process(
             RawFrameMessage(
                 frame=np.zeros((480, 640, 3), dtype=np.uint8),
                 timestamp=1.0,
@@ -178,7 +179,7 @@ class TestClipBufferStageProcess:
                 height=480,
             )
         )
-        result = stage._process(
+        result = stage.process(
             RawFrameMessage(
                 frame=np.zeros((720, 1280, 3), dtype=np.uint8),
                 timestamp=2.0,
@@ -188,6 +189,7 @@ class TestClipBufferStageProcess:
             )
         )
         assert result is not None
+        assert isinstance(result, VideoClipMessage)
         assert result.source == "cam1"
         assert result.width == 1280
         assert result.height == 720
@@ -201,7 +203,7 @@ class TestClipBufferStageReset:
         """Reset empties the buffer and resets counters."""
         stage = ClipBufferStage(clip_len=4)
         for _ in range(3):
-            stage._process(_make_frame_msg())
+            stage.process(_make_frame_msg())
         assert len(stage._buffer) == 3
 
         stage.reset()
@@ -214,12 +216,12 @@ class TestClipBufferStageReset:
         """After reset, a new full buffer re-emits without stride delay."""
         stage = ClipBufferStage(clip_len=2, stride=2)
         # Fill and emit
-        stage._process(_make_frame_msg())
-        result = stage._process(_make_frame_msg())
+        stage.process(_make_frame_msg())
+        result = stage.process(_make_frame_msg())
         assert isinstance(result, VideoClipMessage)
 
         stage.reset()
         # Fill again — should emit immediately (first emission after reset)
-        stage._process(_make_frame_msg())
-        result = stage._process(_make_frame_msg())
+        stage.process(_make_frame_msg())
+        result = stage.process(_make_frame_msg())
         assert isinstance(result, VideoClipMessage)

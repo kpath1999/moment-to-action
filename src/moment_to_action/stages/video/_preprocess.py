@@ -33,7 +33,7 @@ from moment_to_action.utils import BufferSpec
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
-    from moment_to_action.metrics._collector import MetricsCollector
+    from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +316,7 @@ class PreprocessorStage(Stage):
         )
         self._channels_first = channels_first
 
-    def _process(self, msg: Message) -> FrameTensorMessage | None:
+    def _process(self, msg: Message, _metrics: MetricsCollector) -> FrameTensorMessage | None:
         """Preprocess a raw frame into a model-ready tensor.
 
         Returns a FrameTensorMessage (previously called TensorMessage).

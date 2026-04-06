@@ -14,6 +14,7 @@ from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
+    from moment_to_action.metrics import MetricsCollector
 
 
 @pytest.mark.unit
@@ -38,7 +39,11 @@ class TestStage:
         class ConcreteStage(Stage):
             """A concrete stage that passes through the message unchanged."""
 
-            def _process(self, msg: Message) -> Message | None:
+            def _process(
+                self,
+                msg: Message,
+                _metrics: MetricsCollector,
+            ) -> Message | None:
                 # Simulate some minimal work
                 time.sleep(0.001)
                 return msg
@@ -99,7 +104,11 @@ class TestStage:
         class NoneStage(Stage):
             """A stage that returns None."""
 
-            def _process(self, msg: Message) -> Message | None:  # noqa: ARG002
+            def _process(
+                self,
+                _msg: Message,
+                _metrics: MetricsCollector,
+            ) -> Message | None:
                 return None
 
         import time
@@ -137,7 +146,11 @@ class TestStage:
         """Test that stage_idx is passed correctly to metrics."""
 
         class MockedStage(Stage):
-            def _process(self, msg: Message) -> Message | None:
+            def _process(
+                self,
+                msg: Message,
+                _metrics: MetricsCollector,
+            ) -> Message | None:
                 return msg
 
         stage = MockedStage()
@@ -178,7 +191,11 @@ class TestStage:
         """Test that Stage.process() measures latency accurately."""
 
         class SlowStage(Stage):
-            def _process(self, msg: Message) -> Message | None:
+            def _process(
+                self,
+                msg: Message,
+                _metrics: MetricsCollector,
+            ) -> Message | None:
                 time.sleep(0.05)  # 50ms
                 return msg
 

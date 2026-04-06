@@ -1,6 +1,6 @@
 """Metrics collection and reporting."""
 
-from moment_to_action.metrics._collector import MetricsCollector
+from moment_to_action.metrics._collector import MetricsCollector, NullMetricsCollector
 from moment_to_action.metrics._types import (
     CollectorReport,
     EventRecord,
@@ -18,6 +18,7 @@ __all__ = [
     "EventType",
     "LatencyBudget",
     "MetricsCollector",
+    "NullMetricsCollector",
     "PipelineRecord",
     "PipelineStats",
     "StageRecord",

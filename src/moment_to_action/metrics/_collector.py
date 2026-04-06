@@ -210,3 +210,61 @@ class MetricsCollector:
         status = "✓ within budget" if budget.within_budget else "✗ over budget"
         logger.info("  Total:   %.1fms  (%s)", budget.total_mean_ms, status)
         logger.info("=" * 50)
+
+
+class NullMetricsCollector(MetricsCollector):
+    """No-op metrics collector used when no metrics are requested.
+
+    All logging methods are no-ops, reducing overhead when metrics
+    collection is disabled.
+    """
+
+    def __init__(self) -> None:
+        """Initialize a null collector with no session tracking."""
+        self._session_id = "null"
+        self._latency_budget_ms = 0.0
+        self._pipeline_log = []
+        self._stage_log = []
+        self._event_log = []
+
+    def log_pipeline_event(
+        self,
+        event_type: EventType,
+        latency_ms: float,
+        metadata: dict | None = None,
+    ) -> None:
+        """No-op pipeline event logging."""
+
+    def log_stage(
+        self,
+        stage_name: str,
+        stage_idx: int,
+        latency_ms: float,
+        metadata: dict | None = None,
+    ) -> None:
+        """No-op stage latency logging."""
+
+    def log_event(self, event_type: str, data: dict) -> None:
+        """No-op general event logging."""
+
+    def report(self) -> CollectorReport:
+        """Return an empty report."""
+        return CollectorReport(
+            session_id=self.session_id,
+            total_stages=0,
+            total_pipeline_events=0,
+            per_stage={},
+            pipeline=PipelineStats(
+                total_triggers=0,
+                total_detections=0,
+                total_false_positives=0,
+                trigger_rate=0.0,
+                false_positive_rate=0.0,
+            ),
+            latency_budget=LatencyBudget(
+                total_mean_ms=0.0,
+                budget_ms=0.0,
+                headroom_ms=0.0,
+                within_budget=True,
+            ),
+        )

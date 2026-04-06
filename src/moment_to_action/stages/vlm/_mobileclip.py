@@ -23,6 +23,7 @@ from moment_to_action.utils.ml import cosine_similarity, softmax
 if TYPE_CHECKING:
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
+    from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class MobileCLIPStage(Stage):
         self._text_tokens = self._tokenize(text_prompts)
         logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))
 
-    def _process(self, msg: Message) -> ClassificationMessage | None:
+    def _process(self, msg: Message, _metrics: MetricsCollector) -> ClassificationMessage | None:
         """Run zero-shot classification against all text prompts."""
         # NOTE: input type check uses FrameTensorMessage (renamed from TensorMessage)
         if not isinstance(msg, FrameTensorMessage):

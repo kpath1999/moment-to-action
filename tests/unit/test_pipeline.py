@@ -130,7 +130,9 @@ class TestPipeline:
         assert pipeline.metrics is metrics_mock
 
     def test_pipeline_none_metrics_is_optional(self, sample_message: RawFrameMessage) -> None:
-        """Test that MetricsCollector is optional (None is passed to stages)."""
+        """Test that MetricsCollector is optional (default NullMetricsCollector is passed)."""
+        from moment_to_action.metrics import NullMetricsCollector
+
         stage1 = mock.MagicMock()
         result_msg = sample_message.model_copy(update={"latency_ms": 10.0})
         stage1.process.return_value = result_msg
@@ -139,9 +141,9 @@ class TestPipeline:
         pipeline = Pipeline([stage1], metrics=None)
         pipeline.run(sample_message)
 
-        # Verify metrics=None was passed to stage
+        # Verify a NullMetricsCollector was passed to stage
         call_args = stage1.process.call_args
-        assert call_args.kwargs["metrics"] is None
+        assert isinstance(call_args.kwargs["metrics"], NullMetricsCollector)
 
     def test_pipeline_message_flow_through_stages(self, sample_message: RawFrameMessage) -> None:
         """Test that message flows correctly through multiple stages."""

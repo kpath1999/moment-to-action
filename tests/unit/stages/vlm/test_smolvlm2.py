@@ -179,7 +179,7 @@ class TestSmolVLM2StageProcess:
             source="test",
         )
         with pytest.raises(TypeError, match="expects VideoClipMessage"):
-            stage._process(msg)
+            stage.process(msg)
 
     def test_process_returns_classification_message(self) -> None:
         """Successful processing returns a ClassificationMessage."""
@@ -200,7 +200,7 @@ class TestSmolVLM2StageProcess:
 
         frames = [np.zeros((480, 640, 3), dtype=np.uint8) for _ in range(4)]
         msg = VideoClipMessage(timestamp=time.time(), frames=frames, source="test")
-        result = stage._process(msg)
+        result = stage.process(msg)
 
         assert isinstance(result, ClassificationMessage)
         assert result.label == "A person is walking."
@@ -222,7 +222,7 @@ class TestSmolVLM2StageProcess:
 
         frames = [np.zeros((480, 640, 3), dtype=np.uint8) for _ in range(2)]
         msg = VideoClipMessage(timestamp=time.time(), frames=frames, source="test")
-        assert stage._process(msg) is None
+        assert stage.process(msg) is None
 
     def test_process_returns_none_on_empty_decoded_list(self) -> None:
         """Returns None when batch_decode returns an empty list."""
@@ -240,7 +240,7 @@ class TestSmolVLM2StageProcess:
 
         frames = [np.zeros((480, 640, 3), dtype=np.uint8) for _ in range(2)]
         msg = VideoClipMessage(timestamp=time.time(), frames=frames, source="test")
-        assert stage._process(msg) is None
+        assert stage.process(msg) is None
 
 
 @pytest.mark.unit

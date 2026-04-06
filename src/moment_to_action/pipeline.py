@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
-    from moment_to_action.metrics._collector import MetricsCollector
+    from moment_to_action.metrics import MetricsCollector
     from moment_to_action.stages._base import Stage
 
 
@@ -19,6 +19,10 @@ class Pipeline:
         metrics: MetricsCollector | None = None,
     ) -> None:
         self._stages = stages
+        if metrics is None:
+            from moment_to_action.metrics import NullMetricsCollector
+
+            metrics = NullMetricsCollector()
         self._metrics = metrics
 
     @property
@@ -27,8 +31,8 @@ class Pipeline:
         return self._stages
 
     @property
-    def metrics(self) -> MetricsCollector | None:
-        """Return the optional metrics collector."""
+    def metrics(self) -> MetricsCollector:
+        """Return the metrics collector."""
         return self._metrics
 
     def run(self, msg: Message) -> Message | None:

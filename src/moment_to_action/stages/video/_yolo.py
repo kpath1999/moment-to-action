@@ -21,6 +21,7 @@ from moment_to_action.stages._base import Stage
 if TYPE_CHECKING:
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
+    from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ class YOLOStage(Stage):
         """Detection confidence threshold in [0, 1]."""
         return self._confidence_threshold
 
-    def _process(self, msg: Message) -> DetectionMessage | None:
+    def _process(self, msg: Message, _metrics: MetricsCollector) -> DetectionMessage | None:
         """Run YOLO inference and return detections above threshold."""
         # NOTE: input type check uses FrameTensorMessage (renamed from TensorMessage)
         if not isinstance(msg, FrameTensorMessage):

@@ -30,6 +30,7 @@ from moment_to_action.utils.video import sample_frames, to_pil_rgb
 if TYPE_CHECKING:
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
+    from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,11 @@ class SmolVLM2Stage(Stage):
     # Stage interface
     # ------------------------------------------------------------------
 
-    def _process(self, msg: Message) -> ClassificationMessage | None:
+    def _process(
+        self,
+        msg: Message,
+        _metrics: MetricsCollector,
+    ) -> ClassificationMessage | None:
         """Sample frames from a clip, run SmolVLM2, and return a description."""
         if not isinstance(msg, VideoClipMessage):
             type_name = type(msg).__name__

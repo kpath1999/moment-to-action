@@ -1,7 +1,7 @@
 """Abstract Stage base class.
 
-MetricsCollector is optional — pass one to Pipeline and every stage
-reports its latency automatically. No metrics code inside stages.
+MetricsCollector must be passed to every stage. Pipeline creates a default
+NullMetricsCollector if none is provided to avoid null checks in stage code.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
-    from moment_to_action.metrics._collector import MetricsCollector
+    from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -38,24 +38,39 @@ class Stage(ABC):
             msg:       Incoming message to process.
             stage_idx: Zero-based position of this stage in the pipeline, assigned
                        by the pipeline itself — not stored on the stage.
-            metrics:   Optional collector; receives a ``log_stage`` call when provided.
+            metrics:   Metrics collector for recording stage latency.
+                      If not provided, a default NullMetricsCollector is used.
         """
+        if metrics is None:
+            from moment_to_action.metrics import NullMetricsCollector
+
+            metrics = NullMetricsCollector()
+
         t = time.perf_counter()
-        result = self._process(msg)
+        result = self._process(msg, metrics)
         elapsed_ms = (time.perf_counter() - t) * 1000
 
         # Stamp latency on the result so consumers don't need to measure it.
         if result is not None:
             result = result.model_copy(update={"latency_ms": elapsed_ms})
 
-        if metrics is not None:
-            metrics.log_stage(self.name, stage_idx, elapsed_ms)
+        metrics.log_stage(self.name, stage_idx, elapsed_ms)
 
         status = "→ None (stopped)" if result is None else f"→ {type(result).__name__}"
         logger.debug("%s: %.1fms  %s", self.name, elapsed_ms, status)
         return result
 
     @abstractmethod
-    def _process(self, msg: Message) -> Message | None:
-        """Process a message and return the result or None to stop the pipeline."""
+    def _process(
+        self,
+        msg: Message,
+        metrics: MetricsCollector,
+    ) -> Message | None:
+        """Process a message and return the result or None to stop the pipeline.
+
+        Args:
+            msg:     Incoming message to process.
+            metrics: Metrics collector for custom stage instrumentation.
+                    Always provided (never None).
+        """
         ...
