@@ -99,6 +99,19 @@ class Span:
             f"[{self.type_.name}] {self.name}: {self.latency_ms:.2f}ms (metadata={self.metadata})"
         )
 
+    def json(self) -> dict[str, t.Any]:
+        """Generate a JSON-serializable dictionary representation of this span."""
+        return {
+            "id": self.id_,
+            "parent_id": self.parent_id,
+            "type": self.type_.name,
+            "name": self.name,
+            "start": self.start.isoformat(),
+            "end": self.end.isoformat(),
+            "latency_ns": self.latency_ns,
+            "metadata": self.metadata,
+        }
+
     def __attrs_post_init__(self) -> None:
         self._frozen = True  # Freeze the span after initialization to prevent modifications
 
@@ -184,6 +197,16 @@ class Trace:
 
         return "\n".join(lines)
 
+    def json(self) -> dict[str, t.Any]:
+        """Generate a JSON-serializable dictionary representation of this trace."""
+        return {
+            "id": self.id_,
+            "start": self.start.isoformat(),
+            "end": self.end.isoformat(),
+            "latency_ns": self.latency_ns,
+            "spans": [span.json() for span in self.spans],
+        }
+
     def __attrs_post_init__(self) -> None:
         self._frozen = True  # Freeze the trace after initialization to prevent modifications
 
@@ -244,3 +267,12 @@ class MetricsReport:
             lines.append("")  # Add extra newline between traces
 
         return "\n".join(lines)
+
+    def json(self) -> dict[str, t.Any]:
+        """Generate a JSON-serializable dictionary representation of this report."""
+        return {
+            "session_id": self.session_id,
+            "latency_budget_ms": self.latency_budget.total_seconds() * 1000,
+            "traces": [trace.json() for trace in self.traces],
+            "slow_traces": [trace.json() for trace in self.slow_traces],
+        }
