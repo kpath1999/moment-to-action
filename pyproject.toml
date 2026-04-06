@@ -75,8 +75,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# scripts/ is not a package — INP001 (implicit namespace) doesn't apply
-"scripts/*.py" = ["INP001"]
+"scripts/*.py" = [
+    # scripts/ is not a package — INP001 (implicit namespace) doesn't apply
+    "INP001",
+    # we can (and have to) print in scripts
+    "T201",
+]
 
 # Tests: exceptions for the many things that are OK in tests
 "tests/**/*.py" = [
