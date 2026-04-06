@@ -17,6 +17,7 @@ from moment_to_action.models import (
     ModelInfo,
     ModelManager,
     ModelStatus,
+    TransformersSource,
     VendoredSource,
 )
 
@@ -146,6 +147,37 @@ class TestCacheInspectCommand:
         assert result.exit_code == 0
         assert "mobileclip_s2" in result.output
         assert "download" in result.output
+
+    def test_table_shows_smolvlm_as_transformers(self) -> None:
+        """Table shows SMOLVLM2_2_2B as 'transformers'."""
+        from moment_to_action._cli import cli
+
+        smol_info = MagicMock()
+        smol_info.id = ModelID.SMOLVLM2_2_2B
+        smol_info.source = TransformersSource(
+            hf_repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct",
+        )
+
+        smol_status = ModelStatus(
+            info=smol_info,
+            available=False,
+            path=None,
+            size_bytes=None,
+        )
+
+        mock_manager = MagicMock()
+        mock_manager.list_models.return_value = [smol_status]
+
+        with patch("moment_to_action._cli.init_logging"):
+            with patch(
+                "moment_to_action._cli.commands.cmd_cache.cmd_inspect.ModelManager",
+                return_value=mock_manager,
+            ):
+                result = CliRunner().invoke(cli, ["cache", "inspect"])
+
+        assert result.exit_code == 0
+        assert "smolvlm2_2_2b" in result.output
+        assert "transformers" in result.output
 
     def test_json_flag_outputs_valid_json(self) -> None:
         """--json flag produces valid JSON output.
@@ -355,6 +387,38 @@ class TestCacheInspectCommand:
         assert model["available"] is False
         assert model["size_bytes"] is None
         assert model["path"] is None
+
+    def test_json_transformers_source_label(self) -> None:
+        """JSON output shows 'transformers' for TransformersSource models."""
+        from moment_to_action._cli import cli
+
+        smol_info = MagicMock()
+        smol_info.id = ModelID.SMOLVLM2_2_2B
+        smol_info.source = TransformersSource(
+            hf_repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct",
+        )
+
+        smol_status = ModelStatus(
+            info=smol_info,
+            available=False,
+            path=None,
+            size_bytes=None,
+        )
+
+        mock_manager = MagicMock()
+        mock_manager.list_models.return_value = [smol_status]
+        mock_manager.cache_dir = Path("/tmp/cache")
+
+        with patch("moment_to_action._cli.init_logging"):
+            with patch(
+                "moment_to_action._cli.commands.cmd_cache.cmd_inspect.ModelManager",
+                return_value=mock_manager,
+            ):
+                result = CliRunner().invoke(cli, ["cache", "inspect", "--json"])
+
+        assert result.exit_code == 0
+        output_json = json.loads(result.output)
+        assert output_json["models"][0]["source"] == "transformers"
 
     def test_exit_code_zero_on_success(self) -> None:
         """Command exits with code 0 on success.

@@ -6,6 +6,7 @@ from .buffer import BufferPool, BufferSpec
 from .cli import GlobalData, ctx_get_seed, ctx_set_seed, format_size
 from .compute import ComputeDispatcher
 from .ml import cosine_similarity, softmax
+from .video import sample_frames, to_pil_rgb
 
 __all__ = [
     "BufferPool",
@@ -16,5 +17,7 @@ __all__ = [
     "ctx_get_seed",
     "ctx_set_seed",
     "format_size",
+    "sample_frames",
     "softmax",
+    "to_pil_rgb",
 ]

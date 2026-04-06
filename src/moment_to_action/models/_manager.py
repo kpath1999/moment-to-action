@@ -12,6 +12,7 @@ from ._types import (
     ModelID,
     ModelInfo,
     ModelStatus,
+    TransformersSource,
     VendoredSource,
 )
 
@@ -111,6 +112,11 @@ class ModelManager:
         # Vendored model not found; check cache
         if isinstance(info.source, DownloadSource):
             cache_path = self._cache_dir / model.value / info.filename
+            available = cache_path.exists()
+            logger.debug("Model %s availability (cached): %s", model.value, available)
+            return available
+        if isinstance(info.source, TransformersSource):
+            cache_path = self._cache_dir / model.value
             available = cache_path.exists()
             logger.debug("Model %s availability (cached): %s", model.value, available)
             return available
@@ -242,6 +248,17 @@ class ModelManager:
                 logger.info("Model downloaded successfully: %s", cache_path)
                 return cache_path
 
+            case TransformersSource(hf_repo_id=repo):
+                cache_dir = self._cache_dir / info.id.value
+                if cache_dir.exists():
+                    logger.debug("Using cached transformers repo: %s", cache_dir)
+                    return cache_dir
+
+                logger.info("Downloading transformers model %s from %s", info.id.value, repo)
+                self._download_transformers_model(repo, cache_dir)
+                logger.info("Transformers model downloaded successfully: %s", cache_dir)
+                return cache_dir
+
     def _resolve_path_local(self, info: ModelInfo) -> Path:
         """Resolve the local path for a model without triggering a download.
 
@@ -267,6 +284,8 @@ class ModelManager:
                 return path
             case DownloadSource():
                 return self._cache_dir / info.id.value / info.filename
+            case TransformersSource():
+                return self._cache_dir / info.id.value
 
     def _resolve_path_vendored_only(self, info: ModelInfo) -> Path:
         """Resolve path for vendored models only (no download).
@@ -284,6 +303,9 @@ class ModelManager:
             case VendoredSource(subdir=subdir):
                 return self._vendored_dir / subdir / info.filename
             case DownloadSource():
+                msg = f"Model {info.id} is downloadable, not vendored"
+                raise FileNotFoundError(msg)
+            case TransformersSource():
                 msg = f"Model {info.id} is downloadable, not vendored"
                 raise FileNotFoundError(msg)
 
@@ -333,6 +355,35 @@ class ModelManager:
                 dest_path.unlink()
             logger.exception("Download failed for %s/%s", repo_id, filename)
             msg = f"Failed to download {repo_id}/{filename}: {e}"
+            raise RuntimeError(msg) from e
+
+    def _download_transformers_model(self, repo_id: str, dest_dir: Path) -> None:
+        """Download a transformers model repo and save it under a managed cache path.
+
+        Args:
+            repo_id: HuggingFace repo ID (e.g. "HuggingFaceTB/SmolVLM2-2.2B-Instruct").
+            dest_dir: Target directory under the model cache.
+
+        Raises:
+            RuntimeError: If download fails.
+        """
+        from transformers import AutoModelForImageTextToText, AutoProcessor
+
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            logger.debug("Downloading transformers repo %s to %s", repo_id, dest_dir)
+
+            processor = AutoProcessor.from_pretrained(repo_id, trust_remote_code=True)
+            processor.save_pretrained(dest_dir)
+
+            model = AutoModelForImageTextToText.from_pretrained(repo_id, trust_remote_code=True)
+            model.save_pretrained(dest_dir)
+
+        except Exception as e:
+            if dest_dir.exists():
+                self._rmdir_with_size(dest_dir)
+            logger.exception("Transformers model download failed for %s", repo_id)
+            msg = f"Failed to download transformers model {repo_id}: {e}"
             raise RuntimeError(msg) from e
 
     def _stream_with_progress(

@@ -9,7 +9,12 @@ import pytest
 
 from moment_to_action.messages.llm import ReasoningMessage
 from moment_to_action.messages.sensor import RawFrameMessage
-from moment_to_action.messages.video import BoundingBox, DetectionMessage, FrameTensorMessage
+from moment_to_action.messages.video import (
+    BoundingBox,
+    DetectionMessage,
+    FrameTensorMessage,
+    VideoClipMessage,
+)
 from moment_to_action.messages.vlm import ClassificationMessage
 
 
@@ -500,3 +505,19 @@ class TestMessageModelCopy:
         updated_msg = msg.model_copy(update={"latency_ms": 75.0})
         assert updated_msg.latency_ms == 75.0
         assert updated_msg.label == "test"
+
+
+@pytest.mark.unit
+class TestVideoClipMessage:
+    """Tests for VideoClipMessage."""
+
+    def test_num_frames_property(self) -> None:
+        """num_frames returns the number of frames in the clip."""
+        frames = [np.zeros((480, 640, 3), dtype=np.uint8) for _ in range(5)]
+        msg = VideoClipMessage(timestamp=time.time(), frames=frames)
+        assert msg.num_frames == 5
+
+    def test_num_frames_empty_clip(self) -> None:
+        """num_frames returns 0 for an empty clip."""
+        msg = VideoClipMessage(timestamp=time.time(), frames=[])
+        assert msg.num_frames == 0

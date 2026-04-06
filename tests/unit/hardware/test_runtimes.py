@@ -184,6 +184,33 @@ class TestLiteRTBackend:
         with pytest.raises(TypeError, match="Input 'input1' dtype mismatch"):
             backend.run(handle, inputs)
 
+    @patch("moment_to_action.hardware._platforms._runtimes._litert._Interpreter")
+    def test_litert_run_multi_input_happy_path(self, mock_interpreter_class: Mock) -> None:
+        """Test multi-input run succeeds and sets all tensors correctly."""
+        mock_interp = MagicMock()
+        mock_interpreter_class.return_value = mock_interp
+
+        input_details = [
+            {"name": "input1", "dtype": np.float32, "index": 0},
+            {"name": "input2", "dtype": np.float32, "index": 1},
+        ]
+        mock_interp.get_input_details.return_value = input_details
+        mock_interp.get_output_details.return_value = [{"index": 0}]
+        output_tensor = np.array([1.0])
+        mock_interp.get_tensor.return_value = output_tensor
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        handle = backend.load_model("/tmp/model.tflite")
+
+        inputs = {
+            "input1": np.array([1.0, 2.0], dtype=np.float32),
+            "input2": np.array([3.0, 4.0], dtype=np.float32),
+        }
+        outputs = backend.run(handle, inputs)
+
+        assert len(outputs) == 1
+        assert mock_interp.set_tensor.call_count == 2
+
 
 @pytest.mark.unit
 class TestONNXBackend:

@@ -2,12 +2,24 @@
 
 Public API::
 
-    from moment_to_action.hardware import ComputeBackend, ComputeUnit, PowerSample, BenchmarkResult
+    from moment_to_action.hardware import (
+        BenchmarkResult,
+        ComputeBackend,
+        ComputeUnit,
+        PowerSample,
+        TorchExecutionPolicy,
+    )
 """
 
 from __future__ import annotations
 
 from ._backend import BenchmarkResult, ComputeBackend
-from ._types import ComputeUnit, PowerSample
+from ._types import ComputeUnit, PowerSample, TorchExecutionPolicy
 
-__all__ = ["BenchmarkResult", "ComputeBackend", "ComputeUnit", "PowerSample"]
+__all__ = [
+    "BenchmarkResult",
+    "ComputeBackend",
+    "ComputeUnit",
+    "PowerSample",
+    "TorchExecutionPolicy",
+]

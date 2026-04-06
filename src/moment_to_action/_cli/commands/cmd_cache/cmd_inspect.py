@@ -13,6 +13,7 @@ from rich.table import Table
 from moment_to_action.models import (
     DownloadSource,
     ModelManager,
+    TransformersSource,
     VendoredSource,
 )
 from moment_to_action.utils.cli import format_size
@@ -60,6 +61,8 @@ def _output_json(manager: ModelManager, statuses: list[ModelStatus]) -> None:
                 source_str = "vendored"
             case DownloadSource():
                 source_str = "download"
+            case TransformersSource():
+                source_str = "transformers"
 
         model_data = {
             "id": status.info.id.value,
@@ -95,6 +98,8 @@ def _output_table(statuses: list[ModelStatus]) -> None:
                 source_str = "vendored"
             case DownloadSource():
                 source_str = "download"
+            case TransformersSource():
+                source_str = "transformers"
 
         # Format status
         status_str = "[green]Available[/green]" if status.available else "[red]Not Available[/red]"

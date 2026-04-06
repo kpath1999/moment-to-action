@@ -30,8 +30,13 @@ if TYPE_CHECKING:
         ModelInput,
         PowerMonitor,
     )
+    from moment_to_action.hardware._types import TorchExecutionPolicy
 
 from moment_to_action.hardware._platforms._detection import Platform, detect_platform
+from moment_to_action.hardware._platforms.macos_arm64 import (
+    MacOSARM64Backend,
+    MacOSARM64PowerMonitor,
+)
 from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
 from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64PowerMonitor
 from moment_to_action.hardware._types import ComputeUnit
@@ -88,6 +93,8 @@ def _make_power_monitor() -> PowerMonitor:
             return QCS6490PowerMonitor()
         case Platform.X86_64:
             return X86_64PowerMonitor()
+        case Platform.MACOS_ARM64:
+            return MacOSARM64PowerMonitor()
 
 
 def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
@@ -97,6 +104,8 @@ def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
             return QCS6490Backend(preferred_unit=preferred_unit)
         case Platform.X86_64:
             return X86_64Backend()
+        case Platform.MACOS_ARM64:
+            return MacOSARM64Backend()
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +210,17 @@ class ComputeBackend:
             model_handle: Handle returned by :meth:`load_model`.
         """
         return self._backend.get_output_details(model_handle)
+
+    def resolve_torch_policy(self, requested: str = "auto") -> TorchExecutionPolicy:
+        """Resolve torch device/dtype policy via the active platform backend.
+
+        Args:
+            requested: ``"auto"`` or a string accepted by ``torch.device``.
+
+        Returns:
+            A resolved torch execution policy.
+        """
+        return self._backend.resolve_torch_policy(requested)
 
     # ------------------------------------------------------------------
     # Benchmarking

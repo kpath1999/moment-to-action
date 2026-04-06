@@ -181,6 +181,32 @@ class TestX86_64Backend:  # noqa: N801
 
             assert details == output_details
 
+    def test_x86_64_resolve_torch_policy_delegates_to_helper(self) -> None:
+        """Test x86_64 torch policy is resolved by shared helper."""
+        mock_litert = MagicMock()
+        mock_onnx = MagicMock()
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
+                return_value=mock_litert,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
+                return_value=mock_onnx,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._backend.resolve_torch_execution_policy"
+            ) as mock_resolve,
+        ):
+            mock_resolve.return_value.device = "cpu"
+            mock_resolve.return_value.dtype = "float32"
+            backend = X86_64Backend()
+            policy = backend.resolve_torch_policy("auto")
+
+            mock_resolve.assert_called_once_with("auto")
+            assert policy.device == "cpu"
+            assert policy.dtype == "float32"
+
 
 @pytest.mark.unit
 class TestX86_64PowerMonitor:  # noqa: N801

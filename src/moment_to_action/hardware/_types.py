@@ -7,8 +7,12 @@ import ``ComputeUnit`` from here, not from the backend module.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 import attrs
+
+if TYPE_CHECKING:
+    import torch
 
 
 class ComputeUnit(StrEnum):
@@ -35,3 +39,19 @@ class PowerSample:
 
     utilization_pct: float
     """Utilisation percentage (0-100)."""
+
+
+@attrs.frozen
+class TorchExecutionPolicy:
+    """Resolved torch execution configuration for model loading and inference.
+
+    Attributes:
+        device: Resolved ``torch.device`` instance.
+        dtype: Resolved ``torch.dtype`` instance.
+    """
+
+    device: torch.device
+    """Resolved torch device."""
+
+    dtype: torch.dtype
+    """Resolved torch dtype."""

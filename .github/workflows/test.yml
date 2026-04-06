@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: test-${{ github.ref }}
+  group: test-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -51,7 +51,7 @@ jobs:
               --cov-report=html:htmlcov
 
       - name: Publish coverage comment
-        if: ${{ always() && github.event_name == 'pull_request' }}
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: MishaKav/pytest-coverage-comment@v1.1.52
         with:
           junitxml-path: pytest-results.xml

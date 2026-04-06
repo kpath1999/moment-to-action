@@ -1,4 +1,4 @@
-"""Video-pipeline messages: tensors, bounding boxes, and detections."""
+"""Video-pipeline messages: tensors, bounding boxes, detections, and clips."""
 
 from __future__ import annotations
 
@@ -68,3 +68,34 @@ class DetectionMessage(BaseMessage):
             Up to *n* :class:`BoundingBox` instances sorted by descending confidence.
         """
         return sorted(self.boxes, key=lambda b: b.confidence, reverse=True)[:n]
+
+
+class VideoClipMessage(BaseMessage):
+    """A temporal window of raw frames captured from a live stream or file.
+
+    Populated by :class:`~moment_to_action.stages.video.ClipBufferStage`.
+    Consumed by vision-language model stages (e.g. SmolVLM2).
+
+    All frames share the same spatial dimensions (width x height) and are
+    stored in capture order (oldest first).
+    """
+
+    frames: list[NDArray]
+    """Ordered list of raw BGR frames (HxWxC, uint8).  Oldest frame first."""
+
+    source: str = ""
+    """Identifier of the originating sensor (camera index, device path, etc.)."""
+
+    width: int = 0
+    """Frame width in pixels; ``0`` when unknown."""
+
+    height: int = 0
+    """Frame height in pixels; ``0`` when unknown."""
+
+    fps: float = 0.0
+    """Capture frame-rate reported by the sensor; ``0.0`` when unknown."""
+
+    @property
+    def num_frames(self) -> int:
+        """Number of frames in the clip."""
+        return len(self.frames)
