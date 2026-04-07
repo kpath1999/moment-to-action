@@ -1,212 +1,440 @@
 """Central metrics collection for the framework.
 
-Every model inference, pipeline trigger, and detection event
-reports here. This is your research results table in code form.
+The MetricsCollector is designed to provide a flexible and extensible way to collect detailed
+metrics across the entire pipeline execution.
 
-At the end of a run, call report() to get a summary suitable
-for including directly in your paper's results section.
+It allows stages to create spans that are automatically associated with the current trace, enabling
+a hierarchical view of the execution. At the end of the pipeline, the MetricsCollector can generate
+a comprehensive report that includes latency information for each span and trace, as well as any
+relevant metadata. This report can be used to identify bottlenecks and optimize performance across
+the pipeline.
+
+The MetricsCollector is implemented as a context manager, allowing for easy integration into the
+pipeline stages. Stages can use the `start_span` method to create spans for specific operations, and
+these spans will be automatically nested under the current trace. The collector also provides
+methods for setting and getting metadata on the current span, allowing stages to add custom
+information that can be included in the final report.
+
+Traces are effectively the "root span" of a section of execution, and all spans created during that
+execution are children of that trace. This allows for a clear hierarchical structure in the
+collected metrics, making it easier to analyze the performance of different stages and identify any
+issues.
 """
 
 from __future__ import annotations
 
-import json
+import contextlib
+import copy
 import logging
 import time
-from pathlib import Path
+import typing as t
+from datetime import UTC, datetime, timedelta
+from threading import Event, Lock, Thread
+from typing import TYPE_CHECKING
 
-import attrs
-import numpy as np
+import psutil
 
-from moment_to_action.metrics._types import (
-    CollectorReport,
-    EventRecord,
-    EventType,
-    LatencyBudget,
-    PipelineRecord,
-    PipelineStats,
-    StageRecord,
-    StageStats,
+from moment_to_action.hardware._types import ComputeUnit
+
+from ._types import (
+    MemoryUsageSample,
+    MetricsReport,
+    ResourceUsageSample,
+    Span,
+    SpanType,
+    Trace,
 )
+
+if TYPE_CHECKING:
+    from moment_to_action.hardware import ComputeBackend
 
 logger = logging.getLogger(__name__)
 
 
-class MetricsCollector:
-    """Collects timing, accuracy, and power metrics across the pipeline.
+@contextlib.contextmanager
+def _unfreeze[T: Span | Trace](obj: T) -> t.Generator[T, None, None]:
+    """Context manager to temporarily unfreeze an attrs object for modification."""
+    was_frozen = getattr(obj, "_frozen", None)
+    if not was_frozen:
+        msg = f"Object {obj} is not frozen, cannot unfreeze"
+        raise ValueError(msg)
 
-    Thread-safe for concurrent writes from sensor threads.
+    object.__setattr__(obj, "_frozen", False)
+    try:
+        yield obj
+    finally:
+        object.__setattr__(obj, "_frozen", True)
+
+
+class MetricsCollector:
+    """Collects timing, accuracy, and power metrics from across the pipeline.
+
+    Methods are thread-safe, but the collector is not designed for high contention — it's expected
+    that spans will be created and ended in a mostly single-threaded manner within the pipeline
+    execution, and the lock is primarily to protect against edge cases and ensure consistency of the
+    internal state.
     """
 
     def __init__(
         self,
+        compute_backend: ComputeBackend | None = None,
         session_id: str | None = None,
-        latency_budget_ms: float = 5000.0,
+        latency_budget: timedelta = timedelta(seconds=5),
+        mem_sample_interval: timedelta = timedelta(seconds=0.1),
     ) -> None:
+        """Create a new metrics collector.
+
+        Args:
+            compute_backend:
+                The compute backend to collect hardware metrics from (power, frequency, etc.).
+                If None, hardware resource sampling is disabled but all timing metrics still work.
+            session_id:
+                Session name. If not provided, one will be auto-generated.
+            latency_budget:
+                Our trace latency budget. Defaults to five seconds.
+            mem_sample_interval:
+                How often to sample memory usage for spans. Defaults to 100ms.
+        """
+        # Configuration
+        # all this is const and unprotected by lock
         self._session_id = session_id or f"session_{int(time.time())}"
-        self._latency_budget_ms = latency_budget_ms
-        self._pipeline_log: list[PipelineRecord] = []
-        self._stage_log: list[StageRecord] = []
-        self._event_log: list[EventRecord] = []
+        self._latency_budget = latency_budget
+        self._mem_sample_interval = mem_sample_interval
+
+        # ID tracking
+        self._current_id = 0
+
+        # Traces and spans
+        self._traces: dict[int, Trace] = {}
+        self._spans: dict[int, Span] = {}
+
+        self._current_trace: Trace | None = None
+        self._span_stack: list[Span] = []
+
+        # Sampling stuff
+        self._compute_backend = compute_backend
+        self._process = psutil.Process()  # current process
+
+        if not self._compute_backend:
+            logger.warning("No compute backend provided - hardware resource sampling disabled!")
+
+        # Other state
+        self._lock = Lock()  # For thread safety, protects all state (One Big Lock)
+
+    def _sample_resource_usage(self) -> None:
+        """Sample memory usage for the current trace, with psutil.
+
+        Must hold lock to do this.
+        """
+        if self._current_trace is None:  # pragma: no cover
+            return  # No active trace, nothing to sample
+
+        if self._compute_backend is None:
+            return  # No backend configured; hardware sampling disabled
+
+        proc_mem_info = self._process.memory_info()
+
+        pwr_mon = self._compute_backend.resource_monitor
+
+        sample = ResourceUsageSample(
+            timestamp=datetime.now(tz=UTC),
+            running_span_id=self._span_stack[-1].id_ if self._span_stack else None,
+            cpu_usage=pwr_mon.sample(ComputeUnit.CPU),
+            gpu_usage=pwr_mon.sample(ComputeUnit.GPU),
+            npu_usage=pwr_mon.sample(ComputeUnit.NPU),
+            dsp_usage=pwr_mon.sample(ComputeUnit.DSP),
+            proc_cpu_usage=self._process.cpu_percent(interval=None),
+            mem_usage=MemoryUsageSample(
+                rss_bytes=proc_mem_info.rss,
+                vms_bytes=proc_mem_info.vms,
+                shared_bytes=proc_mem_info.shared,
+                text_bytes=proc_mem_info.text,
+                lib_bytes=proc_mem_info.lib,
+                data_bytes=proc_mem_info.data,
+                dirty_bytes=proc_mem_info.dirty,
+            ),
+        )
+        self._current_trace.resource_usage_samples.append(sample)
+
+    def _start_resource_sampling_thread(self, evt: Event) -> Thread:
+        """Start a background thread to sample memory usage at regular intervals.
+
+        Thread safe.
+        """
+
+        def sampling_loop() -> None:
+            while not evt.is_set():
+                with self._lock:
+                    self._sample_resource_usage()
+                time.sleep(self._mem_sample_interval.total_seconds())
+
+        thread = Thread(target=sampling_loop)
+        thread.start()
+        return thread
+
+    def _next_id(self) -> int:
+        """Generate a new unique identifier for a trace or span.
+
+        Must already hold lock.
+        """
+        id_ = self._current_id
+        self._current_id += 1
+        return id_
+
+    @contextlib.contextmanager
+    def start_trace(self) -> t.Generator[Trace, None, None]:
+        """Context manager for starting and ending a new trace."""
+        with self._lock:
+            # Ensure no trace is currently active
+            if self._current_trace is not None:
+                msg = "Cannot start a new trace while another is active."
+                raise RuntimeError(msg)
+
+            # Create trace with unique ID and start time
+            trace = Trace(
+                id_=self._next_id(),
+                start=datetime.now(tz=UTC),
+                end=datetime(1970, 1, 1, tzinfo=UTC),
+            )
+
+            # Save the trace
+            self._traces[trace.id_] = trace
+            self._current_trace = trace
+
+        # Start hardware sampling thread
+        # this will sample mem usage right away
+        sampling_thread_event = Event()
+        sampling_thread = self._start_resource_sampling_thread(sampling_thread_event)
+
+        # Give the trace back to the user, and time it
+        start_ns = time.perf_counter_ns()
+        try:
+            yield trace
+        finally:
+            # Get end time
+            end_ns = time.perf_counter_ns()
+
+            # Stop the sampling thread and wait for it to finish
+            sampling_thread_event.set()
+            sampling_thread.join()
+
+            with self._lock:
+                # ensure span stack is empty
+                if self._span_stack:  # pragma: no cover
+                    msg = "Span stack is not empty at the end of the trace. Missing span ends?"
+                    raise RuntimeError(msg)
+
+                # Trace is over and we have execution back, end it and clear current
+                with _unfreeze(trace):
+                    trace.end = datetime.now(tz=UTC)
+                    trace.latency_ns = end_ns - start_ns
+
+                self._current_trace = None
+
+    @contextlib.contextmanager
+    def start_span(
+        self, type_: SpanType, name: str, metadata: dict[str, t.Any] | None = None
+    ) -> t.Generator[Span, None, None]:
+        """Context manager for starting and ending a new span within the current trace."""
+        with self._lock:
+            if self._current_trace is None:
+                msg = "Cannot start a span without an active trace."
+                raise RuntimeError(msg)
+
+            # Create span with unique ID and start time
+            span = Span(
+                id_=self._next_id(),
+                parent_id=self._span_stack[-1].id_ if self._span_stack else None,
+                type_=type_,
+                name=name,
+                start=datetime.now(tz=UTC),
+                end=datetime(1970, 1, 1, tzinfo=UTC),
+                metadata=metadata or {},
+            )
+
+            # Save the span and add it to the current trace
+            self._spans[span.id_] = span
+
+            self._current_trace.spans.append(span)
+            self._span_stack.append(span)
+
+        # Give the span back to the user, and time it
+        start_ns = time.perf_counter_ns()
+        try:
+            yield span
+        finally:
+            end_ns = time.perf_counter_ns()
+
+            with self._lock:
+                # ensure we are at the end of the current span
+                if self._span_stack[-1].id_ != span.id_:  # pragma: no cover
+                    msg = (
+                        "Span stack is out of order. "
+                        "Spans must be ended in the reverse order they were started."
+                    )
+                    raise RuntimeError(msg)
+
+                # Span is over, end it and pop from stack
+                with _unfreeze(span):
+                    span.end = datetime.now(tz=UTC)
+                    span.latency_ns = end_ns - start_ns
+
+                self._span_stack.pop()
 
     @property
     def session_id(self) -> str:
         """Return the session identifier."""
         return self._session_id
 
-    # ------------------------------------------------------------------
-    # Logging methods
-    # ------------------------------------------------------------------
+    @property
+    def latency_budget(self) -> timedelta:
+        """Return the latency budget."""
+        return self._latency_budget
 
-    def log_pipeline_event(
-        self,
-        event_type: EventType,
-        latency_ms: float,
-        metadata: dict | None = None,
-    ) -> None:
-        """Record a pipeline-level event such as a trigger or detection."""
-        self._pipeline_log.append(
-            PipelineRecord(
-                timestamp=time.time(),
-                event_type=event_type,
-                latency_ms=latency_ms,
-                metadata=metadata or {},
+    @property
+    def traces(self) -> list[Trace]:
+        """Return the list of recorded traces."""
+        with self._lock:
+            return list(self._traces.values())
+
+    @property
+    def spans(self) -> list[Span]:
+        """Return the list of recorded spans."""
+        with self._lock:
+            return list(self._spans.values())
+
+    def get_trace(self, trace_id: int) -> Trace:
+        """Get a specific trace by ID."""
+        with self._lock:
+            return self._traces[trace_id]
+
+    def get_span(self, span_id: int) -> Span:
+        """Get a specific span by ID."""
+        with self._lock:
+            return self._spans[span_id]
+
+    @property
+    def current_trace(self) -> Trace:
+        """Return the currently active trace."""
+        with self._lock:
+            if self._current_trace is None:
+                msg = "No active trace. Cannot access current trace."
+                raise RuntimeError(msg)
+            return self._current_trace
+
+    @property
+    def current_span(self) -> Span:
+        """Return the currently active span."""
+        with self._lock:
+            # Ensure we have spans in the stack to return a current span
+            if not self._span_stack:
+                msg = "No spans have been started. Cannot access last span."
+                raise RuntimeError(msg)
+
+            # Check invariants to ensure our internal state is consistent
+            if self._current_trace is None:  # pragma: no cover
+                msg = "Invariant violation: current_trace should exist if span_stack is not empty"
+                raise AssertionError(msg)
+
+            # Ensure the span has not ended (invariants should guarantee this)
+            if self._span_stack[-1].end != datetime(1970, 1, 1, tzinfo=UTC):  # pragma: no cover
+                msg = "Invariant violation: current_span has already ended"
+                raise AssertionError(msg)
+
+            return self._span_stack[-1]
+
+    def get_meta(self, key: str) -> t.Any:
+        """Get metadata value from the current span."""
+        with self._lock:
+            # Access _span_stack directly to avoid recursive lock acquisition
+            if not self._span_stack:
+                msg = "No spans have been started. Cannot access last span."
+                raise RuntimeError(msg)
+            return self._span_stack[-1].metadata.get(key)
+
+    def set_meta(self, key: str, value: t.Any) -> None:
+        """Set metadata value on the current span."""
+        with self._lock:
+            # Access _span_stack directly to avoid recursive lock acquisition
+            if not self._span_stack:
+                msg = "No spans have been started. Cannot access last span."
+                raise RuntimeError(msg)
+            with _unfreeze(self._span_stack[-1]) as span:
+                span.metadata[key] = value
+
+    def report(self) -> MetricsReport:
+        """Generate a summary report across all collected traces and spans."""
+        with self._lock:
+            # Access _traces directly (not via self.traces) to avoid recursive lock acquisition
+            traces = copy.deepcopy(list(self._traces.values()))
+            return MetricsReport(
+                session_id=self.session_id,
+                latency_budget=self.latency_budget,
+                traces=traces,
+                slow_traces=[trace for trace in traces if trace.latency > self.latency_budget],
             )
-        )
 
-    def log_stage(
-        self,
-        stage_name: str,
-        stage_idx: int,
-        latency_ms: float,
-        metadata: dict | None = None,
-    ) -> None:
-        """Record a single stage execution.
 
-        Args:
-            stage_name: Class name of the stage (e.g. ``"YOLOStage"``).
-            stage_idx: Pipeline stage index (1 = trigger/sensor, 2 = vision/LLM).
-            latency_ms: Wall-clock time for this stage in milliseconds.
-            metadata: Optional extra context to attach to the record.
+class NullMetricsCollector(MetricsCollector):
+    """A no-op metrics collector that ignores all spans and traces."""
+
+    def __init__(self, compute_backend: ComputeBackend | None = None) -> None:  # noqa: ARG002
+        """Initialize a null metrics collector.
+
+        The compute_backend is accepted for API compatibility but is never used —
+        NullMetricsCollector is a no-op that never samples hardware metrics.
         """
-        self._stage_log.append(
-            StageRecord(
-                timestamp=time.time(),
-                stage_name=stage_name,
-                stage_idx=stage_idx,
-                latency_ms=latency_ms,
-                metadata=metadata or {},
-            )
+        # Bypass MetricsCollector.__init__ entirely; we only need the minimal
+        # state that report() and the properties access.
+        self._session_id = "null"
+        self._latency_budget = timedelta(seconds=5)
+        self._traces: dict[int, Trace] = {}
+        self._spans: dict[int, Span] = {}
+        self._span_stack: list[Span] = []
+        self._current_trace: Trace | None = None
+        self._lock = Lock()
+
+    @contextlib.contextmanager
+    def start_trace(self) -> t.Generator[Trace, None, None]:
+        """No-op trace context manager."""
+        yield Trace(id_=0, start=datetime.now(tz=UTC), end=datetime.now(tz=UTC))
+
+    @contextlib.contextmanager
+    def start_span(
+        self, type_: SpanType, name: str, metadata: dict[str, t.Any] | None = None
+    ) -> t.Generator[Span, None, None]:
+        """No-op span context manager."""
+        yield Span(
+            id_=0,
+            parent_id=None,
+            type_=type_,
+            name=name,
+            start=datetime.now(tz=UTC),
+            end=datetime.now(tz=UTC),
+            metadata=metadata or {},
         )
 
-    def log_event(self, event_type: str, data: dict) -> None:
-        """General purpose event log for load times, config changes, etc."""
-        self._event_log.append(
-            EventRecord(
-                timestamp=time.time(),
-                event_type=event_type,
-                data=data,
-            )
+    def get_span(self, span_id: int) -> Span:  # noqa: ARG002
+        """Get a span - returns dummy span for null collector."""
+        return Span(
+            id_=0,
+            parent_id=None,
+            type_=SpanType.STAGE,
+            name="null",
+            start=datetime.now(tz=UTC),
+            end=datetime.now(tz=UTC),
+            metadata={},
         )
 
-    # ------------------------------------------------------------------
-    # Reporting
-    # ------------------------------------------------------------------
+    def get_trace(self, trace_id: int) -> Trace:  # noqa: ARG002
+        """Get a trace - returns dummy trace for null collector."""
+        return Trace(id_=0, start=datetime.now(tz=UTC), end=datetime.now(tz=UTC))
 
-    def report(self) -> CollectorReport:
-        """Generate a summary report across all collected metrics."""
-        return CollectorReport(
+    def report(self) -> MetricsReport:
+        """Generate an empty report."""
+        return MetricsReport(
             session_id=self.session_id,
-            total_stages=len(self._stage_log),
-            total_pipeline_events=len(self._pipeline_log),
-            per_stage=self._per_stage_stats(),
-            pipeline=self._pipeline_stats(),
-            latency_budget=self._latency_budget_analysis(),
+            latency_budget=self.latency_budget,
+            traces=[],
+            slow_traces=[],
         )
-
-    def _per_stage_stats(self) -> dict[str, StageStats]:
-        """Compute per-stage latency statistics from the stage log."""
-        if not self._stage_log:
-            return {}
-
-        by_stage: dict[str, list[float]] = {}
-        for record in self._stage_log:
-            by_stage.setdefault(record.stage_name, []).append(record.latency_ms)
-
-        return {
-            stage: StageStats(
-                num_calls=len(latencies),
-                mean_ms=float(np.mean(arr := np.array(latencies))),
-                p50_ms=float(np.percentile(arr, 50)),
-                p95_ms=float(np.percentile(arr, 95)),
-                min_ms=float(np.min(arr)),
-                max_ms=float(np.max(arr)),
-            )
-            for stage, latencies in by_stage.items()
-        }
-
-    def _pipeline_stats(self) -> PipelineStats:
-        triggers = [r for r in self._pipeline_log if r.event_type == EventType.TRIGGER_FIRED]
-        detections = [r for r in self._pipeline_log if r.event_type == EventType.DETECTION]
-        false_positives = [
-            r for r in self._pipeline_log if r.event_type == EventType.FALSE_POSITIVE
-        ]
-        return PipelineStats(
-            total_triggers=len(triggers),
-            total_detections=len(detections),
-            total_false_positives=len(false_positives),
-            trigger_rate=len(triggers) / max(1, len(self._pipeline_log)),
-            false_positive_rate=len(false_positives) / max(1, len(detections)),
-        )
-
-    def _latency_budget_analysis(self) -> LatencyBudget:
-        """Compute latency budget against end-to-end pipeline event times."""
-        total_mean = (
-            float(np.mean([r.latency_ms for r in self._pipeline_log]))
-            if self._pipeline_log
-            else 0.0
-        )
-        return LatencyBudget(
-            total_mean_ms=total_mean,
-            budget_ms=self._latency_budget_ms,
-            headroom_ms=self._latency_budget_ms - total_mean,
-            within_budget=total_mean < self._latency_budget_ms,
-        )
-
-    def print_stage_latencies(self) -> None:
-        """Print latency table for the most recent pipeline run."""
-        if not self._stage_log:
-            logger.info("No stage latencies recorded.")
-            return
-        total = sum(r.latency_ms for r in self._stage_log)
-        logger.info("\n%-25s %10s", "Stage", "Latency")
-        logger.info("─" * 37)
-        for r in self._stage_log:
-            logger.info("  %-23s %8.1fms", r.stage_name, r.latency_ms)
-        logger.info("─" * 37)
-        logger.info("  %-23s %8.1fms", "Total", total)
-
-    def save(self, path: str) -> None:
-        """Save full report to JSON."""
-        Path(path).write_text(json.dumps(attrs.asdict(self.report()), indent=2))
-        logger.info("Metrics saved to %s", path)
-
-    def print_summary(self) -> None:
-        """Log a human-readable summary."""
-        r = self.report()
-        logger.info("\n%s", "=" * 50)
-        logger.info("METRICS SUMMARY  |  session: %s", r.session_id)
-        logger.info("=" * 50)
-        logger.info("Total stages: %d", r.total_stages)
-        logger.info("\nPer-stage latency:")
-        for stage, stats in r.per_stage.items():
-            logger.info(
-                "  %-20s  mean=%.1fms  p95=%.1fms",
-                stage,
-                stats.mean_ms,
-                stats.p95_ms,
-            )
-        budget = r.latency_budget
-        logger.info("\nLatency budget (target <%.0fms):", budget.budget_ms)
-        status = "✓ within budget" if budget.within_budget else "✗ over budget"
-        logger.info("  Total:   %.1fms  (%s)", budget.total_mean_ms, status)
-        logger.info("=" * 50)

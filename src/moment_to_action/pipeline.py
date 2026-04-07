@@ -4,42 +4,50 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from moment_to_action.metrics import NullMetricsCollector, SpanType
+
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
-    from moment_to_action.metrics._collector import MetricsCollector
+    from moment_to_action.metrics import MetricsCollector
     from moment_to_action.stages._base import Stage
 
 
 class Pipeline:
     """Sequential pipeline of stages."""
 
-    def __init__(
-        self,
-        stages: list[Stage],
-        metrics: MetricsCollector | None = None,
-    ) -> None:
+    def __init__(self, stages: list[Stage]) -> None:
         self._stages = stages
-        self._metrics = metrics
 
     @property
     def stages(self) -> list[Stage]:
         """Return the list of stages."""
         return self._stages
 
-    @property
-    def metrics(self) -> MetricsCollector | None:
-        """Return the optional metrics collector."""
-        return self._metrics
+    def run(self, msg: Message, metrics: MetricsCollector | None = None) -> Message | None:
+        """Run the message through all stages sequentially.
 
-    def run(self, msg: Message) -> Message | None:
-        """Run the message through all stages sequentially."""
+        Args:
+            msg: The input message to process through the pipeline.
+            metrics: MetricsCollector to use for collecting metrics during pipeline execution.
+                If not provided, a NullMetricsCollector will be used that does nothing.
+        """
+        # If no metrics collector provided, use a null one that does nothing
+        if metrics is None:
+            metrics = NullMetricsCollector()
+
+        # Start a trace for this pipeline execution
         current: Message = msg
 
-        for idx, stage in enumerate(self._stages):
-            new = stage.process(current, stage_idx=idx, metrics=self._metrics)
-            if new is None:
-                return None
+        # Start a span for the entire pipeline execution
+        with metrics.start_span(SpanType.PIPELINE, "Pipeline Run"):
+            # Run through the stages sequentially
+            for stage in self._stages:
+                # run the stage and check if we should exit
+                new = stage.process(current, metrics=metrics)
+                if new is None:
+                    return None
 
-            current = new
+                # update for next stage
+                current = new
 
         return current

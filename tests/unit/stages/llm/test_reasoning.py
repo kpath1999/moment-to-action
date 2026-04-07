@@ -365,12 +365,18 @@ class TestReasoningStage:
         self, sample_detection_message: DetectionMessage
     ) -> None:
         """Test that latency_ms is stamped on the result."""
+        from moment_to_action.metrics import MetricsCollector
+
         stage = ReasoningStage()
 
-        result = stage.process(sample_detection_message)
+        # Use a real metrics collector to get accurate timing
+        metrics = MetricsCollector(session_id="test_reasoning_latency")
+        with metrics.start_trace():
+            result = stage.process(sample_detection_message, metrics=metrics)
 
         assert result is not None
         assert isinstance(result, ReasoningMessage)
+        # With a real metrics collector, latency should be measurable
         assert result.latency_ms >= 0.0
 
     def test_system_prompt_consistency_across_calls(

@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
+
+
+def _make_sample(**kwargs: object) -> ComputeUnitUsageSample:
+    """Helper to build a ComputeUnitUsageSample with sensible defaults."""
+    defaults: dict[str, object] = {
+        "timestamp": datetime.now(tz=UTC),
+        "device": ComputeUnit.CPU,
+        "usage_pct": 0.0,
+        "frequency_mhz": 0.0,
+        "memory_mb": 0.0,
+        "power_mw": 0.0,
+    }
+    return ComputeUnitUsageSample(**{**defaults, **kwargs})  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
@@ -42,88 +57,88 @@ class TestComputeUnit:
 
 
 @pytest.mark.unit
-class TestPowerSample:
-    """Tests for PowerSample data class."""
+class TestComputeUnitUsageSample:
+    """Tests for ComputeUnitUsageSample data class."""
 
-    def test_powersample_construction_basic(self) -> None:
-        """Test basic PowerSample construction with valid values."""
-        sample = PowerSample(
-            timestamp=1234567890.5,
+    def test_sample_construction_basic(self) -> None:
+        """Test basic construction with valid values."""
+        ts = datetime.now(tz=UTC)
+        sample = ComputeUnitUsageSample(
+            timestamp=ts,
             device=ComputeUnit.CPU,
+            usage_pct=75.5,
+            frequency_mhz=2400.0,
+            memory_mb=4096.0,
             power_mw=150.0,
-            utilization_pct=75.5,
         )
-        assert sample.timestamp == 1234567890.5
+        assert sample.timestamp == ts
         assert sample.device == ComputeUnit.CPU
+        assert sample.usage_pct == 75.5
+        assert sample.frequency_mhz == 2400.0
+        assert sample.memory_mb == 4096.0
         assert sample.power_mw == 150.0
-        assert sample.utilization_pct == 75.5
 
-    def test_powersample_construction_npu(self) -> None:
-        """Test PowerSample construction with NPU compute unit."""
-        sample = PowerSample(
-            timestamp=1234567890.0,
-            device=ComputeUnit.NPU,
-            power_mw=200.0,
-            utilization_pct=90.0,
-        )
+    def test_sample_construction_npu(self) -> None:
+        """Test construction with NPU compute unit."""
+        sample = _make_sample(device=ComputeUnit.NPU, power_mw=200.0, usage_pct=90.0)
         assert sample.device == ComputeUnit.NPU
         assert sample.power_mw == 200.0
 
-    def test_powersample_construction_gpu(self) -> None:
-        """Test PowerSample construction with GPU compute unit."""
-        sample = PowerSample(
-            timestamp=1234567890.0,
-            device=ComputeUnit.GPU,
-            power_mw=500.0,
-            utilization_pct=95.0,
-        )
+    def test_sample_construction_gpu(self) -> None:
+        """Test construction with GPU compute unit."""
+        sample = _make_sample(device=ComputeUnit.GPU, power_mw=500.0, usage_pct=95.0)
         assert sample.device == ComputeUnit.GPU
         assert sample.power_mw == 500.0
 
-    def test_powersample_construction_dsp(self) -> None:
-        """Test PowerSample construction with DSP compute unit."""
-        sample = PowerSample(
-            timestamp=1234567890.0,
-            device=ComputeUnit.DSP,
-            power_mw=100.0,
-            utilization_pct=50.0,
-        )
+    def test_sample_construction_dsp(self) -> None:
+        """Test construction with DSP compute unit."""
+        sample = _make_sample(device=ComputeUnit.DSP, power_mw=100.0, usage_pct=50.0)
         assert sample.device == ComputeUnit.DSP
         assert sample.power_mw == 100.0
 
-    def test_powersample_with_zero_values(self) -> None:
-        """Test PowerSample construction with zero values."""
-        sample = PowerSample(
-            timestamp=0.0,
-            device=ComputeUnit.CPU,
-            power_mw=0.0,
-            utilization_pct=0.0,
-        )
-        assert sample.timestamp == 0.0
+    def test_sample_with_zero_values(self) -> None:
+        """Test construction with zero values."""
+        sample = _make_sample(usage_pct=0.0, frequency_mhz=0.0, memory_mb=0.0, power_mw=0.0)
+        assert sample.usage_pct == 0.0
         assert sample.power_mw == 0.0
-        assert sample.utilization_pct == 0.0
 
-    def test_powersample_with_high_values(self) -> None:
-        """Test PowerSample construction with high values."""
-        sample = PowerSample(
-            timestamp=9999999999.99,
+    def test_sample_with_high_values(self) -> None:
+        """Test construction with high values."""
+        sample = _make_sample(
             device=ComputeUnit.GPU,
             power_mw=10000.0,
-            utilization_pct=100.0,
+            usage_pct=100.0,
+            frequency_mhz=3500.0,
+            memory_mb=65536.0,
         )
-        assert sample.timestamp == 9999999999.99
         assert sample.power_mw == 10000.0
-        assert sample.utilization_pct == 100.0
+        assert sample.usage_pct == 100.0
 
-    def test_powersample_field_access(self) -> None:
-        """Test that all fields of PowerSample are accessible."""
-        sample = PowerSample(
-            timestamp=123.45,
-            device=ComputeUnit.NPU,
-            power_mw=250.5,
-            utilization_pct=85.25,
-        )
+    def test_sample_field_access(self) -> None:
+        """Test that all fields of ComputeUnitUsageSample are accessible."""
+        sample = _make_sample(usage_pct=85.25, power_mw=250.5)
         assert hasattr(sample, "timestamp")
         assert hasattr(sample, "device")
+        assert hasattr(sample, "usage_pct")
+        assert hasattr(sample, "frequency_mhz")
+        assert hasattr(sample, "memory_mb")
         assert hasattr(sample, "power_mw")
-        assert hasattr(sample, "utilization_pct")
+
+    def test_sample_json(self) -> None:
+        """Test that json() returns a serializable dict with all fields."""
+        ts = datetime.now(tz=UTC)
+        sample = _make_sample(
+            timestamp=ts,
+            device=ComputeUnit.GPU,
+            usage_pct=42.0,
+            frequency_mhz=1800.0,
+            memory_mb=2048.0,
+            power_mw=75.0,
+        )
+        result = sample.json()
+        assert result["timestamp"] == ts.isoformat()
+        assert result["device"] == ComputeUnit.GPU
+        assert result["usage_pct"] == 42.0
+        assert result["frequency_mhz"] == 1800.0
+        assert result["memory_mb"] == 2048.0
+        assert result["power_mw"] == 75.0

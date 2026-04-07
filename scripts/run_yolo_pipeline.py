@@ -10,14 +10,17 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import time
+from pathlib import Path
 
+import rich
 from rich.console import Console
 from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import RawFrameMessage, ReasoningMessage
+from moment_to_action.messages import ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
@@ -43,8 +46,10 @@ parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshol
 args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-metrics = MetricsCollector()
+compute_backend = ComputeBackend(preferred_unit=device)
+metrics = MetricsCollector(compute_backend=compute_backend)
 manager = ModelManager()
+
 
 # ── build pipeline ─────────────────────────────────────────────────
 # Stages resolve their own model paths via ModelManager.
@@ -52,24 +57,21 @@ pipeline = Pipeline(
     stages=[
         PreprocessorStage(target_size=(640, 640), letterbox=True),
         YOLOStage(
-            backend=ComputeBackend(preferred_unit=device),
+            backend=compute_backend,
             manager=manager,
             confidence_threshold=args.conf,
         ),
         ReasoningStage(),
     ],
-    metrics=metrics,
 )
 
 # ── load frame via FileSensor, then run pipeline ───────────────────
 with FileSensor(args.image) as sensor:
     msg = sensor.read()
-    if not isinstance(msg, RawFrameMessage):
-        err = f"Expected RawFrameMessage, got {type(msg).__name__}"
-        raise TypeError(err)
 
 t_total = time.perf_counter()
-result = pipeline.run(msg)
+with metrics.start_trace():
+    result = pipeline.run(msg, metrics=metrics)
 total_ms = (time.perf_counter() - t_total) * 1000
 
 # ── print results ──────────────────────────────────────────────────
@@ -87,4 +89,10 @@ elif isinstance(result, ReasoningMessage):
     logger.info("\nLLM response:")
     logger.info("%s", result.response)
 
-metrics.print_stage_latencies()
+# Log metrics summary
+metrics_report = metrics.report()
+rich.print("============== Metrics report ==============")
+rich.print(metrics_report.summary_full_rich())
+
+with Path("metrics_report.json").open("w") as f:
+    json.dump(metrics_report.json(), f, indent=4)

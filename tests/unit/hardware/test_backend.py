@@ -11,11 +11,11 @@ from moment_to_action.hardware._backend import (
     BenchmarkResult,
     ComputeBackend,
     _make_backend,
-    _make_power_monitor,
+    _make_resource_monitor,
 )
 from moment_to_action.hardware._platforms._detection import Platform
-from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490PowerMonitor
-from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64PowerMonitor
+from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490ResourceMonitor
+from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64ResourceMonitor
 from moment_to_action.hardware._types import ComputeUnit
 
 
@@ -69,7 +69,7 @@ class TestComputeBackendConstruction:
     def test_compute_backend_construction_default(self) -> None:
         """Test ComputeBackend construction with default unit (NPU)."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_be.return_value = MagicMock()
@@ -82,7 +82,7 @@ class TestComputeBackendConstruction:
     def test_compute_backend_construction_cpu(self) -> None:
         """Test ComputeBackend construction with CPU preference."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_be.return_value = MagicMock()
@@ -96,7 +96,7 @@ class TestComputeBackendConstruction:
     def test_compute_backend_active_unit_property(self) -> None:
         """Test ComputeBackend.active_unit returns backend's supported unit."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -107,28 +107,28 @@ class TestComputeBackendConstruction:
 
                     assert backend.active_unit == ComputeUnit.CPU
 
-    def test_compute_backend_power_monitor_property(self) -> None:
-        """Test ComputeBackend.power_monitor property."""
+    def test_compute_backend_resource_monitor_property(self) -> None:
+        """Test ComputeBackend.resource_monitor property."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
-                    mock_power_monitor = MagicMock()
-                    mock_pm.return_value = mock_power_monitor
+                    mock_resource_monitor = MagicMock()
+                    mock_pm.return_value = mock_resource_monitor
                     mock_be.return_value = MagicMock()
                     mock_be.return_value.get_supported_unit.return_value = ComputeUnit.CPU
 
                     backend = ComputeBackend()
 
-                    assert backend.power_monitor is mock_power_monitor
+                    assert backend.resource_monitor is mock_resource_monitor
 
-    def test_make_power_monitor_qcs6490(self) -> None:
-        """Test that _make_power_monitor returns QCS6490PowerMonitor for QCS6490 platform."""
+    def test_make_resource_monitor_qcs6490(self) -> None:
+        """Test that _make_resource_monitor returns QCS6490ResourceMonitor for QCS6490 platform."""
         with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
             mock_detect.return_value = Platform.QCS6490
 
-            power_monitor = _make_power_monitor()
+            resource_monitor = _make_resource_monitor()
 
-            assert isinstance(power_monitor, QCS6490PowerMonitor)
+            assert isinstance(resource_monitor, QCS6490ResourceMonitor)
 
     def test_make_backend_qcs6490(self) -> None:
         """Test that _make_backend returns QCS6490Backend for QCS6490 platform."""
@@ -139,16 +139,16 @@ class TestComputeBackendConstruction:
 
             assert isinstance(backend, QCS6490Backend)
 
-    def test_make_power_monitor_macos_arm64(self) -> None:
-        """Test that _make_power_monitor returns MacOSARM64PowerMonitor for macOS arm64."""
-        from moment_to_action.hardware._platforms.macos_arm64 import MacOSARM64PowerMonitor
+    def test_make_resource_monitor_macos_arm64(self) -> None:
+        """Test that _make_resource_monitor returns MacOSARM64ResourceMonitor for macOS arm64."""
+        from moment_to_action.hardware._platforms.macos_arm64 import MacOSARM64ResourceMonitor
 
         with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
             mock_detect.return_value = Platform.MACOS_ARM64
 
-            power_monitor = _make_power_monitor()
+            resource_monitor = _make_resource_monitor()
 
-            assert isinstance(power_monitor, MacOSARM64PowerMonitor)
+            assert isinstance(resource_monitor, MacOSARM64ResourceMonitor)
 
     def test_make_backend_macos_arm64(self) -> None:
         """Test that _make_backend returns MacOSARM64Backend for macOS arm64."""
@@ -161,14 +161,14 @@ class TestComputeBackendConstruction:
 
             assert isinstance(backend, MacOSARM64Backend)
 
-    def test_make_power_monitor_x86_64(self) -> None:
-        """Test that _make_power_monitor returns X86_64PowerMonitor for X86_64 platform."""
+    def test_make_resource_monitor_x86_64(self) -> None:
+        """Test that _make_resource_monitor returns X86_64ResourceMonitor for X86_64 platform."""
         with patch("moment_to_action.hardware._backend.detect_platform") as mock_detect:
             mock_detect.return_value = Platform.X86_64
 
-            power_monitor = _make_power_monitor()
+            resource_monitor = _make_resource_monitor()
 
-            assert isinstance(power_monitor, X86_64PowerMonitor)
+            assert isinstance(resource_monitor, X86_64ResourceMonitor)
 
     def test_make_backend_x86_64(self) -> None:
         """Test that _make_backend returns X86_64Backend for X86_64 platform."""
@@ -201,7 +201,7 @@ class TestComputeBackendDelegation:
     def test_compute_backend_load_model_delegates(self) -> None:
         """Test ComputeBackend.load_model delegates to backend."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -218,7 +218,7 @@ class TestComputeBackendDelegation:
     def test_compute_backend_run_delegates(self) -> None:
         """Test ComputeBackend.run delegates to backend."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -237,7 +237,7 @@ class TestComputeBackendDelegation:
     def test_compute_backend_get_input_details_delegates(self) -> None:
         """Test ComputeBackend.get_input_details delegates to backend."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -255,7 +255,7 @@ class TestComputeBackendDelegation:
     def test_compute_backend_get_output_details_delegates(self) -> None:
         """Test ComputeBackend.get_output_details delegates to backend."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -273,7 +273,7 @@ class TestComputeBackendDelegation:
     def test_compute_backend_resolve_torch_policy_delegates(self) -> None:
         """Test ComputeBackend.resolve_torch_policy delegates to backend."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -297,7 +297,7 @@ class TestComputeBackendBenchmarking:
     def test_benchmark_returns_benchmark_result(self) -> None:
         """Test ComputeBackend.benchmark returns BenchmarkResult with correct structure."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -317,7 +317,7 @@ class TestComputeBackendBenchmarking:
     def test_benchmark_result_structure(self) -> None:
         """Test benchmark result contains all required percentile fields."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -341,7 +341,7 @@ class TestComputeBackendBenchmarking:
     def test_benchmark_latencies_are_positive(self) -> None:
         """Test benchmark latencies are all positive values."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -365,7 +365,7 @@ class TestComputeBackendBenchmarking:
     def test_benchmark_percentiles_ordering(self) -> None:
         """Test benchmark percentiles are in correct order."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -386,7 +386,7 @@ class TestComputeBackendBenchmarking:
     def test_benchmark_default_n_runs(self) -> None:
         """Test benchmark uses default n_runs=20."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()
@@ -405,7 +405,7 @@ class TestComputeBackendBenchmarking:
     def test_benchmark_custom_n_runs(self) -> None:
         """Test benchmark accepts custom n_runs parameter."""
         with patch("moment_to_action.hardware._backend.detect_platform"):
-            with patch("moment_to_action.hardware._backend._make_power_monitor") as mock_pm:
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
                 with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
                     mock_pm.return_value = MagicMock()
                     mock_backend = MagicMock()

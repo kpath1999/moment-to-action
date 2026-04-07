@@ -215,6 +215,7 @@ pyrightconfig.json
 
 # Ignore outputs of test scripts
 /detections.jpg
+/metrics_report.json
 
 # Ignore log outputs
 logs/

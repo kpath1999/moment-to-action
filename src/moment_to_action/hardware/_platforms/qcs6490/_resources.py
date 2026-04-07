@@ -1,4 +1,4 @@
-"""Power monitoring implementation for the QCS6490 platform.
+"""Resource monitoring implementation for the QCS6490 platform.
 
 Reads power draw from sysfs when hardware sensors are available; otherwise
 returns static estimates derived from typical QCS6490 power envelopes.
@@ -12,22 +12,23 @@ Utilization is read via:
 from __future__ import annotations
 
 import logging
-import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
 import psutil
 
-from moment_to_action.hardware._platforms._base import PowerMonitor
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._platforms._base import ResourceMonitor
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 logger = logging.getLogger(__name__)
+
 
 # Adreno GPU utilization sysfs path (Qualcomm kgsl driver).
 _KGSL_GPU_BUSY_PATH = Path("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage")
 
 
-class QCS6490PowerMonitor(PowerMonitor):
+class QCS6490ResourceMonitor(ResourceMonitor):
     """Reads power from sysfs on the QCS6490; falls back to estimates.
 
     Power estimates are based on typical operating power envelopes for the
@@ -56,8 +57,8 @@ class QCS6490PowerMonitor(PowerMonitor):
         else:
             logger.warning("SoC power info not available - using utilization-based estimates")
 
-    def sample(self, unit: ComputeUnit) -> PowerSample:
-        """Take a power measurement for *unit*.
+    def sample(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
+        """Take a resource measurement for *unit*.
 
         Reads from sysfs when available; falls back to static estimates.
 
@@ -65,35 +66,52 @@ class QCS6490PowerMonitor(PowerMonitor):
             unit: The compute unit to sample.
 
         Returns:
-            A ``PowerSample`` with the current power reading.
+            A ``ComputeUnitUsageSample`` with the current readings.
         """
         if self._hw_available:
             return self._read_hw_sensor(unit)
         return self._estimate(unit)
 
-    def _read_hw_sensor(self, unit: ComputeUnit) -> PowerSample:
+    def _read_hw_sensor(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         # NOTE: the battery power_now file reports *total* system power draw,
         # not per-unit.  We pass `unit` through so the caller knows which
         # unit was active when the sample was taken.
         try:
             power_uw = int(Path(f"{self.SYSFS_POWER_PATH}/battery/power_now").read_text().strip())
-            return PowerSample(
-                timestamp=time.time(),
+            return ComputeUnitUsageSample(
+                timestamp=datetime.now(tz=UTC),
                 device=unit,
+                usage_pct=self._read_utilization(unit),
+                frequency_mhz=self._read_frequency_mhz(unit),
+                memory_mb=self.used_memory_mb(),
                 power_mw=power_uw / 1000.0,
-                utilization_pct=self._read_utilization(unit),
             )
         except (FileNotFoundError, ValueError) as e:
             logger.warning("HW power sensor read failed: %s", e)
             return self._estimate(unit)
 
-    def _estimate(self, unit: ComputeUnit) -> PowerSample:
-        return PowerSample(
-            timestamp=time.time(),
+    def _estimate(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
+        return ComputeUnitUsageSample(
+            timestamp=datetime.now(tz=UTC),
             device=unit,
+            usage_pct=self._read_utilization(unit),
+            frequency_mhz=self._read_frequency_mhz(unit),
+            memory_mb=self.used_memory_mb(),
             power_mw=self._ESTIMATES.get(unit, 300.0),
-            utilization_pct=self._read_utilization(unit),
         )
+
+    @staticmethod
+    def _read_frequency_mhz(unit: ComputeUnit) -> float:
+        """Return operating frequency in MHz for *unit*, or 0.0 if unavailable."""
+        if unit == ComputeUnit.CPU:
+            try:
+                freq_info = psutil.cpu_freq()
+            except (AttributeError, OSError):
+                return 0.0
+            else:
+                return freq_info.current if freq_info else 0.0
+        # GPU/NPU/DSP frequencies are not available via a stable public interface.
+        return 0.0
 
     @staticmethod
     def _read_utilization(unit: ComputeUnit) -> float:

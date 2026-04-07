@@ -14,18 +14,18 @@ class TestReadPowerCommand:
     """Tests for the read-power subcommand."""
 
     def test_outputs_power_and_utilization(self) -> None:
-        """read-power echoes power_mw and utilization_pct for the chosen device."""
+        """read-power echoes power_mw and usage_pct for the chosen device."""
         from moment_to_action._cli import cli
 
         mock_sample = MagicMock()
         mock_sample.power_mw = 1500
-        mock_sample.utilization_pct = 42
+        mock_sample.usage_pct = 42
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -44,13 +44,13 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
         mock_sample.power_mw = 2500.5
-        mock_sample.utilization_pct = 10
+        mock_sample.usage_pct = 10
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -68,13 +68,13 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
         mock_sample.power_mw = 1500
-        mock_sample.utilization_pct = 67.5
+        mock_sample.usage_pct = 67.5
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -93,13 +93,13 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
         mock_sample.power_mw = 1500
-        mock_sample.utilization_pct = 42
+        mock_sample.usage_pct = 42
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -117,20 +117,20 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
         mock_sample.power_mw = 1500.5
-        mock_sample.utilization_pct = 42.0
+        mock_sample.usage_pct = 42.0
         mock_sample.timestamp = 1234567890.5
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         asdict_result = {
             "timestamp": 1234567890.5,
             "compute_unit": "CPU",
             "power_mw": 1500.5,
-            "utilization_pct": 42.0,
+            "usage_pct": 42.0,
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -153,17 +153,17 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         asdict_result = {
             "timestamp": 1234567890.5,
             "compute_unit": "CPU",
             "power_mw": 1500,
-            "utilization_pct": 42,
+            "usage_pct": 42,
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -186,17 +186,17 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         asdict_result = {
             "timestamp": 1234567890.5,
             "compute_unit": "CPU",
             "power_mw": 2345.67,
-            "utilization_pct": 50,
+            "usage_pct": 50,
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -214,23 +214,23 @@ class TestReadPowerCommand:
         assert "power_mw" in output_json
         assert output_json["power_mw"] == 2345.67
 
-    def test_json_output_has_utilization_pct_field(self) -> None:
-        """JSON output has utilization_pct field."""
+    def test_json_output_has_usage_pct_field(self) -> None:
+        """JSON output has usage_pct field."""
         from moment_to_action._cli import cli
 
         mock_sample = MagicMock()
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         asdict_result = {
             "timestamp": 1234567890.5,
             "compute_unit": "CPU",
             "power_mw": 1500,
-            "utilization_pct": 75.5,
+            "usage_pct": 75.5,
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -245,8 +245,8 @@ class TestReadPowerCommand:
 
         assert result.exit_code == 0
         output_json = json.loads(result.output)
-        assert "utilization_pct" in output_json
-        assert output_json["utilization_pct"] == 75.5
+        assert "usage_pct" in output_json
+        assert output_json["usage_pct"] == 75.5
 
     def test_json_output_has_timestamp_field(self) -> None:
         """JSON output has timestamp field."""
@@ -255,17 +255,17 @@ class TestReadPowerCommand:
         test_timestamp = 1704067200.5
         mock_sample = MagicMock()
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         asdict_result = {
             "timestamp": test_timestamp,
             "compute_unit": "CPU",
             "power_mw": 1500,
-            "utilization_pct": 42,
+            "usage_pct": 42,
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -290,13 +290,13 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
         mock_sample.power_mw = 1000
-        mock_sample.utilization_pct = 50
+        mock_sample.usage_pct = 50
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -315,17 +315,17 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         asdict_result = {
             "timestamp": 1234567890.0,
             "compute_unit": device,
             "power_mw": 1000,
-            "utilization_pct": 50,
+            "usage_pct": 50,
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -343,7 +343,7 @@ class TestReadPowerCommand:
         assert "compute_unit" in output_json
         assert output_json["compute_unit"] == device
         assert "power_mw" in output_json
-        assert "utilization_pct" in output_json
+        assert "usage_pct" in output_json
         assert "timestamp" in output_json
 
     def test_invalid_device_fails(self) -> None:
@@ -361,19 +361,19 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
         mock_sample.power_mw = 1500
-        mock_sample.utilization_pct = 42
+        mock_sample.usage_pct = 42
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         asdict_result = {
             "timestamp": 1234567890.0,
             "compute_unit": "CPU",
             "power_mw": 1500,
-            "utilization_pct": 42,
+            "usage_pct": 42,
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
@@ -397,14 +397,14 @@ class TestReadPowerCommand:
 
         mock_sample = MagicMock()
         mock_sample.power_mw = 1500
-        mock_sample.utilization_pct = 42
+        mock_sample.usage_pct = 42
         mock_sample.timestamp = 1234567890.0
 
-        mock_pwr_mon = MagicMock()
-        mock_pwr_mon.sample.return_value = mock_sample
+        mock_resource_mon = MagicMock()
+        mock_resource_mon.sample.return_value = mock_sample
 
         mock_backend = MagicMock()
-        mock_backend.power_monitor = mock_pwr_mon
+        mock_backend.resource_monitor = mock_resource_mon
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(

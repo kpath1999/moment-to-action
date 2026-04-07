@@ -84,6 +84,10 @@ class CameraStreamSensor(BaseSensor):
         if self._backend == "auto":
             cap = cv2.VideoCapture(self._device)
         else:
+            if not isinstance(self._backend, int):  # pragma: no cover
+                err = f"backend must be int or 'auto', got {type(self._backend).__name__}"
+                raise ValueError(err)
+
             cap = cv2.VideoCapture(self._device, self._backend)
 
         if not cap.isOpened():
@@ -130,7 +134,7 @@ class CameraStreamSensor(BaseSensor):
         ok, frame = self._cap.read()
         ts = time.time()
 
-        if not ok or frame is None:
+        if not ok:
             logger.debug("CameraStreamSensor: dropped frame from device %r", self._device)
             return RawFrameMessage(
                 frame=None,

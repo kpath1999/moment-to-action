@@ -14,12 +14,12 @@ Public API::
 from __future__ import annotations
 
 from ._backend import BenchmarkResult, ComputeBackend
-from ._types import ComputeUnit, PowerSample, TorchExecutionPolicy
+from ._types import ComputeUnit, ComputeUnitUsageSample, TorchExecutionPolicy
 
 __all__ = [
     "BenchmarkResult",
     "ComputeBackend",
     "ComputeUnit",
-    "PowerSample",
+    "ComputeUnitUsageSample",
     "TorchExecutionPolicy",
 ]

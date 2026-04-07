@@ -29,12 +29,13 @@ Compute dispatch:
 from __future__ import annotations
 
 import logging
-import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable  # noqa: TC003
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 from moment_to_action.hardware import ComputeUnit
+from moment_to_action.metrics._collector import NullMetricsCollector
+from moment_to_action.metrics._types import SpanType
 from moment_to_action.utils import BufferPool, ComputeDispatcher
 
 if TYPE_CHECKING:
@@ -85,13 +86,8 @@ class BasePreprocessor[InputT, OutputT](ABC):
                 ...
     """
 
-    def __init__(
-        self,
-        compute_unit: ComputeUnit = ComputeUnit.CPU,
-        metrics: MetricsCollector | None = None,
-    ) -> None:
+    def __init__(self, compute_unit: ComputeUnit = ComputeUnit.CPU) -> None:
         self._compute_unit = compute_unit
-        self._metrics = metrics
         self._buffers = BufferPool()
         self._dispatcher = ComputeDispatcher(compute_unit)
 
@@ -108,28 +104,37 @@ class BasePreprocessor[InputT, OutputT](ABC):
     # Public interface
     # ------------------------------------------------------------------
 
-    def process(self, data: InputT) -> OutputT:
+    def process(self, data: InputT, metrics: MetricsCollector | None = None) -> OutputT:
         """Validate, preprocess, and report timing.
 
         This is what models call. Never override this - override _process.
+
+        Args:
+            data:   Input data to preprocess (AudioInput, ImageInput, etc).
+            metrics: MetricsCollector for reporting timing. Optional, but recommended.
+                     If not provided, timing will be skipped but processing will still work.
         """
+        # Ensure we always have a metrics collector to avoid null checks in subclass code
+        #
+        # This is done here so that preprocessors can be used standalone, outside of a pipeline,
+        # if desired. Useful for testing
+        if metrics is None:
+            metrics = NullMetricsCollector()
+
+        # Validate input before processing
         self._validate(data)
 
-        t_start = time.perf_counter()
-        result = self._process(data)
-        elapsed_ms = (time.perf_counter() - t_start) * 1000
+        # Time the processing and report to metrics
+        with metrics.start_span(SpanType.PREPROCESS, self.__class__.__name__) as span:
+            span_id = span.id_  # save so we can report after processing
 
-        if self._metrics:
-            self._metrics.log_event(
-                "preprocess",
-                {
-                    "preprocessor": self.__class__.__name__,
-                    "latency_ms": elapsed_ms,
-                    "compute_unit": self._dispatcher.active_unit.name,
-                },
-            )
+            # Run the actual preprocessing logic implemented by the subclass
+            result = self._process(data)
 
+        # Get elapsed time from metrics for logging
+        elapsed_ms = metrics.get_span(span_id).latency_ms
         logger.debug("%s.process: %.2fms", self.__class__.__name__, elapsed_ms)
+
         return result
 
     # ------------------------------------------------------------------

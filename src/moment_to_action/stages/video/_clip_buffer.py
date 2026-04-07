@@ -36,6 +36,7 @@ from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
+    from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class ClipBufferStage(Stage):
     # Stage interface
     # ------------------------------------------------------------------
 
-    def _process(self, msg: Message) -> VideoClipMessage | None:
+    def _process(self, msg: Message, _metrics: MetricsCollector) -> VideoClipMessage | None:
         """Accumulate *msg* and emit a clip when stride is reached.
 
         Returns:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -9,9 +10,9 @@ import pytest
 
 from moment_to_action.hardware._platforms.macos_arm64 import (
     MacOSARM64Backend,
-    MacOSARM64PowerMonitor,
+    MacOSARM64ResourceMonitor,
 )
-from moment_to_action.hardware._types import ComputeUnit, PowerSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 
 @pytest.mark.unit
@@ -150,31 +151,31 @@ class TestMacOSARM64Backend:
 
 
 @pytest.mark.unit
-class TestMacOSARM64PowerMonitor:
-    """Tests for MacOSARM64PowerMonitor."""
+class TestMacOSARM64ResourceMonitor:
+    """Tests for MacOSARM64ResourceMonitor."""
 
     def test_sample_cpu_returns_power_sample(self) -> None:
         """sample(CPU) returns a valid PowerSample."""
         with patch("psutil.cpu_percent", return_value=50.0):
-            monitor = MacOSARM64PowerMonitor()
+            monitor = MacOSARM64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
-        assert isinstance(sample, PowerSample)
+        assert isinstance(sample, ComputeUnitUsageSample)
         assert sample.device == ComputeUnit.CPU
         assert sample.power_mw >= 0.0
-        assert 0.0 <= sample.utilization_pct <= 100.0
-        assert sample.timestamp > 0.0
+        assert 0.0 <= sample.usage_pct <= 100.0
+        assert isinstance(sample.timestamp, datetime)
 
     def test_sample_non_cpu_returns_zero_power(self) -> None:
         """sample(NPU) returns zero power (no NPU on macOS arm64)."""
-        monitor = MacOSARM64PowerMonitor()
+        monitor = MacOSARM64ResourceMonitor()
         sample = monitor.sample(ComputeUnit.NPU)
         assert sample.device == ComputeUnit.NPU
         assert sample.power_mw == 0.0
-        assert sample.utilization_pct == 0.0
+        assert sample.usage_pct == 0.0
 
     def test_power_increases_with_load(self) -> None:
         """Higher CPU utilization produces higher estimated power."""
-        monitor = MacOSARM64PowerMonitor()
+        monitor = MacOSARM64ResourceMonitor()
         with (
             patch("psutil.cpu_percent", return_value=0.0),
             patch("psutil.cpu_freq") as mock_freq,
@@ -197,7 +198,7 @@ class TestMacOSARM64PowerMonitor:
             patch("psutil.cpu_percent", return_value=100.0),
             patch("psutil.cpu_freq", side_effect=OSError("cpu_freq unavailable")),
         ):
-            monitor = MacOSARM64PowerMonitor()
+            monitor = MacOSARM64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
         # base=50 + 3.0 GHz x 100% x 0.6 = 50 + 180 = 230
         assert sample.power_mw == pytest.approx(230.0)
@@ -208,13 +209,13 @@ class TestMacOSARM64PowerMonitor:
             patch("psutil.cpu_percent", return_value=0.0),
             patch("psutil.cpu_freq", side_effect=AttributeError),
         ):
-            monitor = MacOSARM64PowerMonitor()
+            monitor = MacOSARM64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
         assert sample.power_mw == pytest.approx(50.0)  # base only, 0% load
 
     def test_utilization_pct_matches_cpu_percent(self) -> None:
         """utilization_pct field reflects psutil.cpu_percent value."""
         with patch("psutil.cpu_percent", return_value=42.0):
-            monitor = MacOSARM64PowerMonitor()
+            monitor = MacOSARM64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
-        assert sample.utilization_pct == 42.0
+        assert sample.usage_pct == 42.0

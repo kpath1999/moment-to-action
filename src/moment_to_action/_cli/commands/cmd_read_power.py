@@ -17,13 +17,11 @@ from moment_to_action.hardware import ComputeBackend, ComputeUnit
 def read_power(ctx: click.Context, *, device: ComputeUnit, json_output: bool) -> None:  # noqa: ARG001
     """Read power of a device."""
     backend = ComputeBackend(device)
-    pwr_mon = backend.power_monitor
+    resource_mon = backend.resource_monitor
 
-    sample = pwr_mon.sample(device)
+    sample = resource_mon.sample(device)
     if json_output:
         output = attrs.asdict(sample)
         click.echo(json.dumps(output))
     else:
-        click.echo(
-            f"Device {device} is drawing {sample.power_mw} mW at {sample.utilization_pct}% usage."
-        )
+        click.echo(f"Device {device} is drawing {sample.power_mw} mW at {sample.usage_pct}% usage.")

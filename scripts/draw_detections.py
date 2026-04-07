@@ -12,18 +12,22 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from typing import TYPE_CHECKING
 
 import cv2
 from rich.console import Console
 from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import DetectionMessage, RawFrameMessage
+from moment_to_action.messages import DetectionMessage
 from moment_to_action.models import ModelManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages._base import Stage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
+
+if TYPE_CHECKING:
+    from moment_to_action.metrics import MetricsCollector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,7 +54,7 @@ class CaptureStage(Stage):
     def __init__(self) -> None:
         self.detections: DetectionMessage | None = None
 
-    def _process(self, msg: object) -> DetectionMessage:
+    def _process(self, msg: object, metrics: MetricsCollector) -> DetectionMessage:  # noqa: ARG002
         """Capture the detection message and pass it through."""
         if not isinstance(msg, DetectionMessage):
             err = f"CaptureStage expects DetectionMessage, got {type(msg).__name__}"
@@ -78,9 +82,6 @@ pipeline = Pipeline(
 # ── load frame via FileSensor, then run pipeline ───────────────────
 with FileSensor(args.image) as sensor:
     msg = sensor.read()
-    if not isinstance(msg, RawFrameMessage):
-        err = f"Expected RawFrameMessage, got {type(msg).__name__}"
-        raise TypeError(err)
 
 pipeline.run(msg)
 
