@@ -10,6 +10,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import logging
 import time
@@ -47,7 +48,12 @@ args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
 compute_backend = ComputeBackend(preferred_unit=device)
-metrics = MetricsCollector(compute_backend=compute_backend)
+metrics = MetricsCollector(
+    compute_backend=compute_backend,
+    resource_sample_interval=datetime.timedelta(
+        seconds=0.01
+    ),  # YOLO too fast, need to sample more frequently
+)
 manager = ModelManager()
 
 

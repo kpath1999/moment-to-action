@@ -827,7 +827,7 @@ class TestResourceSampling:
         collector = MetricsCollector(
             compute_backend=mock_backend,
             session_id="test-resource-sampling",
-            mem_sample_interval=timedelta(milliseconds=10),
+            resource_sample_interval=timedelta(milliseconds=10),
         )
 
         with collector.start_trace() as trace:
@@ -849,7 +849,7 @@ class TestResourceSampling:
         collector = MetricsCollector(
             compute_backend=None,
             session_id="test-no-backend",
-            mem_sample_interval=timedelta(milliseconds=10),
+            resource_sample_interval=timedelta(milliseconds=10),
         )
 
         with collector.start_trace() as trace:
