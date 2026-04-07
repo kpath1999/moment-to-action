@@ -80,7 +80,7 @@ class MetricsCollector:
         compute_backend: ComputeBackend | None = None,
         session_id: str | None = None,
         latency_budget: timedelta = timedelta(seconds=5),
-        mem_sample_interval: timedelta = timedelta(seconds=0.1),
+        resource_sample_interval: timedelta = timedelta(seconds=0.1),
     ) -> None:
         """Create a new metrics collector.
 
@@ -92,14 +92,14 @@ class MetricsCollector:
                 Session name. If not provided, one will be auto-generated.
             latency_budget:
                 Our trace latency budget. Defaults to five seconds.
-            mem_sample_interval:
-                How often to sample memory usage for spans. Defaults to 100ms.
+            resource_sample_interval:
+                How often to sample resource usage for spans. Defaults to 100ms.
         """
         # Configuration
         # all this is const and unprotected by lock
         self._session_id = session_id or f"session_{int(time.time())}"
         self._latency_budget = latency_budget
-        self._mem_sample_interval = mem_sample_interval
+        self._resource_sample_interval = resource_sample_interval
 
         # ID tracking
         self._current_id = 0
@@ -166,7 +166,7 @@ class MetricsCollector:
             while not evt.is_set():
                 with self._lock:
                     self._sample_resource_usage()
-                time.sleep(self._mem_sample_interval.total_seconds())
+                time.sleep(self._resource_sample_interval.total_seconds())
 
         thread = Thread(target=sampling_loop)
         thread.start()
