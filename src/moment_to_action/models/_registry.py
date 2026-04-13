@@ -18,6 +18,11 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         filename="model.tflite",
         source=VendoredSource(subdir="yolo"),
     ),
+    ModelID.YOLO_V8_TFLITE_INT8: ModelInfo(
+        id=ModelID.YOLO_V8_TFLITE_INT8,
+        filename="model_int8.tflite",
+        source=VendoredSource(subdir="yolo"),
+    ),
     ModelID.MOBILECLIP_S2: ModelInfo(
         id=ModelID.MOBILECLIP_S2,
         filename="mobileclip_s2_datacompdr_last.tflite",

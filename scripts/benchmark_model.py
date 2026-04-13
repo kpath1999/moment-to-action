@@ -15,10 +15,15 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import json
 import logging
 import sys
 from pathlib import Path
+
+# Emit a Python + native C stack trace to stderr on any fatal signal
+# (SIGSEGV, SIGBUS, SIGFPE, SIGABRT) that escapes the subprocess probe.
+faulthandler.enable()
 
 import rich
 from rich.console import Console
@@ -105,7 +110,16 @@ parser.add_argument(
     action="store_true",
     help="Persist results into the default VariantRegistry cache.",
 )
+parser.add_argument(
+    "--log-level",
+    default="INFO",
+    choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+    metavar="LEVEL",
+    help="Logging verbosity (default: INFO). Use DEBUG to diagnose delegate crashes.",
+)
 args = parser.parse_args()
+
+logging.getLogger().setLevel(args.log_level)
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 

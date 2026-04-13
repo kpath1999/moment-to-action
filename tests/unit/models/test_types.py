@@ -31,20 +31,26 @@ class TestModelID:
         assert hasattr(ModelID, "YOLO_V8_TFLITE")
         assert ModelID.YOLO_V8_TFLITE.value == "yolo_v8_tflite"
 
+    def test_model_id_has_yolo_v8_tflite_int8(self) -> None:
+        """Test that ModelID enum has YOLO_V8_TFLITE_INT8."""
+        assert hasattr(ModelID, "YOLO_V8_TFLITE_INT8")
+        assert ModelID.YOLO_V8_TFLITE_INT8.value == "yolo_v8_tflite_int8"
+
     def test_model_id_has_mobileclip_s2(self) -> None:
         """Test that ModelID enum has MOBILECLIP_S2."""
         assert hasattr(ModelID, "MOBILECLIP_S2")
         assert ModelID.MOBILECLIP_S2.value == "mobileclip_s2"
 
     def test_model_id_enum_count(self) -> None:
-        """Test that ModelID has exactly five members."""
-        assert len(list(ModelID)) == 5
+        """Test that ModelID has exactly six members."""
+        assert len(list(ModelID)) == 6
 
     @pytest.mark.parametrize(
         "model_id",
         [
             ModelID.YOLO_V8,
             ModelID.YOLO_V8_TFLITE,
+            ModelID.YOLO_V8_TFLITE_INT8,
             ModelID.MOBILECLIP_S2,
             ModelID.SMOLVLM2_2_2B,
             ModelID.QWEN3_4B,
@@ -341,6 +347,12 @@ class TestModelRegistry:
         info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
         assert info.id == ModelID.MOBILECLIP_S2
 
+    def test_registry_contains_yolo_v8_tflite_int8(self) -> None:
+        """Test that MODEL_REGISTRY contains YOLO_V8_TFLITE_INT8."""
+        assert ModelID.YOLO_V8_TFLITE_INT8 in MODEL_REGISTRY
+        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8]
+        assert info.id == ModelID.YOLO_V8_TFLITE_INT8
+
     def test_registry_contains_smolvlm2_2_2b(self) -> None:
         """Test that MODEL_REGISTRY contains SMOLVLM2_2_2B."""
         assert ModelID.SMOLVLM2_2_2B in MODEL_REGISTRY
@@ -354,8 +366,8 @@ class TestModelRegistry:
         assert info.id == ModelID.QWEN3_4B
 
     def test_registry_has_exactly_four_entries(self) -> None:
-        """Test that MODEL_REGISTRY has exactly five entries."""
-        assert len(MODEL_REGISTRY) == 5
+        """Test that MODEL_REGISTRY has exactly six entries."""
+        assert len(MODEL_REGISTRY) == 6
 
     def test_yolo_v8_is_vendored(self) -> None:
         """Test that YOLO_V8 has VendoredSource."""
@@ -372,6 +384,11 @@ class TestModelRegistry:
         """Test that YOLO_V8 has correct filename."""
         info = MODEL_REGISTRY[ModelID.YOLO_V8]
         assert info.filename == "model.onnx"
+
+    def test_yolo_v8_tflite_int8_has_correct_filename(self) -> None:
+        """Test that YOLO_V8_TFLITE_INT8 has correct filename."""
+        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8]
+        assert info.filename == "model_int8.tflite"
 
     def test_mobileclip_s2_is_downloadable(self) -> None:
         """Test that MOBILECLIP_S2 has DownloadSource."""
@@ -429,7 +446,13 @@ class TestModelRegistry:
 
     @pytest.mark.parametrize(
         "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B, ModelID.QWEN3_4B],
+        [
+            ModelID.YOLO_V8,
+            ModelID.YOLO_V8_TFLITE_INT8,
+            ModelID.MOBILECLIP_S2,
+            ModelID.SMOLVLM2_2_2B,
+            ModelID.QWEN3_4B,
+        ],
     )
     def test_registry_entries_are_model_info(self, model_id: ModelID) -> None:
         """Test that all registry entries are ModelInfo instances."""
@@ -438,7 +461,13 @@ class TestModelRegistry:
 
     @pytest.mark.parametrize(
         "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B, ModelID.QWEN3_4B],
+        [
+            ModelID.YOLO_V8,
+            ModelID.YOLO_V8_TFLITE_INT8,
+            ModelID.MOBILECLIP_S2,
+            ModelID.SMOLVLM2_2_2B,
+            ModelID.QWEN3_4B,
+        ],
     )
     def test_registry_entry_id_matches_key(self, model_id: ModelID) -> None:
         """Test that registry entry ID matches its key."""

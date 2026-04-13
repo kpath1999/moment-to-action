@@ -32,6 +32,14 @@ class YOLOBenchmark(ModelBenchmark):
         return ModelID.YOLO_V8
 
     def _load_model(self, backend: ComputeBackend, manager: ModelManager) -> object:
+        if backend.active_unit == ComputeUnit.NPU and manager.is_available(
+            ModelID.YOLO_V8_TFLITE_INT8
+        ):
+            handle = backend.load_model(manager.get_path(ModelID.YOLO_V8_TFLITE_INT8))
+            details = backend.get_input_details(handle)
+            self._input_shape = tuple(int(d) for d in details[0]["shape"])
+            return handle
+
         # Prefer TFLite on accelerated units so inference routes through the
         # LiteRT/QNN delegate instead of onnxruntime CPU.
         if backend.active_unit != ComputeUnit.CPU and manager.is_available(

@@ -1,22 +1,20 @@
-"""Convert the vendored YOLOv8 ONNX model to TFLite for QCS6490 acceleration.
+"""Convert YOLO26n to TFLite for QCS6490 acceleration via ultralytics.
 
-The converted ``model.tflite`` is written alongside the existing ``model.onnx``
-in ``src/moment_to_action/models/_vendored/yolo/``.  Once present, ``YOLOStage``
-and ``YOLOBenchmark`` automatically route accelerated inference through the
-LiteRT/QNN delegate instead of onnxruntime/CPU.
+The converted ``model.tflite`` (float32) and ``model_int8.tflite`` are written
+alongside the existing ``model.onnx`` in
+``src/moment_to_action/models/_vendored/yolo/``. ``YOLOStage`` and
+``YOLOBenchmark`` use the INT8 variant on NPU and float32 variant on GPU.
 
-Requires ``onnx2tf`` (not in the default project dependencies):
+Requires ``ultralytics`` and its TFLite export dependencies (not in the default project
+dependencies).  Pass them all explicitly so uv manages the install instead of letting
+ultralytics attempt a ``pip install`` that fails on PEP 668 / externally-managed systems:
 
-    uv run --with onnx2tf python scripts/convert_yolo_to_tflite.py
-
-``onnx2tf`` inserts an input-transposition node so the TFLite model accepts
-NHWC tensors ``[1, 640, 640, 3]`` — matching TFLite's native layout — even
-though the source ONNX uses NCHW.  The stage handles the transposition
-automatically by inspecting the model's input_details at load time.
+    uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
@@ -28,63 +26,75 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _YOLO_DIR = _REPO_ROOT / "src" / "moment_to_action" / "models" / "_vendored" / "yolo"
-_ONNX_PATH = _YOLO_DIR / "model.onnx"
 _TFLITE_PATH = _YOLO_DIR / "model.tflite"
+_TFLITE_INT8_PATH = _YOLO_DIR / "model_int8.tflite"
+
+_MODEL_NAME = "yolo26n.pt"
 
 
-def _check_onnx2tf() -> None:
+def _check_ultralytics() -> None:
     try:
-        import onnx2tf  # noqa: F401
+        import ultralytics  # noqa: F401
     except ImportError:
         print(
-            "onnx2tf is not installed.\n"
-            "Run:  uv run --with onnx2tf python scripts/convert_yolo_to_tflite.py",
+            "ultralytics is not installed.\n"
+            'Run:  uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,'
+            'onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,'
+            'tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py',
             file=sys.stderr,
         )
         sys.exit(1)
 
 
-def convert() -> None:
-    """Convert model.onnx → model.tflite using onnx2tf."""
-    _check_onnx2tf()
-    import onnx2tf
-
-    if not _ONNX_PATH.exists():
-        print(f"Source model not found: {_ONNX_PATH}", file=sys.stderr)
+def _pick_tflite(candidates: list[Path], preferred_keyword: str) -> Path:
+    if not candidates:
+        msg = "ultralytics did not produce a .tflite file — check the output for errors."
+        print(msg, file=sys.stderr)
         sys.exit(1)
+    return next((f for f in candidates if preferred_keyword in f.name.lower()), candidates[0])
 
-    if _TFLITE_PATH.exists():
-        print(f"TFLite model already exists at {_TFLITE_PATH} — skipping conversion.")
-        print("Delete it first if you want to re-convert.")
+
+def convert() -> None:
+    """Export yolo26n.pt → float32/int8 TFLite variants using ultralytics."""
+    _check_ultralytics()
+    from ultralytics import YOLO
+
+    if _TFLITE_PATH.exists() and _TFLITE_INT8_PATH.exists():
+        print(
+            f"TFLite models already exist at {_TFLITE_PATH} and {_TFLITE_INT8_PATH} —"
+            " skipping conversion."
+        )
+        print("Delete them first if you want to re-convert.")
         return
 
-    print(f"Converting {_ONNX_PATH} → {_TFLITE_PATH} …")
+    print(f"Exporting {_MODEL_NAME} to float32/int8 TFLite …")
 
+    original_cwd = Path.cwd()
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        onnx2tf.convert(
-            input_onnx_file_path=str(_ONNX_PATH),
-            output_folder_path=str(tmp_path),
-            # Keep float32 — quantisation can be done separately if required.
-            output_integer_quantized_tflite=False,
-            non_verbose=True,
-        )
-        # onnx2tf writes <model_stem>_float32.tflite into the output folder.
-        candidates = sorted(tmp_path.glob("*.tflite"))
-        if not candidates:
-            print(
-                "onnx2tf did not produce a .tflite file — check the output for errors.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        # Pick the float32 variant if multiple files were emitted.
-        tflite_src = next(
-            (f for f in candidates if "float32" in f.name),
-            candidates[0],
-        )
-        shutil.copy2(tflite_src, _TFLITE_PATH)
+        os.chdir(tmp_path)
+        try:
+            model = YOLO(_MODEL_NAME)
+            float32_export_path = model.export(format="tflite")
+            int8_export_path = model.export(format="tflite", int8=True)
+        finally:
+            os.chdir(original_cwd)
+
+        candidates = sorted(tmp_path.glob("**/*.tflite"))
+
+        float32_src = Path(float32_export_path)
+        if not float32_src.exists():
+            float32_src = _pick_tflite(candidates, "float32")
+
+        int8_src = Path(int8_export_path)
+        if not int8_src.exists():
+            int8_src = _pick_tflite(candidates, "int8")
+
+        shutil.copy2(float32_src, _TFLITE_PATH)
+        shutil.copy2(int8_src, _TFLITE_INT8_PATH)
 
     print(f"Written:  {_TFLITE_PATH}  ({_TFLITE_PATH.stat().st_size // 1024} KB)")
+    print(f"Written:  {_TFLITE_INT8_PATH}  ({_TFLITE_INT8_PATH.stat().st_size // 1024} KB)")
     print("Run `uv run python scripts/benchmark_model.py --model yolo --units npu gpu` to verify.")
 
 

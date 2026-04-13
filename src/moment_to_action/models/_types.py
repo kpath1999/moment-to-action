@@ -25,6 +25,7 @@ class ModelID(Enum):
 
     YOLO_V8 = "yolo_v8"
     YOLO_V8_TFLITE = "yolo_v8_tflite"
+    YOLO_V8_TFLITE_INT8 = "yolo_v8_tflite_int8"
     MOBILECLIP_S2 = "mobileclip_s2"
     SMOLVLM2_2_2B = "smolvlm2_2_2b"
     QWEN3_4B = "qwen3_4b"

@@ -52,7 +52,9 @@ class LiteRTBackend(InferenceBackend):
 
     def __init__(self, compute_unit: ComputeUnit = ComputeUnit.CPU) -> None:
         self._unit = compute_unit
+        self._active_unit = compute_unit
         self._interpreter_cache: dict[str, object] = {}
+        self._model_unit_cache: dict[str, ComputeUnit] = {}
 
     def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load a TFLite model, caching interpreters by path.
@@ -68,12 +70,15 @@ class LiteRTBackend(InferenceBackend):
         """
         path = os.fspath(path)  # normalise to str for cache key
         if path in self._interpreter_cache:
+            self._active_unit = self._model_unit_cache[path]
             logger.debug("Model cache hit: %s", path)
             return self._interpreter_cache[path]
 
-        interp = self._load_interpreter(path)
+        interp, actual_unit = self._load_interpreter(path)
         self._interpreter_cache[path] = interp
-        logger.info("Loaded %s on %s", path, self._unit.name)
+        self._model_unit_cache[path] = actual_unit
+        self._active_unit = actual_unit
+        logger.info("Loaded %s on %s", path, actual_unit.name)
         return interp
 
     def run(self, handle: object, inputs: ModelInput) -> list[np.ndarray]:
@@ -108,8 +113,8 @@ class LiteRTBackend(InferenceBackend):
         return cast("_Interpreter", handle).get_output_details()
 
     def get_supported_unit(self) -> ComputeUnit:
-        """Return the compute unit this backend targets."""
-        return self._unit
+        """Return the compute unit currently active for this backend."""
+        return self._active_unit
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -123,7 +128,7 @@ class LiteRTBackend(InferenceBackend):
         """
         return []
 
-    def _load_interpreter(self, model_path: str) -> object:
+    def _load_interpreter(self, model_path: str) -> tuple[object, ComputeUnit]:
         """Load and allocate a TFLite interpreter.
 
         Calls :meth:`_get_delegates` internally to obtain the right delegate
@@ -135,22 +140,40 @@ class LiteRTBackend(InferenceBackend):
             model_path: Filesystem path to the ``.tflite`` model.
 
         Returns:
-            An allocated interpreter handle.
+            A tuple containing the allocated interpreter handle and the
+            compute unit effectively used by the runtime.
 
         Raises:
             RuntimeError: If a delegate fails to load or apply to the model.
         """
+        logger.debug(
+            "[load_interpreter] requesting delegates for %s on %s",
+            model_path,
+            self._unit.name,
+        )
         delegates = self._get_delegates()
+        logger.debug(
+            "[load_interpreter] got %d delegate(s) for %s",
+            len(delegates),
+            model_path,
+        )
+
+        logger.debug("[load_interpreter] constructing Interpreter for %s", model_path)
         try:
             interp = _Interpreter(model_path=model_path, experimental_delegates=delegates)
         except RuntimeError as e:  # pragma: no cover
             if delegates:
-                msg = f"Delegate failed: {e}"
+                msg = f"Delegate failed during Interpreter construction: {e}"
                 raise RuntimeError(msg) from e
             raise
+        logger.debug("[load_interpreter] Interpreter constructed for %s", model_path)
 
+        logger.debug("[load_interpreter] calling allocate_tensors() for %s", model_path)
         interp.allocate_tensors()
-        return interp
+        logger.debug("[load_interpreter] allocate_tensors() complete for %s", model_path)
+
+        actual_unit = self._unit if delegates else ComputeUnit.CPU
+        return interp, actual_unit
 
     @staticmethod
     def _set_inputs(interp: _Interpreter, inputs: ModelInput) -> None:

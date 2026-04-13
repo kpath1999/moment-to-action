@@ -161,6 +161,7 @@ class TestQCS6490Backend:
 
             assert isinstance(handle, _ModelHandle)
             assert handle.backend == mock_litert_cpu
+            assert backend.get_supported_unit() == ComputeUnit.CPU
 
     def test_qcs6490_load_onnx_routes_correctly(self) -> None:
         """Test QCS6490Backend.load_model routes .onnx to ONNX."""
@@ -411,6 +412,10 @@ class TestQCS6490Backend:
                 "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490Backend._try_make_accel_backend",
                 return_value=None,
             ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490Backend._try_make_onnx_accel_backend",
+                return_value=None,
+            ),
         ):
             backend = QCS6490Backend(preferred_unit=ComputeUnit.NPU)
             unit = backend.get_supported_unit()
@@ -432,9 +437,15 @@ class TestQCS6490LiteRTBackend:
     def test_get_delegates_npu_unit_loads_qnn_delegate(self) -> None:
         """Test _get_delegates loads QNN delegate for NPU unit."""
         mock_delegate = MagicMock()
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._litert._load_delegate",
-            return_value=mock_delegate,
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
+                return_value=None,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._load_delegate",
+                return_value=mock_delegate,
+            ),
         ):
             backend = QCS6490LiteRTBackend(compute_unit=ComputeUnit.NPU)
             delegates = backend._get_delegates()
@@ -444,25 +455,56 @@ class TestQCS6490LiteRTBackend:
 
     def test_get_delegates_npu_unit_raises_on_missing_delegate(self) -> None:
         """Test _get_delegates raises RuntimeError if QNN delegate missing."""
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._litert._load_delegate",
-            side_effect=FileNotFoundError("Delegate not found"),
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
+                return_value="native crash — SIGSEGV (exit -11)",
+            ),
         ):
             with pytest.raises(RuntimeError, match="NPU delegate unavailable"):
                 QCS6490LiteRTBackend(compute_unit=ComputeUnit.NPU)._get_delegates()
 
-    def test_get_delegates_gpu_unit_returns_empty_list(self) -> None:
-        """Test _get_delegates returns empty list for GPU unit (not yet implemented)."""
-        backend = QCS6490LiteRTBackend(compute_unit=ComputeUnit.GPU)
-        delegates = backend._get_delegates()
+    def test_get_delegates_gpu_unit_loads_qnn_delegate(self) -> None:
+        """Test _get_delegates loads QNN delegate for GPU unit."""
+        mock_delegate = MagicMock()
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
+                return_value=None,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._load_delegate",
+                return_value=mock_delegate,
+            ),
+        ):
+            backend = QCS6490LiteRTBackend(compute_unit=ComputeUnit.GPU)
+            delegates = backend._get_delegates()
 
-        assert delegates == []
+            assert len(delegates) == 1
+            assert delegates[0] == mock_delegate
+
+    def test_get_delegates_gpu_unit_raises_on_missing_delegate(self) -> None:
+        """Test _get_delegates raises RuntimeError if GPU delegate load fails."""
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
+                return_value="native crash — SIGSEGV (exit -11)",
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="GPU delegate unavailable"):
+                QCS6490LiteRTBackend(compute_unit=ComputeUnit.GPU)._get_delegates()
 
     def test_get_delegates_npu_with_load_delegate_exception(self) -> None:
         """Test _get_delegates raises RuntimeError on any delegate load exception."""
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._litert._load_delegate",
-            side_effect=RuntimeError("Delegate load failed"),
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
+                return_value=None,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._load_delegate",
+                side_effect=RuntimeError("Delegate load failed"),
+            ),
         ):
             with pytest.raises(RuntimeError, match="NPU delegate unavailable"):
                 QCS6490LiteRTBackend(compute_unit=ComputeUnit.NPU)._get_delegates()
@@ -548,49 +590,38 @@ class TestQCS6490ResourceMonitor:
 
     def test_qcs6490_power_monitor_hw_available_reads_sensor(self) -> None:
         """Test ResourceMonitor reads hw sensor when sysfs path exists."""
-        mock_sysfs = MagicMock()
-        mock_sysfs.exists.return_value = True
         mock_power_path = MagicMock()
-        mock_power_path.read_text.return_value = "5000000\n"
-
-        with (
-            patch("moment_to_action.hardware._platforms.qcs6490._resources.Path") as mock_path,
-            patch("psutil.cpu_percent", return_value=50.0),
+        with patch.object(
+            QCS6490ResourceMonitor,
+            "_discover_power_now_path",
+            return_value=mock_power_path,
         ):
-            mock_path.return_value = mock_sysfs
             monitor = QCS6490ResourceMonitor()
-            assert monitor._hw_available is True
+        assert monitor._hw_available is True
 
     def test_qcs6490_power_monitor_hw_unavailable_estimates(self) -> None:
         """Test ResourceMonitor uses estimates when sysfs unavailable."""
-        mock_sysfs = MagicMock()
-        mock_sysfs.exists.return_value = False
-
-        with patch("moment_to_action.hardware._platforms.qcs6490._resources.Path") as mock_path:
-            mock_path.return_value = mock_sysfs
+        with patch.object(
+            QCS6490ResourceMonitor,
+            "_discover_power_now_path",
+            return_value=None,
+        ):
             monitor = QCS6490ResourceMonitor()
-            assert monitor._hw_available is False
+        assert monitor._hw_available is False
 
     def test_qcs6490_power_monitor_sample_hw_available(self) -> None:
         """Test sample returns PowerSample from hardware sensor."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = True
         mock_power_path = MagicMock()
         mock_power_path.read_text.return_value = "5000000\n"
 
         with (
-            patch("moment_to_action.hardware._platforms.qcs6490._resources.Path") as mock_path_cls,
+            patch.object(
+                QCS6490ResourceMonitor,
+                "_discover_power_now_path",
+                return_value=mock_power_path,
+            ),
             patch("psutil.cpu_percent", return_value=50.0),
         ):
-
-            def path_side_effect(path_str: str) -> MagicMock:
-                if "battery/power_now" in path_str:
-                    return mock_power_path
-                # Default for sysfs check in __init__
-                return mock_sysfs_root
-
-            mock_path_cls.side_effect = path_side_effect
-
             monitor = QCS6490ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
@@ -601,13 +632,11 @@ class TestQCS6490ResourceMonitor:
 
     def test_qcs6490_power_monitor_sample_hw_unavailable_fallback(self) -> None:
         """Test sample falls back to estimate when sysfs unavailable."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = False
-
         with (
-            patch(
-                "moment_to_action.hardware._platforms.qcs6490._resources.Path",
-                return_value=mock_sysfs_root,
+            patch.object(
+                QCS6490ResourceMonitor,
+                "_discover_power_now_path",
+                return_value=None,
             ),
             patch("psutil.cpu_percent", return_value=25.0),
         ):
@@ -621,24 +650,17 @@ class TestQCS6490ResourceMonitor:
 
     def test_qcs6490_power_monitor_sample_hw_read_error_fallback(self) -> None:
         """Test sample falls back to estimate on hardware read error."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = True
         mock_power_path = MagicMock()
         mock_power_path.read_text.side_effect = FileNotFoundError()
 
         with (
-            patch("moment_to_action.hardware._platforms.qcs6490._resources.Path") as mock_path_cls,
+            patch.object(
+                QCS6490ResourceMonitor,
+                "_discover_power_now_path",
+                return_value=mock_power_path,
+            ),
             patch("psutil.cpu_percent", return_value=30.0),
         ):
-
-            def path_side_effect(path_str: str) -> MagicMock:
-                if "battery/power_now" in path_str:
-                    return mock_power_path
-                # Default for sysfs check in __init__
-                return mock_sysfs_root
-
-            mock_path_cls.side_effect = path_side_effect
-
             monitor = QCS6490ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
@@ -703,12 +725,10 @@ class TestQCS6490ResourceMonitor:
 
     def test_qcs6490_power_monitor_multiple_samples_npu(self) -> None:
         """Test ResourceMonitor returns consistent samples for NPU."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = False
-
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._resources.Path",
-            return_value=mock_sysfs_root,
+        with patch.object(
+            QCS6490ResourceMonitor,
+            "_discover_power_now_path",
+            return_value=None,
         ):
             monitor = QCS6490ResourceMonitor()
             sample1 = monitor.sample(ComputeUnit.NPU)
@@ -721,12 +741,10 @@ class TestQCS6490ResourceMonitor:
 
     def test_qcs6490_power_monitor_multiple_samples_gpu(self) -> None:
         """Test ResourceMonitor returns consistent samples for GPU."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = False
-
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._resources.Path",
-            return_value=mock_sysfs_root,
+        with patch.object(
+            QCS6490ResourceMonitor,
+            "_discover_power_now_path",
+            return_value=None,
         ):
             monitor = QCS6490ResourceMonitor()
             sample1 = monitor.sample(ComputeUnit.GPU)

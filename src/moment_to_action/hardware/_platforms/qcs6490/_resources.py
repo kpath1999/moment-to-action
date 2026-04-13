@@ -50,12 +50,36 @@ class QCS6490ResourceMonitor(ResourceMonitor):
     }
 
     def __init__(self) -> None:
-        self._hw_available = Path(self.SYSFS_POWER_PATH).exists()
+        self._power_now_path = self._discover_power_now_path()
+        self._hw_available = self._power_now_path is not None
 
-        if self._hw_available:
-            logger.info("SoC power info available at %s", self.SYSFS_POWER_PATH)
+        if self._power_now_path is not None:
+            logger.info("SoC power info available at %s", self._power_now_path)
         else:
             logger.warning("SoC power info not available - using utilization-based estimates")
+
+    def _discover_power_now_path(self) -> Path | None:
+        root = Path(self.SYSFS_POWER_PATH)
+        if not root.exists():
+            return None
+
+        preferred = (
+            root / "qcom-battmgr-bat" / "power_now",
+            root / "battery" / "power_now",
+        )
+        for candidate in preferred:
+            if candidate.exists():
+                return candidate
+
+        try:
+            for supply in sorted(root.iterdir()):
+                candidate = supply / "power_now"
+                if candidate.exists():
+                    return candidate
+        except OSError:
+            return None
+
+        return None
 
     def sample(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         """Take a resource measurement for *unit*.
@@ -77,7 +101,10 @@ class QCS6490ResourceMonitor(ResourceMonitor):
         # not per-unit.  We pass `unit` through so the caller knows which
         # unit was active when the sample was taken.
         try:
-            power_uw = int(Path(f"{self.SYSFS_POWER_PATH}/battery/power_now").read_text().strip())
+            if self._power_now_path is None:
+                return self._estimate(unit)
+
+            power_uw = int(self._power_now_path.read_text().strip())
             return ComputeUnitUsageSample(
                 timestamp=datetime.now(tz=UTC),
                 device=unit,

@@ -776,8 +776,8 @@ class TestYOLOTFLiteIntegration:
         assert len(result) == 1
         assert result[0].confidence == pytest.approx(0.8)
 
-    def test_tflite_model_preferred_when_unit_is_npu(self) -> None:
-        """YOLOStage loads YOLO_V8_TFLITE when backend is NPU and TFLite is available."""
+    def test_tflite_int8_model_preferred_when_unit_is_npu(self) -> None:
+        """YOLOStage loads YOLO_V8_TFLITE_INT8 when backend is NPU and available."""
 
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
@@ -786,16 +786,16 @@ class TestYOLOTFLiteIntegration:
 
         manager = mock.MagicMock(spec=ModelManager)
         manager.is_available.return_value = True
-        tflite_path = Path("/fake/model.tflite")
+        tflite_path = Path("/fake/model_int8.tflite")
         manager.get_path.return_value = tflite_path
 
         YOLOStage(backend=backend, manager=manager)
 
-        manager.is_available.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
-        manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
+        manager.is_available.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8)
+        manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8)
 
-    def test_onnx_model_used_when_tflite_unavailable(self) -> None:
-        """YOLOStage falls back to YOLO_V8 when TFLite is unavailable."""
+    def test_onnx_model_used_when_npu_int8_unavailable(self) -> None:
+        """YOLOStage falls back to YOLO_V8 when NPU INT8 TFLite is unavailable."""
 
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
@@ -809,5 +809,11 @@ class TestYOLOTFLiteIntegration:
 
         YOLOStage(backend=backend, manager=manager)
 
+        manager.is_available.assert_has_calls(
+            [
+                mock.call(ModelID.YOLO_V8_TFLITE_INT8),
+                mock.call(ModelID.YOLO_V8_TFLITE),
+            ]
+        )
         manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
 

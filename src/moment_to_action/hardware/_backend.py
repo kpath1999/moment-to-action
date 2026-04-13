@@ -138,13 +138,17 @@ class ComputeBackend:
         self._backend: InferenceBackend = _make_backend(preferred_unit)
 
         logger.info(
-            "ComputeBackend: preferred=%s active=%s", preferred_unit.name, self.active_unit.name
+            "ComputeBackend: preferred=%s initial=%s",
+            preferred_unit.name,
+            self.active_unit.name,
         )
 
-        # Log a warning if we didn't get our prefered backend
+        # Log a warning if the requested unit is unavailable during
+        # backend construction. The effective unit can still change per
+        # model if delegate application fails at load time.
         if self.active_unit != self._preferred_unit:
             logger.warning(
-                "Preferred compute backend unit %s not available, falling back to %s",
+                "Preferred compute backend unit %s unavailable at init, starting on %s",
                 preferred_unit.name,
                 self.active_unit.name,
             )
