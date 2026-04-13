@@ -32,12 +32,12 @@ class TestModelID:
         assert ModelID.MOBILECLIP_S2.value == "mobileclip_s2"
 
     def test_model_id_enum_count(self) -> None:
-        """Test that ModelID has exactly three members."""
-        assert len(list(ModelID)) == 3
+        """Test that ModelID has exactly four members."""
+        assert len(list(ModelID)) == 4
 
     @pytest.mark.parametrize(
         "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
+        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B, ModelID.QWEN3_4B],
     )
     def test_model_id_has_value(self, model_id: ModelID) -> None:
         """Test that each ModelID has a value."""
@@ -48,6 +48,11 @@ class TestModelID:
         """Test that ModelID enum has SMOLVLM2_2_2B."""
         assert hasattr(ModelID, "SMOLVLM2_2_2B")
         assert ModelID.SMOLVLM2_2_2B.value == "smolvlm2_2_2b"
+
+    def test_model_id_has_qwen3_4b(self) -> None:
+        """Test that ModelID enum has QWEN3_4B."""
+        assert hasattr(ModelID, "QWEN3_4B")
+        assert ModelID.QWEN3_4B.value == "qwen3_4b"
 
 
 @pytest.mark.unit
@@ -217,6 +222,16 @@ class TestModelInfo:
         )
         assert isinstance(info.source, TransformersSource)
 
+    def test_model_info_with_qwen_transformers_source(self) -> None:
+        """Test ModelInfo with Qwen3 TransformersSource."""
+        source = TransformersSource(hf_repo_id="Qwen/Qwen3-4B-Instruct-2507")
+        info = ModelInfo(
+            id=ModelID.QWEN3_4B,
+            filename="",
+            source=source,
+        )
+        assert isinstance(info.source, TransformersSource)
+
 
 @pytest.mark.unit
 class TestTransformersSource:
@@ -321,9 +336,15 @@ class TestModelRegistry:
         info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
         assert info.id == ModelID.SMOLVLM2_2_2B
 
-    def test_registry_has_exactly_two_entries(self) -> None:
-        """Test that MODEL_REGISTRY has exactly three entries."""
-        assert len(MODEL_REGISTRY) == 3
+    def test_registry_contains_qwen3_4b(self) -> None:
+        """Test that MODEL_REGISTRY contains QWEN3_4B."""
+        assert ModelID.QWEN3_4B in MODEL_REGISTRY
+        info = MODEL_REGISTRY[ModelID.QWEN3_4B]
+        assert info.id == ModelID.QWEN3_4B
+
+    def test_registry_has_exactly_four_entries(self) -> None:
+        """Test that MODEL_REGISTRY has exactly four entries."""
+        assert len(MODEL_REGISTRY) == 4
 
     def test_yolo_v8_is_vendored(self) -> None:
         """Test that YOLO_V8 has VendoredSource."""
@@ -379,9 +400,25 @@ class TestModelRegistry:
         info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
         assert info.filename == "__UNUSED__"
 
+    def test_qwen3_4b_is_transformers_source(self) -> None:
+        """Test that QWEN3_4B has TransformersSource."""
+        info = MODEL_REGISTRY[ModelID.QWEN3_4B]
+        assert isinstance(info.source, TransformersSource)
+
+    def test_qwen3_4b_has_correct_hf_repo(self) -> None:
+        """Test that QWEN3_4B has correct HF repo."""
+        info = MODEL_REGISTRY[ModelID.QWEN3_4B]
+        assert isinstance(info.source, TransformersSource)
+        assert info.source.hf_repo_id == "Qwen/Qwen3-4B-Instruct-2507"
+
+    def test_qwen3_4b_has_unused_filename_sentinel(self) -> None:
+        """Test that QWEN3_4B has '__UNUSED__' filename (directory-based source)."""
+        info = MODEL_REGISTRY[ModelID.QWEN3_4B]
+        assert info.filename == "__UNUSED__"
+
     @pytest.mark.parametrize(
         "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
+        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B, ModelID.QWEN3_4B],
     )
     def test_registry_entries_are_model_info(self, model_id: ModelID) -> None:
         """Test that all registry entries are ModelInfo instances."""
@@ -390,7 +427,7 @@ class TestModelRegistry:
 
     @pytest.mark.parametrize(
         "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
+        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B, ModelID.QWEN3_4B],
     )
     def test_registry_entry_id_matches_key(self, model_id: ModelID) -> None:
         """Test that registry entry ID matches its key."""

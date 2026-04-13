@@ -26,4 +26,9 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         filename="__UNUSED__",
         source=TransformersSource(hf_repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct"),
     ),
+    ModelID.QWEN3_4B: ModelInfo(
+        id=ModelID.QWEN3_4B,
+        filename="__UNUSED__",
+        source=TransformersSource(hf_repo_id="Qwen/Qwen3-4B-Instruct-2507"),
+    ),
 }

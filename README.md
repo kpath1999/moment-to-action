@@ -63,3 +63,74 @@ uv run python scripts/run_mobileclip_pipeline.py \
   --image images/fighting.jpg \
   --device cpu
 ```
+
+## Benchmark Module
+
+The repository now includes an INFaaS-style benchmark subsystem under
+`moment_to_action.benchmark` for profiling model variants across compute units
+and storing queryable variant profiles.
+
+### What it provides
+
+- `BenchmarkHarness` to run one or many benchmarks.
+- `ModelBenchmark` base class with a template `profile()` flow.
+- Built-in benchmarks for:
+  - `YOLOBenchmark`
+  - `MobileCLIPBenchmark`
+  - `SmolVLM2Benchmark`
+  - `Qwen3Benchmark`
+- `VariantRegistry` for persistent JSON storage and querying.
+
+### Quick usage
+
+```python
+from moment_to_action.benchmark import (
+    BenchmarkConfig,
+    BenchmarkHarness,
+    MobileCLIPBenchmark,
+    Qwen3Benchmark,
+    SmolVLM2Benchmark,
+    VariantRegistry,
+    YOLOBenchmark,
+)
+from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.models import ModelID, ModelManager
+
+backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
+manager = ModelManager()
+registry = VariantRegistry()
+
+harness = BenchmarkHarness(backend=backend, manager=manager, registry=registry)
+harness.register_benchmark(YOLOBenchmark())
+harness.register_benchmark(MobileCLIPBenchmark())
+harness.register_benchmark(SmolVLM2Benchmark())
+harness.register_benchmark(Qwen3Benchmark())
+
+config = BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1])
+profiles = harness.run_all(config=config)
+
+# Query and persist
+fastest_yolo = registry.best_variant(ModelID.YOLO_V8, objective="latency")
+registry.save()  # saves to the default cache location
+```
+
+### Testing the benchmark module
+
+Use the existing task helpers:
+
+```bash
+just test-unit
+just lint
+```
+
+For benchmark-focused tests only:
+
+```bash
+uv run pytest tests/unit/benchmark
+```
+
+Notes:
+- Unit tests for the benchmark module mock backends and model loaders, so they
+  do not require real hardware accelerators or large model downloads.
+- Real-world latency/accuracy numbers should be collected in your own runtime
+  environment with the target hardware.
