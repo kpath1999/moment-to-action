@@ -46,7 +46,6 @@ class Stage(ABC):
             metrics:   Metrics collector for recording stage latency.
                       If not provided, a default NullMetricsCollector is used.
         """
-<<<<<<< HEAD
         # Ensure we always have a metrics collector to avoid null checks in stage code
         #
         # This is done here so that stages can be used standalone, outside of a pipeline, if desired
@@ -70,9 +69,7 @@ class Stage(ABC):
         ##DIFF
         # Log the stage execution and latency
         #calculate additional memory used by stage (memory used by stage)
-=======
         # calculate additional memory used by stage (memory used by stage)
->>>>>>> ec2df30 (style: fix formatting with ruff2)
         mem_before = _rss_mb()
 
         t = time.perf_counter()

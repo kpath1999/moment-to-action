@@ -40,7 +40,7 @@ class QCS6490ResourceMonitor(ResourceMonitor):
     These are approximate mid-load figures, not TDP or peak values.
     """
 
-    SYSFS_POWER_PATH: ClassVar[str] = "/sys/class/power_supply"
+    SYSFS_POWER_PATH: ClassVar[str] = "/sys/class/power_supply/qcom-battmgr-bat"
 
     _ESTIMATES: ClassVar[dict[ComputeUnit, float]] = {
         ComputeUnit.NPU: 500.0,
@@ -77,7 +77,7 @@ class QCS6490ResourceMonitor(ResourceMonitor):
         # not per-unit.  We pass `unit` through so the caller knows which
         # unit was active when the sample was taken.
         try:
-            power_uw = int(Path(f"{self.SYSFS_POWER_PATH}/battery/power_now").read_text().strip())
+            power_uw = int(Path(f"{self.SYSFS_POWER_PATH}/power_now").read_text().strip())
             return ComputeUnitUsageSample(
                 timestamp=datetime.now(tz=UTC),
                 device=unit,

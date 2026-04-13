@@ -24,6 +24,7 @@ class ModelID(Enum):
     """Unique identifier for each model in the registry."""
 
     YOLO_V8 = "yolo_v8"
+    YOLO_V8_TFLITE = "yolo_v8_tflite"
     MOBILECLIP_S2 = "mobileclip_s2"
     SMOLVLM2_2_2B = "smolvlm2_2_2b"
     QWEN_2_5 = "qwen"

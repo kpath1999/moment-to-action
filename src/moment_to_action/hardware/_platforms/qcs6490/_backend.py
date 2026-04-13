@@ -100,7 +100,8 @@ class QCS6490Backend(InferenceBackend):
 
         # ONNX backend is always available (falls back to ImportError at load
         # time if onnxruntime is not installed).
-        self._onnx_backend: QCS6490ONNXBackend = QCS6490ONNXBackend()
+        #asoma7: Adding the preferred device so ONNXBackend can see that info (npu/cpu)
+        self._onnx_backend: QCS6490ONNXBackend = QCS6490ONNXBackend(device=self._preferred_unit)
 
         logger.info(
             "QCS6490Backend: preferred=%s accel=%s",
@@ -178,6 +179,7 @@ class QCS6490Backend(InferenceBackend):
             List of output tensors, one per model output slot.
         """
         h = cast("_ModelHandle", handle)
+        print(type(h.backend))
         return h.backend.run(h.raw, inputs)
 
     def get_input_details(self, handle: object) -> list[dict]:

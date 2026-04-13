@@ -47,6 +47,8 @@ parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshol
 args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
+#asoma7
+#device = ComputeUnit.NPU
 compute_backend = ComputeBackend(preferred_unit=device)
 metrics = MetricsCollector(
     compute_backend=compute_backend,

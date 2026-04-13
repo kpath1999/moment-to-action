@@ -54,13 +54,15 @@ class QCS6490LiteRTBackend(LiteRTBackend):
         # decide whether to retry on CPU.
         if self._unit == ComputeUnit.NPU:
             try:
-                qnn = _load_delegate(_QNN_DELEGATE_PATH)
+                #asoma7, testing, revert, TODO
+                #qnn = _load_delegate(_QNN_DELEGATE_PATH)
+                qnn_delegate = _load_delegate("libQnnTFLiteDelegate.so", options={"backend_type": "htp"})
             except Exception as e:
                 msg = f"NPU delegate unavailable: {e}"
                 raise RuntimeError(msg) from e
             else:
                 logger.info("QNN delegate loaded → Hexagon HTP/NPU")
-                return [qnn]
+                return [qnn_delegate]
 
         # GPU and other units: no delegate implemented yet.
         return []

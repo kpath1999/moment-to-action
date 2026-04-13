@@ -27,8 +27,9 @@ class ONNXBackend(InferenceBackend):
     to avoid redundant I/O on repeated ``load_model`` calls.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, device: str = "cpu") -> None:
         self._session_cache: dict[str, object] = {}
+        self.device = device
 
     def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load an ONNX model, caching sessions by path.
@@ -44,7 +45,28 @@ class ONNXBackend(InferenceBackend):
             logger.debug("ONNX cache hit: %s", path)
             return self._session_cache[path]
 
-        session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+        #session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+
+        #List of available providers
+
+        if self.device == "NPU":
+            providers = ["QNNExecutionProvider"]
+            provider_options = [{"backend_path": "libQnnHtp.so"}]
+        else:
+            providers = ["CPUExecutionProvider"]
+            provider_options = [{}]
+
+        so = ort.SessionOptions()
+        session = ort.InferenceSession(path,
+                                       #providers=["QNNExecutionProvider", "CPUExecutionProvider"],
+                                       providers=providers,
+                                       #asoma7, choose one argument
+                                       #provider_options=[{"backend_type": "htp"}, {}],
+                                       #provider_options=[{"backend_path": "libQnnHtp.so"}, {}],
+                                       provider_options=provider_options,
+                                       )
+        actual_providers = session.get_providers()
+        print(f"Using providers: {actual_providers}") # Show which providers are actually loaded
         self._session_cache[path] = session
         logger.info("Loaded %s via onnxruntime", path)
         return session
