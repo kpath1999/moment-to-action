@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.messages.video import (
     BoundingBox,
     DetectionMessage,
@@ -32,6 +33,8 @@ class TestYOLOParseOutputs:
         """Create a mock ComputeBackend."""
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.CPU
+        backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
         return backend
 
     @pytest.fixture
@@ -112,16 +115,18 @@ class TestYOLOParseOutputs:
     def test_parse_outputs_insufficient_outputs(
         self, mock_backend: MagicMock, mock_manager: MagicMock
     ) -> None:
-        """Test with fewer than 3 outputs returns empty list."""
+        """Test with fewer than 3 outputs (but not 1) returns empty list."""
         stage = YOLOStage(
             backend=mock_backend,
             manager=mock_manager,
             confidence_threshold=0.5,
         )
 
-        outputs = [np.array([[[100, 100, 200, 200]]])]  # Only 1 output instead of 3
-
-        result = stage._parse_outputs(outputs, (480, 640))
+        # Two outputs: falls through to the <3 guard (not the raw-predictions branch)
+        result = stage._parse_outputs(
+            [np.zeros((1, 4, 4), dtype=np.float32), np.zeros((1, 4), dtype=np.float32)],
+            (480, 640),
+        )
 
         assert len(result) == 0
 
@@ -162,6 +167,8 @@ class TestYOLONMS:
         """Create a mock ComputeBackend."""
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.CPU
+        backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
         return backend
 
     @pytest.fixture
@@ -291,6 +298,8 @@ class TestYOLOConfidenceFiltering:
         """Create a mock ComputeBackend."""
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.CPU
+        backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
         return backend
 
     @pytest.fixture
@@ -388,6 +397,8 @@ class TestYOLOLabels:
         """Create a mock ComputeBackend."""
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.CPU
+        backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
         return backend
 
     @pytest.fixture
@@ -492,6 +503,8 @@ class TestYOLOStageE2E:
         """Create a mock ComputeBackend."""
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.CPU
+        backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
         return backend
 
     @pytest.fixture
@@ -641,3 +654,160 @@ class TestYOLOStageE2E:
         assert box.confidence == pytest.approx(0.95)
         assert box.class_id == 0
         assert box.label == "person"
+
+
+@pytest.mark.unit
+class TestYOLOTFLiteIntegration:
+    """Tests for TFLite-specific YOLOStage behaviour (NHWC input, raw-predictions output)."""
+
+    def _make_stage_nhwc(self) -> YOLOStage:
+        """Build a YOLOStage whose mock model reports NHWC input shape."""
+
+        backend = MagicMock()
+        backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.NPU
+        # TFLite model input: [1, 640, 640, 3] (NHWC)
+        backend.get_input_details.return_value = [{"shape": [1, 640, 640, 3], "name": "input"}]
+
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.is_available.return_value = True
+        manager.get_path.return_value = Path("/fake/model.tflite")
+
+        return YOLOStage(backend=backend, manager=manager, confidence_threshold=0.5)
+
+    def _make_stage_nchw(self) -> YOLOStage:
+        """Build a YOLOStage whose mock model reports NCHW input shape."""
+
+        backend = MagicMock()
+        backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.CPU
+        # ONNX model input: [1, 3, 640, 640] (NCHW)
+        backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
+
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.get_path.return_value = Path("/fake/model.onnx")
+
+        return YOLOStage(backend=backend, manager=manager, confidence_threshold=0.5)
+
+    def test_nhwc_flag_set_for_tflite_input_shape(self) -> None:
+        """YOLOStage._nhwc is True when model input is [1, H, W, C]."""
+        stage = self._make_stage_nhwc()
+        assert stage._nhwc is True
+
+    def test_nhwc_flag_false_for_onnx_input_shape(self) -> None:
+        """YOLOStage._nhwc is False when model input is [1, C, H, W]."""
+        stage = self._make_stage_nchw()
+        assert stage._nhwc is False
+
+    def test_process_transposes_tensor_for_nhwc_model(self) -> None:
+        """_process sends [1, H, W, C] to the backend when _nhwc is True."""
+        stage = self._make_stage_nhwc()
+        stage._backend.run.return_value = [
+            np.zeros((1, 0, 4), dtype=np.float32),
+            np.zeros((1, 0), dtype=np.float32),
+            np.zeros((1, 0), dtype=np.uint8),
+        ]
+
+        rng = np.random.default_rng(0)
+        tensor = rng.standard_normal((1, 3, 640, 640)).astype(np.float32)
+        msg = FrameTensorMessage(tensor=tensor, timestamp=0.0, original_size=(640, 640))
+        stage.process(msg)
+
+        called_tensor = stage._backend.run.call_args[0][1]
+        assert called_tensor.shape == (1, 640, 640, 3)
+
+    def test_process_does_not_transpose_for_nchw_model(self) -> None:
+        """_process sends [1, C, H, W] unchanged when _nhwc is False."""
+        stage = self._make_stage_nchw()
+        stage._backend.run.return_value = [
+            np.zeros((1, 0, 4), dtype=np.float32),
+            np.zeros((1, 0), dtype=np.float32),
+            np.zeros((1, 0), dtype=np.uint8),
+        ]
+
+        rng = np.random.default_rng(0)
+        tensor = rng.standard_normal((1, 3, 640, 640)).astype(np.float32)
+        msg = FrameTensorMessage(tensor=tensor, timestamp=0.0, original_size=(640, 640))
+        stage.process(msg)
+
+        called_tensor = stage._backend.run.call_args[0][1]
+        assert called_tensor.shape == (1, 3, 640, 640)
+
+    def test_parse_outputs_raw_predictions_single_tensor(self) -> None:
+        """_parse_outputs handles the 1-tensor [1, 84, N] raw format."""
+        stage = self._make_stage_nchw()
+
+        n_anchors = 8400
+        raw = np.zeros((1, 84, n_anchors), dtype=np.float32)
+        # Place one strong detection at anchor 0: box cx=320,cy=320,w=200,h=200, class 0 = 0.9
+        raw[0, 0, 0] = 320.0  # cx
+        raw[0, 1, 0] = 320.0  # cy
+        raw[0, 2, 0] = 200.0  # w
+        raw[0, 3, 0] = 200.0  # h
+        raw[0, 4, 0] = 0.9   # class 0 (person) score
+
+        result = stage._parse_outputs([raw], (640, 640))
+
+        assert len(result) == 1
+        assert result[0].label == "person"
+        assert result[0].confidence == pytest.approx(0.9)
+        # cx=320,w=200 → x1=220, x2=420 (scaled 1:1 for 640×640 → 640×640)
+        assert result[0].x1 == pytest.approx(220.0)
+        assert result[0].x2 == pytest.approx(420.0)
+
+    def test_parse_outputs_raw_predictions_wrong_shape_returns_empty(self) -> None:
+        """_parse_outputs returns [] when single-output tensor has wrong column count."""
+        stage = self._make_stage_nchw()
+        # Shape [1, 1, 4] — looks like 1-tensor but only 4 columns, not 84
+        malformed = np.array([[[100, 100, 200, 200]]], dtype=np.float32)
+        result = stage._parse_outputs([malformed], (640, 640))
+        assert result == []
+
+    def test_parse_outputs_delegates_to_3tensor_for_three_outputs(self) -> None:
+        """_parse_outputs still handles the original 3-tensor ONNX format."""
+        stage = self._make_stage_nchw()
+
+        boxes = np.array([[[100, 100, 200, 200]]], dtype=np.float32)
+        scores = np.array([[0.8]], dtype=np.float32)
+        class_ids = np.array([[0]], dtype=np.uint8)
+
+        result = stage._parse_outputs([boxes, scores, class_ids], (640, 640))
+
+        assert len(result) == 1
+        assert result[0].confidence == pytest.approx(0.8)
+
+    def test_tflite_model_preferred_when_unit_is_npu(self) -> None:
+        """YOLOStage loads YOLO_V8_TFLITE when backend is NPU and TFLite is available."""
+
+        backend = MagicMock()
+        backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.NPU
+        backend.get_input_details.return_value = [{"shape": [1, 640, 640, 3], "name": "input"}]
+
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.is_available.return_value = True
+        tflite_path = Path("/fake/model.tflite")
+        manager.get_path.return_value = tflite_path
+
+        YOLOStage(backend=backend, manager=manager)
+
+        manager.is_available.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
+        manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
+
+    def test_onnx_model_used_when_tflite_unavailable(self) -> None:
+        """YOLOStage falls back to YOLO_V8 when TFLite is unavailable."""
+
+        backend = MagicMock()
+        backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.NPU
+        backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
+
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.is_available.return_value = False
+        onnx_path = Path("/fake/model.onnx")
+        manager.get_path.return_value = onnx_path
+
+        YOLOStage(backend=backend, manager=manager)
+
+        manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
+

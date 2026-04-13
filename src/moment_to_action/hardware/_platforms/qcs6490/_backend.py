@@ -73,7 +73,8 @@ class QCS6490Backend(InferenceBackend):
 
     - ``.tflite`` → ``_accel_backend`` (NPU/GPU, optional) with automatic
       fallback to ``_cpu_backend`` (always present).
-    - ``.onnx``   → ``_onnx_backend`` (CPU via ONNX Runtime).
+    - ``.onnx``   → ``_onnx_accel_backend`` (QNN ONNX EP, optional) with
+      automatic fallback to ``_onnx_cpu_backend`` (always present).
 
     Args:
         preferred_unit: The compute unit to attempt first for TFLite models.
@@ -98,9 +99,14 @@ class QCS6490Backend(InferenceBackend):
             preferred_unit
         )
 
-        # ONNX backend is always available (falls back to ImportError at load
-        # time if onnxruntime is not installed).
-        self._onnx_backend: QCS6490ONNXBackend = QCS6490ONNXBackend()
+        # CPU ONNX backend is always available.
+        self._onnx_cpu_backend: QCS6490ONNXBackend = QCS6490ONNXBackend(ComputeUnit.CPU)
+
+        # Accelerated ONNX backend — None if the preferred unit is CPU or
+        # the QNN ONNX EP is unavailable on this device.
+        self._onnx_accel_backend: QCS6490ONNXBackend | None = (
+            self._try_make_onnx_accel_backend(preferred_unit)
+        )
 
         logger.info(
             "QCS6490Backend: preferred=%s accel=%s",
@@ -113,6 +119,25 @@ class QCS6490Backend(InferenceBackend):
     # ------------------------------------------------------------------
     # Sub-backend factories
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _try_make_onnx_accel_backend(unit: ComputeUnit) -> QCS6490ONNXBackend | None:
+        """Try to create a QNN-accelerated ONNX backend; return ``None`` on failure.
+
+        CPU is not an accelerator — if *unit* is ``CPU``, returns ``None``
+        immediately so that ``_onnx_cpu_backend`` is used directly.
+        """
+        if unit not in (ComputeUnit.NPU, ComputeUnit.GPU):
+            return None
+        try:
+            return QCS6490ONNXBackend(compute_unit=unit)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "%s QNN ONNX EP unavailable (%s) — ONNX will run on CPU",
+                unit.name,
+                e,
+            )
+            return None
 
     @staticmethod
     def _try_make_accel_backend(unit: ComputeUnit) -> QCS6490LiteRTBackend | None:
@@ -233,6 +258,17 @@ class QCS6490Backend(InferenceBackend):
         return _ModelHandle(raw=raw, backend=self._litert_cpu_backend)
 
     def _load_onnx(self, path: str) -> _ModelHandle:
-        """Load an .onnx model via the ONNX sub-backend."""
-        raw = self._onnx_backend.load_model(path)
-        return _ModelHandle(raw=raw, backend=self._onnx_backend)
+        """Load an .onnx model, trying the QNN accelerator then falling back to CPU."""
+        if self._onnx_accel_backend is not None:
+            try:
+                raw = self._onnx_accel_backend.load_model(path)
+                return _ModelHandle(raw=raw, backend=self._onnx_accel_backend)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "ONNX accel load failed for %r (%s) — retrying on CPU",
+                    path,
+                    e,
+                )
+
+        raw = self._onnx_cpu_backend.load_model(path)
+        return _ModelHandle(raw=raw, backend=self._onnx_cpu_backend)

@@ -64,7 +64,7 @@ uv run python scripts/run_mobileclip_pipeline.py \
   --device cpu
 ```
 
-## Benchmark Module
+## Benchmark module
 
 The repository now includes an INFaaS-style benchmark subsystem under
 `moment_to_action.benchmark` for profiling model variants across compute units

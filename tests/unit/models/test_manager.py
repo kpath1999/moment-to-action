@@ -201,7 +201,7 @@ class TestModelManagerListModels:
         """Test list_models() returns all models in registry."""
         manager = ModelManager()
         statuses = manager.list_models()
-        assert len(statuses) == 3
+        assert len(statuses) == 5
 
     def test_list_models_yolo_is_available(self) -> None:
         """Test list_models() shows YOLO_V8 as available."""
@@ -796,7 +796,7 @@ class TestModelManagerStreamWithProgress:
 
             statuses = manager.list_models()
 
-            assert len(statuses) == 3
+            assert len(statuses) == 5
             for status in statuses:
                 assert not status.available
                 assert status.path is None

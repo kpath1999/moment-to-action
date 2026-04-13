@@ -30,6 +30,14 @@ class ONNXBackend(InferenceBackend):
     def __init__(self) -> None:
         self._session_cache: dict[str, object] = {}
 
+    def _get_providers(self) -> list[str | tuple[str, dict]]:
+        """Return the execution-provider list for session creation.
+
+        Subclasses override this to swap in GPU/NPU providers.  The base
+        implementation returns CPU-only.
+        """
+        return ["CPUExecutionProvider"]
+
     def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load an ONNX model, caching sessions by path.
 
@@ -44,7 +52,7 @@ class ONNXBackend(InferenceBackend):
             logger.debug("ONNX cache hit: %s", path)
             return self._session_cache[path]
 
-        session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+        session = ort.InferenceSession(path, providers=self._get_providers())
         self._session_cache[path] = session
         logger.info("Loaded %s via onnxruntime", path)
         return session

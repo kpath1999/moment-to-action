@@ -12,6 +12,7 @@ from moment_to_action.hardware._platforms.qcs6490._backend import (
     _ModelHandle,
 )
 from moment_to_action.hardware._platforms.qcs6490._litert import QCS6490LiteRTBackend
+from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
 from moment_to_action.hardware._platforms.qcs6490._resources import QCS6490ResourceMonitor
 from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
@@ -184,6 +185,66 @@ class TestQCS6490Backend:
             assert isinstance(handle, _ModelHandle)
             mock_onnx.load_model.assert_called_once_with("/tmp/model.onnx")
             assert handle.backend == mock_onnx
+
+    def test_try_make_onnx_accel_backend_cpu_unit_returns_none(self) -> None:
+        """Test _try_make_onnx_accel_backend returns None for CPU unit."""
+        result = QCS6490Backend._try_make_onnx_accel_backend(ComputeUnit.CPU)
+        assert result is None
+
+    def test_try_make_onnx_accel_backend_npu_success(self) -> None:
+        """Test _try_make_onnx_accel_backend creates backend for NPU unit."""
+        mock_backend = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490ONNXBackend",
+            return_value=mock_backend,
+        ):
+            result = QCS6490Backend._try_make_onnx_accel_backend(ComputeUnit.NPU)
+            assert result is mock_backend
+
+    def test_try_make_onnx_accel_backend_gpu_success(self) -> None:
+        """Test _try_make_onnx_accel_backend creates backend for GPU unit."""
+        mock_backend = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490ONNXBackend",
+            return_value=mock_backend,
+        ):
+            result = QCS6490Backend._try_make_onnx_accel_backend(ComputeUnit.GPU)
+            assert result is mock_backend
+
+    def test_try_make_onnx_accel_backend_failure_returns_none(self) -> None:
+        """Test _try_make_onnx_accel_backend returns None when backend raises."""
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490ONNXBackend",
+            side_effect=RuntimeError("QNN ONNX EP not found"),
+        ):
+            result = QCS6490Backend._try_make_onnx_accel_backend(ComputeUnit.NPU)
+            assert result is None
+
+    def test_qcs6490_load_onnx_falls_back_to_cpu_on_accel_failure(self) -> None:
+        """Test .onnx loading falls back to CPU when accel backend raises."""
+        mock_litert_cpu = MagicMock()
+        mock_litert_cpu.get_supported_unit.return_value = ComputeUnit.CPU
+
+        mock_onnx_cpu = MagicMock()
+        mock_onnx_cpu.load_model.return_value = "cpu_onnx_handle"
+        mock_onnx_accel = MagicMock()
+        mock_onnx_accel.load_model.side_effect = RuntimeError("QNN EP unavailable")
+
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490LiteRTBackend",
+                return_value=mock_litert_cpu,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490ONNXBackend",
+                side_effect=[mock_onnx_cpu, mock_onnx_accel],
+            ),
+        ):
+            backend = QCS6490Backend(preferred_unit=ComputeUnit.NPU)
+            handle = backend.load_model("/tmp/model.onnx")
+
+        assert isinstance(handle, _ModelHandle)
+        assert handle.backend is mock_onnx_cpu
 
     def test_qcs6490_load_unsupported_format_raises(self) -> None:
         """Test QCS6490Backend.load_model raises ValueError for unsupported format."""
@@ -405,6 +466,80 @@ class TestQCS6490LiteRTBackend:
         ):
             with pytest.raises(RuntimeError, match="NPU delegate unavailable"):
                 QCS6490LiteRTBackend(compute_unit=ComputeUnit.NPU)._get_delegates()
+
+
+@pytest.mark.unit
+class TestQCS6490ONNXBackend:
+    """Test QCS6490ONNXBackend QNN Execution Provider routing."""
+
+    def test_construction_with_cpu_unit(self) -> None:
+        """Test QCS6490ONNXBackend constructs with CPU unit."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.CPU)
+        assert backend.get_supported_unit() == ComputeUnit.CPU
+
+    def test_construction_with_npu_unit(self) -> None:
+        """Test QCS6490ONNXBackend constructs with NPU unit."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.NPU)
+        assert backend.get_supported_unit() == ComputeUnit.NPU
+
+    def test_construction_defaults_to_cpu(self) -> None:
+        """Test QCS6490ONNXBackend defaults to CPU when no unit given."""
+        backend = QCS6490ONNXBackend()
+        assert backend.get_supported_unit() == ComputeUnit.CPU
+
+    def test_get_providers_cpu_returns_cpu_ep(self) -> None:
+        """Test _get_providers returns CPUExecutionProvider for CPU unit."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.CPU)
+        providers = backend._get_providers()
+        assert providers == ["CPUExecutionProvider"]
+
+    def test_get_providers_npu_returns_qnn_ep_with_htp(self) -> None:
+        """Test _get_providers returns QNNExecutionProvider with HTP for NPU."""
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_available_providers",
+            return_value=["QNNExecutionProvider", "CPUExecutionProvider"],
+        ):
+            backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.NPU)
+            providers = backend._get_providers()
+
+        assert providers == [("QNNExecutionProvider", {"backend_path": "HTP"})]
+
+    def test_get_providers_gpu_returns_qnn_ep_with_gpu(self) -> None:
+        """Test _get_providers returns QNNExecutionProvider with GPU for GPU unit."""
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_available_providers",
+            return_value=["QNNExecutionProvider", "CPUExecutionProvider"],
+        ):
+            backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.GPU)
+            providers = backend._get_providers()
+
+        assert providers == [("QNNExecutionProvider", {"backend_path": "GPU"})]
+
+    def test_get_providers_npu_raises_when_qnn_unavailable(self) -> None:
+        """Test _get_providers raises RuntimeError when QNN EP not registered."""
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_available_providers",
+            return_value=["CPUExecutionProvider"],
+        ):
+            backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.NPU)
+            with pytest.raises(RuntimeError, match="QNN ONNX EP unavailable"):
+                backend._get_providers()
+
+    def test_get_providers_gpu_raises_when_qnn_unavailable(self) -> None:
+        """Test _get_providers raises RuntimeError for GPU when QNN EP absent."""
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_available_providers",
+            return_value=["CPUExecutionProvider"],
+        ):
+            backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.GPU)
+            with pytest.raises(RuntimeError, match="QNN ONNX EP unavailable"):
+                backend._get_providers()
+
+    def test_get_providers_dsp_falls_back_to_cpu_ep(self) -> None:
+        """Test _get_providers returns CPUExecutionProvider for unhandled units."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.DSP)
+        providers = backend._get_providers()
+        assert providers == ["CPUExecutionProvider"]
 
 
 @pytest.mark.unit

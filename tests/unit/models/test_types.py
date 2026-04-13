@@ -26,18 +26,29 @@ class TestModelID:
         assert hasattr(ModelID, "YOLO_V8")
         assert ModelID.YOLO_V8.value == "yolo_v8"
 
+    def test_model_id_has_yolo_v8_tflite(self) -> None:
+        """Test that ModelID enum has YOLO_V8_TFLITE."""
+        assert hasattr(ModelID, "YOLO_V8_TFLITE")
+        assert ModelID.YOLO_V8_TFLITE.value == "yolo_v8_tflite"
+
     def test_model_id_has_mobileclip_s2(self) -> None:
         """Test that ModelID enum has MOBILECLIP_S2."""
         assert hasattr(ModelID, "MOBILECLIP_S2")
         assert ModelID.MOBILECLIP_S2.value == "mobileclip_s2"
 
     def test_model_id_enum_count(self) -> None:
-        """Test that ModelID has exactly four members."""
-        assert len(list(ModelID)) == 4
+        """Test that ModelID has exactly five members."""
+        assert len(list(ModelID)) == 5
 
     @pytest.mark.parametrize(
         "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B, ModelID.QWEN3_4B],
+        [
+            ModelID.YOLO_V8,
+            ModelID.YOLO_V8_TFLITE,
+            ModelID.MOBILECLIP_S2,
+            ModelID.SMOLVLM2_2_2B,
+            ModelID.QWEN3_4B,
+        ],
     )
     def test_model_id_has_value(self, model_id: ModelID) -> None:
         """Test that each ModelID has a value."""
@@ -343,8 +354,8 @@ class TestModelRegistry:
         assert info.id == ModelID.QWEN3_4B
 
     def test_registry_has_exactly_four_entries(self) -> None:
-        """Test that MODEL_REGISTRY has exactly four entries."""
-        assert len(MODEL_REGISTRY) == 4
+        """Test that MODEL_REGISTRY has exactly five entries."""
+        assert len(MODEL_REGISTRY) == 5
 
     def test_yolo_v8_is_vendored(self) -> None:
         """Test that YOLO_V8 has VendoredSource."""

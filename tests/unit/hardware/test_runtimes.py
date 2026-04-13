@@ -222,6 +222,11 @@ class TestONNXBackend:
             backend = ONNXBackend()
             assert backend is not None
 
+    def test_onnx_get_providers_returns_cpu_ep(self) -> None:
+        """Test ONNXBackend._get_providers returns CPUExecutionProvider."""
+        backend = ONNXBackend()
+        assert backend._get_providers() == ["CPUExecutionProvider"]
+
     def test_onnx_get_supported_unit_returns_cpu(self) -> None:
         """Test ONNXBackend.get_supported_unit returns CPU."""
         backend = ONNXBackend()
@@ -239,6 +244,18 @@ class TestONNXBackend:
         assert handle is not None
         mock_session_class.assert_called_once()
         assert mock_session_class.call_args[0][0] == "/tmp/model.onnx"
+
+    @patch("moment_to_action.hardware._platforms._runtimes._onnx.ort.InferenceSession")
+    def test_onnx_load_model_uses_get_providers(self, mock_session_class: Mock) -> None:
+        """Test ONNXBackend.load_model passes _get_providers() to InferenceSession."""
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+
+        backend = ONNXBackend()
+        backend.load_model("/tmp/model.onnx")
+
+        _, kwargs = mock_session_class.call_args
+        assert kwargs.get("providers") == ["CPUExecutionProvider"]
 
     @patch("moment_to_action.hardware._platforms._runtimes._onnx.ort.InferenceSession")
     def test_onnx_load_model_caching(self, mock_session_class: Mock) -> None:
