@@ -28,6 +28,8 @@ class ModelID(Enum):
     MOBILECLIP_S2 = "mobileclip_s2"
     SMOLVLM2_2_2B = "smolvlm2_2_2b"
     QWEN_2_5 = "qwen"
+    YAMNET_TFLITE = "yamnet_tflite"
+    YAMNET_ONNX = "yamnet_onnx"
 
 
 @attrs.frozen

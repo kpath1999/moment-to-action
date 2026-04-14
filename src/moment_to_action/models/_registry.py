@@ -31,7 +31,6 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         filename="__UNUSED__",
         source=TransformersSource(hf_repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct"),
     ),
-
     ModelID.QWEN_2_5: ModelInfo(
         id=ModelID.QWEN_2_5,
         #filename="qwen2.5-1.5b-instruct-q5_k_m.gguf",
@@ -39,4 +38,14 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         #filename="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
         source=VendoredSource(subdir="slm_models")
     ),
+    ModelID.YAMNET_TFLITE: ModelInfo(
+        id=ModelID.YAMNET_TFLITE,
+        filename="yamnet.tflite",
+        source=VendoredSource(subdir="yamnet"),
+    ),
+    ModelID.YAMNET_ONNX: ModelInfo(
+        id=ModelID.YAMNET_ONNX,
+        filename="model.onnx",
+        source=VendoredSource(subdir="yamnet"),
+    ),    
 }

@@ -12,6 +12,9 @@ checks and ``isinstance`` guards across the full message hierarchy.
 from __future__ import annotations
 
 from .audio import AudioTensorMessage
+#asoma7
+#TODO, correct
+from .audio_dup import AudioEventMessage
 from .llm import ReasoningMessage
 from .sensor import RawFrameMessage
 from .video import BoundingBox, DetectionMessage, FrameTensorMessage, VideoClipMessage

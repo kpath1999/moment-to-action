@@ -70,18 +70,16 @@ pipeline = Pipeline(
             manager=manager,
             confidence_threshold=args.conf,
         ),
-        #PromptFormatterStage(
-        #    template="json",
-        #    min_confidence=0.3,
-        #    top_k=5),
+        PromptFormatterStage(
+            template="json",
+            min_confidence=0.3,
+            top_k=5),
         #Replacing the ReasoningStage() with LLMStage()
         #ReasoningStage(),
-        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/Qwen3.5-0.8B-Q4_K_M.gguf"),
-        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"),
-        #LLMStage(
-        #    model_id=ModelID.QWEN_2_5,
-        #    manager=manager,
-        #),
+        LLMStage(
+            model_id=ModelID.QWEN_2_5,
+            manager=manager,
+        ),
     ],
 )
 

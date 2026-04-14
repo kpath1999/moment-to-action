@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from moment_to_action.pipeline import Pipeline
 
-from . import llm, video, vlm
+from . import llm, video, vlm, audio
 from ._base import Stage
 from ._formatter import PromptFormatterStage
 

@@ -77,8 +77,6 @@ pipeline = Pipeline(
             template="json",
             min_confidence=0.3,
             top_k=5),        
-        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"),
-        #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/qwen2.5-1.5b-instruct-q5_k_m.gguf"),
         LLMStage(
             model_id=ModelID.QWEN_2_5,
             manager=manager,
