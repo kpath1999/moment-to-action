@@ -134,3 +134,13 @@ Notes:
   do not require real hardware accelerators or large model downloads.
 - Real-world latency/accuracy numbers should be collected in your own runtime
   environment with the target hardware.
+
+## TODOs
+
+- Collect full benchmark profiles for `Qwen3Benchmark` across available units.
+- Collect full benchmark profiles for `SmolVLM2Benchmark` across available units.
+- Improve accuracy evaluation methodology for all benchmarked models.
+- Investigate and fix `MobileCLIP` GPU accuracy instability (`NaN` embeddings on GPU).
+- Add explicit reporting for unavailable accuracy (separate from numeric score) in CSV and plots.
+- Expand evaluation image set and add stronger coverage across classes/scenes.
+- Add a reproducible benchmark matrix in CI docs (model x unit x metrics).
