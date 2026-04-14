@@ -123,3 +123,77 @@ def test_yolo_run_inference_raises_for_non_ndarray() -> None:
     backend = mock.MagicMock()
     with pytest.raises(TypeError, match="expects ndarray"):
         benchmark._run_inference(object(), {"data": 1}, backend)
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_accuracy_returns_none_without_eval_images() -> None:
+    """_evaluate_accuracy returns None when no eval images are configured."""
+    benchmark = YOLOBenchmark()
+    backend = mock.MagicMock()
+    manager = mock.MagicMock(spec=ModelManager)
+    result = benchmark._evaluate_accuracy(object(), backend, manager)
+    assert result is None
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_accuracy_returns_none_when_cv2_missing() -> None:
+    """_evaluate_accuracy returns None gracefully when opencv is not installed."""
+    img_path = Path("/tmp/dummy.jpg")
+    benchmark = YOLOBenchmark(eval_image_paths=[img_path])
+    backend = mock.MagicMock()
+    manager = mock.MagicMock(spec=ModelManager)
+
+    with mock.patch("builtins.__import__", side_effect=ImportError("cv2")):
+        result = benchmark._evaluate_accuracy(object(), backend, manager)
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_accuracy_with_mocked_pipeline(tmp_path: Path) -> None:
+    """_evaluate_accuracy computes mAP50 when oracle and variant agree perfectly."""
+    import numpy as np
+
+    # Create a placeholder image file (content doesn't matter; cv2 is mocked)
+    img_file = tmp_path / "img.jpg"
+    img_file.write_bytes(b"\xff\xd8\xff")
+
+    benchmark = YOLOBenchmark(eval_image_paths=[img_file])
+
+    # Both oracle and eval backends return the same raw 1-tensor output:
+    # one box at [270,270,370,370] with score 0.9 for class 0
+    raw_output = np.zeros((1, 84, 1), dtype=np.float32)
+    raw_output[0, 0, 0] = 320.0
+    raw_output[0, 1, 0] = 320.0
+    raw_output[0, 2, 0] = 100.0
+    raw_output[0, 3, 0] = 100.0
+    raw_output[0, 4, 0] = 0.9
+
+    fake_image = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    cpu_backend = mock.MagicMock()
+    cpu_backend.run.return_value = [raw_output]
+
+    eval_backend = mock.MagicMock()
+    eval_backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640]}]
+    eval_backend.run.return_value = [raw_output]
+    eval_backend.load_model.return_value = object()
+    eval_backend.active_unit = ComputeUnit.CPU
+
+    manager = mock.MagicMock(spec=ModelManager)
+    manager.get_path.return_value = Path("/tmp/yolo.onnx")
+
+    import cv2  # noqa: PLC0415
+
+    with (
+        mock.patch(
+            "moment_to_action.hardware.ComputeBackend",
+            return_value=cpu_backend,
+        ),
+        mock.patch.object(cv2, "imread", return_value=fake_image),
+        mock.patch.object(cv2, "resize", return_value=fake_image[:640, :640]),
+    ):
+        result = benchmark._evaluate_accuracy(object(), eval_backend, manager)
+
+    # Perfect agreement → mAP50 = 1.0
+    assert result == pytest.approx(1.0)

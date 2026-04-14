@@ -1,0 +1,83 @@
+{
+  "model": "mobileclip",
+  "model_id": "mobileclip_s2",
+  "config": {
+    "n_warmup": 5,
+    "n_runs": 20
+  },
+  "eval_images": [
+    "/home/kpatherya3/moment-to-action/tests/int/images/cat.jpg",
+    "/home/kpatherya3/moment-to-action/tests/int/images/dog.jpg",
+    "/home/kpatherya3/moment-to-action/tests/int/images/horse.jpg",
+    "/home/kpatherya3/moment-to-action/tests/int/images/pedestrian.jpg",
+    "/home/kpatherya3/moment-to-action/tests/int/images/teddybear.jpg"
+  ],
+  "profiles": [
+    {
+      "variant_id": {
+        "model_id": "mobileclip_s2",
+        "compute_unit": "CPU"
+      },
+      "accuracy": 1.0,
+      "load_latency_ms": 175.87988602463156,
+      "inference_mean_ms": 1201.7592636984773,
+      "inference_p50_ms": 1201.571902493015,
+      "inference_p95_ms": 1219.5348506735172,
+      "inference_p99_ms": 1220.0703565019649,
+      "peak_memory_mb": 951.19140625,
+      "max_batch_size": 1,
+      "hardware_target": "qcs6490",
+      "cost": {
+        "power_mw": 115866.135,
+        "energy_per_inference_mj": 139243.20108518837
+      },
+      "model_size_bytes": 396881784,
+      "n_runs": 20,
+      "profiled_at": "2026-04-14T06:57:20.642885+00:00"
+    },
+    {
+      "variant_id": {
+        "model_id": "mobileclip_s2",
+        "compute_unit": "GPU"
+      },
+      "accuracy": NaN,
+      "load_latency_ms": 4764.37825197354,
+      "inference_mean_ms": 221.86526285368018,
+      "inference_p50_ms": 222.40863149636425,
+      "inference_p95_ms": 224.5144221407827,
+      "inference_p99_ms": 227.0314076251816,
+      "peak_memory_mb": 1059.26171875,
+      "max_batch_size": 1,
+      "hardware_target": "qcs6490",
+      "cost": {
+        "power_mw": 115866.135,
+        "energy_per_inference_mj": 25706.670497614992
+      },
+      "model_size_bytes": 396881784,
+      "n_runs": 20,
+      "profiled_at": "2026-04-14T06:57:38.946457+00:00"
+    },
+    {
+      "variant_id": {
+        "model_id": "mobileclip_s2",
+        "compute_unit": "NPU"
+      },
+      "accuracy": 1.0,
+      "load_latency_ms": 2517.1617819578387,
+      "inference_mean_ms": 1478.726111544529,
+      "inference_p50_ms": 1485.7322374882642,
+      "inference_p95_ms": 1573.699508048594,
+      "inference_p99_ms": 1582.9503959883004,
+      "peak_memory_mb": 1350.7265625,
+      "max_batch_size": 1,
+      "hardware_target": "qcs6490",
+      "cost": {
+        "power_mw": 115866.135,
+        "energy_per_inference_mj": 171334.27926824344
+      },
+      "model_size_bytes": 396881784,
+      "n_runs": 20,
+      "profiled_at": "2026-04-14T06:58:34.322715+00:00"
+    }
+  ]
+}
