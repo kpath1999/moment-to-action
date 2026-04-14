@@ -39,7 +39,7 @@ def test_qwen3_load_uses_torch_policy() -> None:
     ):
         handle = benchmark._load_model(backend=backend, manager=manager)
 
-    manager.get_path.assert_called_once_with(ModelID.QWEN3_4B)
+    manager.get_path.assert_called_once_with(ModelID.QWEN2_5_4B)
     mock_tokenizer.assert_called_once()
     mock_model.assert_called_once()
 

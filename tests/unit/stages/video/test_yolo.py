@@ -662,7 +662,6 @@ class TestYOLOTFLiteIntegration:
 
     def _make_stage_nhwc(self) -> YOLOStage:
         """Build a YOLOStage whose mock model reports NHWC input shape."""
-
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
         backend.active_unit = ComputeUnit.NPU
@@ -677,7 +676,6 @@ class TestYOLOTFLiteIntegration:
 
     def _make_stage_nchw(self) -> YOLOStage:
         """Build a YOLOStage whose mock model reports NCHW input shape."""
-
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
         backend.active_unit = ComputeUnit.CPU
@@ -744,7 +742,7 @@ class TestYOLOTFLiteIntegration:
         raw[0, 1, 0] = 320.0  # cy
         raw[0, 2, 0] = 200.0  # w
         raw[0, 3, 0] = 200.0  # h
-        raw[0, 4, 0] = 0.9   # class 0 (person) score
+        raw[0, 4, 0] = 0.9  # class 0 (person) score
 
         result = stage._parse_outputs([raw], (640, 640))
 
@@ -778,7 +776,6 @@ class TestYOLOTFLiteIntegration:
 
     def test_tflite_int8_model_preferred_when_unit_is_npu(self) -> None:
         """YOLOStage loads YOLO_V8_TFLITE_INT8 when backend is NPU and available."""
-
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
         backend.active_unit = ComputeUnit.NPU
@@ -796,7 +793,6 @@ class TestYOLOTFLiteIntegration:
 
     def test_onnx_model_used_when_npu_int8_unavailable(self) -> None:
         """YOLOStage falls back to YOLO_V8 when NPU INT8 TFLite is unavailable."""
-
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
         backend.active_unit = ComputeUnit.NPU
@@ -816,4 +812,3 @@ class TestYOLOTFLiteIntegration:
             ]
         )
         manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
-

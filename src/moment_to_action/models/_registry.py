@@ -23,6 +23,11 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         filename="model_int8.tflite",
         source=VendoredSource(subdir="yolo"),
     ),
+    ModelID.YOLO_V8_TFLITE_INT8_320: ModelInfo(
+        id=ModelID.YOLO_V8_TFLITE_INT8_320,
+        filename="model_int8_320.tflite",
+        source=VendoredSource(subdir="yolo"),
+    ),
     ModelID.MOBILECLIP_S2: ModelInfo(
         id=ModelID.MOBILECLIP_S2,
         filename="mobileclip_s2_datacompdr_last.tflite",
@@ -36,9 +41,9 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         filename="__UNUSED__",
         source=TransformersSource(hf_repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct"),
     ),
-    ModelID.QWEN3_4B: ModelInfo(
-        id=ModelID.QWEN3_4B,
+    ModelID.QWEN2_5_4B: ModelInfo(
+        id=ModelID.QWEN2_5_4B,
         filename="__UNUSED__",
-        source=TransformersSource(hf_repo_id="Qwen/Qwen3-4B-Instruct-2507"),
+        source=TransformersSource(hf_repo_id="Qwen/Qwen2.5-4B-Instruct"),
     ),
 }

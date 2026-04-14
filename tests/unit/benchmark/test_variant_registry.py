@@ -84,7 +84,9 @@ def test_best_variant_objectives() -> None:
 def test_save_and_load_round_trip(tmp_path: Path) -> None:
     path = tmp_path / "registry.json"
     registry = VariantRegistry(path=path)
-    profile = _profile(ModelID.MOBILECLIP_S2, ComputeUnit.GPU, latency=3.0, accuracy=0.9, energy=0.2)
+    profile = _profile(
+        ModelID.MOBILECLIP_S2, ComputeUnit.GPU, latency=3.0, accuracy=0.9, energy=0.2
+    )
     registry.register(profile)
 
     registry.save()

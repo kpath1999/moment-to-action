@@ -7,8 +7,11 @@ inference on the Qualcomm QCS6490.
 from __future__ import annotations
 
 import logging
+import os
+import shlex
 import subprocess
 import sys
+from pathlib import Path
 
 from moment_to_action.hardware._platforms._runtimes import LiteRTBackend
 from moment_to_action.hardware._types import ComputeUnit
@@ -25,6 +28,155 @@ _QNN_GPU_BACKEND = "gpu"
 
 # Timeout for the subprocess delegate probe.
 _DELEGATE_PROBE_TIMEOUT_S = 15
+
+_ADSP_LIBRARY_DEFAULT = ";".join(  # noqa: FLY002
+    (
+        "/usr/lib/rfsa/adsp",
+        "/usr/lib/rfsa/adsp/hexagon-v75",
+        "/usr/lib/rfsa/adsp/hexagon-v73",
+        "/usr/lib/rfsa/adsp/hexagon-v68",
+    )
+)
+
+# Environment variable used to track that we've already re-exec'd with fastrpc permissions.
+_FASTRPC_REEXEC_MARKER = "MOMENT_TO_ACTION_FASTRPC_REEXECD"
+
+
+def _is_in_fastrpc_group() -> bool:
+    """Check if the current process has fastrpc group membership.
+
+    Returns:
+        True if the process is in the fastrpc group (either as primary or supplementary).
+    """
+    try:
+        import grp
+
+        # Get the fastrpc group ID
+        try:
+            fastrpc_gid = grp.getgrnam("fastrpc").gr_gid
+        except KeyError:
+            # fastrpc group doesn't exist on this system
+            return False
+
+        # Check primary group
+        if os.getgid() == fastrpc_gid:
+            return True
+
+        # Check supplementary groups
+        return fastrpc_gid in os.getgroups()
+    except Exception:  # noqa: BLE001
+        # If we can't determine group membership, assume we don't have it
+        return False
+
+
+def _ensure_fastrpc_permissions() -> None:
+    """Ensure the process has fastrpc group permissions for NPU access.
+
+    If not already in the fastrpc group and not already re-exec'd, re-executes
+    the current process using ``sg fastrpc -c`` to gain the necessary permissions.
+
+    This allows users to run NPU workloads without manually prefixing commands
+    with ``sg fastrpc -c``.
+    """
+    # If we've already re-exec'd, don't do it again (avoid infinite loop)
+    if os.environ.get(_FASTRPC_REEXEC_MARKER):
+        return
+
+    # If we're already in the fastrpc group, nothing to do
+    if _is_in_fastrpc_group():
+        return
+
+    # Check if sg command exists
+    try:
+        subprocess.run(
+            ["which", "sg"],  # noqa: S607
+            check=True,
+            capture_output=True,
+            timeout=5,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        # sg not available, can't auto-switch groups
+        logger.warning(
+            "Not in fastrpc group and 'sg' command unavailable — "
+            "NPU access may fail. Run with: sg fastrpc -c 'your_command'"
+        )
+        return
+
+    # Re-exec with sg fastrpc -c
+    logger.info(
+        "Not in fastrpc group — automatically re-executing with 'sg fastrpc -c' for NPU access..."
+    )
+
+    # Cannot re-exec if running from python -c (the code is not in sys.argv)
+    if sys.argv and sys.argv[0] == "-c":
+        logger.warning(
+            "Cannot auto-reexec when running from 'python -c'. "
+            "Please run your script with: sg fastrpc -c 'python -c ...'"
+        )
+        return
+
+    # Build the command to re-exec: sg fastrpc -c 'python script.py args...'
+    # Properly quote all arguments to handle spaces and special characters
+    cmd_parts = [shlex.quote(sys.executable)] + [shlex.quote(arg) for arg in sys.argv]
+    cmd_line = " ".join(cmd_parts)
+
+    # Set the marker in the environment before re-exec
+    env = os.environ.copy()
+    env[_FASTRPC_REEXEC_MARKER] = "1"
+
+    try:
+        # Use sg to re-run the current command with fastrpc group
+        result = subprocess.run(  # noqa: S603
+            ["sg", "fastrpc", "-c", cmd_line],  # noqa: S607
+            env=env,
+            check=False,  # Don't raise on non-zero exit
+        )
+        # Exit with the same code as the child process
+        sys.exit(result.returncode)
+    except Exception:
+        logger.exception("Failed to re-execute with fastrpc group")
+        logger.warning(
+            "Continuing without fastrpc group — NPU access may fail. "
+            "To fix, run manually: sg fastrpc -c 'your_command'"
+        )
+
+
+def _collect_htp_diagnostics() -> str:
+    """Return a compact snapshot of the HTP transport environment."""
+    adsp_library_path = os.environ.get("ADSP_LIBRARY_PATH", "")
+
+    fastrpc_nodes = [
+        path
+        for path in (
+            "/dev/fastrpc-cdsp",
+            "/dev/fastrpc-cdsp-secure",
+            "/dev/fastrpc-adsp-secure",
+        )
+        if Path(path).exists()
+    ]
+
+    remoteprocs: list[str] = []
+    for remoteproc in sorted(Path("/sys/class/remoteproc").glob("remoteproc*")):
+        name_path = remoteproc / "name"
+        state_path = remoteproc / "state"
+        firmware_path = remoteproc / "firmware"
+        if not (name_path.exists() and state_path.exists()):
+            continue
+        name = name_path.read_text().strip()
+        state = state_path.read_text().strip()
+        firmware = firmware_path.read_text().strip() if firmware_path.exists() else "?"
+        remoteprocs.append(f"{name}:{state}:{firmware}")
+
+    skels = sorted(str(path) for path in Path("/usr/lib/rfsa/adsp").glob("libQnnHtp*Skel.so"))
+
+    return (
+        "HTP diagnostics: "
+        f"ADSP_LIBRARY_PATH={adsp_library_path or '<unset>'}; "
+        f"recommended_ADSP_LIBRARY_PATH={_ADSP_LIBRARY_DEFAULT}; "
+        f"fastrpc_nodes={fastrpc_nodes or ['<none>']}; "
+        f"remoteprocs={remoteprocs or ['<none>']}; "
+        f"htp_skels={skels or ['<none>']}"
+    )
 
 
 def _probe_delegate_load(delegate_lib: str, options: dict[str, str]) -> str | None:
@@ -45,21 +197,24 @@ def _probe_delegate_load(delegate_lib: str, options: dict[str, str]) -> str | No
         describing the failure.
     """
     opts_repr = repr(options)
-    script = "\n".join([
-        "import sys, faulthandler",
-        "faulthandler.enable()",
-        "try:",
-        "    from ai_edge_litert.interpreter import load_delegate",
-        "except ImportError:",
-        "    from tensorflow.lite.python.interpreter import load_delegate",
-        f"load_delegate({delegate_lib!r}, {opts_repr})",
-        "sys.exit(0)",
-    ])
+    script = "\n".join(
+        [
+            "import sys, faulthandler",
+            "faulthandler.enable()",
+            "try:",
+            "    from ai_edge_litert.interpreter import load_delegate",
+            "except ImportError:",
+            "    from tensorflow.lite.python.interpreter import load_delegate",
+            f"load_delegate({delegate_lib!r}, {opts_repr})",
+            "sys.exit(0)",
+        ]
+    )
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603
             [sys.executable, "-c", script],
             capture_output=True,
             timeout=_DELEGATE_PROBE_TIMEOUT_S,
+            check=False,
         )
     except subprocess.TimeoutExpired:
         return f"probe timed out after {_DELEGATE_PROBE_TIMEOUT_S}s"
@@ -84,6 +239,7 @@ def _probe_delegate_load(delegate_lib: str, options: dict[str, str]) -> str | No
         )
     return f"delegate probe exited {rc}:\n{detail}"
 
+
 # Try to import ai_edge_litert at module load time.  On dev machines this
 # package is absent, so we fall back to tf.lite (which ships with tensorflow).
 try:
@@ -105,7 +261,7 @@ class QCS6490LiteRTBackend(LiteRTBackend):
     the QNN delegate is loaded; CPU requests use no delegate (XNNPACK).
     """
 
-    def _get_delegates(self) -> list:
+    def _get_delegates(self) -> list:  # noqa: C901
         """Build the delegate list for the configured compute unit.
 
         Returns an empty list for CPU — no delegate loading is attempted,
@@ -122,7 +278,27 @@ class QCS6490LiteRTBackend(LiteRTBackend):
         # NPU path: probe in a subprocess first to catch native crashes, then
         # load in the real process if the probe passes.
         if self._unit == ComputeUnit.NPU:
-            npu_opts = {_QNN_BACKEND_KEY: _QNN_NPU_BACKEND}
+            # Ensure we have fastrpc group permissions before attempting NPU access.
+            _ensure_fastrpc_permissions()
+
+            # Ensure ADSP_LIBRARY_PATH is set for HTP skeleton library discovery.
+            if not os.environ.get("ADSP_LIBRARY_PATH"):
+                os.environ["ADSP_LIBRARY_PATH"] = _ADSP_LIBRARY_DEFAULT
+                logger.debug(
+                    "[get_delegates] ADSP_LIBRARY_PATH was unset; applying default=%s",
+                    _ADSP_LIBRARY_DEFAULT,
+                )
+
+            npu_opts = {
+                _QNN_BACKEND_KEY: _QNN_NPU_BACKEND,
+                # Burst mode (3) + HMX convolution give the best latency on Hexagon HTP.
+                # htp_performance_mode accepts the integer enum value:
+                #   0=default, 1=balanced, 2=low_power, 3=burst, 4=high_performance
+                # Passing the string name "burst" causes SIGABRT in this delegate version.
+                "htp_performance_mode": "3",
+                "htp_use_conv_hmx": "1",
+            }
+            logger.debug("[get_delegates] %s", _collect_htp_diagnostics())
             logger.debug(
                 "[get_delegates] probing QNN NPU delegate: lib=%s options=%r",
                 _QNN_DELEGATE_PATH,
@@ -130,14 +306,14 @@ class QCS6490LiteRTBackend(LiteRTBackend):
             )
             probe_err = _probe_delegate_load(_QNN_DELEGATE_PATH, npu_opts)
             if probe_err:
-                msg = f"NPU delegate unavailable: {probe_err}"
+                msg = f"NPU delegate unavailable: {probe_err}\n{_collect_htp_diagnostics()}"
                 logger.warning("[get_delegates] %s", msg)
                 raise RuntimeError(msg)
             logger.debug("[get_delegates] NPU delegate probe passed — loading in main process")
             try:
                 qnn = _load_delegate(_QNN_DELEGATE_PATH, npu_opts)
             except Exception as e:
-                msg = f"NPU delegate unavailable: {e}"
+                msg = f"NPU delegate unavailable: {e}\n{_collect_htp_diagnostics()}"
                 raise RuntimeError(msg) from e
             else:
                 logger.info(

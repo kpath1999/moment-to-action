@@ -4,7 +4,12 @@ from unittest import mock
 
 import pytest
 
-from moment_to_action.benchmark import BenchmarkConfig, BenchmarkHarness, ModelBenchmark, VariantRegistry
+from moment_to_action.benchmark import (
+    BenchmarkConfig,
+    BenchmarkHarness,
+    ModelBenchmark,
+    VariantRegistry,
+)
 from moment_to_action.hardware import ComputeUnit
 from moment_to_action.models import ModelID
 
@@ -18,7 +23,9 @@ class _MockBenchmark(ModelBenchmark):
     def model_id(self) -> ModelID:
         return self._model_id
 
-    def profile(self, backend: object, manager: object, config: BenchmarkConfig | None = None) -> object:
+    def profile(
+        self, backend: object, manager: object, config: BenchmarkConfig | None = None
+    ) -> object:
         del backend, manager, config
         return self._profile
 
@@ -56,4 +63,4 @@ def test_run_model_missing_registration_raises() -> None:
     harness = BenchmarkHarness(backend=mock.MagicMock(), manager=mock.MagicMock())
 
     with pytest.raises(RuntimeError, match="No benchmark registered"):
-        harness.run_model(ModelID.QWEN3_4B)
+        harness.run_model(ModelID.QWEN2_5_4B)

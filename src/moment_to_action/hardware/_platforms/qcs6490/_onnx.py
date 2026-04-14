@@ -64,8 +64,7 @@ class QCS6490ONNXBackend(ONNXBackend):
             available = ort.get_available_providers()
             if _QNN_EP_NAME not in available:
                 msg = (
-                    f"{self._unit.name} QNN ONNX EP unavailable "
-                    f"(available providers: {available})"
+                    f"{self._unit.name} QNN ONNX EP unavailable (available providers: {available})"
                 )
                 raise RuntimeError(msg)
             backend_path = _QNN_NPU_BACKEND if self._unit == ComputeUnit.NPU else _QNN_GPU_BACKEND

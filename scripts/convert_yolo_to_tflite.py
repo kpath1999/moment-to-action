@@ -5,15 +5,21 @@ alongside the existing ``model.onnx`` in
 ``src/moment_to_action/models/_vendored/yolo/``. ``YOLOStage`` and
 ``YOLOBenchmark`` use the INT8 variant on NPU and float32 variant on GPU.
 
+Pass ``--imgsz 320`` to produce a 320×320 INT8 model (``model_int8_320.tflite``)
+that fits within Hexagon HTP TCM constraints on the QCS6490.  The 640×640
+model exceeds TCM requirements (~2.56 MB per tensor vs. ~4 MB available).
+
 Requires ``ultralytics`` and its TFLite export dependencies (not in the default project
 dependencies).  Pass them all explicitly so uv manages the install instead of letting
 ultralytics attempt a ``pip install`` that fails on PEP 668 / externally-managed systems:
 
     uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py
+    uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py --imgsz 320
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import sys
@@ -26,8 +32,6 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _YOLO_DIR = _REPO_ROOT / "src" / "moment_to_action" / "models" / "_vendored" / "yolo"
-_TFLITE_PATH = _YOLO_DIR / "model.tflite"
-_TFLITE_INT8_PATH = _YOLO_DIR / "model_int8.tflite"
 
 _MODEL_NAME = "yolo26n.pt"
 
@@ -39,7 +43,7 @@ def _check_ultralytics() -> None:
         print(
             "ultralytics is not installed.\n"
             'Run:  uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,'
-            'onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,'
+            "onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,"
             'tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py',
             file=sys.stderr,
         )
@@ -54,20 +58,31 @@ def _pick_tflite(candidates: list[Path], preferred_keyword: str) -> Path:
     return next((f for f in candidates if preferred_keyword in f.name.lower()), candidates[0])
 
 
-def convert() -> None:
-    """Export yolo26n.pt → float32/int8 TFLite variants using ultralytics."""
+def convert(imgsz: int = 640) -> None:
+    """Export yolo26n.pt → float32/int8 TFLite variants using ultralytics.
+
+    Args:
+        imgsz: Input image size (square).  Use 320 to produce a model that fits
+               within Hexagon HTP TCM constraints on the QCS6490 — the 640×640
+               model requires ~2.56 MB per tensor, exceeding the ~2 MB default
+               VTCM allocation.
+    """
     _check_ultralytics()
     from ultralytics import YOLO
 
-    if _TFLITE_PATH.exists() and _TFLITE_INT8_PATH.exists():
+    suffix = f"_{imgsz}" if imgsz != 640 else ""
+    tflite_path = _YOLO_DIR / f"model{suffix}.tflite"
+    tflite_int8_path = _YOLO_DIR / f"model_int8{suffix}.tflite"
+
+    if tflite_path.exists() and tflite_int8_path.exists():
         print(
-            f"TFLite models already exist at {_TFLITE_PATH} and {_TFLITE_INT8_PATH} —"
+            f"TFLite models already exist at {tflite_path} and {tflite_int8_path} —"
             " skipping conversion."
         )
         print("Delete them first if you want to re-convert.")
         return
 
-    print(f"Exporting {_MODEL_NAME} to float32/int8 TFLite …")
+    print(f"Exporting {_MODEL_NAME} to float32/int8 TFLite (imgsz={imgsz}) …")
 
     original_cwd = Path.cwd()
     with tempfile.TemporaryDirectory() as tmp:
@@ -75,8 +90,8 @@ def convert() -> None:
         os.chdir(tmp_path)
         try:
             model = YOLO(_MODEL_NAME)
-            float32_export_path = model.export(format="tflite")
-            int8_export_path = model.export(format="tflite", int8=True)
+            float32_export_path = model.export(format="tflite", imgsz=imgsz)
+            int8_export_path = model.export(format="tflite", int8=True, imgsz=imgsz)
         finally:
             os.chdir(original_cwd)
 
@@ -90,13 +105,33 @@ def convert() -> None:
         if not int8_src.exists():
             int8_src = _pick_tflite(candidates, "int8")
 
-        shutil.copy2(float32_src, _TFLITE_PATH)
-        shutil.copy2(int8_src, _TFLITE_INT8_PATH)
+        shutil.copy2(float32_src, tflite_path)
+        shutil.copy2(int8_src, tflite_int8_path)
 
-    print(f"Written:  {_TFLITE_PATH}  ({_TFLITE_PATH.stat().st_size // 1024} KB)")
-    print(f"Written:  {_TFLITE_INT8_PATH}  ({_TFLITE_INT8_PATH.stat().st_size // 1024} KB)")
-    print("Run `uv run python scripts/benchmark_model.py --model yolo --units npu gpu` to verify.")
+    print(f"Written:  {tflite_path}  ({tflite_path.stat().st_size // 1024} KB)")
+    print(f"Written:  {tflite_int8_path}  ({tflite_int8_path.stat().st_size // 1024} KB)")
+    if imgsz == 320:
+        print(
+            "Note: 320×320 model targets Hexagon HTP NPU — fits within TCM constraints.\n"
+            "Run `uv run python scripts/benchmark_model.py --model yolo --units npu` to verify."
+        )
+    else:
+        print(
+            "Run `uv run python scripts/benchmark_model.py --model yolo --units npu gpu` to verify."
+        )
 
 
 if __name__ == "__main__":
-    convert()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=640,
+        choices=[320, 640],
+        help=(
+            "Input image size (square). Use 320 for NPU (fits Hexagon TCM), "
+            "640 for CPU/GPU (default)."
+        ),
+    )
+    args = parser.parse_args()
+    convert(imgsz=args.imgsz)

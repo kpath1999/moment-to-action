@@ -32,19 +32,22 @@ class YOLOBenchmark(ModelBenchmark):
         return ModelID.YOLO_V8
 
     def _load_model(self, backend: ComputeBackend, manager: ModelManager) -> object:
-        if backend.active_unit == ComputeUnit.NPU and manager.is_available(
-            ModelID.YOLO_V8_TFLITE_INT8
-        ):
-            handle = backend.load_model(manager.get_path(ModelID.YOLO_V8_TFLITE_INT8))
-            details = backend.get_input_details(handle)
-            self._input_shape = tuple(int(d) for d in details[0]["shape"])
-            return handle
+        if backend.active_unit == ComputeUnit.NPU:
+            # Prefer the 320×320 INT8 model on NPU: it is the only variant whose
+            # largest intermediate tensor (~0.64 MB) fits within the Hexagon HTP
+            # VTCM/TCM budget on QCS6490.  The 640×640 INT8 model requires
+            # ~2.56 MB per tensor, which exceeds the default allocation and causes
+            # a graph-prepare failure (tcm_migration error 17).
+            for npu_model_id in (ModelID.YOLO_V8_TFLITE_INT8_320, ModelID.YOLO_V8_TFLITE_INT8):
+                if manager.is_available(npu_model_id):
+                    handle = backend.load_model(manager.get_path(npu_model_id))
+                    details = backend.get_input_details(handle)
+                    self._input_shape = tuple(int(d) for d in details[0]["shape"])
+                    return handle
 
         # Prefer TFLite on accelerated units so inference routes through the
         # LiteRT/QNN delegate instead of onnxruntime CPU.
-        if backend.active_unit != ComputeUnit.CPU and manager.is_available(
-            ModelID.YOLO_V8_TFLITE
-        ):
+        if backend.active_unit != ComputeUnit.CPU and manager.is_available(ModelID.YOLO_V8_TFLITE):
             handle = backend.load_model(manager.get_path(ModelID.YOLO_V8_TFLITE))
             details = backend.get_input_details(handle)
             self._input_shape = tuple(int(d) for d in details[0]["shape"])

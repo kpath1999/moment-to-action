@@ -14,10 +14,10 @@ from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
+from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.messages.video import BoundingBox, DetectionMessage, FrameTensorMessage
 from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
-from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:

@@ -105,8 +105,8 @@ class QCS6490Backend(InferenceBackend):
 
         # Accelerated ONNX backend — None if the preferred unit is CPU or
         # the QNN ONNX EP is unavailable on this device.
-        self._onnx_accel_backend: QCS6490ONNXBackend | None = (
-            self._try_make_onnx_accel_backend(preferred_unit)
+        self._onnx_accel_backend: QCS6490ONNXBackend | None = self._try_make_onnx_accel_backend(
+            preferred_unit
         )
 
         if (

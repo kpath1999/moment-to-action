@@ -17,7 +17,9 @@ class VariantRegistry:
 
     def __init__(self, path: Path | None = None) -> None:
         if path is None:
-            path = platformdirs.user_cache_path("moment_to_action", "GATech") / "variant_registry.json"
+            path = (
+                platformdirs.user_cache_path("moment_to_action", "GATech") / "variant_registry.json"
+            )
         self._path = path
         self._profiles: dict[VariantID, VariantProfile] = {}
 
@@ -70,7 +72,9 @@ class VariantRegistry:
             return min(candidates, key=lambda item: item.inference_mean_ms)
         if objective == "accuracy":
             with_accuracy = [item for item in candidates if item.accuracy is not None]
-            return max(with_accuracy, key=lambda item: item.accuracy or 0.0) if with_accuracy else None
+            return (
+                max(with_accuracy, key=lambda item: item.accuracy or 0.0) if with_accuracy else None
+            )
         if objective == "efficiency":
             with_energy = [
                 item for item in candidates if item.cost.energy_per_inference_mj is not None

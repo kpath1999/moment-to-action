@@ -172,6 +172,35 @@ class LiteRTBackend(InferenceBackend):
         interp.allocate_tensors()
         logger.debug("[load_interpreter] allocate_tensors() complete for %s", model_path)
 
+        # Log delegate partitioning stats if DEBUG level is enabled
+        if logger.isEnabledFor(logging.DEBUG) and delegates:
+            try:
+                # Get execution plan - shows which nodes run on which delegate
+                # Negative node IDs indicate delegate execution, non-negative = CPU
+                exec_plan = interp._get_execution_plan()
+                delegate_nodes = sum(1 for node_id in exec_plan if node_id < 0)
+                cpu_nodes = len(exec_plan) - delegate_nodes
+                total_nodes = len(exec_plan)
+
+                if cpu_nodes > 0:
+                    logger.warning(
+                        "[load_interpreter] Heterogeneous execution for %s: "
+                        "%d/%d nodes on delegate, %d on CPU fallback",
+                        model_path,
+                        delegate_nodes,
+                        total_nodes,
+                        cpu_nodes,
+                    )
+                else:
+                    logger.debug(
+                        "[load_interpreter] Full acceleration: %d/%d nodes on delegate",
+                        delegate_nodes,
+                        total_nodes,
+                    )
+            except (AttributeError, Exception):  # noqa: BLE001
+                # _get_execution_plan may not exist in all versions
+                pass
+
         actual_unit = self._unit if delegates else ComputeUnit.CPU
         return interp, actual_unit
 

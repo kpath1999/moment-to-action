@@ -30,31 +30,54 @@ def test_yolo_load_and_input_shape_cpu_uses_onnx() -> None:
 
 
 @pytest.mark.unit
-def test_yolo_load_and_input_shape_npu_uses_tflite_when_available() -> None:
-    """On NPU with INT8 available, _load_model picks YOLO_V8_TFLITE_INT8."""
+def test_yolo_load_npu_prefers_int8_320_when_available() -> None:
+    """On NPU, _load_model picks YOLO_V8_TFLITE_INT8_320 first (fits TCM)."""
     benchmark = YOLOBenchmark()
     backend = mock.MagicMock()
     backend.active_unit = ComputeUnit.NPU
     manager = mock.MagicMock(spec=ModelManager)
     manager.is_available.return_value = True
-    tflite_path = Path("/tmp/yolo_npu_int8.tflite")
+    tflite_path = Path("/tmp/yolo_npu_int8_320.tflite")
     manager.get_path.return_value = tflite_path
-    # TFLite model reports NHWC input shape
-    backend.get_input_details.return_value = [{"shape": [1, 640, 640, 3], "name": "input"}]
+    # 320×320 TFLite model reports NHWC shape
+    backend.get_input_details.return_value = [{"shape": [1, 320, 320, 3], "name": "input"}]
 
     handle = benchmark._load_model(backend=backend, manager=manager)
-    manager.is_available.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8)
-    manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8)
+    manager.is_available.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8_320)
+    manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8_320)
     backend.load_model.assert_called_once_with(tflite_path)
 
     inputs = benchmark._make_dummy_input(handle, batch_size=2)
     assert isinstance(inputs, np.ndarray)
+    assert inputs.shape == (2, 320, 320, 3)
+
+
+@pytest.mark.unit
+def test_yolo_load_npu_falls_back_to_int8_640_when_320_unavailable() -> None:
+    """On NPU with only 640-INT8 available, _load_model picks YOLO_V8_TFLITE_INT8."""
+    benchmark = YOLOBenchmark()
+    backend = mock.MagicMock()
+    backend.active_unit = ComputeUnit.NPU
+    manager = mock.MagicMock(spec=ModelManager)
+    # is_available: False for 320, True for 640-int8
+    manager.is_available.side_effect = lambda m: m == ModelID.YOLO_V8_TFLITE_INT8
+    tflite_path = Path("/tmp/yolo_npu_int8.tflite")
+    manager.get_path.return_value = tflite_path
+    backend.get_input_details.return_value = [{"shape": [1, 640, 640, 3], "name": "input"}]
+
+    handle = benchmark._load_model(backend=backend, manager=manager)
+    manager.is_available.assert_any_call(ModelID.YOLO_V8_TFLITE_INT8_320)
+    manager.is_available.assert_any_call(ModelID.YOLO_V8_TFLITE_INT8)
+    manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8)
+    backend.load_model.assert_called_once_with(tflite_path)
+
+    inputs = benchmark._make_dummy_input(handle, batch_size=2)
     assert inputs.shape == (2, 640, 640, 3)
 
 
 @pytest.mark.unit
 def test_yolo_load_falls_back_to_onnx_when_tflite_unavailable() -> None:
-    """On NPU without TFLite model, _load_model falls back to ONNX."""
+    """On NPU without any TFLite model, _load_model falls back to ONNX."""
     benchmark = YOLOBenchmark()
     backend = mock.MagicMock()
     backend.active_unit = ComputeUnit.NPU
@@ -64,13 +87,11 @@ def test_yolo_load_falls_back_to_onnx_when_tflite_unavailable() -> None:
     manager.get_path.return_value = onnx_path
 
     benchmark._load_model(backend=backend, manager=manager)
-    assert manager.is_available.call_count == 2
-    manager.is_available.assert_has_calls(
-        [
-            mock.call(ModelID.YOLO_V8_TFLITE_INT8),
-            mock.call(ModelID.YOLO_V8_TFLITE),
-        ]
-    )
+    # NPU path checks 320 and 640-int8; both unavailable
+    # then non-CPU path checks YOLO_V8_TFLITE; also unavailable
+    manager.is_available.assert_any_call(ModelID.YOLO_V8_TFLITE_INT8_320)
+    manager.is_available.assert_any_call(ModelID.YOLO_V8_TFLITE_INT8)
+    manager.is_available.assert_any_call(ModelID.YOLO_V8_TFLITE)
     manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
     backend.load_model.assert_called_once_with(onnx_path)
 

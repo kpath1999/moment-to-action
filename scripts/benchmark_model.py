@@ -36,7 +36,6 @@ from moment_to_action.benchmark import (
     ModelBenchmark,
     Qwen3Benchmark,
     SmolVLM2Benchmark,
-    VariantID,
     VariantProfile,
     VariantRegistry,
     YOLOBenchmark,
@@ -58,7 +57,7 @@ _MODEL_CHOICES: dict[str, tuple[ModelID, ModelBenchmark]] = {
     "yolo": (ModelID.YOLO_V8, YOLOBenchmark()),
     "mobileclip": (ModelID.MOBILECLIP_S2, MobileCLIPBenchmark()),
     "smolvlm2": (ModelID.SMOLVLM2_2_2B, SmolVLM2Benchmark()),
-    "qwen3": (ModelID.QWEN3_4B, Qwen3Benchmark()),
+    "qwen3": (ModelID.QWEN2_5_4B, Qwen3Benchmark()),
 }
 
 _UNIT_MAP: dict[str, ComputeUnit] = {
@@ -186,7 +185,11 @@ table.add_column("Model Size (MB)", justify="right")
 for p in profiles:
     unit_str = p.variant_id.compute_unit.value
     power = f"{p.cost.power_mw:.0f}" if p.cost.power_mw is not None else "—"
-    energy = f"{p.cost.energy_per_inference_mj:.3f}" if p.cost.energy_per_inference_mj is not None else "—"
+    energy = (
+        f"{p.cost.energy_per_inference_mj:.3f}"
+        if p.cost.energy_per_inference_mj is not None
+        else "—"
+    )
     table.add_row(
         unit_str,
         f"{p.load_latency_ms:.1f}",
@@ -198,7 +201,7 @@ for p in profiles:
         str(p.max_batch_size),
         power,
         energy,
-        f"{p.model_size_bytes / (1024 ** 2):.1f}",
+        f"{p.model_size_bytes / (1024**2):.1f}",
     )
 
 rich.print(table)

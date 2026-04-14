@@ -36,14 +36,19 @@ class TestModelID:
         assert hasattr(ModelID, "YOLO_V8_TFLITE_INT8")
         assert ModelID.YOLO_V8_TFLITE_INT8.value == "yolo_v8_tflite_int8"
 
+    def test_model_id_has_yolo_v8_tflite_int8_320(self) -> None:
+        """Test that ModelID enum has YOLO_V8_TFLITE_INT8_320."""
+        assert hasattr(ModelID, "YOLO_V8_TFLITE_INT8_320")
+        assert ModelID.YOLO_V8_TFLITE_INT8_320.value == "yolo_v8_tflite_int8_320"
+
     def test_model_id_has_mobileclip_s2(self) -> None:
         """Test that ModelID enum has MOBILECLIP_S2."""
         assert hasattr(ModelID, "MOBILECLIP_S2")
         assert ModelID.MOBILECLIP_S2.value == "mobileclip_s2"
 
     def test_model_id_enum_count(self) -> None:
-        """Test that ModelID has exactly six members."""
-        assert len(list(ModelID)) == 6
+        """Test that ModelID has exactly seven members."""
+        assert len(list(ModelID)) == 7
 
     @pytest.mark.parametrize(
         "model_id",
@@ -51,9 +56,10 @@ class TestModelID:
             ModelID.YOLO_V8,
             ModelID.YOLO_V8_TFLITE,
             ModelID.YOLO_V8_TFLITE_INT8,
+            ModelID.YOLO_V8_TFLITE_INT8_320,
             ModelID.MOBILECLIP_S2,
             ModelID.SMOLVLM2_2_2B,
-            ModelID.QWEN3_4B,
+            ModelID.QWEN2_5_4B,
         ],
     )
     def test_model_id_has_value(self, model_id: ModelID) -> None:
@@ -66,10 +72,10 @@ class TestModelID:
         assert hasattr(ModelID, "SMOLVLM2_2_2B")
         assert ModelID.SMOLVLM2_2_2B.value == "smolvlm2_2_2b"
 
-    def test_model_id_has_qwen3_4b(self) -> None:
-        """Test that ModelID enum has QWEN3_4B."""
-        assert hasattr(ModelID, "QWEN3_4B")
-        assert ModelID.QWEN3_4B.value == "qwen3_4b"
+    def test_model_id_has_qwen2_5_4b(self) -> None:
+        """Test that ModelID enum has QWEN2_5_4B."""
+        assert hasattr(ModelID, "QWEN2_5_4B")
+        assert ModelID.QWEN2_5_4B.value == "qwen2.5_4b"
 
 
 @pytest.mark.unit
@@ -241,9 +247,9 @@ class TestModelInfo:
 
     def test_model_info_with_qwen_transformers_source(self) -> None:
         """Test ModelInfo with Qwen3 TransformersSource."""
-        source = TransformersSource(hf_repo_id="Qwen/Qwen3-4B-Instruct-2507")
+        source = TransformersSource(hf_repo_id="Qwen/Qwen2.5-4B-Instruct")
         info = ModelInfo(
-            id=ModelID.QWEN3_4B,
+            id=ModelID.QWEN2_5_4B,
             filename="",
             source=source,
         )
@@ -359,15 +365,15 @@ class TestModelRegistry:
         info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
         assert info.id == ModelID.SMOLVLM2_2_2B
 
-    def test_registry_contains_qwen3_4b(self) -> None:
-        """Test that MODEL_REGISTRY contains QWEN3_4B."""
-        assert ModelID.QWEN3_4B in MODEL_REGISTRY
-        info = MODEL_REGISTRY[ModelID.QWEN3_4B]
-        assert info.id == ModelID.QWEN3_4B
+    def test_registry_contains_qwen2_5_4b(self) -> None:
+        """Test that MODEL_REGISTRY contains QWEN2_5_4B."""
+        assert ModelID.QWEN2_5_4B in MODEL_REGISTRY
+        info = MODEL_REGISTRY[ModelID.QWEN2_5_4B]
+        assert info.id == ModelID.QWEN2_5_4B
 
     def test_registry_has_exactly_four_entries(self) -> None:
-        """Test that MODEL_REGISTRY has exactly six entries."""
-        assert len(MODEL_REGISTRY) == 6
+        """Test that MODEL_REGISTRY has exactly seven entries."""
+        assert len(MODEL_REGISTRY) == 7
 
     def test_yolo_v8_is_vendored(self) -> None:
         """Test that YOLO_V8 has VendoredSource."""
@@ -389,6 +395,23 @@ class TestModelRegistry:
         """Test that YOLO_V8_TFLITE_INT8 has correct filename."""
         info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8]
         assert info.filename == "model_int8.tflite"
+
+    def test_yolo_v8_tflite_int8_320_is_in_registry(self) -> None:
+        """Test that YOLO_V8_TFLITE_INT8_320 is registered."""
+        assert ModelID.YOLO_V8_TFLITE_INT8_320 in MODEL_REGISTRY
+        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8_320]
+        assert info.id == ModelID.YOLO_V8_TFLITE_INT8_320
+
+    def test_yolo_v8_tflite_int8_320_has_correct_filename(self) -> None:
+        """Test that YOLO_V8_TFLITE_INT8_320 has the 320 filename."""
+        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8_320]
+        assert info.filename == "model_int8_320.tflite"
+
+    def test_yolo_v8_tflite_int8_320_is_vendored(self) -> None:
+        """Test that YOLO_V8_TFLITE_INT8_320 uses VendoredSource."""
+        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8_320]
+        assert isinstance(info.source, VendoredSource)
+        assert info.source.subdir == "yolo"
 
     def test_mobileclip_s2_is_downloadable(self) -> None:
         """Test that MOBILECLIP_S2 has DownloadSource."""
@@ -428,20 +451,20 @@ class TestModelRegistry:
         info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
         assert info.filename == "__UNUSED__"
 
-    def test_qwen3_4b_is_transformers_source(self) -> None:
-        """Test that QWEN3_4B has TransformersSource."""
-        info = MODEL_REGISTRY[ModelID.QWEN3_4B]
+    def test_qwen2_5_4b_is_transformers_source(self) -> None:
+        """Test that QWEN2_5_4B has TransformersSource."""
+        info = MODEL_REGISTRY[ModelID.QWEN2_5_4B]
         assert isinstance(info.source, TransformersSource)
 
-    def test_qwen3_4b_has_correct_hf_repo(self) -> None:
-        """Test that QWEN3_4B has correct HF repo."""
-        info = MODEL_REGISTRY[ModelID.QWEN3_4B]
+    def test_qwen2_5_4b_has_correct_hf_repo(self) -> None:
+        """Test that QWEN2_5_4B has correct HF repo."""
+        info = MODEL_REGISTRY[ModelID.QWEN2_5_4B]
         assert isinstance(info.source, TransformersSource)
-        assert info.source.hf_repo_id == "Qwen/Qwen3-4B-Instruct-2507"
+        assert info.source.hf_repo_id == "Qwen/Qwen2.5-4B-Instruct"
 
-    def test_qwen3_4b_has_unused_filename_sentinel(self) -> None:
-        """Test that QWEN3_4B has '__UNUSED__' filename (directory-based source)."""
-        info = MODEL_REGISTRY[ModelID.QWEN3_4B]
+    def test_qwen2_5_4b_has_unused_filename_sentinel(self) -> None:
+        """Test that QWEN2_5_4B has '__UNUSED__' filename (directory-based source)."""
+        info = MODEL_REGISTRY[ModelID.QWEN2_5_4B]
         assert info.filename == "__UNUSED__"
 
     @pytest.mark.parametrize(
@@ -451,7 +474,7 @@ class TestModelRegistry:
             ModelID.YOLO_V8_TFLITE_INT8,
             ModelID.MOBILECLIP_S2,
             ModelID.SMOLVLM2_2_2B,
-            ModelID.QWEN3_4B,
+            ModelID.QWEN2_5_4B,
         ],
     )
     def test_registry_entries_are_model_info(self, model_id: ModelID) -> None:
@@ -466,7 +489,7 @@ class TestModelRegistry:
             ModelID.YOLO_V8_TFLITE_INT8,
             ModelID.MOBILECLIP_S2,
             ModelID.SMOLVLM2_2_2B,
-            ModelID.QWEN3_4B,
+            ModelID.QWEN2_5_4B,
         ],
     )
     def test_registry_entry_id_matches_key(self, model_id: ModelID) -> None:

@@ -27,7 +27,7 @@ class Qwen3Benchmark(ModelBenchmark):
 
     @property
     def model_id(self) -> ModelID:
-        return ModelID.QWEN3_4B
+        return ModelID.QWEN2_5_4B
 
     def _load_model(self, backend: ComputeBackend, manager: ModelManager) -> object:
         policy = backend.resolve_torch_policy("auto")

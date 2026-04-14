@@ -9,7 +9,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 import psutil
 
-from moment_to_action.benchmark._types import BenchmarkConfig, CostProfile, VariantID, VariantProfile
+from moment_to_action.benchmark._types import (
+    BenchmarkConfig,
+    CostProfile,
+    VariantID,
+    VariantProfile,
+)
 from moment_to_action.hardware._platforms._detection import detect_platform
 
 if TYPE_CHECKING:
