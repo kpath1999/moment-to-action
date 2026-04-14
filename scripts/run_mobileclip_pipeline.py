@@ -27,6 +27,7 @@ from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages.video import PreprocessorStage
 from moment_to_action.stages.vlm import MobileCLIPStage
+from moment_to_action.stages import PromptFormatterStage
 from moment_to_action.stages.llm import LLMStage
 
 logging.basicConfig(
@@ -72,6 +73,10 @@ pipeline = Pipeline(
             backend=compute_backend,
             manager=manager,
         ),
+        PromptFormatterStage(
+            template="json",
+            min_confidence=0.3,
+            top_k=5),        
         #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"),
         #LLMStage(model_path="/home/ubuntu/moment-to-action/llm_models/qwen2.5-1.5b-instruct-q5_k_m.gguf"),
         LLMStage(

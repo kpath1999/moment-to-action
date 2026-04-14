@@ -13,5 +13,6 @@ from moment_to_action.pipeline import Pipeline
 
 from . import llm, video, vlm
 from ._base import Stage
+from ._formatter import PromptFormatterStage
 
 __all__ = ["Pipeline", "Stage", "llm", "video", "vlm"]

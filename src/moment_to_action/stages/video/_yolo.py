@@ -130,8 +130,8 @@ class YOLOStage(Stage):
         super().__init__()
         self._backend = backend
         # Resolve the YOLO model path through the manager — downloads/caches as needed.
-        #model_path = manager.get_path(ModelID.YOLO_V8)
-        model_path = manager.get_path(ModelID.YOLO_V8_TFLITE)
+        model_path = manager.get_path(ModelID.YOLO_V8)
+        #model_path = manager.get_path(ModelID.YOLO_V8_TFLITE)
         self._handle = self._backend.load_model(model_path)
         self._confidence_threshold = confidence_threshold
         logger.info("YOLOStage: loaded %s", model_path)

@@ -27,7 +27,7 @@ from openai import OpenAI
 
 from moment_to_action.config.slm_config.slm_config import settings
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import ClassificationMessage, DetectionMessage, ReasoningMessage
+from moment_to_action.messages import ClassificationMessage, DetectionMessage, ReasoningMessage, PromptMessage
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
@@ -328,19 +328,22 @@ class LLMStage(Stage):
     """
 
     def _process(self, msg: Message, _metrics: MetricsCollector) -> ReasoningMessage | None:
-        """Format detections into a prompt and run the LLM."""
         """I think another Stage will be useful, which takes the DetectionMessage,
         structures it as a JSON/XML message and passes it to the LLM"""
-        if not isinstance(msg, DetectionMessage | ClassificationMessage):
-            err = f"LLMStage expects DetectionMessage, got {type(msg).__name__}"
-            raise TypeError(err)
+        """Receive a formatted PromptMessage and run the LLM"""
+        if not isinstance(msg, PromptMessage):
+            raise TypeError(f"LLMStage expects PromptMessage, got {type(msg).__name__}")
 
         self._turn += 1
+        prompt = msg.prompt
+        #TODO Remove below comment
+        """
         prompt = (
             '{"detections": [{"label": "person", "confidence": 0.88}, '
             '{"label": "gun", "confidence": 0.95} ], '
             '"action": "a person aiming a gun" }'
         )
+        """
 
         # LLM inference — tokenize, run, decode
         system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)

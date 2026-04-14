@@ -16,6 +16,7 @@ from .llm import ReasoningMessage
 from .sensor import RawFrameMessage
 from .video import BoundingBox, DetectionMessage, FrameTensorMessage, VideoClipMessage
 from .vlm import ClassificationMessage
+from .prompt import PromptMessage
 
 # Union of every concrete message type in the pipeline.
 # Use this alias for ``isinstance`` checks or exhaustive ``match`` statements.
@@ -27,6 +28,7 @@ type Message = (
     | DetectionMessage
     | ReasoningMessage
     | ClassificationMessage
+    | PromptMessage
 )
 
 __all__ = [
@@ -39,4 +41,5 @@ __all__ = [
     "RawFrameMessage",
     "ReasoningMessage",
     "VideoClipMessage",
+    "PromptMessage",
 ]
