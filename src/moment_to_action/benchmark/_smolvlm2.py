@@ -12,6 +12,9 @@ from moment_to_action.benchmark._base import ModelBenchmark
 from moment_to_action.models import ModelID
 
 if TYPE_CHECKING:
+    from transformers import PreTrainedModel
+    from transformers.processing_utils import ProcessorMixin
+
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
 
@@ -20,8 +23,8 @@ if TYPE_CHECKING:
 class _SmolVLM2Handle:
     """Internal handle carrying SmolVLM2 model and processor."""
 
-    model: object
-    processor: object
+    model: PreTrainedModel
+    processor: ProcessorMixin
 
 
 class SmolVLM2Benchmark(ModelBenchmark):
@@ -39,7 +42,7 @@ class SmolVLM2Benchmark(ModelBenchmark):
             model_path,
             dtype=policy.dtype,
             trust_remote_code=True,
-        ).to(policy.device)
+        ).to(policy.device)  # type: ignore[arg-type]
         model.train(mode=False)
         return _SmolVLM2Handle(model=model, processor=processor)
 
@@ -55,8 +58,8 @@ class SmolVLM2Benchmark(ModelBenchmark):
                 ],
             }
         ]
-        inputs = model_handle.processor.apply_chat_template(
-            messages,
+        inputs: dict[str, torch.Tensor] = model_handle.processor.apply_chat_template(  # type: ignore[assignment]
+            messages,  # type: ignore[arg-type]
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
@@ -72,7 +75,7 @@ class SmolVLM2Benchmark(ModelBenchmark):
             msg = "SmolVLM2 benchmark expects mapping inputs"
             raise TypeError(msg)
         with torch.inference_mode():
-            model_handle.model.generate(
+            model_handle.model.generate(  # type: ignore[operator]
                 **inputs,
                 do_sample=False,
                 max_new_tokens=8,

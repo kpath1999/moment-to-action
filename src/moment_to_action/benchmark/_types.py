@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime  # noqa: TC003
 
 import attrs
 
-from moment_to_action.hardware._types import ComputeUnit
-from moment_to_action.models import ModelID
+from moment_to_action.hardware._types import ComputeUnit  # noqa: TC001
+from moment_to_action.models import ModelID  # noqa: TC001
 
 
 def _default_batch_sizes() -> list[int]:
@@ -47,6 +47,7 @@ class VariantProfile:
     model_size_bytes: int
     n_runs: int
     profiled_at: datetime
+    accuracy_details: dict[str, float] | None = None
 
     def json(self) -> dict[str, object]:
         """Return a JSON-serializable representation of this profile."""
@@ -71,6 +72,7 @@ class VariantProfile:
             "model_size_bytes": self.model_size_bytes,
             "n_runs": self.n_runs,
             "profiled_at": self.profiled_at.isoformat(),
+            "accuracy_details": self.accuracy_details,
         }
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -24,6 +24,9 @@ if TYPE_CHECKING:
 
 class ModelBenchmark(ABC):
     """Abstract benchmark for a model family."""
+
+    def __init__(self) -> None:
+        self._last_accuracy_details: dict[str, float] | None = None
 
     @property
     @abstractmethod
@@ -59,7 +62,9 @@ class ModelBenchmark(ABC):
             latencies_ms[idx] = (time.perf_counter() - t0) * 1000.0
             peak_rss_mb = max(peak_rss_mb, process.memory_info().rss / (1024.0 * 1024.0))
 
+        self._set_accuracy_details(None)
         accuracy = self._evaluate_accuracy(handle, backend, manager)
+        accuracy_details = self._accuracy_details()
         max_batch_size = self._probe_max_batch_size(handle, backend)
 
         model_size_bytes = self._model_size_bytes(manager.get_path(self.model_id))
@@ -91,6 +96,7 @@ class ModelBenchmark(ABC):
             model_size_bytes=model_size_bytes,
             n_runs=cfg.n_runs,
             profiled_at=datetime.now(tz=UTC),
+            accuracy_details=accuracy_details,
         )
 
     @abstractmethod
@@ -114,6 +120,14 @@ class ModelBenchmark(ABC):
         """Evaluate model accuracy for this variant if applicable."""
         del handle, backend, manager
         return None
+
+    def _set_accuracy_details(self, details: dict[str, float] | None) -> None:
+        """Store structured accuracy details for the current profiling run."""
+        self._last_accuracy_details = details
+
+    def _accuracy_details(self) -> dict[str, float] | None:
+        """Retrieve structured accuracy details for the latest run."""
+        return self._last_accuracy_details
 
     def _probe_max_batch_size(
         self,

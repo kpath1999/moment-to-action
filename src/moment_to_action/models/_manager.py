@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import platformdirs
+from huggingface_hub import snapshot_download
 
 from ._registry import MODEL_REGISTRY
 from ._types import (
@@ -360,6 +361,9 @@ class ModelManager:
     def _download_transformers_model(self, repo_id: str, dest_dir: Path) -> None:
         """Download a transformers model repo and save it under a managed cache path.
 
+        Uses ``snapshot_download`` so that any HuggingFace repo can be stored
+        locally regardless of model architecture (VLM, detector, encoder, …).
+
         Args:
             repo_id: HuggingFace repo ID (e.g. "HuggingFaceTB/SmolVLM2-2.2B-Instruct").
             dest_dir: Target directory under the model cache.
@@ -367,17 +371,11 @@ class ModelManager:
         Raises:
             RuntimeError: If download fails.
         """
-        from transformers import AutoModelForImageTextToText, AutoProcessor
-
         try:
             dest_dir.mkdir(parents=True, exist_ok=True)
             logger.debug("Downloading transformers repo %s to %s", repo_id, dest_dir)
 
-            processor = AutoProcessor.from_pretrained(repo_id, trust_remote_code=True)
-            processor.save_pretrained(dest_dir)
-
-            model = AutoModelForImageTextToText.from_pretrained(repo_id, trust_remote_code=True)
-            model.save_pretrained(dest_dir)
+            snapshot_download(repo_id=repo_id, local_dir=dest_dir)
 
         except Exception as e:
             if dest_dir.exists():

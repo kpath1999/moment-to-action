@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from moment_to_action.benchmark._types import BenchmarkConfig, VariantProfile
 from moment_to_action.benchmark._variant_registry import VariantRegistry
 
 if TYPE_CHECKING:
     from moment_to_action.benchmark._base import ModelBenchmark
+    from moment_to_action.benchmark._types import BenchmarkConfig, VariantProfile
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelID, ModelManager
 

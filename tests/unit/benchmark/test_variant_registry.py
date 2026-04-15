@@ -17,6 +17,7 @@ def _profile(
     latency: float,
     accuracy: float | None,
     energy: float | None,
+    accuracy_details: dict[str, float] | None = None,
 ) -> VariantProfile:
     return VariantProfile(
         variant_id=VariantID(model_id=model_id, compute_unit=compute_unit),
@@ -33,6 +34,7 @@ def _profile(
         model_size_bytes=1,
         n_runs=1,
         profiled_at=datetime(2026, 1, 1, tzinfo=UTC),
+        accuracy_details=accuracy_details,
     )
 
 

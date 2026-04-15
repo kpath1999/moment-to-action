@@ -177,7 +177,7 @@ class LiteRTBackend(InferenceBackend):
             try:
                 # Get execution plan - shows which nodes run on which delegate
                 # Negative node IDs indicate delegate execution, non-negative = CPU
-                exec_plan = interp._get_execution_plan()
+                exec_plan = interp._get_execution_plan()  # noqa: SLF001
                 delegate_nodes = sum(1 for node_id in exec_plan if node_id < 0)
                 cpu_nodes = len(exec_plan) - delegate_nodes
                 total_nodes = len(exec_plan)
@@ -198,8 +198,10 @@ class LiteRTBackend(InferenceBackend):
                         total_nodes,
                     )
             except (AttributeError, Exception):  # noqa: BLE001
-                # _get_execution_plan may not exist in all versions
-                pass
+                # _get_execution_plan may not exist in all TFLite versions
+                logger.debug(
+                    "[load_interpreter] _get_execution_plan unavailable, skipping delegate stats"
+                )
 
         actual_unit = self._unit if delegates else ComputeUnit.CPU
         return interp, actual_unit

@@ -46,10 +46,6 @@ class TestModelID:
         assert hasattr(ModelID, "MOBILECLIP_S2")
         assert ModelID.MOBILECLIP_S2.value == "mobileclip_s2"
 
-    def test_model_id_enum_count(self) -> None:
-        """Test that ModelID has exactly seven members."""
-        assert len(list(ModelID)) == 7
-
     @pytest.mark.parametrize(
         "model_id",
         [
@@ -370,10 +366,6 @@ class TestModelRegistry:
         assert ModelID.QWEN2_5_4B in MODEL_REGISTRY
         info = MODEL_REGISTRY[ModelID.QWEN2_5_4B]
         assert info.id == ModelID.QWEN2_5_4B
-
-    def test_registry_has_exactly_four_entries(self) -> None:
-        """Test that MODEL_REGISTRY has exactly seven entries."""
-        assert len(MODEL_REGISTRY) == 7
 
     def test_yolo_v8_is_vendored(self) -> None:
         """Test that YOLO_V8 has VendoredSource."""

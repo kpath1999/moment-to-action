@@ -10,6 +10,8 @@ from moment_to_action.benchmark._base import ModelBenchmark
 from moment_to_action.models import ModelID
 
 if TYPE_CHECKING:
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
+
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
 
@@ -18,8 +20,8 @@ if TYPE_CHECKING:
 class _Qwen3Handle:
     """Internal handle carrying Qwen3 model and tokenizer."""
 
-    model: object
-    tokenizer: object
+    model: PreTrainedModel
+    tokenizer: PreTrainedTokenizerBase
 
 
 class Qwen3Benchmark(ModelBenchmark):
@@ -36,7 +38,7 @@ class Qwen3Benchmark(ModelBenchmark):
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             torch_dtype=policy.dtype,
-        ).to(policy.device)
+        ).to(policy.device)  # type: ignore[arg-type]
         model.train(mode=False)
         return _Qwen3Handle(model=model, tokenizer=tokenizer)
 
@@ -53,7 +55,7 @@ class Qwen3Benchmark(ModelBenchmark):
             msg = "Qwen3 benchmark expects mapping inputs"
             raise TypeError(msg)
         with torch.inference_mode():
-            model_handle.model.generate(
+            model_handle.model.generate(  # type: ignore[operator]
                 **inputs,
                 do_sample=False,
                 max_new_tokens=16,

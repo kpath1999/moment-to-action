@@ -26,6 +26,7 @@ dependencies = [
     "huggingface_hub>=0.18.0",
     "num2words>=0.5.14",
     "matplotlib>=3.10.8",
+    "pycocotools>=2.0.10",
 ]
 
 [project.scripts]
@@ -83,6 +84,11 @@ ignore = [
     "T201",
 ]
 
+"archive/*.py" = [
+    # archive/ contains historical one-off modules, not an importable package
+    "INP001",
+]
+
 # Tests: exceptions for the many things that are OK in tests
 "tests/**/*.py" = [
     # assertions (S101)
@@ -93,10 +99,15 @@ ignore = [
     "SLF001",
     # pytest imports outside type-checking (TC002)
     "TC002",
+    # Path and similar imports are often only used in postponed annotations
+    "TC003",
     # nested context managers (SIM117)
     "SIM117",
     # hardcoded temp files (S108)
     "S108",
+    # test modules/functions do not need docstrings everywhere
+    "D100",
+    "D103",
     # undocumented public packages (D104)
     "D104",
 ]

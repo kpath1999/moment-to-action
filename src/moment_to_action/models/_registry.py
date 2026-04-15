@@ -46,4 +46,14 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         filename="__UNUSED__",
         source=TransformersSource(hf_repo_id="Qwen/Qwen2.5-4B-Instruct"),
     ),
+    ModelID.GROUNDING_DINO_BASE: ModelInfo(
+        id=ModelID.GROUNDING_DINO_BASE,
+        filename="__UNUSED__",
+        source=TransformersSource(hf_repo_id="IDEA-Research/grounding-dino-base"),
+    ),
+    ModelID.SIGLIP_SO400M: ModelInfo(
+        id=ModelID.SIGLIP_SO400M,
+        filename="__UNUSED__",
+        source=TransformersSource(hf_repo_id="google/siglip-so400m-patch14-384"),
+    ),
 }

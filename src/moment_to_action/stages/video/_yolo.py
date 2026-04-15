@@ -154,7 +154,7 @@ class YOLOStage(Stage):
         # NCHW: shape = [1, C, H, W]  →  second dim is channels (3)
         details = backend.get_input_details(self._handle)
         shape = details[0]["shape"]
-        self._nhwc: bool = len(shape) == 4 and int(shape[-1]) == 3 and int(shape[1]) != 3
+        self._nhwc: bool = len(shape) == 4 and int(shape[-1]) == 3 and int(shape[1]) != 3  # noqa: PLR2004
 
         logger.info("YOLOStage: loaded %s (nhwc=%s)", model_path.name, self._nhwc)
 
@@ -212,7 +212,7 @@ class YOLOStage(Stage):
 
         **3-tensor format** (ONNX / onnx2tf-converted TFLite):
 
-        * ``outputs[0]``: ``[1, N, 4]``  float32 — boxes (x1,y1,x2,y2) in 640×640 space
+        * ``outputs[0]``: ``[1, N, 4]``  float32 -- boxes (x1,y1,x2,y2) in 640x640 space
         * ``outputs[1]``: ``[1, N]``     float32 — confidence scores 0..1
         * ``outputs[2]``: ``[1, N]``     uint8   — class IDs
 

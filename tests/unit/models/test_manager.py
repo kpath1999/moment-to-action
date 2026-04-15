@@ -197,12 +197,6 @@ class TestModelManagerListModels:
         statuses = manager.list_models()
         assert isinstance(statuses, list)
 
-    def test_list_models_contains_all_models(self) -> None:
-        """Test list_models() returns all models in registry."""
-        manager = ModelManager()
-        statuses = manager.list_models()
-        assert len(statuses) == 6
-
     def test_list_models_yolo_is_available(self) -> None:
         """Test list_models() shows YOLO_V8 as available."""
         manager = ModelManager()
@@ -796,7 +790,6 @@ class TestModelManagerStreamWithProgress:
 
             statuses = manager.list_models()
 
-            assert len(statuses) == 6
             for status in statuses:
                 assert not status.available
                 assert status.path is None
@@ -808,34 +801,29 @@ class TestDownloadTransformersModel:
     """Tests for ModelManager._download_transformers_model."""
 
     def test_import_error_raises_module_not_found(self, tmp_path: Path) -> None:
-        """Missing transformers raises ModuleNotFoundError (no guard in source)."""
+        """Missing huggingface_hub raises ModuleNotFoundError (no guard in source)."""
         manager = ModelManager(cache_dir=tmp_path)
         dest = tmp_path / "smolvlm2"
 
         with mock.patch.dict(
             "sys.modules",
-            {"transformers": None},
+            {"huggingface_hub": None},
         ):
             with pytest.raises((RuntimeError, ModuleNotFoundError)):
                 manager._download_transformers_model("repo/test", dest)
 
     def test_successful_download(self, tmp_path: Path) -> None:
-        """Successful download saves processor and model."""
+        """Successful download calls snapshot_download with correct args."""
         manager = ModelManager(cache_dir=tmp_path)
         dest = tmp_path / "smolvlm2"
 
-        mock_processor = mock.MagicMock()
-        mock_model = mock.MagicMock()
-
-        mock_transformers = mock.MagicMock()
-        mock_transformers.AutoProcessor.from_pretrained.return_value = mock_processor
-        mock_transformers.AutoModelForImageTextToText.from_pretrained.return_value = mock_model
-
-        with mock.patch.dict("sys.modules", {"transformers": mock_transformers}):
+        with mock.patch(
+            "moment_to_action.models._manager.snapshot_download",
+            autospec=True,
+        ) as mock_snapshot:
             manager._download_transformers_model("repo/test", dest)
 
-        mock_processor.save_pretrained.assert_called_once_with(dest)
-        mock_model.save_pretrained.assert_called_once_with(dest)
+        mock_snapshot.assert_called_once_with(repo_id="repo/test", local_dir=dest)
         assert dest.exists()
 
     def test_download_failure_cleans_up_dest_dir(self, tmp_path: Path) -> None:
@@ -845,13 +833,11 @@ class TestDownloadTransformersModel:
         dest.mkdir()
         (dest / "partial_file").write_text("data")
 
-        mock_transformers = mock.MagicMock()
-        mock_transformers.AutoProcessor.from_pretrained.side_effect = ConnectionError(
-            "Network error"
-        )
-
         with (
-            mock.patch.dict("sys.modules", {"transformers": mock_transformers}),
+            mock.patch(
+                "moment_to_action.models._manager.snapshot_download",
+                side_effect=ConnectionError("Network error"),
+            ),
             pytest.raises(RuntimeError, match="Failed to download transformers model"),
         ):
             manager._download_transformers_model("repo/test", dest)

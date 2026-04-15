@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path  # noqa: TC003
 
 import attrs
 import platformdirs
@@ -54,9 +54,10 @@ class VariantRegistry:
                 continue
             if max_latency_ms is not None and profile.inference_mean_ms > max_latency_ms:
                 continue
-            if min_accuracy is not None:
-                if profile.accuracy is None or profile.accuracy < min_accuracy:
-                    continue
+            if min_accuracy is not None and (
+                profile.accuracy is None or profile.accuracy < min_accuracy
+            ):
+                continue
             if hardware_target is not None and profile.hardware_target != hardware_target:
                 continue
             matches.append(profile)
@@ -143,6 +144,7 @@ class VariantRegistry:
                 model_size_bytes=item["model_size_bytes"],
                 n_runs=item["n_runs"],
                 profiled_at=datetime.fromisoformat(item["profiled_at"]),
+                accuracy_details=item.get("accuracy_details"),
             )
             profiles[variant_id] = profile
 
