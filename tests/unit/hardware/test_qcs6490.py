@@ -439,6 +439,9 @@ class TestQCS6490LiteRTBackend:
         mock_delegate = MagicMock()
         with (
             patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._ensure_fastrpc_permissions",
+            ),
+            patch(
                 "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
                 return_value=None,
             ),
@@ -456,6 +459,9 @@ class TestQCS6490LiteRTBackend:
     def test_get_delegates_npu_unit_raises_on_missing_delegate(self) -> None:
         """Test _get_delegates raises RuntimeError if QNN delegate missing."""
         with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._ensure_fastrpc_permissions",
+            ),
             patch(
                 "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
                 return_value="native crash — SIGSEGV (exit -11)",
@@ -497,6 +503,9 @@ class TestQCS6490LiteRTBackend:
     def test_get_delegates_npu_with_load_delegate_exception(self) -> None:
         """Test _get_delegates raises RuntimeError on any delegate load exception."""
         with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._ensure_fastrpc_permissions",
+            ),
             patch(
                 "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
                 return_value=None,
