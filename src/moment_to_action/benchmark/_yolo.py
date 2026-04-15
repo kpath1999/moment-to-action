@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PIL import Image
 
+from moment_to_action.benchmark._accuracy import compute_map50, parse_yolo_outputs
 from moment_to_action.benchmark._base import ModelBenchmark
 from moment_to_action.benchmark._detection_metrics import compute_detection_map
 from moment_to_action.benchmark._oracle_ground_truth import OracleBox, OracleDetection, OracleStore
@@ -41,11 +42,13 @@ class YOLOBenchmark(ModelBenchmark):
 
     def __init__(
         self,
+        eval_image_paths: list[Path] | None = None,
         *,
         coco_dataset: CocoDataset | None = None,
         conf_threshold: float = 0.25,
     ) -> None:
         super().__init__()
+        self._eval_image_paths = eval_image_paths or []
         self._input_shape: tuple[int, ...] = (1, 3, 640, 640)
         self._coco_dataset = coco_dataset
         self._conf_threshold = conf_threshold
@@ -92,6 +95,9 @@ class YOLOBenchmark(ModelBenchmark):
         """Evaluate YOLO against project oracle or COCO pseudo-ground-truth."""
         if self._coco_dataset is not None:
             return self._evaluate_coco_accuracy(handle=handle, backend=backend)
+
+        if self._eval_image_paths:
+            return self._evaluate_eval_images(handle=handle, backend=backend, manager=manager)
 
         del manager
         gt = OracleStore().load()
@@ -177,6 +183,73 @@ class YOLOBenchmark(ModelBenchmark):
         )
         return metrics.map_50_95
 
+    def _evaluate_eval_images(
+        self,
+        handle: object,
+        backend: ComputeBackend,
+        manager: ModelManager,
+    ) -> float | None:
+        """Return mAP@50 against a CPU/ONNX oracle on explicit eval images."""
+        try:
+            import cv2  # type: ignore[import-untyped]
+        except ImportError:
+            logger.warning("opencv-python not installed -- skipping YOLO accuracy evaluation")
+            return None
+
+        from moment_to_action.hardware import ComputeBackend
+
+        cpu_backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
+        oracle_handle = cpu_backend.load_model(manager.get_path(ModelID.YOLO_V8))
+
+        details = backend.get_input_details(handle)
+        shape = details[0]["shape"]
+        nhwc = (
+            len(shape) == _INPUT_NDIM
+            and int(shape[-1]) == _RGB_CHANNELS
+            and int(shape[1]) != _RGB_CHANNELS
+        )
+        if nhwc:
+            height_in, width_in = int(shape[1]), int(shape[2])
+        else:
+            height_in, width_in = int(shape[2]), int(shape[3])
+
+        oracle_preds: list[list[np.ndarray]] = []
+        eval_preds: list[list[np.ndarray]] = []
+        oracle_size = 640
+
+        for img_path in self._eval_image_paths:
+            img_bgr = cv2.imread(str(img_path))
+            if img_bgr is None:
+                logger.warning("Could not load eval image %s -- skipping", img_path)
+                continue
+
+            oracle_tensor = _preprocess_nchw(img_bgr, oracle_size, oracle_size)
+            oracle_outputs = cpu_backend.run(oracle_handle, oracle_tensor)
+            oracle_preds.append(parse_yolo_outputs(oracle_outputs))
+
+            if nhwc:
+                eval_tensor = _preprocess_nhwc(img_bgr, height_in, width_in)
+            else:
+                eval_tensor = _preprocess_nchw(img_bgr, height_in, width_in)
+            eval_outputs = backend.run(handle, eval_tensor)
+
+            scale = float(oracle_size) / height_in if height_in != oracle_size else 1.0
+            raw_boxes = parse_yolo_outputs(eval_outputs)
+            if scale != 1.0:
+                raw_boxes = [
+                    np.array(
+                        [box[0] * scale, box[1] * scale, box[2] * scale, box[3] * scale],
+                        dtype=np.float32,
+                    )
+                    for box in raw_boxes
+                ]
+            eval_preds.append(raw_boxes)
+
+        if not oracle_preds:
+            return None
+
+        return compute_map50(eval_preds, oracle_preds)
+
 
 def _load_yolo_tensor(
     img_path: Path,
@@ -197,6 +270,41 @@ def _load_yolo_tensor(
         arr = arr.transpose(2, 0, 1)
 
     return arr[np.newaxis]
+
+
+def _letterbox_resize(
+    img_bgr: np.ndarray,
+    target_h: int,
+    target_w: int,
+) -> np.ndarray:
+    """Resize an image with letterboxing while preserving aspect ratio."""
+    src_h, src_w = img_bgr.shape[:2]
+    scale = min(target_w / src_w, target_h / src_h)
+    new_w = int(src_w * scale)
+    new_h = int(src_h * scale)
+
+    import cv2  # type: ignore[import-untyped]
+
+    resized = cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    canvas = np.full((target_h, target_w, 3), 114, dtype=np.uint8)
+    pad_top = (target_h - new_h) // 2
+    pad_left = (target_w - new_w) // 2
+    canvas[pad_top : pad_top + new_h, pad_left : pad_left + new_w] = resized
+    return canvas
+
+
+def _preprocess_nchw(img_bgr: np.ndarray, height: int, width: int) -> np.ndarray:
+    """Return a float32 RGB NCHW tensor normalized to [0, 1]."""
+    canvas = _letterbox_resize(img_bgr, height, width)
+    rgb = canvas[:, :, ::-1].astype(np.float32) / 255.0
+    return np.expand_dims(rgb.transpose(2, 0, 1), 0)
+
+
+def _preprocess_nhwc(img_bgr: np.ndarray, height: int, width: int) -> np.ndarray:
+    """Return a float32 RGB NHWC tensor normalized to [0, 1]."""
+    canvas = _letterbox_resize(img_bgr, height, width)
+    rgb = canvas[:, :, ::-1].astype(np.float32) / 255.0
+    return np.expand_dims(rgb, 0)
 
 
 def _parse_yolo_boxes(

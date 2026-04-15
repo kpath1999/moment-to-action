@@ -8,6 +8,7 @@ import numpy as np
 import open_clip
 from PIL import Image
 
+from moment_to_action.benchmark._accuracy import mean_embedding_similarity
 from moment_to_action.benchmark._base import ModelBenchmark
 from moment_to_action.benchmark._oracle_ground_truth import OracleStore
 from moment_to_action.benchmark._retrieval_metrics import compute_retrieval_metrics
@@ -25,8 +26,14 @@ logger = logging.getLogger(__name__)
 class MobileCLIPBenchmark(ModelBenchmark):
     """Benchmark implementation for MobileCLIP-S2."""
 
-    def __init__(self, *, coco_dataset: CocoDataset | None = None) -> None:
+    def __init__(
+        self,
+        eval_image_paths: list[Path] | None = None,
+        *,
+        coco_dataset: CocoDataset | None = None,
+    ) -> None:
         super().__init__()
+        self._eval_image_paths = eval_image_paths or []
         self._coco_dataset = coco_dataset
 
     @property
@@ -59,7 +66,19 @@ class MobileCLIPBenchmark(ModelBenchmark):
         if self._coco_dataset is not None:
             return self._evaluate_coco_accuracy(handle=handle, backend=backend)
 
-        del manager
+        if self._eval_image_paths:
+            return self._evaluate_embedding_consistency(
+                handle=handle, backend=backend, manager=manager
+            )
+
+        return self._evaluate_project_oracle_accuracy(handle=handle, backend=backend)
+
+    def _evaluate_project_oracle_accuracy(
+        self,
+        handle: object,
+        backend: ComputeBackend,
+    ) -> float | None:
+        """Evaluate MobileCLIP against oracle labels stored for project sample images."""
         gt = OracleStore().load()
         if gt is None or not gt.classifications:
             logger.debug(
@@ -185,6 +204,70 @@ class MobileCLIPBenchmark(ModelBenchmark):
         )
         return metrics.recall_at_1
 
+    def _evaluate_embedding_consistency(
+        self,
+        handle: object,
+        backend: ComputeBackend,
+        manager: ModelManager,
+    ) -> float | None:
+        """Return mean cosine similarity of image embeddings vs a CPU oracle."""
+        try:
+            import cv2  # type: ignore[import-untyped]
+        except ImportError:
+            logger.warning("opencv-python not installed -- skipping MobileCLIP accuracy evaluation")
+            return None
+
+        from moment_to_action.hardware import ComputeBackend
+        from moment_to_action.hardware._types import ComputeUnit
+
+        cpu_backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
+        oracle_handle = cpu_backend.load_model(manager.get_path(self.model_id))
+        dummy_tokens = np.zeros((1, 77), dtype=np.int64)
+
+        oracle_embeddings: list[np.ndarray] = []
+        eval_embeddings: list[np.ndarray] = []
+        nan_count = 0
+
+        for img_path in self._eval_image_paths:
+            img_bgr = cv2.imread(str(img_path))
+            if img_bgr is None:
+                logger.warning("Could not load eval image %s -- skipping", img_path)
+                continue
+
+            img_tensor = _preprocess_mobileclip(img_bgr)
+            oracle_inputs = {
+                "serving_default_args_0:0": img_tensor,
+                "serving_default_args_1:0": dummy_tokens,
+            }
+            oracle_out = cpu_backend.run(oracle_handle, oracle_inputs)
+
+            eval_inputs = {
+                "serving_default_args_0:0": img_tensor,
+                "serving_default_args_1:0": dummy_tokens,
+            }
+            eval_out = backend.run(handle, eval_inputs)
+
+            eval_emb = np.asarray(eval_out[0], dtype=np.float32)
+            if bool(np.any(np.isnan(eval_emb))):
+                nan_count += 1
+                continue
+
+            oracle_embeddings.append(np.asarray(oracle_out[0], dtype=np.float32))
+            eval_embeddings.append(eval_emb)
+
+        if nan_count > 0:
+            logger.warning(
+                "%d/%d eval image(s) produced NaN embeddings on %s -- accuracy unavailable",
+                nan_count,
+                len(self._eval_image_paths),
+                backend.active_unit.name,
+            )
+
+        if not oracle_embeddings:
+            return None
+
+        return mean_embedding_similarity(oracle_embeddings, eval_embeddings)
+
 
 def _load_mobileclip_tensor(img_path: Path) -> np.ndarray:
     """Load a PIL image and convert to a float32 NCHW tensor for MobileCLIP (256x256)."""
@@ -192,6 +275,15 @@ def _load_mobileclip_tensor(img_path: Path) -> np.ndarray:
     arr = np.asarray(image, dtype=np.float32) / 255.0
     arr = arr.transpose(2, 0, 1)
     return arr[np.newaxis]
+
+
+def _preprocess_mobileclip(img_bgr: np.ndarray) -> np.ndarray:
+    """Return a float32 RGB NCHW tensor normalized to [0, 1]."""
+    import cv2  # type: ignore[import-untyped]
+
+    resized = cv2.resize(img_bgr, (256, 256), interpolation=cv2.INTER_LINEAR)
+    rgb = resized[:, :, ::-1].astype(np.float32) / 255.0
+    return np.expand_dims(rgb.transpose(2, 0, 1), 0)
 
 
 def _default_sample_images() -> list[Path]:
