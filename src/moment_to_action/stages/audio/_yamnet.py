@@ -1,0 +1,121 @@
+"""YAMNet audio classification stage."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+import numpy as np
+
+from moment_to_action.messages.audio import AudioClassificationMessage, AudioTensorMessage
+from moment_to_action.metrics._types import SpanType
+from moment_to_action.models import ModelID, ModelManager
+from moment_to_action.stages._base import Stage
+
+if TYPE_CHECKING:
+    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.messages import Message
+    from moment_to_action.metrics import MetricsCollector
+
+logger = logging.getLogger(__name__)
+
+
+class YAMNetStage(Stage):
+    """Run YAMNet on an audio tensor and emit an audio classification."""
+
+    def __init__(
+        self,
+        backend: ComputeBackend,
+        manager: ModelManager,
+        *,
+        class_names: Sequence[str] | None = None,
+        confidence_threshold: float = 0.0,
+        aggregation: str = "mean",
+        model_id: ModelID = ModelID.YAMNET_TFLITE,
+    ) -> None:
+        super().__init__()
+        self._backend = backend
+        self._class_names = tuple(class_names) if class_names is not None else None
+        self._confidence_threshold = confidence_threshold
+        self._aggregation = aggregation
+        model_path = manager.get_path(model_id)
+        self._handle = self._backend.load_model(model_path)
+        logger.info("YAMNetStage: loaded %s", model_path)
+
+    def _process(
+        self,
+        msg: Message,
+        metrics: MetricsCollector,
+    ) -> AudioClassificationMessage | None:
+        if not isinstance(msg, AudioTensorMessage):
+            err = f"YAMNetStage expects AudioTensorMessage, got {type(msg).__name__}"
+            raise TypeError(err)
+
+        model_input = self._prepare_input(msg.data)
+        with metrics.start_span(SpanType.MODEL_INFERENCE, "YAMNet inference"):
+            outputs = self._backend.run(self._handle, model_input)
+
+        frame_scores = self._extract_score_matrix(outputs)
+        if frame_scores.size == 0:
+            logger.debug("YAMNetStage: model produced no frame scores")
+            return None
+
+        clip_scores = self._aggregate_scores(frame_scores)
+        class_names = self._resolve_class_names(len(clip_scores))
+        best_idx = int(np.argmax(clip_scores))
+        confidence = float(clip_scores[best_idx])
+
+        if confidence < self._confidence_threshold:
+            logger.debug(
+                "YAMNetStage: best score %.3f below threshold %.3f",
+                confidence,
+                self._confidence_threshold,
+            )
+            return None
+
+        label = class_names[best_idx]
+        logger.info("YAMNetStage: '%s'  conf=%.3f", label, confidence)
+        return AudioClassificationMessage(
+            label=label,
+            confidence=confidence,
+            all_scores={
+                name: float(score) for name, score in zip(class_names, clip_scores, strict=False)
+            },
+            sample_rate=msg.sample_rate,
+            source=msg.source,
+            timestamp=msg.timestamp,
+        )
+
+    def _prepare_input(self, tensor: np.ndarray) -> np.ndarray:
+        return np.asarray(tensor, dtype=np.uint8)
+
+    def _extract_score_matrix(self, outputs: list[np.ndarray]) -> np.ndarray:
+        for output in outputs:
+            array = np.asarray(output, dtype=np.float32)
+            if array.ndim == 2:
+                return array
+            if array.ndim == 3 and array.shape[0] == 1:
+                return array[0]
+        return np.empty((0, 0), dtype=np.float32)
+
+    def _aggregate_scores(self, frame_scores: np.ndarray) -> np.ndarray:
+        if self._aggregation == "max":
+            return frame_scores.max(axis=0)
+        if self._aggregation == "mean":
+            return frame_scores.mean(axis=0)
+
+        msg = f"Unsupported aggregation '{self._aggregation}'. Use 'mean' or 'max'."
+        raise ValueError(msg)
+
+    def _resolve_class_names(self, num_classes: int) -> tuple[str, ...]:
+        if self._class_names is None:
+            return tuple(f"class_{idx}" for idx in range(num_classes))
+        if len(self._class_names) != num_classes:
+            msg = (
+                "YAMNet class_names length does not match model outputs: "
+                f"{len(self._class_names)} != {num_classes}"
+            )
+            raise ValueError(msg)
+        return self._class_names
+

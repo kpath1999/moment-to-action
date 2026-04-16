@@ -21,3 +21,18 @@ class RawFrameMessage(BaseMessage):
 
     height: int = 0
     """Frame height in pixels; ``0`` when unknown."""
+
+class AudioInput(BaseMessage):
+    """Raw audio captured directly from a sensor or stream."""
+
+    waveform: NDArray | None
+    """Raw mono audio as a NumPy array. ``None`` signals a dropped chunk."""
+
+    source: str = ""
+    """Identifier for the capture device or stream (e.g. ``"mic0"``)."""
+
+    sample_rate: int = 16000
+    """Sampling rate in Hz."""
+
+    num_samples: int = 0
+    """Number of samples in ``waveform``; ``0`` when unknown."""

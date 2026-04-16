@@ -11,12 +11,11 @@ checks and ``isinstance`` guards across the full message hierarchy.
 
 from __future__ import annotations
 
-from .audio import AudioTensorMessage
 #asoma7
 #TODO, correct
-from .audio_dup import AudioEventMessage
 from .llm import ReasoningMessage
 from .sensor import RawFrameMessage
+from .sensor import AudioInput
 from .video import BoundingBox, DetectionMessage, FrameTensorMessage, VideoClipMessage
 from .vlm import ClassificationMessage
 from .prompt import PromptMessage
@@ -25,6 +24,7 @@ from .prompt import PromptMessage
 # Use this alias for ``isinstance`` checks or exhaustive ``match`` statements.
 type Message = (
     RawFrameMessage
+    | AudioInput
     | AudioTensorMessage
     | FrameTensorMessage
     | VideoClipMessage
@@ -42,6 +42,7 @@ __all__ = [
     "FrameTensorMessage",
     "Message",
     "RawFrameMessage",
+    "AudioInput",
     "ReasoningMessage",
     "VideoClipMessage",
     "PromptMessage",

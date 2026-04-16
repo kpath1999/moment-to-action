@@ -13,17 +13,54 @@ from ._base import BaseMessage
 
 
 class AudioTensorMessage(BaseMessage):
-    """Preprocessed audio tensor ready for model inference.
-
-    Placeholder — not yet used in the active pipeline.
-    """
+    """Preprocessed audio tensor ready for model inference."""
 
     data: NDArray
-    """Audio samples or feature tensor as a NumPy array.
-    Shape is intentionally unconstrained until the pipeline is finalised."""
+    """Audio samples or feature tensor as a NumPy array."""
 
     sample_rate: int
     """Sampling rate in Hz used when ``data`` holds raw PCM samples."""
+
+    source: str
+    """Identifier for the audio capture device or stream."""
+
+
+class AudioClassificationMessage(BaseMessage):
+    """Audio event classification output."""
+
+    label: str
+    """Winning class label selected by the model."""
+
+    confidence: float
+    """Confidence score for ``label`` in ``[0, 1]``."""
+
+    all_scores: dict[str, float]
+    """Mapping of candidate labels to scores."""
+
+    sample_rate: int
+    """Sampling rate in Hz for the analyzed clip."""
+
+    source: str
+    """Identifier for the audio capture device or stream."""
+
+
+class AudioTranscriptionMessage(BaseMessage):
+    """Speech-to-text output for an audio clip."""
+
+    text: str
+    """Transcribed text."""
+
+    language: str | None = None
+    """Detected or forced language code, if available."""
+
+    confidence: float | None = None
+    """Optional confidence score reported by the transcriber."""
+
+    segments: list[dict] = []
+    """Optional per-segment metadata from the transcription backend."""
+
+    sample_rate: int
+    """Sampling rate in Hz for the analyzed clip."""
 
     source: str
     """Identifier for the audio capture device or stream."""
