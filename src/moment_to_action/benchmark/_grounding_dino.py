@@ -156,7 +156,7 @@ class GroundingDINOBenchmark(ModelBenchmark):
             results = h.processor.post_process_grounded_object_detection(  # type: ignore[union-attr,attr-defined]
                 outputs,
                 inputs["input_ids"],
-                box_threshold=self._box_threshold,
+                threshold=self._box_threshold,
                 text_threshold=self._text_threshold,
                 target_sizes=[image.size[::-1]],
             )[0]

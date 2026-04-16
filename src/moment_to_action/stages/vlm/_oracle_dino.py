@@ -58,7 +58,7 @@ class OracleGroundingDinoStage(Stage):
         results = self._processor.post_process_grounded_object_detection(
             outputs,
             inputs.input_ids,
-            box_threshold=0.3,
+            threshold=0.3,
             text_threshold=0.3,
             target_sizes=[image.size[::-1]],
         )[0]

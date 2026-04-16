@@ -27,6 +27,7 @@ dependencies = [
     "num2words>=0.5.14",
     "matplotlib>=3.10.8",
     "pycocotools>=2.0.10",
+    "sentencepiece>=0.2.1",
 ]
 
 [project.scripts]

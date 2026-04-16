@@ -129,3 +129,70 @@ def test_main_skip_oracle_and_write_output(
 
     written_payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert written_payload == stdout_payload
+
+
+@pytest.mark.unit
+def test_main_oracle_only_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--model oracle should run oracle passes but skip YOLO and MobileCLIP eval."""
+    module = _load_script_module()
+
+    class _FakeDataset:
+        dataset_name = "coco_val2017"
+
+        def __init__(self, n_images: int) -> None:
+            self._n_images = n_images
+
+        def images(self) -> list[Path]:
+            return [Path(f"img_{idx}.jpg") for idx in range(self._n_images)]
+
+    oracle_calls: list[tuple[object, object, object]] = []
+    yolo_calls: list[object] = []
+    mobileclip_calls: list[object] = []
+
+    monkeypatch.setattr(module, "CocoDataset", _FakeDataset)
+    monkeypatch.setattr(module, "ModelManager", object)
+    monkeypatch.setattr(
+        module,
+        "OracleStore",
+        lambda dataset_name: SimpleNamespace(
+            path=tmp_path / f"oracle_{dataset_name}.json",
+            load=lambda: None,
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_run_oracle_passes",
+        lambda dataset, manager, unit: oracle_calls.append((dataset, manager, unit)),
+    )
+    monkeypatch.setattr(
+        module,
+        "_run_yolo_eval",
+        lambda *_a, **_kw: yolo_calls.append(True),
+    )
+    monkeypatch.setattr(
+        module,
+        "_run_mobileclip_eval",
+        lambda *_a, **_kw: mobileclip_calls.append(True),
+    )
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_coco_eval.py", "--n-images", "3", "--model", "oracle"],
+    )
+
+    module.main()
+
+    assert len(oracle_calls) == 1
+    assert yolo_calls == []
+    assert mobileclip_calls == []
+
+    stdout_payload = json.loads(capsys.readouterr().out)
+    assert stdout_payload["dataset"] == "coco_val2017"
+    assert stdout_payload["n_images"] == 3
+    assert "yolo" not in stdout_payload
+    assert "mobileclip" not in stdout_payload

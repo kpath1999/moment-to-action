@@ -40,9 +40,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model",
-        choices=["yolo", "mobileclip", "both"],
+        choices=["yolo", "mobileclip", "both", "oracle"],
         default="both",
-        help="Which edge model(s) to evaluate.",
+        help="Which edge model(s) to evaluate. Use 'oracle' to only generate pseudo-GT labels.",
     )
     parser.add_argument(
         "--oracle-unit",
