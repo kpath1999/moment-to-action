@@ -27,8 +27,8 @@ _NUM_MEL_BINS = 64
 _STFT_WINDOW_SECONDS = 0.025
 _STFT_HOP_SECONDS = 0.010
 
-_FRAME_LENGTH = int(_TARGET_SR * _STFT_WINDOW_SECONDS)   # 400
-_FRAME_STEP = int(_TARGET_SR * _STFT_HOP_SECONDS)        # 160
+_FRAME_LENGTH = int(_TARGET_SR * _STFT_WINDOW_SECONDS)  # 400
+_FRAME_STEP = int(_TARGET_SR * _STFT_HOP_SECONDS)  # 160
 _FFT_LENGTH = 512
 
 # Quantization params from your interpreter metadata
@@ -57,8 +57,8 @@ class YAMNetPreprocessor(BaseAudioPreprocessor):
     def _process(self, data: AudioInput) -> AudioTensorMessage:
         waveform, _ = self._load_waveform(data)
 
-        features = self._waveform_to_log_mel(waveform)   # [96, 64]
-        quantized = self._quantize(features)             # [96, 64] uint8
+        features = self._waveform_to_log_mel(waveform)  # [96, 64]
+        quantized = self._quantize(features)  # [96, 64] uint8
 
         buf = self._buffers.get("yamnet_input")
         buf[0, 0, :, :] = quantized
@@ -124,4 +124,3 @@ class YAMNetPreprocessorStage(Stage):
 
     def _process(self, msg, metrics: MetricsCollector):
         return self._preprocessor.process(msg, metrics=metrics)
-

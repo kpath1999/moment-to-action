@@ -83,4 +83,3 @@ class BaseAudioPreprocessor(BasePreprocessor["AudioInput", AudioTensorMessage]):
         if peak > 1e-6:
             return (waveform / peak).astype(np.float32)
         return waveform.astype(np.float32)
-

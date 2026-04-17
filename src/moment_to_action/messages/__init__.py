@@ -11,8 +11,8 @@ checks and ``isinstance`` guards across the full message hierarchy.
 
 from __future__ import annotations
 
-#asoma7
-#TODO, correct
+# asoma7
+# TODO, correct
 from .llm import ReasoningMessage
 from .sensor import RawFrameMessage
 from .sensor import AudioInput

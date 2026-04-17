@@ -46,7 +46,7 @@ from ._types import (
     Span,
     SpanType,
     Trace,
-    )
+)
 from pathlib import Path
 
 from moment_to_action.metrics._types import (
@@ -125,7 +125,7 @@ class MetricsCollector:
         self._latency_budget = latency_budget
         self._pipeline_log: list[PipelineRecord] = []
         self._stage_log: list[StageRecord] = []
-        self._event_log: list[EventRecord] = []        
+        self._event_log: list[EventRecord] = []
         self._resource_sample_interval = resource_sample_interval
 
         # ID tracking
@@ -708,6 +708,7 @@ class MetricsCollector:
         logger.info("  Total:   %.1fms  (%s)", budget.total_mean_ms, status)
         logger.info("=" * 50)
 
+
 class NullMetricsCollector(MetricsCollector):
     """A no-op metrics collector that ignores all spans and traces."""
 
@@ -745,7 +746,7 @@ class NullMetricsCollector(MetricsCollector):
             start=datetime.now(tz=UTC),
             end=datetime.now(tz=UTC),
             metadata=metadata or {},
-            )        
+        )
 
     def get_span(self, span_id: int) -> Span:  # noqa: ARG002
         """Get a span - returns dummy span for null collector."""

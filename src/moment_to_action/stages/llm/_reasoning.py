@@ -27,7 +27,12 @@ from openai import OpenAI
 
 from moment_to_action.config.slm_config.slm_config import settings
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import ClassificationMessage, DetectionMessage, ReasoningMessage, PromptMessage
+from moment_to_action.messages import (
+    ClassificationMessage,
+    DetectionMessage,
+    ReasoningMessage,
+    PromptMessage,
+)
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
@@ -336,7 +341,7 @@ class LLMStage(Stage):
 
         self._turn += 1
         prompt = msg.prompt
-        #TODO Remove below comment
+        # TODO Remove below comment
         """
         prompt = (
             '{"detections": [{"label": "person", "confidence": 0.88}, '

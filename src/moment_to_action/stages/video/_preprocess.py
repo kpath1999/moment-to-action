@@ -333,11 +333,11 @@ class PreprocessorStage(Stage):
         )
         processed = self._preprocessor.process(img, metrics=metrics)
         data = processed.data  # [H, W, C]
-        #asoma7, testing, revert TODO
+        # asoma7, testing, revert TODO
         if self._channels_first:
             data = np.transpose(data, (2, 0, 1))  # [H,W,C] → [C,H,W]
         tensor = data[np.newaxis, ...].astype(np.float32)  # → [1,C,H,W] or [1,H,W,C]
-        #tensor = data[np.newaxis, ...].astype(np.uint8)
+        # tensor = data[np.newaxis, ...].astype(np.uint8)
         # NOTE: output type is FrameTensorMessage (renamed from TensorMessage)
         return FrameTensorMessage(
             tensor=tensor,

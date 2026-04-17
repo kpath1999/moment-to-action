@@ -55,6 +55,7 @@ FormatHandler = Callable[["Message", float, int], dict]
 # Built-in handlers
 # ---------------------------------------------------------------------------
 
+
 def _handle_detection(
     msg: DetectionMessage,
     min_confidence: float,
@@ -68,10 +69,7 @@ def _handle_detection(
     boxes = [b for b in msg.boxes if b.confidence >= min_confidence]
     boxes = sorted(boxes, key=lambda b: -b.confidence)[:top_k]
 
-    detections = [
-        {"label": b.label, "confidence": round(b.confidence, 2)}
-        for b in boxes
-    ]
+    detections = [{"label": b.label, "confidence": round(b.confidence, 2)} for b in boxes]
     return {
         "source": "detection",
         "detections": detections,
@@ -91,16 +89,11 @@ def _handle_classification(
     are also surfaced explicitly so the prompt is unambiguous.
     """
     # Filter and rank the full distribution
-    filtered = {
-        label: score
-        for label, score in msg.all_scores.items()
-        if score >= min_confidence
-    }
+    filtered = {label: score for label, score in msg.all_scores.items() if score >= min_confidence}
     top_labels = sorted(filtered.items(), key=lambda kv: -kv[1])[:top_k]
 
     classifications = [
-        {"label": label, "confidence": round(score, 2)}
-        for label, score in top_labels
+        {"label": label, "confidence": round(score, 2)} for label, score in top_labels
     ]
 
     return {
@@ -108,6 +101,7 @@ def _handle_classification(
         "winner": {"label": msg.label, "confidence": round(msg.confidence, 2)},
         "classifications": classifications,
     }
+
 
 """
 def _handle_classification(
@@ -137,11 +131,11 @@ def _handle_classification(
 # Template protocol + built-in templates
 # ---------------------------------------------------------------------------
 
+
 class PromptTemplate(Protocol):
     """Callable that turns a context dict into a prompt string."""
 
-    def __call__(self, context: dict) -> str:
-        ...
+    def __call__(self, context: dict) -> str: ...
 
 
 def json_template(context: dict) -> str:
@@ -159,16 +153,12 @@ def natural_language_template(context: dict) -> str:
     parts = []
 
     if "detections" in context:
-        items = ", ".join(
-            f"{d['label']} ({d['confidence']:.0%})"
-            for d in context["detections"]
-        )
+        items = ", ".join(f"{d['label']} ({d['confidence']:.0%})" for d in context["detections"])
         parts.append(f"Detected: {items}" if items else "Detected: nothing above threshold")
 
     if "classifications" in context:
         items = ", ".join(
-            f"{c['label']} ({c['confidence']:.0%})"
-            for c in context["classifications"]
+            f"{c['label']} ({c['confidence']:.0%})" for c in context["classifications"]
         )
         parts.append(f"Classified: {items}" if items else "Classified: nothing above threshold")
 
@@ -189,6 +179,7 @@ TEMPLATES: dict[str, PromptTemplate] = {
 # ---------------------------------------------------------------------------
 # PromptFormatterStage
 # ---------------------------------------------------------------------------
+
 
 class PromptFormatterStage(Stage):
     """Converts upstream vision messages into LLM-ready PromptMessages.

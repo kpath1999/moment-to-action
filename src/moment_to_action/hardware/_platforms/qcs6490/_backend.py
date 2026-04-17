@@ -100,7 +100,7 @@ class QCS6490Backend(InferenceBackend):
 
         # ONNX backend is always available (falls back to ImportError at load
         # time if onnxruntime is not installed).
-        #asoma7: Adding the preferred device so ONNXBackend can see that info (npu/cpu)
+        # asoma7: Adding the preferred device so ONNXBackend can see that info (npu/cpu)
         self._onnx_backend: QCS6490ONNXBackend = QCS6490ONNXBackend(device=self._preferred_unit)
 
         logger.info(

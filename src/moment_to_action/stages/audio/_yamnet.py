@@ -78,8 +78,7 @@ class YAMNetStage(Stage):
         top_indices = np.argsort(clip_scores)[::-1][:top_k]
 
         top_predictions = {
-            self._class_names[int(idx)]: float(clip_scores[int(idx)])
-            for idx in top_indices
+            self._class_names[int(idx)]: float(clip_scores[int(idx)]) for idx in top_indices
         }
 
         best_score = next(iter(top_predictions.values()))
@@ -113,7 +112,7 @@ class YAMNetStage(Stage):
             for row in reader:
                 labels.append(row["display_name"])
         return tuple(labels)
-    
+
     def _extract_score_matrix(self, outputs: list[np.ndarray]) -> np.ndarray:
         for output in outputs:
             array = np.asarray(output, dtype=np.float32)
@@ -142,4 +141,3 @@ class YAMNetStage(Stage):
             )
             raise ValueError(msg)
         return self._class_names
-

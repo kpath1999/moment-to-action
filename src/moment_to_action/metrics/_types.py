@@ -135,6 +135,7 @@ class EventType(Enum):
     FALSE_POSITIVE = auto()
     """A detection was later determined to be incorrect."""
 
+
 class PipelineRecord:
     """Record of a pipeline-level event."""
 
@@ -149,6 +150,7 @@ class PipelineRecord:
 
     metadata: dict = attrs.Factory(dict)
     """Arbitrary key/value context for this event."""
+
 
 @attrs.define
 class Span:
@@ -234,6 +236,7 @@ class Span:
             raise AttributeError(msg)
         return super().__setattr__(attr, value)
 
+
 @attrs.define(kw_only=True)
 class StageRecord:
     """Record of a single stage execution (logged by the Stage wrapper)."""
@@ -258,6 +261,7 @@ class StageRecord:
 
     runtime_memory_bytes: int
     """To measure the memory consumed by the stage during computation/process"""
+
 
 @attrs.define
 class Trace:
@@ -546,7 +550,8 @@ class MetricsReport:
             "latency_budget_ms": self.latency_budget.total_seconds() * 1000,
             "traces": [trace.json() for trace in self.traces],
             "slow_traces": [trace.json() for trace in self.slow_traces],
-        }    
+        }
+
 
 @attrs.define
 class EventRecord:
@@ -640,6 +645,7 @@ class LatencyBudget:
 
     within_budget: bool
     """``True`` when ``total_mean_ms < budget_ms``."""
+
 
 @attrs.define
 class CollectorReport:

@@ -60,4 +60,3 @@ class WhisperPreprocessorStage(Stage):
         metrics: MetricsCollector,
     ) -> AudioTensorMessage:
         return self._preprocessor.process(msg, metrics=metrics)
-

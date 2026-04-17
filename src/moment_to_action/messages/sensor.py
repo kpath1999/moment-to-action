@@ -22,6 +22,7 @@ class RawFrameMessage(BaseMessage):
     height: int = 0
     """Frame height in pixels; ``0`` when unknown."""
 
+
 class AudioInput(BaseMessage):
     """Raw audio captured directly from a sensor or stream."""
 

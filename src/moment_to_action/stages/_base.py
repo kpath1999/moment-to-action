@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from moment_to_action.metrics import NullMetricsCollector, SpanType
+
 # memory metrics library
 from moment_to_action.metrics._collector import _rss_mb
 
@@ -68,7 +69,7 @@ class Stage(ABC):
 
         ##DIFF
         # Log the stage execution and latency
-        #calculate additional memory used by stage (memory used by stage)
+        # calculate additional memory used by stage (memory used by stage)
         # calculate additional memory used by stage (memory used by stage)
         mem_before = _rss_mb()
 

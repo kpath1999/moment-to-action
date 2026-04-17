@@ -66,7 +66,6 @@ class WhisperStage(Stage):
         print("waveform min/max:", waveform.min(), waveform.max())
         print("waveform mean abs:", np.mean(np.abs(waveform)))
 
-
         with metrics.start_span(SpanType.MODEL_INFERENCE, "Whisper inference"):
             segments, info = self._model.transcribe(
                 waveform,
@@ -105,4 +104,3 @@ class WhisperStage(Stage):
             source=msg.source,
             timestamp=msg.timestamp,
         )
-
