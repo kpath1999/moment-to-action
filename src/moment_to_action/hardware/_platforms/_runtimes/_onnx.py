@@ -45,30 +45,20 @@ class ONNXBackend(InferenceBackend):
             logger.debug("ONNX cache hit: %s", path)
             return self._session_cache[path]
 
-        # session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
-
-        # List of available providers
-
         if self.device == "NPU":
             providers = ["QNNExecutionProvider"]
             provider_options = [{"backend_path": "libQnnHtp.so"}]
-            # provider_options = [{"backend_type": "gpu"}]
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
 
-        so = ort.SessionOptions()
         session = ort.InferenceSession(
             path,
-            # providers=["QNNExecutionProvider", "CPUExecutionProvider"],
             providers=providers,
-            # asoma7, choose one argument
-            # provider_options=[{"backend_type": "htp"}, {}],
-            # provider_options=[{"backend_path": "libQnnHtp.so"}, {}],
             provider_options=provider_options,
         )
         actual_providers = session.get_providers()
-        print(f"Using providers: {actual_providers}")  # Show which providers are actually loaded
+        logger.info("Using ONNX providers: %s", actual_providers)
         self._session_cache[path] = session
         logger.info("Loaded %s via onnxruntime", path)
         return session

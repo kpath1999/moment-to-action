@@ -28,8 +28,8 @@ from __future__ import annotations
 
 import json
 import logging
-import time
-from typing import TYPE_CHECKING, Callable, Protocol
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol
 
 from moment_to_action.messages import ClassificationMessage, DetectionMessage
 from moment_to_action.messages.prompt import PromptMessage
@@ -102,30 +102,6 @@ def _handle_classification(
         "classifications": classifications,
     }
 
-
-"""
-def _handle_classification(
-    msg: ClassificationMessage,
-    min_confidence: float,
-    top_k: int,
-) -> dict:
-    #Serialize a ClassificationMessage into a structured context dict.
-
-    #Assumes ClassificationMessage has a ``labels`` field that is a list of
-    #objects with ``.label`` and ``.confidence`` attributes. Adjust the field
-    #access below if your ClassificationMessage differs.
-    labels = [l for l in msg.labels if l.confidence >= min_confidence]
-    labels = sorted(labels, key=lambda l: -l.confidence)[:top_k]
-
-    classifications = [
-        {"label": l.label, "confidence": round(l.confidence, 2)}
-        for l in labels
-    ]
-    return {
-        "source": "classification",
-        "classifications": classifications,
-    }
-"""
 
 # ---------------------------------------------------------------------------
 # Template protocol + built-in templates
@@ -208,7 +184,7 @@ class PromptFormatterStage(Stage):
                 }
             )
 
-    Examples
+    Examples:
     --------
     Minimal usage with a YOLO pipeline::
 
@@ -293,14 +269,15 @@ class PromptFormatterStage(Stage):
 
     def _process(self, msg: Message, _metrics: MetricsCollector) -> PromptMessage | None:
         """Look up the handler for this message type, format, and emit."""
-
         handler = self._registry.get(type(msg))
 
         if handler is None:
-            raise TypeError(
-                f"PromptFormatterStage: no handler registered for {type(msg).__name__}. "
-                f"Register one via extra_handlers= or .register_handler()."
+            msg_type = type(msg).__name__
+            error_message = (
+                "PromptFormatterStage: no handler registered for "
+                f"{msg_type}. Register one via extra_handlers= or .register_handler()."
             )
+            raise TypeError(error_message)
 
         # Build the structured context dict via the handler
         context = handler(msg, self._min_confidence, self._top_k)

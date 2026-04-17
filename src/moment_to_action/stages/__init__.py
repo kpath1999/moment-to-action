@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from moment_to_action.pipeline import Pipeline
 
-from . import llm, video, vlm, audio
+from . import audio, llm, video, vlm
 from ._base import Stage
 from ._formatter import PromptFormatterStage
 
-__all__ = ["Pipeline", "Stage", "llm", "video", "vlm"]
+__all__ = ["Pipeline", "PromptFormatterStage", "Stage", "audio", "llm", "video", "vlm"]

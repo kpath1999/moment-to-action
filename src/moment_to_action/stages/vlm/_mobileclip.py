@@ -16,7 +16,6 @@ import numpy as np
 import open_clip
 
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
-from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 from moment_to_action.utils.ml import softmax
@@ -82,7 +81,7 @@ class MobileCLIPStage(Stage):
         norms = np.linalg.norm(text_embeddings, axis=1, keepdims=True)
         return text_embeddings / (norms + 1e-8)
 
-    def _process(self, msg: Message, metrics: MetricsCollector) -> ClassificationMessage | None:
+    def _process(self, msg: Message, _metrics: MetricsCollector) -> ClassificationMessage | None:
         """Run zero-shot classification against all text prompts."""
         # NOTE: input type check uses FrameTensorMessage (renamed from TensorMessage)
         if not isinstance(msg, FrameTensorMessage):

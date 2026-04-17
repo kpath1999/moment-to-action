@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import tensorflow as tf
@@ -34,12 +34,16 @@ _FFT_LENGTH = 512
 # Quantization params from your interpreter metadata
 _INPUT_SCALE = 0.04793788492679596
 _INPUT_ZERO_POINT = 144
+_LOG_MEL_EPSILON = 1e-6
 
 
 class YAMNetPreprocessor(BaseAudioPreprocessor):
+    """Prepare audio for YAMNet's quantized log-mel input."""
+
     def __init__(
         self,
         compute_unit: ComputeUnit = ComputeUnit.CPU,
+        *,
         normalise: bool = True,
     ) -> None:
         super().__init__(
@@ -100,7 +104,7 @@ class YAMNetPreprocessor(BaseAudioPreprocessor):
         )
 
         mel_spectrogram = tf.matmul(tf.square(spectrogram), mel_matrix)
-        log_mel = tf.math.log(mel_spectrogram + 1e-6).numpy().astype(np.float32)
+        log_mel = tf.math.log(mel_spectrogram + _LOG_MEL_EPSILON).numpy().astype(np.float32)
 
         # Ensure exact [96, 64]
         if log_mel.shape[0] < _NUM_FRAMES:
@@ -113,14 +117,15 @@ class YAMNetPreprocessor(BaseAudioPreprocessor):
 
     def _quantize(self, features: np.ndarray) -> np.ndarray:
         quantized = np.round(features / _INPUT_SCALE + _INPUT_ZERO_POINT)
-        quantized = np.clip(quantized, 0, 255).astype(np.uint8)
-        return quantized
+        return np.clip(quantized, 0, 255).astype(np.uint8)
 
 
 class YAMNetPreprocessorStage(Stage):
-    def __init__(self, **kwargs) -> None:
+    """Pipeline stage wrapper around YAMNetPreprocessor."""
+
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__()
         self._preprocessor = YAMNetPreprocessor(**kwargs)
 
-    def _process(self, msg, metrics: MetricsCollector):
+    def _process(self, msg: AudioInput, metrics: MetricsCollector) -> AudioTensorMessage:
         return self._preprocessor.process(msg, metrics=metrics)

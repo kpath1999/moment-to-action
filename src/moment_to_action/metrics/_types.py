@@ -155,6 +155,7 @@ class PipelineRecord:
 @attrs.define
 class Span:
     """Represents a single excution span within the pipeline.
+
     Contains timing and metadata for that span. Used internally by MetricsCollector.
     """
 
@@ -266,6 +267,7 @@ class StageRecord:
 @attrs.define
 class Trace:
     """Represents a single execution trace, with 1+ pipeline inferences.
+
     Contains detailed timing and metadata for each stage, as well as
     overall pipeline events. Used internally by MetricsCollector.
     """

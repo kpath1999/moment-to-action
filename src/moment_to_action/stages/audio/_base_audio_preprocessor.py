@@ -6,7 +6,6 @@ from math import gcd
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import NDArray
 from scipy.signal import resample_poly
 
 from moment_to_action.hardware import ComputeUnit
@@ -14,9 +13,12 @@ from moment_to_action.messages.audio import AudioTensorMessage
 from moment_to_action.stages._preprocess import BasePreprocessor
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
     from moment_to_action.messages.sensor import AudioInput
 
 logger = logging.getLogger(__name__)
+_WAVEFORM_PEAK_EPSILON = 1e-6
 
 
 class BaseAudioPreprocessor(BasePreprocessor["AudioInput", AudioTensorMessage]):
@@ -35,11 +37,14 @@ class BaseAudioPreprocessor(BasePreprocessor["AudioInput", AudioTensorMessage]):
 
     def _validate(self, data: AudioInput) -> None:
         if data.waveform is None:
-            raise ValueError("AudioInput.waveform cannot be None.")
+            message = "AudioInput.waveform cannot be None."
+            raise ValueError(message)
         if data.waveform.ndim != 1:
-            raise ValueError(f"Waveform must be 1-D mono, got shape {data.waveform.shape}.")
+            message = f"Waveform must be 1-D mono, got shape {data.waveform.shape}."
+            raise ValueError(message)
         if data.sample_rate <= 0:
-            raise ValueError(f"Invalid sample_rate: {data.sample_rate}")
+            message = f"Invalid sample_rate: {data.sample_rate}"
+            raise ValueError(message)
 
     def _load_waveform(self, data: AudioInput) -> tuple[NDArray[np.float32], int]:
         waveform = np.asarray(data.waveform, dtype=np.float32)
@@ -80,6 +85,6 @@ class BaseAudioPreprocessor(BasePreprocessor["AudioInput", AudioTensorMessage]):
     @staticmethod
     def _normalise_waveform(waveform: NDArray[np.float32]) -> NDArray[np.float32]:
         peak = float(np.abs(waveform).max(initial=0.0))
-        if peak > 1e-6:
+        if peak > _WAVEFORM_PEAK_EPSILON:
             return (waveform / peak).astype(np.float32)
         return waveform.astype(np.float32)

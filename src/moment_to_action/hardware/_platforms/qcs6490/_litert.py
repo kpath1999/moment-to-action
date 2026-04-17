@@ -54,8 +54,6 @@ class QCS6490LiteRTBackend(LiteRTBackend):
         # decide whether to retry on CPU.
         if self._unit == ComputeUnit.NPU:
             try:
-                # asoma7, testing, revert, TODO
-                # qnn = _load_delegate(_QNN_DELEGATE_PATH)
                 qnn_delegate = _load_delegate(
                     "libQnnTFLiteDelegate.so", options={"backend_type": "htp"}
                 )

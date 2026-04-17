@@ -25,32 +25,22 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import json
 import logging
 import os
 import time
 import typing as t
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from threading import Event, Lock, Thread
 from typing import TYPE_CHECKING
 
-import psutil
 import attrs
 import numpy as np
+import psutil
 
 from moment_to_action.hardware._types import ComputeUnit
-
-from ._types import (
-    MemoryUsageSample,
-    MetricsReport,
-    ResourceUsageSample,
-    Span,
-    SpanType,
-    Trace,
-)
-from pathlib import Path
-
 from moment_to_action.metrics._types import (
-    CollectorReport,
     EventRecord,
     EventType,
     LatencyBudget,
@@ -60,6 +50,15 @@ from moment_to_action.metrics._types import (
     PipelineStats,
     StageRecord,
     StageStats,
+)
+
+from ._types import (
+    MemoryUsageSample,
+    MetricsReport,
+    ResourceUsageSample,
+    Span,
+    SpanType,
+    Trace,
 )
 
 if TYPE_CHECKING:
@@ -481,21 +480,6 @@ class MetricsCollector:
                 metadata=metadata or {},
             )
         )
-
-    '''
-    def snapshot_memory(self, label: str) -> float:
-        """Record a named RSS snapshot and return the value in MB.
-
-        Useful for bracketing model load:
-            before = metrics.snapshot_memory("before_llm_load")
-            self.llm = Llama(...)
-            after  = metrics.snapshot_memory("after_llm_load")
-        """
-        rss = _rss_mb()
-        self.log_event("memory_snapshot", {"label": label, "rss_mb": round(rss, 2)})
-        logger.info("Memory [%s]: %.1f MB RSS", label, rss)
-        return rss
-    '''
 
     def _per_stage_stats(self) -> dict[str, StageStats]:
         """Compute per-stage latency statistics from the stage log."""

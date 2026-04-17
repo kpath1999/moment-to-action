@@ -61,11 +61,6 @@ class WhisperStage(Stage):
 
         waveform = np.asarray(msg.data, dtype=np.float32)
 
-        print("waveform shape:", waveform.shape)
-        print("waveform dtype:", waveform.dtype)
-        print("waveform min/max:", waveform.min(), waveform.max())
-        print("waveform mean abs:", np.mean(np.abs(waveform)))
-
         with metrics.start_span(SpanType.MODEL_INFERENCE, "Whisper inference"):
             segments, info = self._model.transcribe(
                 waveform,

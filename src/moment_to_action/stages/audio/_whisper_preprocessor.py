@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any
 
 from moment_to_action.hardware import ComputeUnit
-from moment_to_action.messages.audio import AudioTensorMessage
-from moment_to_action.messages.sensor import AudioInput
-from moment_to_action.metrics import MetricsCollector
 from moment_to_action.stages._base import Stage
 
 from ._base_audio_preprocessor import BaseAudioPreprocessor
+
+if TYPE_CHECKING:
+    from moment_to_action.messages.audio import AudioTensorMessage
+    from moment_to_action.messages.sensor import AudioInput
+    from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +53,13 @@ class WhisperPreprocessor(BaseAudioPreprocessor):
 class WhisperPreprocessorStage(Stage):
     """Pipeline stage wrapper around WhisperPreprocessor."""
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__()
         self._preprocessor = WhisperPreprocessor(**kwargs)
 
     def _process(
         self,
-        msg,
+        msg: AudioInput,
         metrics: MetricsCollector,
     ) -> AudioTensorMessage:
         return self._preprocessor.process(msg, metrics=metrics)

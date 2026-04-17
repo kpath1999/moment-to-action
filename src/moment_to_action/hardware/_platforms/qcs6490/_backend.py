@@ -179,7 +179,6 @@ class QCS6490Backend(InferenceBackend):
             List of output tensors, one per model output slot.
         """
         h = cast("_ModelHandle", handle)
-        print(type(h.backend))
         return h.backend.run(h.raw, inputs)
 
     def get_input_details(self, handle: object) -> list[dict]:

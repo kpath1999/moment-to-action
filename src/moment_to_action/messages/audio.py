@@ -8,6 +8,7 @@ Note: This module is a **placeholder** pending full audio-pipeline work.
 from __future__ import annotations
 
 from numpy.typing import NDArray  # noqa: TC002
+from pydantic import Field
 
 from ._base import BaseMessage
 
@@ -50,7 +51,7 @@ class AudioTranscriptionMessage(BaseMessage):
     confidence: float | None = None
     """Optional confidence score reported by the transcriber."""
 
-    segments: list[dict] = []
+    segments: list[dict] = Field(default_factory=list)
     """Optional per-segment metadata from the transcription backend."""
 
     sample_rate: int

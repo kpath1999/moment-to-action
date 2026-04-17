@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import csv
-from collections.abc import Sequence
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -15,11 +14,16 @@ from moment_to_action.models import AssetID, ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from pathlib import Path
+
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
+_EXPECTED_RANK_TWO = 2
+_EXPECTED_RANK_THREE = 3
 
 
 class YAMNetStage(Stage):
@@ -105,20 +109,19 @@ class YAMNetStage(Stage):
     def _prepare_input(self, tensor: np.ndarray) -> np.ndarray:
         return np.asarray(tensor, dtype=np.uint8)
 
-    def _load_yamnet_labels(self, labels_path) -> tuple[str, ...]:
+    def _load_yamnet_labels(self, labels_path: Path) -> tuple[str, ...]:
         labels: list[str] = []
         with labels_path.open("r", encoding="utf-8", newline="") as fh:
             reader = csv.DictReader(fh)
-            for row in reader:
-                labels.append(row["display_name"])
+            labels.extend(row["display_name"] for row in reader)
         return tuple(labels)
 
     def _extract_score_matrix(self, outputs: list[np.ndarray]) -> np.ndarray:
         for output in outputs:
             array = np.asarray(output, dtype=np.float32)
-            if array.ndim == 2:
+            if array.ndim == _EXPECTED_RANK_TWO:
                 return array
-            if array.ndim == 3 and array.shape[0] == 1:
+            if array.ndim == _EXPECTED_RANK_THREE and array.shape[0] == 1:
                 return array[0]
         return np.empty((0, 0), dtype=np.float32)
 
