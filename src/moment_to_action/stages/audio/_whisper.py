@@ -4,13 +4,14 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from faster_whisper import WhisperModel
 
 from moment_to_action.messages.audio import AudioTensorMessage, AudioTranscriptionMessage
 from moment_to_action.metrics._types import SpanType
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
+    from faster_whisper import WhisperModel
+
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
 
@@ -37,7 +38,16 @@ class WhisperStage(Stage):
         self._vad_filter = vad_filter
         self._task = task
 
-        self._model = WhisperModel(
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError as exc:
+            message = (
+                "WhisperStage requires the optional dependency 'faster_whisper'. "
+                "Install it to enable audio transcription."
+            )
+            raise ModuleNotFoundError(message) from exc
+
+        self._model: WhisperModel = WhisperModel(
             model_size_or_path,
             device=device,
             compute_type=compute_type,
