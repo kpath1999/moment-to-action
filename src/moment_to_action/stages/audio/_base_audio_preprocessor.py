@@ -6,7 +6,6 @@ from math import gcd
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy.signal import resample_poly
 
 from moment_to_action.hardware import ComputeUnit
 from moment_to_action.messages.audio import AudioTensorMessage
@@ -76,6 +75,15 @@ class BaseAudioPreprocessor(BasePreprocessor["AudioInput", AudioTensorMessage]):
     ) -> NDArray[np.float32]:
         if src_sr == dst_sr:
             return waveform.astype(np.float32)
+
+        try:
+            from scipy.signal import resample_poly
+        except ImportError as exc:
+            message = (
+                "Audio resampling requires the optional dependency 'scipy' when "
+                f"changing sample rates ({src_sr} -> {dst_sr}). Install scipy to enable resampling."
+            )
+            raise ModuleNotFoundError(message) from exc
 
         g = gcd(src_sr, dst_sr)
         up = dst_sr // g
