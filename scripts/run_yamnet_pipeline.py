@@ -1,10 +1,8 @@
-"""Runs the YOLO → LLM baseline pipeline on an image.
-
-Moved from ``src/moment_to_action/edgeperceive/pipeline/run_yolo_pipeline.py``.
+"""Runs YAMNet → LLM baseline pipeline on an audio recording.
 
 Usage:
-    uv run python scripts/run_yolo_pipeline.py --image weapon.jpg
-    uv run python scripts/run_yolo_pipeline.py --image weapon.jpg --device npu
+    uv run python scripts/run_yamnet_pipeline.py --audio audio_recording.wav
+    uv run python scripts/run_yamnet_pipeline.py --audio audio_recording.wav --device npu
 """
 
 from __future__ import annotations
@@ -50,8 +48,6 @@ parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshol
 args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-#asoma7
-#device = ComputeUnit.NPU
 compute_backend = ComputeBackend(preferred_unit=device)
 metrics = MetricsCollector(
     compute_backend=compute_backend,

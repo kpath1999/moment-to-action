@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import csv
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -10,7 +11,7 @@ import numpy as np
 
 from moment_to_action.messages.audio import AudioClassificationMessage, AudioTensorMessage
 from moment_to_action.metrics._types import SpanType
-from moment_to_action.models import ModelID, ModelManager
+from moment_to_action.models import AssetID, ModelID, ModelManager
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
@@ -40,6 +41,8 @@ class YAMNetStage(Stage):
         self._confidence_threshold = confidence_threshold
         self._aggregation = aggregation
         model_path = manager.get_path(model_id)
+        labels_path = manager.get_asset_path(AssetID.YAMNET_CLASS_MAP)
+        self._class_names = self._load_yamnet_labels(labels_path)
         self._handle = self._backend.load_model(model_path)
         logger.info("YAMNetStage: loaded %s", model_path)
 
@@ -53,6 +56,7 @@ class YAMNetStage(Stage):
             raise TypeError(err)
 
         model_input = self._prepare_input(msg.data)
+
         with metrics.start_span(SpanType.MODEL_INFERENCE, "YAMNet inference"):
             outputs = self._backend.run(self._handle, model_input)
 
@@ -62,26 +66,38 @@ class YAMNetStage(Stage):
             return None
 
         clip_scores = self._aggregate_scores(frame_scores)
-        class_names = self._resolve_class_names(len(clip_scores))
-        best_idx = int(np.argmax(clip_scores))
-        confidence = float(clip_scores[best_idx])
 
-        if confidence < self._confidence_threshold:
+        if len(self._class_names) != len(clip_scores):
+            msg_text = (
+                "YAMNet class map length does not match model outputs: "
+                f"{len(self._class_names)} != {len(clip_scores)}"
+            )
+            raise ValueError(msg_text)
+
+        top_k = min(5, len(clip_scores))
+        top_indices = np.argsort(clip_scores)[::-1][:top_k]
+
+        top_predictions = {
+            self._class_names[int(idx)]: float(clip_scores[int(idx)])
+            for idx in top_indices
+        }
+
+        best_score = next(iter(top_predictions.values()))
+        if best_score < self._confidence_threshold:
             logger.debug(
                 "YAMNetStage: best score %.3f below threshold %.3f",
-                confidence,
+                best_score,
                 self._confidence_threshold,
             )
             return None
 
-        label = class_names[best_idx]
-        logger.info("YAMNetStage: '%s'  conf=%.3f", label, confidence)
+        logger.info(
+            "YAMNetStage top-5: %s",
+            ", ".join(f"{label}={score:.3f}" for label, score in top_predictions.items()),
+        )
+
         return AudioClassificationMessage(
-            label=label,
-            confidence=confidence,
-            all_scores={
-                name: float(score) for name, score in zip(class_names, clip_scores, strict=False)
-            },
+            top_predictions=top_predictions,
             sample_rate=msg.sample_rate,
             source=msg.source,
             timestamp=msg.timestamp,
@@ -90,6 +106,14 @@ class YAMNetStage(Stage):
     def _prepare_input(self, tensor: np.ndarray) -> np.ndarray:
         return np.asarray(tensor, dtype=np.uint8)
 
+    def _load_yamnet_labels(self, labels_path) -> tuple[str, ...]:
+        labels: list[str] = []
+        with labels_path.open("r", encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                labels.append(row["display_name"])
+        return tuple(labels)
+    
     def _extract_score_matrix(self, outputs: list[np.ndarray]) -> np.ndarray:
         for output in outputs:
             array = np.asarray(output, dtype=np.float32)

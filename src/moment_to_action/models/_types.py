@@ -31,6 +31,8 @@ class ModelID(Enum):
     YAMNET_TFLITE = "yamnet_tflite"
     YAMNET_ONNX = "yamnet_onnx"
 
+class AssetID(Enum):
+    YAMNET_CLASS_MAP = "yamnet_class_map"
 
 @attrs.frozen
 class VendoredSource:
@@ -71,6 +73,7 @@ class TransformersSource:
 
 
 type ModelSource = VendoredSource | DownloadSource | TransformersSource
+type AssetSource = VendoredSource
 
 
 @attrs.frozen
@@ -86,6 +89,13 @@ class ModelInfo:
     id: ModelID
     filename: str
     source: ModelSource
+
+
+@attrs.frozen
+class AssetInfo:
+    id: AssetID
+    filename: str
+    source: AssetSource
 
 
 @attrs.frozen

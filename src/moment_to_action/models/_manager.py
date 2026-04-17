@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING
 
 import platformdirs
 
-from ._registry import MODEL_REGISTRY
+from ._registry import MODEL_REGISTRY, ASSET_REGISTRY
 from ._types import (
     DownloadSource,
     ModelID,
+    AssetID,
     ModelInfo,
+    AssetInfo,
     ModelStatus,
     TransformersSource,
     VendoredSource,
@@ -89,6 +91,10 @@ class ModelManager:
         path = self._resolve_path(info)
         logger.debug("Model path resolved: %s → %s", model.value, path)
         return path
+
+    def get_asset_path(self, asset: AssetID) -> Path:
+        info = self._get_asset_info(asset)
+        return self._resolve_asset_path(info)
 
     def is_available(self, model: ModelID) -> bool:
         """Check if model is available without downloading.
@@ -210,6 +216,12 @@ class ModelManager:
             raise RuntimeError(msg)
         return MODEL_REGISTRY[model]
 
+    def _get_asset_info(self, asset: AssetID) -> AssetInfo:
+        if asset not in ASSET_REGISTRY:
+            msg = f"Unknown asset: {asset}"
+            raise RuntimeError(msg)
+        return ASSET_REGISTRY[asset]
+
     def _resolve_path(self, info: ModelInfo) -> Path:
         """Resolve path, handling download if necessary.
 
@@ -258,6 +270,15 @@ class ModelManager:
                 self._download_transformers_model(repo, cache_dir)
                 logger.info("Transformers model downloaded successfully: %s", cache_dir)
                 return cache_dir
+
+    def _resolve_asset_path(self, info: AssetInfo) -> Path:
+        match info.source:
+            case VendoredSource(subdir=subdir):
+                path = self._vendored_dir / subdir / info.filename
+                if not path.exists():
+                    msg = f"Vendored asset not found: {path}"
+                    raise FileNotFoundError(msg)
+                return path
 
     def _resolve_path_local(self, info: ModelInfo) -> Path:
         """Resolve the local path for a model without triggering a download.

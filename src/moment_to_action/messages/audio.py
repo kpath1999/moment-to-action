@@ -28,14 +28,8 @@ class AudioTensorMessage(BaseMessage):
 class AudioClassificationMessage(BaseMessage):
     """Audio event classification output."""
 
-    label: str
-    """Winning class label selected by the model."""
-
-    confidence: float
-    """Confidence score for ``label`` in ``[0, 1]``."""
-
-    all_scores: dict[str, float]
-    """Mapping of candidate labels to scores."""
+    top_predictions: dict[str, float]
+    """Top predicted classes and their scores, highest first."""
 
     sample_rate: int
     """Sampling rate in Hz for the analyzed clip."""

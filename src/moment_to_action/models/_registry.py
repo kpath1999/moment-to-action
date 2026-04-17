@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._types import DownloadSource, ModelID, ModelInfo, TransformersSource, VendoredSource
+from ._types import DownloadSource, ModelID, AssetID, ModelInfo, AssetInfo, TransformersSource, VendoredSource
 
 __all__ = ["MODEL_REGISTRY"]
 
@@ -48,4 +48,12 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         filename="model.onnx",
         source=VendoredSource(subdir="yamnet"),
     ),    
+}
+
+ASSET_REGISTRY: dict[AssetID, AssetInfo] = {
+    AssetID.YAMNET_CLASS_MAP: AssetInfo(
+        id=AssetID.YAMNET_CLASS_MAP,
+        filename="yamnet_class_map.csv",
+        source=VendoredSource(subdir="yamnet"),
+    ),
 }

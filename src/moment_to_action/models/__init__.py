@@ -29,7 +29,9 @@ from ._manager import ModelManager
 from ._types import (
     DownloadSource,
     ModelID,
+    AssetID,
     ModelInfo,
+    AssetInfo,
     ModelSource,
     ModelStatus,
     TransformersSource,
@@ -39,7 +41,9 @@ from ._types import (
 __all__ = [
     "DownloadSource",
     "ModelID",
+    "AssetID",
     "ModelInfo",
+    "AssetInfo",
     "ModelManager",
     "ModelSource",
     "ModelStatus",
