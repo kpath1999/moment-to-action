@@ -41,6 +41,7 @@ import psutil
 
 from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.metrics._types import (
+    CollectorReport,
     EventRecord,
     EventType,
     LatencyBudget,
@@ -411,6 +412,17 @@ class MetricsCollector:
                 slow_traces=[trace for trace in traces if trace.latency > self.latency_budget],
             )
 
+    def collector_report(self) -> CollectorReport:
+        """Generate the aggregate report used by summary logging."""
+        return CollectorReport(
+            session_id=self.session_id,
+            total_stages=len(self._stage_log),
+            total_pipeline_events=len(self._pipeline_log),
+            per_stage=self._per_stage_stats(),
+            pipeline=self._pipeline_stats(),
+            latency_budget=self._latency_budget_analysis(),
+        )
+
     def log_stage(
         self,
         stage_name: str,
@@ -499,32 +511,66 @@ class MetricsCollector:
         }
 
     def _compute_stage_stats(self, records: list[StageRecord]) -> StageStats:
-        # Guard clause: Fixes RET503 and prevents IndexError on empty lists
         if not records:
-            return StageStats()
+            msg = "Cannot compute stage stats for an empty record list."
+            raise ValueError(msg)
         latencies = np.array([r.latency_ms for r in records])
-        base = {
-            "num_calls": len(records),
-            "mean_ms": float(np.mean(latencies)),
-            "p50_ms": float(np.percentile(latencies, 50)),
-            "p95_ms": float(np.percentile(latencies, 95)),
-            "min_ms": float(np.min(latencies)),
-            "max_ms": float(np.max(latencies)),
-            "init_memory_bytes": records[0].init_memory_bytes,
-            "mean_runtime_memory_bytes": int(np.mean([r.runtime_memory_bytes for r in records])),
-        }
+        num_calls = len(records)
+        mean_ms = float(np.mean(latencies))
+        p50_ms = float(np.percentile(latencies, 50))
+        p95_ms = float(np.percentile(latencies, 95))
+        min_ms = float(np.min(latencies))
+        max_ms = float(np.max(latencies))
+        init_memory_bytes = records[0].init_memory_bytes
+        mean_runtime_memory_bytes = int(np.mean([r.runtime_memory_bytes for r in records]))
 
         if isinstance(records[0], LLMRecord):
-            return self._compute_llm_stats(base, records)  # type: ignore[arg-type]
-        return StageStats(**base)
+            return self._compute_llm_stats(
+                num_calls=num_calls,
+                mean_ms=mean_ms,
+                p50_ms=p50_ms,
+                p95_ms=p95_ms,
+                min_ms=min_ms,
+                max_ms=max_ms,
+                init_memory_bytes=init_memory_bytes,
+                mean_runtime_memory_bytes=mean_runtime_memory_bytes,
+                records=records,
+            )
+        return StageStats(
+            num_calls=num_calls,
+            mean_ms=mean_ms,
+            p50_ms=p50_ms,
+            p95_ms=p95_ms,
+            min_ms=min_ms,
+            max_ms=max_ms,
+            init_memory_bytes=init_memory_bytes,
+            mean_runtime_memory_bytes=mean_runtime_memory_bytes,
+        )
 
-    def _compute_llm_stats(self, base: dict, records: list[LLMRecord]) -> LLMStats:
+    def _compute_llm_stats(  # noqa: PLR0913
+        self,
+        *,
+        num_calls: int,
+        mean_ms: float,
+        p50_ms: float,
+        p95_ms: float,
+        min_ms: float,
+        max_ms: float,
+        init_memory_bytes: int,
+        mean_runtime_memory_bytes: int,
+        records: list[LLMRecord],
+    ) -> LLMStats:
         """Compute detailed LLM-specific statistics."""
-        if not records:
-            return LLMStats(**base)  # Explicit return for empty case fixes RET503
         gen_arr = np.array([r.gen_ms for r in records])
         return LLMStats(
-            **base,
+            num_calls=num_calls,
+            mean_ms=mean_ms,
+            p50_ms=p50_ms,
+            p95_ms=p95_ms,
+            min_ms=min_ms,
+            max_ms=max_ms,
+            init_memory_bytes=init_memory_bytes,
+            mean_runtime_memory_bytes=mean_runtime_memory_bytes,
             mean_prompt_ms=float(np.mean([r.prompt_ms for r in records])),
             mean_gen_ms=float(np.mean(gen_arr)),
             p95_gen_ms=float(np.percentile(gen_arr, 95)),
@@ -556,11 +602,12 @@ class MetricsCollector:
             if self._pipeline_log
             else 0.0
         )
+        budget_ms = self._latency_budget.total_seconds() * 1000
         return LatencyBudget(
             total_mean_ms=total_mean,
-            budget_ms=self._latency_budget_ms,
-            headroom_ms=self._latency_budget_ms - total_mean,
-            within_budget=total_mean < self._latency_budget_ms,
+            budget_ms=budget_ms,
+            headroom_ms=budget_ms - total_mean,
+            within_budget=total_mean < budget_ms,
         )
 
     # ------------------------------------------------------------------
@@ -648,7 +695,7 @@ class MetricsCollector:
 
     def print_summary(self) -> None:
         """Log a human-readable summary."""
-        r = self.report()
+        r = self.collector_report()
         logger.info("\n%s", "=" * 50)
         logger.info("METRICS SUMMARY  |  session: %s", r.session_id)
         logger.info("=" * 50)

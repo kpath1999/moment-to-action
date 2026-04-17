@@ -7,7 +7,6 @@ NullMetricsCollector if none is provided to avoid null checks in stage code.
 from __future__ import annotations
 
 import logging
-import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -37,13 +36,11 @@ class Stage(ABC):
         stage_idx: int = 0,
         metrics: MetricsCollector | None = None,
     ) -> Message | None:
-
-        self._metrics = metrics
-        self._stage_idx = stage_idx
         """Execute the stage, timing it, setting latency on the result, and logging to metrics.
 
         Args:
             msg:       Incoming message to process.
+            stage_idx: Pipeline stage index for metrics/reporting.
             metrics:   Metrics collector for recording stage latency.
                       If not provided, a default NullMetricsCollector is used.
         """
@@ -55,32 +52,18 @@ class Stage(ABC):
             metrics = NullMetricsCollector()
 
         # Run the stage processing, timing it with the metrics collector
+        mem_before_mb = _rss_mb()
         with metrics.start_span(SpanType.STAGE, self.name) as span:
             span_id = span.id_  # save so we can get the latency later
 
             # Run the stage's processing logic, which may return None to stop the pipeline
             result = self._process(msg, metrics)
+        mem_after_mb = _rss_mb()
 
         # Stamp latency on the result so consumers don't need to measure it themselves
         elapsed_ms = metrics.get_span(span_id).latency_ms
+        runtime_memory_bytes = round((mem_after_mb - mem_before_mb) * 1024 * 1024)
 
-        if result is not None:
-            result = result.model_copy(update={"latency_ms": elapsed_ms})
-
-        ##DIFF
-        # Log the stage execution and latency
-        # calculate additional memory used by stage (memory used by stage)
-        # calculate additional memory used by stage (memory used by stage)
-        mem_before = _rss_mb()
-
-        t = time.perf_counter()
-        result = self._process(msg, metrics)
-        elapsed_ms = (time.perf_counter() - t) * 1000
-
-        mem_after = _rss_mb()
-        mem_delta = mem_after - mem_before
-
-        # Stamp latency on the result so consumers don't need to measure it.
         if result is not None:
             result = result.model_copy(update={"latency_ms": elapsed_ms})
 
@@ -93,7 +76,7 @@ class Stage(ABC):
                     stage_idx=stage_idx,
                     latency_ms=elapsed_ms,
                     init_memory_bytes=0,
-                    runtime_memory_bytes=round(mem_delta, 2),
+                    runtime_memory_bytes=runtime_memory_bytes,
                     **llm_metrics,
                 )
             else:
@@ -102,7 +85,7 @@ class Stage(ABC):
                     stage_idx=stage_idx,
                     latency_ms=elapsed_ms,
                     init_memory_bytes=0,
-                    runtime_memory_bytes=round(mem_delta, 2),
+                    runtime_memory_bytes=runtime_memory_bytes,
                 )
 
         status = "→ None (stopped)" if result is None else f"→ {type(result).__name__}"

@@ -4,13 +4,14 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from moment_to_action.hardware import ComputeUnit
+from moment_to_action.messages.sensor import AudioInput
 from moment_to_action.stages._base import Stage
 
 from ._base_audio_preprocessor import BaseAudioPreprocessor
 
 if TYPE_CHECKING:
+    from moment_to_action.messages import Message
     from moment_to_action.messages.audio import AudioTensorMessage
-    from moment_to_action.messages.sensor import AudioInput
     from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,10 @@ class WhisperPreprocessorStage(Stage):
 
     def _process(
         self,
-        msg: AudioInput,
+        msg: Message,
         metrics: MetricsCollector,
     ) -> AudioTensorMessage:
+        if not isinstance(msg, AudioInput):
+            message = f"WhisperPreprocessorStage expects AudioInput, got {type(msg).__name__}"
+            raise TypeError(message)
         return self._preprocessor.process(msg, metrics=metrics)

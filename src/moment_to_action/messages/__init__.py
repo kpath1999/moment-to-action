@@ -11,7 +11,7 @@ checks and ``isinstance`` guards across the full message hierarchy.
 
 from __future__ import annotations
 
-from .audio import AudioTensorMessage
+from .audio import AudioClassificationMessage, AudioTensorMessage, AudioTranscriptionMessage
 from .llm import ReasoningMessage
 from .prompt import PromptMessage
 from .sensor import AudioInput, RawFrameMessage
@@ -24,6 +24,8 @@ type Message = (
     RawFrameMessage
     | AudioInput
     | AudioTensorMessage
+    | AudioClassificationMessage
+    | AudioTranscriptionMessage
     | FrameTensorMessage
     | VideoClipMessage
     | DetectionMessage
@@ -33,8 +35,10 @@ type Message = (
 )
 
 __all__ = [
+    "AudioClassificationMessage",
     "AudioInput",
     "AudioTensorMessage",
+    "AudioTranscriptionMessage",
     "BoundingBox",
     "ClassificationMessage",
     "DetectionMessage",

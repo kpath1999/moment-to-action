@@ -9,13 +9,14 @@ import tensorflow as tf
 
 from moment_to_action.hardware import ComputeUnit
 from moment_to_action.messages.audio import AudioTensorMessage
+from moment_to_action.messages.sensor import AudioInput
 from moment_to_action.stages._base import Stage
 from moment_to_action.utils.buffer import BufferSpec
 
 from ._base_audio_preprocessor import BaseAudioPreprocessor
 
 if TYPE_CHECKING:
-    from moment_to_action.messages.sensor import AudioInput
+    from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
@@ -127,5 +128,8 @@ class YAMNetPreprocessorStage(Stage):
         super().__init__()
         self._preprocessor = YAMNetPreprocessor(**kwargs)
 
-    def _process(self, msg: AudioInput, metrics: MetricsCollector) -> AudioTensorMessage:
+    def _process(self, msg: Message, metrics: MetricsCollector) -> AudioTensorMessage:
+        if not isinstance(msg, AudioInput):
+            message = f"YAMNetPreprocessorStage expects AudioInput, got {type(msg).__name__}"
+            raise TypeError(message)
         return self._preprocessor.process(msg, metrics=metrics)

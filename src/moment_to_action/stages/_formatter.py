@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from moment_to_action.messages import ClassificationMessage, DetectionMessage
 from moment_to_action.messages.prompt import PromptMessage
@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 # A handler receives the raw message plus filtering params and returns a
 # structured dict that will be handed to the template renderer.
 # Signature: (msg, min_confidence, top_k) -> dict
-FormatHandler = Callable[["Message", float, int], dict]
+FormatHandler = Callable[["Message", float, int], dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
@@ -235,8 +235,8 @@ class PromptFormatterStage(Stage):
 
         # Build the registry: built-ins first, then caller overrides
         self._registry: dict[type, FormatHandler] = {
-            DetectionMessage: _handle_detection,
-            ClassificationMessage: _handle_classification,
+            DetectionMessage: cast("FormatHandler", _handle_detection),
+            ClassificationMessage: cast("FormatHandler", _handle_classification),
         }
         if extra_handlers:
             self._registry.update(extra_handlers)

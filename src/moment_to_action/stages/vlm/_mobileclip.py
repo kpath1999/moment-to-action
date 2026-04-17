@@ -64,7 +64,7 @@ class MobileCLIPStage(Stage):
         """Encode all prompts once at startup."""
         dummy_image = np.zeros((1, 3, 256, 256), dtype=np.float32)
 
-        text_embeddings = []
+        text_embeddings_list: list[np.ndarray] = []
         for tokens in self._text_tokens:
             outputs = self._backend.run(
                 self._handle,
@@ -74,9 +74,9 @@ class MobileCLIPStage(Stage):
                 },
             )
             text_emb = outputs[0][0]  # [512]
-            text_embeddings.append(text_emb)
+            text_embeddings_list.append(np.asarray(text_emb))
 
-        text_embeddings = np.stack(text_embeddings)
+        text_embeddings = np.stack(text_embeddings_list)
         # Pre-normalize
         norms = np.linalg.norm(text_embeddings, axis=1, keepdims=True)
         return text_embeddings / (norms + 1e-8)

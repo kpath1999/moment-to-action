@@ -16,7 +16,6 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, Field
 from pydantic_settings import (
@@ -128,14 +127,16 @@ class Settings(BaseSettings):
         settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
-        **kwargs: Any,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Define the priority order for loading configuration settings."""
         return (
             init_settings,
             env_settings,
             YamlConfigSettingsSource(settings_cls, yaml_file=_CONFIG_PATH),
-            kwargs.get("file_secret_settings"),
+            dotenv_settings,
+            file_secret_settings,
         )
 
 

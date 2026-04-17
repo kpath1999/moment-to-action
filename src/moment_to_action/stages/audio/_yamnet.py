@@ -41,7 +41,7 @@ class YAMNetStage(Stage):
     ) -> None:
         super().__init__()
         self._backend = backend
-        self._class_names = tuple(class_names) if class_names is not None else None
+        self._class_names: tuple[str, ...] = tuple(class_names) if class_names is not None else ()
         self._confidence_threshold = confidence_threshold
         self._aggregation = aggregation
         model_path = manager.get_path(model_id)

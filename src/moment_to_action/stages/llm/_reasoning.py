@@ -9,20 +9,12 @@ Output: ReasoningMessage
 from __future__ import annotations
 
 import logging
-
-# time
-# deque
 from collections import deque
-
-# dataclasses
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
-# httpx server for metrics
 import httpx
 import psutil
-
-# OpenAI library for HTTP communication
 from openai import OpenAI
 
 from moment_to_action.config.slm_config.slm_config import settings
@@ -349,13 +341,13 @@ class LLMStage(Stage):
 
         response = client.chat.completions.create(
             model="any",
-            messages=messages,
+            messages=cast("Any", messages),
             max_tokens=100,
             temperature=0.1,
             stop=["</s>", "\n\n"],
         )
 
-        decision = response.choices[0].message.content.strip()
+        decision = (response.choices[0].message.content or "").strip()
 
         logger.info("LLMStage: prompt=%r", prompt)
         logger.info("LLMStage: decision=%s", decision)
