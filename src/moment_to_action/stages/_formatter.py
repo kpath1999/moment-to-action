@@ -288,7 +288,7 @@ class PromptFormatterStage(Stage):
         logger.debug(
             "PromptFormatterStage: source=%s items=%d prompt=%r",
             context.get("source", "unknown"),
-            len(context.get("detections", context.get("classifications", []))),
+            len(context.get("detections") or context.get("classifications") or []),
             prompt[:120],
         )
 

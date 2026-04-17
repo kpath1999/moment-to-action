@@ -534,7 +534,7 @@ class MetricsCollector:
                 max_ms=max_ms,
                 init_memory_bytes=init_memory_bytes,
                 mean_runtime_memory_bytes=mean_runtime_memory_bytes,
-                records=records,
+                records=t.cast("list[LLMRecord]", records),
             )
         return StageStats(
             num_calls=num_calls,
