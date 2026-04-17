@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from ._reasoning import LLMStage
+from ._reasoning import LLMStage, ReasoningStage
 
-__all__ = ["LLMStage"]
+__all__ = ["LLMStage", "ReasoningStage"]

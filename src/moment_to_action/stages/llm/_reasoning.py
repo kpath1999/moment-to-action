@@ -392,3 +392,6 @@ class LLMStage(Stage):
             "kv_cache_total": slot.get("n_ctx", 512),
             "server_rss_bytes": self._server_rss_bytes(),
         }
+
+
+ReasoningStage = LLMStage
