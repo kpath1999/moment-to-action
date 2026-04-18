@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _IOU_RECALL_THRESHOLD = 0.5
+_BBOX_COORDS = 4
 _INPUT_NDIM = 4
 _CHANNEL_AXIS = 1
 _RGB_CHANNELS = 3
@@ -46,12 +47,14 @@ class YOLOBenchmark(ModelBenchmark):
         *,
         coco_dataset: CocoDataset | None = None,
         conf_threshold: float = 0.25,
+        oracle_store: OracleStore | None = None,
     ) -> None:
         super().__init__()
         self._eval_image_paths = eval_image_paths or []
         self._input_shape: tuple[int, ...] = (1, 3, 640, 640)
         self._coco_dataset = coco_dataset
         self._conf_threshold = conf_threshold
+        self._oracle_store = oracle_store
 
     @property
     def model_id(self) -> ModelID:
@@ -137,20 +140,20 @@ class YOLOBenchmark(ModelBenchmark):
         return recall
 
     def _evaluate_coco_accuracy(self, handle: object, backend: ComputeBackend) -> float | None:
-        """Evaluate YOLO against COCO oracle pseudo-labels using mAP@[0.5:0.95]."""
+        """Evaluate YOLO against native COCO GT detections using mAP@[0.5:0.95]."""
         dataset = self._coco_dataset
         if dataset is None:
             return None
 
-        gt = OracleStore(dataset_name=dataset.dataset_name).load()
-        if gt is None or not gt.detections:
-            logger.debug("YOLOBenchmark: no COCO oracle detections found -- skipping accuracy.")
+        gt_detections = dataset.instance_detections()
+        if not gt_detections:
+            logger.debug("YOLOBenchmark: no COCO native detections found -- skipping accuracy.")
             return None
 
         image_map = {path.name: path for path in dataset.images()}
         predictions = []
-        for oracle_det in gt.detections:
-            img_path = image_map.get(oracle_det.image_name)
+        for gt_det in gt_detections:
+            img_path = image_map.get(gt_det.image_name)
             if img_path is None:
                 continue
 
@@ -162,12 +165,42 @@ class YOLOBenchmark(ModelBenchmark):
                 conf_threshold=self._conf_threshold,
                 class_labels=YOLOStage.COCO_LABELS,
             )
-            predictions.append(OracleDetection(image_name=oracle_det.image_name, boxes=yolo_boxes))
+            # Scale boxes from model input space (e.g. 640x640) to original image space
+            # so they align with COCO ground-truth coordinates.
+            if yolo_boxes:
+                with Image.open(img_path) as _pil:
+                    orig_w, orig_h = _pil.size
+                model_h = (
+                    self._input_shape[2]
+                    if self._input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS
+                    else self._input_shape[1]
+                )
+                model_w = (
+                    self._input_shape[3]
+                    if self._input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS
+                    else self._input_shape[2]
+                )
+                sx = orig_w / model_w
+                sy = orig_h / model_h
+                scaled_boxes = [
+                    OracleBox(
+                        x1=b.x1 * sx,
+                        y1=b.y1 * sy,
+                        x2=b.x2 * sx,
+                        y2=b.y2 * sy,
+                        label=b.label,
+                        confidence=b.confidence,
+                    )
+                    for b in yolo_boxes
+                ]
+            else:
+                scaled_boxes = []
+            predictions.append(OracleDetection(image_name=gt_det.image_name, boxes=scaled_boxes))
 
         if not predictions:
             return None
 
-        metrics = compute_detection_map(predictions=predictions, ground_truth=gt.detections)
+        metrics = compute_detection_map(predictions=predictions, ground_truth=gt_detections)
         self._set_accuracy_details(
             {
                 "map_50": metrics.map_50,
@@ -176,7 +209,7 @@ class YOLOBenchmark(ModelBenchmark):
             }
         )
         logger.info(
-            "YOLOBenchmark COCO pseudo-GT: mAP@[0.5:0.95]=%.3f mAP@0.5=%.3f recall@0.5=%.3f",
+            "YOLOBenchmark COCO native GT: mAP@[0.5:0.95]=%.3f mAP@0.5=%.3f recall@0.5=%.3f",
             metrics.map_50_95,
             metrics.map_50,
             metrics.recall_50,
@@ -307,13 +340,96 @@ def _preprocess_nhwc(img_bgr: np.ndarray, height: int, width: int) -> np.ndarray
     return np.expand_dims(rgb, 0)
 
 
-def _parse_yolo_boxes(
+def _nms_numpy(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float = 0.45) -> list[int]:
+    """Pure-numpy greedy NMS. Returns indices to keep, sorted by descending score."""
+    order = np.argsort(scores)[::-1]
+    keep: list[int] = []
+    while len(order) > 0:
+        cur = order[0]
+        keep.append(int(cur))
+        if len(order) == 1:
+            break
+        cb = boxes[cur]
+        rb = boxes[order[1:]]
+        x1 = np.maximum(cb[0], rb[:, 0])
+        y1 = np.maximum(cb[1], rb[:, 1])
+        x2 = np.minimum(cb[2], rb[:, 2])
+        y2 = np.minimum(cb[3], rb[:, 3])
+        inter = np.maximum(0.0, x2 - x1) * np.maximum(0.0, y2 - y1)
+        cur_area = (cb[2] - cb[0]) * (cb[3] - cb[1])
+        rem_areas = (rb[:, 2] - rb[:, 0]) * (rb[:, 3] - rb[:, 1])
+        iou = inter / (cur_area + rem_areas - inter + 1e-6)
+        order = order[1:][iou < iou_threshold]
+    return keep
+
+
+def _build_oracle_boxes(
+    boxes_xyxy: np.ndarray,
+    scores: np.ndarray,
+    class_ids: np.ndarray,
+    img_w: int,
+    img_h: int,
+    class_labels: tuple[str, ...] | None,
+) -> list[OracleBox]:
+    """Convert filtered xyxy arrays to OracleBox instances, clamped to image bounds."""
+    results: list[OracleBox] = []
+    for box, conf, cls_id in zip(boxes_xyxy, scores, class_ids, strict=False):
+        x1 = max(0.0, float(box[0]))
+        y1 = max(0.0, float(box[1]))
+        x2 = min(float(img_w), float(box[2]))
+        y2 = min(float(img_h), float(box[3]))
+        class_name = str(int(cls_id))
+        if class_labels is not None and int(cls_id) < len(class_labels):
+            class_name = class_labels[int(cls_id)]
+        results.append(
+            OracleBox(x1=x1, y1=y1, x2=x2, y2=y2, label=class_name, confidence=float(conf))
+        )
+    return results
+
+
+def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912
     raw_outputs: object,
     input_shape: tuple[int, ...],
     conf_threshold: float = 0.25,
     class_labels: tuple[str, ...] | None = None,
 ) -> list[OracleBox]:
-    """Parse YOLO raw output tensors into OracleBox instances."""
+    """Parse YOLO raw output tensors into OracleBox instances.
+
+    Handles two output formats:
+
+    * **3-tensor** ``[boxes(1,N,4), scores(1,N), class_ids(1,N)]`` — xyxy pixel coords
+      in model input space (e.g. 640x640).  Produced by the vendored ONNX model.
+    * **1-tensor combined** ``(1, 84, N)`` — cx/cy/w/h + 80 class scores.
+      Produced by the standard Ultralytics TFLite export.
+    """
+    if len(input_shape) == _INPUT_NDIM and input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS:
+        _, _, img_h, img_w = input_shape
+    else:
+        _, img_h, img_w, _ = input_shape
+
+    # --- 3-tensor format ---
+    if (
+        isinstance(raw_outputs, (list, tuple))
+        and len(raw_outputs) == _OUTPUT_NDIM  # 3 tensors
+        and all(isinstance(t, np.ndarray) for t in raw_outputs)
+    ):
+        boxes_arr, scores_arr, class_ids_arr = raw_outputs[0], raw_outputs[1], raw_outputs[2]
+        if boxes_arr.ndim == _OUTPUT_NDIM and boxes_arr.shape[-1] == _BBOX_COORDS:  # (1,N,4)
+            boxes_xyxy = boxes_arr[0].astype(np.float32)
+            scores = scores_arr[0].astype(np.float32)
+            class_ids: np.ndarray = class_ids_arr[0]
+
+            mask = scores >= conf_threshold
+            boxes_xyxy, scores, class_ids = boxes_xyxy[mask], scores[mask], class_ids[mask]
+            if len(boxes_xyxy) == 0:
+                return []
+
+            keep = _nms_numpy(boxes_xyxy, scores)
+            return _build_oracle_boxes(
+                boxes_xyxy[keep], scores[keep], class_ids[keep], img_w, img_h, class_labels
+            )
+
+    # --- 1-tensor / combined format ---
     if isinstance(raw_outputs, (list, tuple)):
         arr = raw_outputs[0]
     elif isinstance(raw_outputs, dict):
@@ -327,53 +443,36 @@ def _parse_yolo_boxes(
     if arr.ndim == _OUTPUT_NDIM and arr.shape[0] == 1:
         arr = arr[0]
 
-    if arr.ndim == _MATRIX_NDIM:
-        if arr.shape[0] == _YOLO_FEATURE_DIM:
-            arr = arr.T
-        boxes_xywh = arr[:, :4]
-        class_scores = arr[:, 4:]
-        confidences = class_scores.max(axis=1)
-
-        mask = confidences >= conf_threshold
-        boxes_xywh = boxes_xywh[mask]
-        confidences = confidences[mask]
-        class_ids = class_scores[mask].argmax(axis=1)
-    else:
+    if arr.ndim != _MATRIX_NDIM:
         return []
 
-    if len(input_shape) == _INPUT_NDIM and input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS:
-        _, _, img_h, img_w = input_shape
-    else:
-        _, img_h, img_w, _ = input_shape
+    if arr.shape[0] == _YOLO_FEATURE_DIM:
+        arr = arr.T
+    if arr.shape[0] == 0 or arr.shape[1] <= _BBOX_COORDS:
+        return []
 
-    results: list[OracleBox] = []
-    for (cx, cy, box_w, box_h), conf, cls_id in zip(
-        boxes_xywh,
-        confidences,
-        class_ids,
-        strict=False,
-    ):
-        x1 = float(cx - box_w / 2)
-        y1 = float(cy - box_h / 2)
-        x2 = float(cx + box_w / 2)
-        y2 = float(cy + box_h / 2)
-        x1, x2 = max(0.0, x1), min(float(img_w), x2)
-        y1, y2 = max(0.0, y1), min(float(img_h), y2)
-        class_name = str(int(cls_id))
-        if class_labels is not None and int(cls_id) < len(class_labels):
-            class_name = class_labels[int(cls_id)]
+    boxes_xywh = arr[:, :_BBOX_COORDS]
+    class_scores = arr[:, _BBOX_COORDS:]
+    confidences = class_scores.max(axis=1)
 
-        results.append(
-            OracleBox(
-                x1=x1,
-                y1=y1,
-                x2=x2,
-                y2=y2,
-                label=class_name,
-                confidence=float(conf),
-            )
-        )
-    return results
+    mask = confidences >= conf_threshold
+    boxes_xywh = boxes_xywh[mask]
+    confidences = confidences[mask]
+    class_ids_raw: np.ndarray = class_scores[mask].argmax(axis=1)
+
+    if len(boxes_xywh) == 0:
+        return []
+
+    x1s = boxes_xywh[:, 0] - boxes_xywh[:, 2] / 2
+    y1s = boxes_xywh[:, 1] - boxes_xywh[:, 3] / 2
+    x2s = boxes_xywh[:, 0] + boxes_xywh[:, 2] / 2
+    y2s = boxes_xywh[:, 1] + boxes_xywh[:, 3] / 2
+    boxes_xyxy_raw = np.stack([x1s, y1s, x2s, y2s], axis=1)
+
+    keep = _nms_numpy(boxes_xyxy_raw, confidences)
+    return _build_oracle_boxes(
+        boxes_xyxy_raw[keep], confidences[keep], class_ids_raw[keep], img_w, img_h, class_labels
+    )
 
 
 def _default_sample_images() -> list[Path]:

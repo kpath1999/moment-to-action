@@ -68,6 +68,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="YOLO confidence threshold used for prediction decoding.",
     )
     parser.add_argument(
+        "--oracle-dir",
+        type=Path,
+        default=Path(__file__).parent.parent / "data" / "oracle",
+        help=(
+            "Directory where oracle pseudo-GT JSON files are read and written. "
+            "Defaults to data/oracle/ in the repo root so the files can be committed "
+            "and transferred to the edge device."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -82,14 +92,19 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_oracle_passes(dataset: CocoDataset, manager: ModelManager, unit: ComputeUnit) -> None:
+def _run_oracle_passes(
+    dataset: CocoDataset,
+    manager: ModelManager,
+    unit: ComputeUnit,
+    oracle_store: OracleStore,
+) -> None:
     backend = ComputeBackend(preferred_unit=unit)
     config = BenchmarkConfig(n_warmup=1, n_runs=1, batch_sizes=[1])
 
-    grounding = GroundingDINOBenchmark(coco_dataset=dataset)
+    grounding = GroundingDINOBenchmark(coco_dataset=dataset, oracle_store=oracle_store)
     grounding.profile(backend=backend, manager=manager, config=config)
 
-    siglip = SigLIPBenchmark(coco_dataset=dataset)
+    siglip = SigLIPBenchmark(coco_dataset=dataset, oracle_store=oracle_store)
     siglip.profile(backend=backend, manager=manager, config=config)
 
 
@@ -120,9 +135,10 @@ def _run_mobileclip_eval(
     dataset: CocoDataset,
     manager: ModelManager,
     unit: ComputeUnit,
+    oracle_store: OracleStore,
 ) -> dict[str, float | None]:
     backend = ComputeBackend(preferred_unit=unit)
-    benchmark = MobileCLIPBenchmark(coco_dataset=dataset)
+    benchmark = MobileCLIPBenchmark(coco_dataset=dataset, oracle_store=oracle_store)
     profile = benchmark.profile(
         backend=backend,
         manager=manager,
@@ -147,14 +163,18 @@ def main() -> None:
 
     dataset = CocoDataset(n_images=args.n_images)
     manager = ModelManager()
-    oracle_store = OracleStore(dataset_name=dataset.dataset_name)
+    oracle_dir: Path = args.oracle_dir
+    oracle_store = OracleStore(path=oracle_dir / f"oracle_{dataset.dataset_name}.json")
+    needs_oracle = args.model in {"mobileclip", "both", "oracle"}
 
-    if not args.skip_oracle and oracle_store.load() is None:
+    if not needs_oracle:
+        logger.info("Skipping oracle generation for YOLO-only run (native COCO GT is used).")
+    elif not args.skip_oracle and oracle_store.load() is None:
         logger.info("Generating COCO oracle pseudo-ground-truth with GroundingDINO and SigLIP...")
-        _run_oracle_passes(dataset, manager, _UNIT_MAP[args.oracle_unit])
+        _run_oracle_passes(dataset, manager, _UNIT_MAP[args.oracle_unit], oracle_store)
     elif not args.skip_oracle:
         logger.info("Refreshing COCO oracle pseudo-ground-truth...")
-        _run_oracle_passes(dataset, manager, _UNIT_MAP[args.oracle_unit])
+        _run_oracle_passes(dataset, manager, _UNIT_MAP[args.oracle_unit], oracle_store)
     else:
         logger.info("Skipping oracle generation and reusing cached COCO oracle data.")
 
@@ -165,7 +185,7 @@ def main() -> None:
     }
 
     if args.model in {"yolo", "both"}:
-        logger.info("Running YOLO COCO pseudo-GT evaluation...")
+        logger.info("Running YOLO COCO native-GT evaluation...")
         results["yolo"] = _run_yolo_eval(
             dataset=dataset,
             manager=manager,
@@ -179,6 +199,7 @@ def main() -> None:
             dataset=dataset,
             manager=manager,
             unit=_UNIT_MAP[args.edge_unit],
+            oracle_store=oracle_store,
         )
 
     print(json.dumps(results, indent=2))

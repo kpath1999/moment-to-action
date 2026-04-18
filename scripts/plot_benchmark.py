@@ -16,7 +16,7 @@ Plots produced (all saved as PNG into *output_dir*):
   - ``<model>_memory.png``     — peak RSS memory per compute unit
   - ``<model>_accuracy.png``   — accuracy per compute unit (only when data available)
   - ``<model>_power.png``      — power draw and energy/inference (only when data available)
-  - ``<model>_summary.png``    — combined 2×3 dashboard of all subplots
+  - ``<model>_summary.png``    — combined 2x3 dashboard of all subplots
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def _unit_colour(unit_str: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def plot_profiles(
+def plot_profiles(  # noqa: C901, PLR0915
     profiles: list[VariantProfile],
     model_name: str,
     output_dir: Path,
@@ -66,10 +66,11 @@ def plot_profiles(
         output_dir: Directory where PNGs are written (must already exist).
     """
     try:
-        import matplotlib  # noqa: PLC0415
-        matplotlib.use("Agg")  # non-interactive backend — safe in headless envs
-        import matplotlib.pyplot as plt  # noqa: PLC0415
-        import matplotlib.ticker as mticker  # noqa: PLC0415
+        import matplotlib as mpl
+
+        mpl.use("Agg")  # non-interactive backend — safe in headless envs
+        import matplotlib.pyplot as plt
+        import matplotlib.ticker as mticker
     except ImportError as exc:
         logger.warning("matplotlib not installed — skipping plots (%s)", exc)
         return
@@ -80,17 +81,24 @@ def plot_profiles(
 
     units = [p.variant_id.compute_unit.value for p in profiles]
     colours = [_unit_colour(u) for u in units]
-    _DISPLAY_NAMES: dict[str, str] = {
+    display_names: dict[str, str] = {
         "yolo": "YOLOv8",
         "mobileclip": "MobileCLIP-S2",
         "smolvlm2": "SmolVLM2",
         "qwen3": "Qwen3",
     }
-    title_prefix = _DISPLAY_NAMES.get(model_name.lower(), model_name.upper())
+    title_prefix = display_names.get(model_name.lower(), model_name.upper())
 
     # ── helpers ──────────────────────────────────────────────────────────────
 
-    def _bar(ax: plt.Axes, labels: list[str], values: list[float], ylabel: str, title: str, clrs: list[str]) -> None:  # type: ignore[name-defined]
+    def _bar(  # type: ignore[name-defined]
+        ax: plt.Axes,
+        labels: list[str],
+        values: list[float],
+        ylabel: str,
+        title: str,
+        clrs: list[str],
+    ) -> None:
         bars = ax.bar(labels, values, color=clrs, edgecolor="white", linewidth=0.5, zorder=3)
         ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3g"))
         ax.set_ylabel(ylabel, fontsize=9)
@@ -116,7 +124,7 @@ def plot_profiles(
         title: str,
         series_colours: list[str],
     ) -> None:
-        import numpy as np  # noqa: PLC0415
+        import numpy as np
 
         n_groups = len(labels)
         n_series = len(series)
@@ -124,8 +132,19 @@ def plot_profiles(
         x = np.arange(n_groups)
         offsets = [(i - (n_series - 1) / 2) * width for i in range(n_series)]
 
-        for (sname, vals), offset, colour in zip(series.items(), offsets, series_colours, strict=False):
-            bars = ax.bar(x + offset, vals, width=width * 0.9, label=sname, color=colour, zorder=3, edgecolor="white", linewidth=0.5)
+        for (sname, vals), offset, colour in zip(
+            series.items(), offsets, series_colours, strict=False
+        ):
+            bars = ax.bar(
+                x + offset,
+                vals,
+                width=width * 0.9,
+                label=sname,
+                color=colour,
+                zorder=3,
+                edgecolor="white",
+                linewidth=0.5,
+            )
             for bar, val in zip(bars, vals, strict=True):
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,
@@ -161,37 +180,65 @@ def plot_profiles(
 
     latency_series = {
         "mean": [p.inference_mean_ms for p in profiles],
-        "p50":  [p.inference_p50_ms for p in profiles],
-        "p95":  [p.inference_p95_ms for p in profiles],
-        "p99":  [p.inference_p99_ms for p in profiles],
+        "p50": [p.inference_p50_ms for p in profiles],
+        "p95": [p.inference_p95_ms for p in profiles],
+        "p99": [p.inference_p99_ms for p in profiles],
     }
     latency_colours = ["#4C72B0", "#55A868", "#DD8452", "#C44E52"]
 
     fig_lat, ax_lat = plt.subplots(figsize=(max(5, len(units) * 2.5), 4))
-    _grouped_bar(ax_lat, units, latency_series, "Latency (ms)", f"{title_prefix} — Inference Latency", latency_colours)
+    _grouped_bar(
+        ax_lat,
+        units,
+        latency_series,
+        "Latency (ms)",
+        f"{title_prefix} — Inference Latency",
+        latency_colours,
+    )
     _save(fig_lat, f"{model_name}_latency.png")
 
     # ── 2. Load latency ──────────────────────────────────────────────────────
 
     fig_load, ax_load = plt.subplots(figsize=(max(4, len(units) * 1.5), 4))
-    _bar(ax_load, units, [p.load_latency_ms for p in profiles], "Load latency (ms)", f"{title_prefix} — Model Load Latency", colours)
+    _bar(
+        ax_load,
+        units,
+        [p.load_latency_ms for p in profiles],
+        "Load latency (ms)",
+        f"{title_prefix} — Model Load Latency",
+        colours,
+    )
     _save(fig_load, f"{model_name}_load.png")
 
     # ── 3. Peak memory ───────────────────────────────────────────────────────
 
     fig_mem, ax_mem = plt.subplots(figsize=(max(4, len(units) * 1.5), 4))
-    _bar(ax_mem, units, [p.peak_memory_mb for p in profiles], "Peak RSS (MB)", f"{title_prefix} — Peak Memory", colours)
+    _bar(
+        ax_mem,
+        units,
+        [p.peak_memory_mb for p in profiles],
+        "Peak RSS (MB)",
+        f"{title_prefix} — Peak Memory",
+        colours,
+    )
     _save(fig_mem, f"{model_name}_memory.png")
 
     # ── 4. Accuracy (optional) ───────────────────────────────────────────────
 
     acc_values = [p.accuracy for p in profiles if p.accuracy is not None]
-    acc_units  = [p.variant_id.compute_unit.value for p in profiles if p.accuracy is not None]
+    acc_units = [p.variant_id.compute_unit.value for p in profiles if p.accuracy is not None]
     acc_colours = [_unit_colour(u) for u in acc_units]
 
     if acc_values:
         fig_acc, ax_acc = plt.subplots(figsize=(max(4, len(acc_units) * 1.5), 4))
-        _bar(ax_acc, acc_units, acc_values, "Score [0–1]", f"{title_prefix} — Accuracy vs CPU Oracle", acc_colours)
+        _bar(
+            ax_acc,
+            acc_units,
+            acc_values,
+            "Score [0-1]",
+            f"{title_prefix} — Accuracy vs CPU Oracle",
+            acc_colours,
+        )
         ax_acc.set_ylim(0, 1.1)
         _save(fig_acc, f"{model_name}_accuracy.png")
 
@@ -199,14 +246,21 @@ def plot_profiles(
 
     power_profiles = [p for p in profiles if p.cost.power_mw is not None]
     if power_profiles:
-        pw_units   = [p.variant_id.compute_unit.value for p in power_profiles]
+        pw_units = [p.variant_id.compute_unit.value for p in power_profiles]
         pw_colours = [_unit_colour(u) for u in pw_units]
-        pw_power   = [p.cost.power_mw for p in power_profiles]  # type: ignore[misc]
-        pw_energy  = [p.cost.energy_per_inference_mj or 0.0 for p in power_profiles]
+        pw_power = [p.cost.power_mw for p in power_profiles]  # type: ignore[misc]
+        pw_energy = [p.cost.energy_per_inference_mj or 0.0 for p in power_profiles]
 
         fig_pw, (ax_pw, ax_en) = plt.subplots(1, 2, figsize=(max(7, len(pw_units) * 2.5), 4))
-        _bar(ax_pw, pw_units, pw_power, "Power (mW)", f"{title_prefix} — Power Draw", pw_colours)
-        _bar(ax_en, pw_units, pw_energy, "Energy/inf (mJ)", f"{title_prefix} — Energy per Inference", pw_colours)
+        _bar(ax_pw, pw_units, pw_power, "Power (mW)", f"{title_prefix} — Power Draw", pw_colours)  # type: ignore[arg-type]
+        _bar(
+            ax_en,
+            pw_units,
+            pw_energy,
+            "Energy/inf (mJ)",
+            f"{title_prefix} — Energy per Inference",
+            pw_colours,
+        )
         _save(fig_pw, f"{model_name}_power.png")
 
     # ── 6. Summary dashboard ─────────────────────────────────────────────────
@@ -215,24 +269,49 @@ def plot_profiles(
     fig_sum, axes = plt.subplots(n_rows, n_cols, figsize=(14, 8))
     fig_sum.suptitle(f"{title_prefix} Benchmark Summary", fontsize=14, fontweight="bold", y=1.01)
 
-    _grouped_bar(axes[0, 0], units, latency_series, "Latency (ms)", "Inference Latency", latency_colours)
+    _grouped_bar(
+        axes[0, 0],
+        units,
+        latency_series,
+        "Latency (ms)",
+        "Inference Latency",
+        latency_colours,
+    )
     _bar(axes[0, 1], units, [p.load_latency_ms for p in profiles], "ms", "Load Latency", colours)
     _bar(axes[0, 2], units, [p.peak_memory_mb for p in profiles], "MB", "Peak Memory", colours)
 
     if acc_values:
-        _bar(axes[1, 0], acc_units, acc_values, "Score [0–1]", "Accuracy vs Oracle", acc_colours)
+        _bar(axes[1, 0], acc_units, acc_values, "Score [0-1]", "Accuracy vs Oracle", acc_colours)
         axes[1, 0].set_ylim(0, 1.1)
     else:
-        axes[1, 0].text(0.5, 0.5, "No accuracy data\n(pass --eval-images)", ha="center", va="center", transform=axes[1, 0].transAxes, fontsize=9, color="grey")
+        axes[1, 0].text(
+            0.5,
+            0.5,
+            "No accuracy data\n(pass --eval-images)",
+            ha="center",
+            va="center",
+            transform=axes[1, 0].transAxes,
+            fontsize=9,
+            color="grey",
+        )
         axes[1, 0].set_title("Accuracy vs Oracle", fontsize=10, fontweight="bold", pad=6)
         axes[1, 0].axis("off")
 
     if power_profiles:
-        _bar(axes[1, 1], pw_units, pw_power, "mW", "Power Draw", pw_colours)
+        _bar(axes[1, 1], pw_units, pw_power, "mW", "Power Draw", pw_colours)  # type: ignore[arg-type]
         _bar(axes[1, 2], pw_units, pw_energy, "mJ", "Energy/Inference", pw_colours)
     else:
         for ax in (axes[1, 1], axes[1, 2]):
-            ax.text(0.5, 0.5, "No power data", ha="center", va="center", transform=ax.transAxes, fontsize=9, color="grey")
+            ax.text(
+                0.5,
+                0.5,
+                "No power data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                fontsize=9,
+                color="grey",
+            )
             ax.axis("off")
 
     _save(fig_sum, f"{model_name}_summary.png")
@@ -243,7 +322,7 @@ def plot_profiles(
 # ---------------------------------------------------------------------------
 
 
-def _load_profiles_from_json(json_path: Path) -> tuple[str, list[object]]:
+def _load_profiles_from_json(json_path: Path) -> tuple[str, list[dict[str, object]]]:
     """Reconstruct minimal profile objects from a saved JSON results file.
 
     Returns ``(model_name, profiles)`` where each profile is a plain dict

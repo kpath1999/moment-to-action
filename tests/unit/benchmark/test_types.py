@@ -14,16 +14,19 @@ class TestBenchmarkTypes:
     """Tests for benchmark type objects."""
 
     def test_variant_id_is_hashable(self) -> None:
+        """VariantID is usable as a dict key."""
         variant_id = VariantID(model_id=ModelID.YOLO_V8, compute_unit=ComputeUnit.CPU)
         data = {variant_id: "ok"}
         assert data[variant_id] == "ok"
 
     def test_cost_profile_defaults(self) -> None:
+        """CostProfile defaults all optional fields to None."""
         cost = CostProfile()
         assert cost.power_mw is None
         assert cost.energy_per_inference_mj is None
 
     def test_variant_profile_json(self) -> None:
+        """VariantProfile.json() serialises variant_id and profiled_at correctly."""
         profiled_at = datetime(2026, 1, 1, tzinfo=UTC)
         profile = VariantProfile(
             variant_id=VariantID(model_id=ModelID.MOBILECLIP_S2, compute_unit=ComputeUnit.NPU),
@@ -50,12 +53,14 @@ class TestBenchmarkTypes:
         assert payload["profiled_at"] == profiled_at.isoformat()
 
     def test_benchmark_config_defaults(self) -> None:
+        """BenchmarkConfig initialises with expected default values."""
         config = BenchmarkConfig()
         assert config.n_warmup == 5
         assert config.n_runs == 20
         assert config.batch_sizes == [1]
 
     def test_types_are_frozen(self) -> None:
+        """Frozen attrs classes raise AttributeError on mutation attempts."""
         profile = CostProfile(power_mw=1.0, energy_per_inference_mj=2.0)
         with pytest.raises(AttributeError):
             profile.power_mw = 2.0  # type: ignore[misc]

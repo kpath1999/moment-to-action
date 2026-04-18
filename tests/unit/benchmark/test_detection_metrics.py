@@ -37,6 +37,9 @@ class _FakeCOCOeval:
     def accumulate(self) -> None:
         return
 
+    def summarize(self) -> None:
+        return
+
 
 @pytest.mark.unit
 def test_compute_detection_map_with_fake_pycocotools(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,8 +47,8 @@ def test_compute_detection_map_with_fake_pycocotools(monkeypatch: pytest.MonkeyP
     pycocotools = types.ModuleType("pycocotools")
     coco_mod = types.ModuleType("pycocotools.coco")
     cocoeval_mod = types.ModuleType("pycocotools.cocoeval")
-    coco_mod.COCO = _FakeCOCO
-    cocoeval_mod.COCOeval = _FakeCOCOeval
+    coco_mod.COCO = _FakeCOCO  # type: ignore[attr-defined]
+    cocoeval_mod.COCOeval = _FakeCOCOeval  # type: ignore[attr-defined]
 
     monkeypatch.setitem(sys.modules, "pycocotools", pycocotools)
     monkeypatch.setitem(sys.modules, "pycocotools.coco", coco_mod)

@@ -5,16 +5,20 @@ alongside the existing ``model.onnx`` in
 ``src/moment_to_action/models/_vendored/yolo/``. ``YOLOStage`` and
 ``YOLOBenchmark`` use the INT8 variant on NPU and float32 variant on GPU.
 
-Pass ``--imgsz 320`` to produce a 320×320 INT8 model (``model_int8_320.tflite``)
-that fits within Hexagon HTP TCM constraints on the QCS6490.  The 640×640
+Pass ``--imgsz 320`` to produce a 320x320 INT8 model (``model_int8_320.tflite``)
+that fits within Hexagon HTP TCM constraints on the QCS6490.  The 640x640
 model exceeds TCM requirements (~2.56 MB per tensor vs. ~4 MB available).
 
 Requires ``ultralytics`` and its TFLite export dependencies (not in the default project
 dependencies).  Pass them all explicitly so uv manages the install instead of letting
 ultralytics attempt a ``pip install`` that fails on PEP 668 / externally-managed systems:
 
-    uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py
-    uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py --imgsz 320
+    uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,\
+onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,\
+tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py
+    uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,\
+onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,\
+tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py --imgsz 320
 """
 
 from __future__ import annotations
@@ -34,6 +38,9 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _YOLO_DIR = _REPO_ROOT / "src" / "moment_to_action" / "models" / "_vendored" / "yolo"
 
 _MODEL_NAME = "yolo26n.pt"
+
+_DEFAULT_IMGSZ = 640
+_NPU_IMGSZ = 320
 
 
 def _check_ultralytics() -> None:
@@ -63,14 +70,14 @@ def convert(imgsz: int = 640) -> None:
 
     Args:
         imgsz: Input image size (square).  Use 320 to produce a model that fits
-               within Hexagon HTP TCM constraints on the QCS6490 — the 640×640
+               within Hexagon HTP TCM constraints on the QCS6490 — the 640x640
                model requires ~2.56 MB per tensor, exceeding the ~2 MB default
                VTCM allocation.
     """
     _check_ultralytics()
     from ultralytics import YOLO
 
-    suffix = f"_{imgsz}" if imgsz != 640 else ""
+    suffix = f"_{imgsz}" if imgsz != _DEFAULT_IMGSZ else ""
     tflite_path = _YOLO_DIR / f"model{suffix}.tflite"
     tflite_int8_path = _YOLO_DIR / f"model_int8{suffix}.tflite"
 
@@ -110,9 +117,9 @@ def convert(imgsz: int = 640) -> None:
 
     print(f"Written:  {tflite_path}  ({tflite_path.stat().st_size // 1024} KB)")
     print(f"Written:  {tflite_int8_path}  ({tflite_int8_path.stat().st_size // 1024} KB)")
-    if imgsz == 320:
+    if imgsz == _NPU_IMGSZ:
         print(
-            "Note: 320×320 model targets Hexagon HTP NPU — fits within TCM constraints.\n"
+            "Note: 320x320 model targets Hexagon HTP NPU — fits within TCM constraints.\n"
             "Run `uv run python scripts/benchmark_model.py --model yolo --units npu` to verify."
         )
     else:

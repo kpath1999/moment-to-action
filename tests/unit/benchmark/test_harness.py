@@ -23,7 +23,7 @@ class _MockBenchmark(ModelBenchmark):
     def model_id(self) -> ModelID:
         return self._model_id
 
-    def profile(
+    def profile(  # type: ignore[override]
         self, backend: object, manager: object, config: BenchmarkConfig | None = None
     ) -> object:
         del backend, manager, config

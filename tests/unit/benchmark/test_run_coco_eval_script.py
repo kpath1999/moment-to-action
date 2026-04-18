@@ -34,6 +34,7 @@ def test_parser_defaults() -> None:
     assert args.edge_unit == "npu"
     assert args.conf_threshold == pytest.approx(0.25)
     assert args.output is None
+    assert args.oracle_dir == Path(__file__).parents[3] / "data" / "oracle"
 
 
 @pytest.mark.unit
@@ -78,8 +79,9 @@ def test_main_skip_oracle_and_write_output(
         dataset: object,
         manager: object,
         unit: object,
+        oracle_store: object,
     ) -> dict[str, float]:
-        del dataset, manager, unit
+        del dataset, manager, unit, oracle_store
         return {
             "accuracy": 0.44,
             "recall_at_1": 0.44,
@@ -90,15 +92,15 @@ def test_main_skip_oracle_and_write_output(
     monkeypatch.setattr(
         module,
         "OracleStore",
-        lambda dataset_name: SimpleNamespace(
-            path=tmp_path / f"oracle_{dataset_name}.json",
+        lambda path=None: SimpleNamespace(
+            path=path or tmp_path / "oracle_coco_val2017.json",
             load=lambda: None,
         ),
     )
     monkeypatch.setattr(
         module,
         "_run_oracle_passes",
-        lambda dataset, manager, unit: oracle_calls.append((dataset, manager, unit)),
+        lambda dataset, manager, unit, _oracle_store: oracle_calls.append((dataset, manager, unit)),
     )
     monkeypatch.setattr(module, "_run_yolo_eval", _fake_run_yolo_eval)
     monkeypatch.setattr(module, "_run_mobileclip_eval", _fake_run_mobileclip_eval)
@@ -158,15 +160,15 @@ def test_main_oracle_only_mode(
     monkeypatch.setattr(
         module,
         "OracleStore",
-        lambda dataset_name: SimpleNamespace(
-            path=tmp_path / f"oracle_{dataset_name}.json",
+        lambda path=None: SimpleNamespace(
+            path=path or tmp_path / "oracle_coco_val2017.json",
             load=lambda: None,
         ),
     )
     monkeypatch.setattr(
         module,
         "_run_oracle_passes",
-        lambda dataset, manager, unit: oracle_calls.append((dataset, manager, unit)),
+        lambda dataset, manager, unit, _oracle_store: oracle_calls.append((dataset, manager, unit)),
     )
     monkeypatch.setattr(
         module,

@@ -21,7 +21,7 @@ class DetectionMetrics:
     per_class_ap: dict[str, float]
 
 
-def compute_detection_map(  # noqa: C901, PLR0912
+def compute_detection_map(  # noqa: C901, PLR0912, PLR0915
     predictions: Sequence[OracleDetection],
     ground_truth: Sequence[OracleDetection],
 ) -> DetectionMetrics:
@@ -101,6 +101,9 @@ def compute_detection_map(  # noqa: C901, PLR0912
     if not coco_gt["annotations"]:
         return DetectionMetrics(map_50=0.0, map_50_95=0.0, recall_50=0.0, per_class_ap={})
 
+    if not coco_dt:
+        return DetectionMetrics(map_50=0.0, map_50_95=0.0, recall_50=0.0, per_class_ap={})
+
     from pycocotools.coco import COCO
     from pycocotools.cocoeval import COCOeval
 
@@ -108,10 +111,14 @@ def compute_detection_map(  # noqa: C901, PLR0912
     coco_gt_api.dataset = coco_gt
     coco_gt_api.createIndex()
 
-    coco_dt_api = coco_gt_api.loadRes(coco_dt) if coco_dt else coco_gt_api.loadRes([])
+    coco_dt_api = coco_gt_api.loadRes(coco_dt)
     evaluator = COCOeval(coco_gt_api, coco_dt_api, iouType="bbox")
     evaluator.evaluate()
     evaluator.accumulate()
+    evaluator.summarize()
+
+    if not isinstance(evaluator.stats, np.ndarray) or evaluator.stats.size == 0:
+        return DetectionMetrics(map_50=0.0, map_50_95=0.0, recall_50=0.0, per_class_ap={})
 
     map_50_95 = float(evaluator.stats[0])
     map_50 = float(evaluator.stats[1])

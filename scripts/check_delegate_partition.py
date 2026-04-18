@@ -61,7 +61,7 @@ for method in sorted(diagnostic_methods):
 print("\n=== Checking execution plan ===")
 try:
     if hasattr(handle, "_get_execution_plan"):
-        exec_plan = handle._get_execution_plan()
+        exec_plan = handle._get_execution_plan()  # noqa: SLF001
         delegate_nodes = sum(1 for node_id in exec_plan if node_id < 0)
         cpu_nodes = len(exec_plan) - delegate_nodes
         print(f"Total nodes: {len(exec_plan)}")
@@ -79,7 +79,7 @@ try:
         num_tensors = handle.get_tensor_details()
         print(f"Total tensors: {len(num_tensors) if num_tensors else 'unknown'}")
 
-except Exception as e:
+except Exception as e:  # noqa: BLE001
     print(f"Error checking execution plan: {e}")
 
 print()

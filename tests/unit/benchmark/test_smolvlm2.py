@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from moment_to_action.benchmark import SmolVLM2Benchmark
+from moment_to_action.benchmark._msrvtt_dataset import MsrvttItem
 from moment_to_action.models import ModelID, ModelManager
 
 
@@ -46,4 +47,34 @@ def test_smolvlm2_load_uses_torch_policy() -> None:
     mock_model.assert_called_once()
 
     inputs = benchmark._make_dummy_input(handle, batch_size=1)
-    assert "input_ids" in inputs
+    assert "input_ids" in inputs  # type: ignore[operator]
+
+
+@pytest.mark.unit
+def test_smolvlm2_evaluate_accuracy_exact_match() -> None:
+    dataset = mock.MagicMock()
+    dataset.items.return_value = [
+        MsrvttItem(video_path=Path("/tmp/a.mp4"), question="q1", answer="person running"),
+        MsrvttItem(video_path=Path("/tmp/b.mp4"), question="q2", answer="red car"),
+    ]
+    benchmark = SmolVLM2Benchmark(msrvtt_dataset=dataset)
+
+    with (
+        mock.patch.object(SmolVLM2Benchmark, "_cast_handle", return_value=mock.MagicMock()),
+        mock.patch(
+            "moment_to_action.benchmark._smolvlm2._sample_video_frames",
+            return_value=[mock.MagicMock()],
+        ),
+        mock.patch.object(
+            SmolVLM2Benchmark,
+            "_generate_answer",
+            side_effect=["person running", "different answer"],
+        ),
+    ):
+        accuracy = benchmark._evaluate_accuracy(
+            handle=object(),
+            backend=mock.MagicMock(),
+            manager=mock.MagicMock(),
+        )
+
+    assert accuracy == pytest.approx(0.5)

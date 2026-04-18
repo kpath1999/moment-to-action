@@ -1,4 +1,5 @@
 cov_path_html := "/tmp/" + `whoami` + "-coverage-html"
+export PYTHONPATH := "src"
 
 # Show help for all available recipes (default)
 [default]

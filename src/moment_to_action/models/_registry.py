@@ -46,6 +46,11 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         filename="__UNUSED__",
         source=TransformersSource(hf_repo_id="Qwen/Qwen2.5-4B-Instruct"),
     ),
+    ModelID.WHISPER_TINY: ModelInfo(
+        id=ModelID.WHISPER_TINY,
+        filename="__UNUSED__",
+        source=TransformersSource(hf_repo_id="openai/whisper-tiny"),
+    ),
     ModelID.GROUNDING_DINO_BASE: ModelInfo(
         id=ModelID.GROUNDING_DINO_BASE,
         filename="__UNUSED__",

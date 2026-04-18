@@ -83,7 +83,7 @@ def test_mobileclip_evaluate_accuracy_with_mocked_pipeline(tmp_path: Path) -> No
 
     fake_image = np.zeros((256, 256, 3), dtype=np.uint8)
 
-    import cv2  # noqa: PLC0415
+    import cv2
 
     with (
         mock.patch(
@@ -121,7 +121,7 @@ def test_mobileclip_evaluate_accuracy_returns_none_for_nan_gpu_output(tmp_path: 
 
     fake_image = np.zeros((256, 256, 3), dtype=np.uint8)
 
-    import cv2  # noqa: PLC0415
+    import cv2
 
     with (
         mock.patch(

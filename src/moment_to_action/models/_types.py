@@ -30,6 +30,7 @@ class ModelID(Enum):
     MOBILECLIP_S2 = "mobileclip_s2"
     SMOLVLM2_2_2B = "smolvlm2_2_2b"
     QWEN2_5_4B = "qwen2.5_4b"
+    WHISPER_TINY = "whisper_tiny"
     GROUNDING_DINO_BASE = "grounding_dino_base"
     SIGLIP_SO400M = "siglip_so400m"
 

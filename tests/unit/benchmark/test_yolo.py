@@ -39,7 +39,7 @@ def test_yolo_load_npu_prefers_int8_320_when_available() -> None:
     manager.is_available.return_value = True
     tflite_path = Path("/tmp/yolo_npu_int8_320.tflite")
     manager.get_path.return_value = tflite_path
-    # 320×320 TFLite model reports NHWC shape
+    # 320x320 TFLite model reports NHWC shape
     backend.get_input_details.return_value = [{"shape": [1, 320, 320, 3], "name": "input"}]
 
     handle = benchmark._load_model(backend=backend, manager=manager)
@@ -72,7 +72,7 @@ def test_yolo_load_npu_falls_back_to_int8_640_when_320_unavailable() -> None:
     backend.load_model.assert_called_once_with(tflite_path)
 
     inputs = benchmark._make_dummy_input(handle, batch_size=2)
-    assert inputs.shape == (2, 640, 640, 3)
+    assert inputs.shape == (2, 640, 640, 3)  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit
@@ -96,7 +96,7 @@ def test_yolo_load_falls_back_to_onnx_when_tflite_unavailable() -> None:
     backend.load_model.assert_called_once_with(onnx_path)
 
     inputs = benchmark._make_dummy_input(None, batch_size=1)
-    assert inputs.shape == (1, 3, 640, 640)
+    assert inputs.shape == (1, 3, 640, 640)  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit
@@ -183,7 +183,7 @@ def test_yolo_evaluate_accuracy_with_mocked_pipeline(tmp_path: Path) -> None:
     manager = mock.MagicMock(spec=ModelManager)
     manager.get_path.return_value = Path("/tmp/yolo.onnx")
 
-    import cv2  # noqa: PLC0415
+    import cv2
 
     with (
         mock.patch(
@@ -197,3 +197,47 @@ def test_yolo_evaluate_accuracy_with_mocked_pipeline(tmp_path: Path) -> None:
 
     # Perfect agreement → mAP50 = 1.0
     assert result == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_coco_accuracy_uses_native_dataset_gt() -> None:
+    """COCO path should use native dataset detections and compute detection metrics."""
+    from moment_to_action.benchmark._oracle_ground_truth import OracleBox, OracleDetection
+
+    dataset = mock.MagicMock()
+    dataset.images.return_value = [Path("/tmp/000000000001.jpg")]
+    dataset.instance_detections.return_value = [
+        OracleDetection(
+            image_name="000000000001.jpg",
+            boxes=[
+                OracleBox(
+                    x1=10.0,
+                    y1=20.0,
+                    x2=30.0,
+                    y2=40.0,
+                    label="person",
+                    confidence=1.0,
+                )
+            ],
+        )
+    ]
+
+    benchmark = YOLOBenchmark(coco_dataset=dataset)
+    benchmark._input_shape = (1, 3, 640, 640)
+
+    backend = mock.MagicMock()
+    backend.run.return_value = [np.zeros((1, 84, 1), dtype=np.float32)]
+
+    metrics = mock.MagicMock(map_50=0.7, map_50_95=0.6, recall_50=0.8)
+    with (
+        mock.patch(
+            "moment_to_action.benchmark._yolo._load_yolo_tensor",
+            return_value=np.zeros((1, 3, 640, 640), dtype=np.float32),
+        ),
+        mock.patch("moment_to_action.benchmark._yolo._parse_yolo_boxes", return_value=[]),
+        mock.patch("moment_to_action.benchmark._yolo.compute_detection_map", return_value=metrics),
+    ):
+        result = benchmark._evaluate_coco_accuracy(handle=object(), backend=backend)
+
+    dataset.instance_detections.assert_called_once()
+    assert result == pytest.approx(0.6)

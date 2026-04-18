@@ -15,6 +15,7 @@ import attrs
 import numpy as np
 import torch
 from PIL import Image
+from rich.progress import track
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
 from moment_to_action.benchmark._base import ModelBenchmark
@@ -145,7 +146,17 @@ class GroundingDINOBenchmark(ModelBenchmark):
         text = ". ".join(self._text_queries) + "."
         oracle_detections: list[OracleDetection] = []
 
-        for img_path in self._sample_images:
+        sample_images: list[Path] = self._sample_images
+        if self._coco_dataset is not None and sample_images:
+            image_iter = track(
+                sample_images,
+                description="GroundingDINO COCO oracle",
+                total=len(sample_images),
+            )
+        else:
+            image_iter = sample_images
+
+        for img_path in image_iter:
             image = Image.open(img_path).convert("RGB")
             inputs = h.processor(images=image, text=text, return_tensors="pt")  # type: ignore[operator]
             inputs = {k: v.to(h.device) for k, v in inputs.items()}
@@ -178,7 +189,7 @@ class GroundingDINOBenchmark(ModelBenchmark):
                 )
             ]
             oracle_detections.append(OracleDetection(image_name=img_path.name, boxes=boxes))
-            logger.info("GroundingDINOBenchmark: %s → %d boxes", img_path.name, len(boxes))
+            logger.debug("GroundingDINOBenchmark: %s -> %d boxes", img_path.name, len(boxes))
 
         # Merge with any existing oracle ground truth (preserve classifications).
         existing = self._oracle_store.load()

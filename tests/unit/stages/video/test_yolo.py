@@ -700,7 +700,7 @@ class TestYOLOTFLiteIntegration:
     def test_process_transposes_tensor_for_nhwc_model(self) -> None:
         """_process sends [1, H, W, C] to the backend when _nhwc is True."""
         stage = self._make_stage_nhwc()
-        stage._backend.run.return_value = [
+        stage._backend.run.return_value = [  # type: ignore[attr-defined]
             np.zeros((1, 0, 4), dtype=np.float32),
             np.zeros((1, 0), dtype=np.float32),
             np.zeros((1, 0), dtype=np.uint8),
@@ -711,13 +711,13 @@ class TestYOLOTFLiteIntegration:
         msg = FrameTensorMessage(tensor=tensor, timestamp=0.0, original_size=(640, 640))
         stage.process(msg)
 
-        called_tensor = stage._backend.run.call_args[0][1]
+        called_tensor = stage._backend.run.call_args[0][1]  # type: ignore[attr-defined]
         assert called_tensor.shape == (1, 640, 640, 3)
 
     def test_process_does_not_transpose_for_nchw_model(self) -> None:
         """_process sends [1, C, H, W] unchanged when _nhwc is False."""
         stage = self._make_stage_nchw()
-        stage._backend.run.return_value = [
+        stage._backend.run.return_value = [  # type: ignore[attr-defined]
             np.zeros((1, 0, 4), dtype=np.float32),
             np.zeros((1, 0), dtype=np.float32),
             np.zeros((1, 0), dtype=np.uint8),
@@ -728,7 +728,7 @@ class TestYOLOTFLiteIntegration:
         msg = FrameTensorMessage(tensor=tensor, timestamp=0.0, original_size=(640, 640))
         stage.process(msg)
 
-        called_tensor = stage._backend.run.call_args[0][1]
+        called_tensor = stage._backend.run.call_args[0][1]  # type: ignore[attr-defined]
         assert called_tensor.shape == (1, 3, 640, 640)
 
     def test_parse_outputs_raw_predictions_single_tensor(self) -> None:
@@ -749,7 +749,7 @@ class TestYOLOTFLiteIntegration:
         assert len(result) == 1
         assert result[0].label == "person"
         assert result[0].confidence == pytest.approx(0.9)
-        # cx=320,w=200 → x1=220, x2=420 (scaled 1:1 for 640×640 → 640×640)
+        # cx=320,w=200 → x1=220, x2=420 (scaled 1:1 for 640x640 -> 640x640)
         assert result[0].x1 == pytest.approx(220.0)
         assert result[0].x2 == pytest.approx(420.0)
 

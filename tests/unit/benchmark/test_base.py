@@ -78,8 +78,9 @@ def test_probe_max_batch_size_stops_on_error() -> None:
         del handle, inputs, backend_
         call_count["n"] += 1
         if call_count["n"] >= 3:
-            raise RuntimeError("oom")
+            msg = "oom"
+            raise RuntimeError(msg)
 
-    benchmark._run_inference = raising_run  # type: ignore[method-assign]
+    benchmark._run_inference = raising_run  # type: ignore[method-assign, assignment]
     batch = benchmark._probe_max_batch_size(object(), backend, max_probe=10)
     assert batch == 2

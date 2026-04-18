@@ -31,10 +31,12 @@ class MobileCLIPBenchmark(ModelBenchmark):
         eval_image_paths: list[Path] | None = None,
         *,
         coco_dataset: CocoDataset | None = None,
+        oracle_store: OracleStore | None = None,
     ) -> None:
         super().__init__()
         self._eval_image_paths = eval_image_paths or []
         self._coco_dataset = coco_dataset
+        self._oracle_store = oracle_store
 
     @property
     def model_id(self) -> ModelID:
@@ -143,7 +145,8 @@ class MobileCLIPBenchmark(ModelBenchmark):
         if dataset is None:
             return None
 
-        gt = OracleStore(dataset_name=dataset.dataset_name).load()
+        store = self._oracle_store or OracleStore(dataset_name=dataset.dataset_name)
+        gt = store.load()
         if gt is None or not gt.classifications:
             logger.debug("MobileCLIPBenchmark: no COCO oracle classifications found -- skipping.")
             return None

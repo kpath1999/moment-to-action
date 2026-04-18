@@ -14,7 +14,6 @@ from moment_to_action.benchmark._accuracy import (
     parse_yolo_outputs,
 )
 
-
 # ---------------------------------------------------------------------------
 # compute_iou
 # ---------------------------------------------------------------------------
@@ -85,7 +84,7 @@ def test_match_no_pred() -> None:
 def test_match_low_iou_counts_as_fp() -> None:
     # Boxes barely overlap — IoU << 0.5
     pred = np.array([0.0, 0.0, 3.0, 3.0], dtype=np.float32)
-    gt   = np.array([5.0, 5.0, 10.0, 10.0], dtype=np.float32)
+    gt = np.array([5.0, 5.0, 10.0, 10.0], dtype=np.float32)
     tp, fp, fn = match_detections([pred], [gt], iou_threshold=0.5)
     assert tp == 0
     assert fp == 1
@@ -119,7 +118,7 @@ def test_map50_mismatched_lists_raises() -> None:
 @pytest.mark.unit
 def test_map50_all_wrong() -> None:
     pred = np.array([0.0, 0.0, 3.0, 3.0], dtype=np.float32)
-    gt   = np.array([50.0, 50.0, 100.0, 100.0], dtype=np.float32)
+    gt = np.array([50.0, 50.0, 100.0, 100.0], dtype=np.float32)
     score = compute_map50([[pred]], [[gt]])
     assert score == pytest.approx(0.0)
 
@@ -193,7 +192,7 @@ def test_parse_yolo_1tensor_one_detection() -> None:
     raw[0, 1, 0] = 320.0  # cy
     raw[0, 2, 0] = 100.0  # w
     raw[0, 3, 0] = 100.0  # h
-    raw[0, 4, 0] = 0.9    # class-0 confidence
+    raw[0, 4, 0] = 0.9  # class-0 confidence
     result = parse_yolo_outputs([raw], confidence_threshold=0.5)
     assert len(result) == 1
     box = result[0]
@@ -206,9 +205,9 @@ def test_parse_yolo_1tensor_one_detection() -> None:
 @pytest.mark.unit
 def test_parse_yolo_3tensor_one_detection() -> None:
     boxes = np.array([[[10.0, 20.0, 50.0, 60.0]]], dtype=np.float32)  # [1, 1, 4]
-    scores = np.array([[0.8]], dtype=np.float32)                        # [1, 1]
-    class_ids = np.array([[0]], dtype=np.uint8)                         # [1, 1]
-    result = parse_yolo_outputs([boxes, scores, class_ids], confidence_threshold=0.5)
+    scores = np.array([[0.8]], dtype=np.float32)  # [1, 1]
+    class_ids = np.array([[0]], dtype=np.uint8)  # [1, 1]
+    result = parse_yolo_outputs([boxes, scores, class_ids], confidence_threshold=0.5)  # type: ignore[list-item]
     assert len(result) == 1
     assert result[0].tolist() == pytest.approx([10.0, 20.0, 50.0, 60.0])
 
