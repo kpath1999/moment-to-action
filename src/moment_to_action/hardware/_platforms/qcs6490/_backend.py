@@ -88,7 +88,7 @@ class QCS6490Backend(InferenceBackend):
 
     def __init__(self, preferred_unit: ComputeUnit = ComputeUnit.NPU) -> None:
         self._preferred_unit = preferred_unit
-        self._active_unit = ComputeUnit.CPU
+        self._supported_unit = ComputeUnit.CPU
 
         # CPU backend is always available — the unconditional fallback.
         self._litert_cpu_backend: QCS6490LiteRTBackend = QCS6490LiteRTBackend(
@@ -114,7 +114,7 @@ class QCS6490Backend(InferenceBackend):
             or self._onnx_accel_backend is not None
             or preferred_unit == ComputeUnit.CPU
         ):
-            self._active_unit = preferred_unit
+            self._supported_unit = preferred_unit
 
         logger.info(
             "QCS6490Backend: preferred=%s accel=%s",
@@ -232,13 +232,13 @@ class QCS6490Backend(InferenceBackend):
         return h.backend.get_output_details(h.raw)
 
     def get_supported_unit(self) -> ComputeUnit:
-        """Return the compute unit effectively in use.
+        """Return the stable compute unit configured for this backend instance.
 
-        This value is optimistic at construction time (requested unit if an
-        accelerator backend is available), then updated to the actual unit on
-        each model load as fallback decisions are made.
+        This is selected once at construction time based on the requested unit
+        and backend availability. Individual model handles may still fall back
+        to CPU during load, but that should not mutate backend-wide state.
         """
-        return self._active_unit
+        return self._supported_unit
 
     def resolve_torch_policy(self, requested: str = "auto") -> TorchExecutionPolicy:
         """Resolve torch execution policy for this platform."""
@@ -253,7 +253,6 @@ class QCS6490Backend(InferenceBackend):
         if self._litert_accel_backend is not None:
             try:
                 raw = self._litert_accel_backend.load_model(path)
-                self._active_unit = self._litert_accel_backend.get_supported_unit()
                 return _ModelHandle(raw=raw, backend=self._litert_accel_backend)
             except Exception as e:  # noqa: BLE001
                 logger.warning(
@@ -263,7 +262,6 @@ class QCS6490Backend(InferenceBackend):
                 )
 
         raw = self._litert_cpu_backend.load_model(path)
-        self._active_unit = self._litert_cpu_backend.get_supported_unit()
         return _ModelHandle(raw=raw, backend=self._litert_cpu_backend)
 
     def _load_onnx(self, path: str) -> _ModelHandle:
@@ -271,7 +269,6 @@ class QCS6490Backend(InferenceBackend):
         if self._onnx_accel_backend is not None:
             try:
                 raw = self._onnx_accel_backend.load_model(path)
-                self._active_unit = self._onnx_accel_backend.get_supported_unit()
                 return _ModelHandle(raw=raw, backend=self._onnx_accel_backend)
             except Exception as e:  # noqa: BLE001
                 logger.warning(
@@ -281,5 +278,4 @@ class QCS6490Backend(InferenceBackend):
                 )
 
         raw = self._onnx_cpu_backend.load_model(path)
-        self._active_unit = self._onnx_cpu_backend.get_supported_unit()
         return _ModelHandle(raw=raw, backend=self._onnx_cpu_backend)

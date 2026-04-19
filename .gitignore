@@ -218,6 +218,14 @@ pyrightconfig.json
 /detections.jpg
 /metrics_report.json
 
+# Benchmark / profiling output artifacts
+scripts/mobileclip_*/
+scripts/*_results_*/
+scripts/yolo_results_*/
+
+# Local scratch space
+archive/
+
 # Ignore log outputs
 logs/
 data/

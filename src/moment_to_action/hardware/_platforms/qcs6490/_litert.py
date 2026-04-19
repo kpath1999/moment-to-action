@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -37,9 +36,6 @@ _ADSP_LIBRARY_DEFAULT = ";".join(  # noqa: FLY002
         "/usr/lib/rfsa/adsp/hexagon-v68",
     )
 )
-
-# Environment variable used to track that we've already re-exec'd with fastrpc permissions.
-_FASTRPC_REEXEC_MARKER = "MOMENT_TO_ACTION_FASTRPC_REEXECD"
 
 
 def _is_in_fastrpc_group() -> bool:
@@ -72,73 +68,18 @@ def _is_in_fastrpc_group() -> bool:
 def _ensure_fastrpc_permissions() -> None:
     """Ensure the process has fastrpc group permissions for NPU access.
 
-    If not already in the fastrpc group and not already re-exec'd, re-executes
-    the current process using ``sg fastrpc -c`` to gain the necessary permissions.
-
-    This allows users to run NPU workloads without manually prefixing commands
-    with ``sg fastrpc -c``.
+    Library code should fail explicitly here rather than trying to re-execute
+    the current process behind the caller's back.
     """
-    # If we've already re-exec'd, don't do it again (avoid infinite loop)
-    if os.environ.get(_FASTRPC_REEXEC_MARKER):
-        return
-
-    # If we're already in the fastrpc group, nothing to do
     if _is_in_fastrpc_group():
         return
 
-    # Check if sg command exists
-    try:
-        subprocess.run(
-            ["which", "sg"],  # noqa: S607
-            check=True,
-            capture_output=True,
-            timeout=5,
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        # sg not available, can't auto-switch groups
-        logger.warning(
-            "Not in fastrpc group and 'sg' command unavailable — "
-            "NPU access may fail. Run with: sg fastrpc -c 'your_command'"
-        )
-        return
-
-    # Re-exec with sg fastrpc -c
-    logger.info(
-        "Not in fastrpc group — automatically re-executing with 'sg fastrpc -c' for NPU access..."
+    msg = (
+        "NPU access requires membership in the 'fastrpc' group. "
+        "Re-run your command under that group, for example: "
+        "sg fastrpc -c '<your command>'"
     )
-
-    # Cannot re-exec if running from python -c (the code is not in sys.argv)
-    if sys.argv and sys.argv[0] == "-c":
-        logger.warning(
-            "Cannot auto-reexec when running from 'python -c'. "
-            "Please run your script with: sg fastrpc -c 'python -c ...'"
-        )
-        return
-
-    # Build the command to re-exec: sg fastrpc -c 'python script.py args...'
-    # Properly quote all arguments to handle spaces and special characters
-    cmd_parts = [shlex.quote(sys.executable)] + [shlex.quote(arg) for arg in sys.argv]
-    cmd_line = " ".join(cmd_parts)
-
-    # Set the marker in the environment before re-exec
-    env = os.environ.copy()
-    env[_FASTRPC_REEXEC_MARKER] = "1"
-
-    try:
-        # Use sg to re-run the current command with fastrpc group
-        result = subprocess.run(  # noqa: S603
-            ["sg", "fastrpc", "-c", cmd_line],  # noqa: S607
-            env=env,
-            check=False,  # Don't raise on non-zero exit
-        )
-        # Exit with the same code as the child process
-        sys.exit(result.returncode)
-    except Exception:
-        logger.exception("Failed to re-execute with fastrpc group")
-        logger.warning(
-            "Continuing without fastrpc group — NPU access may fail. "
-            "To fix, run manually: sg fastrpc -c 'your_command'"
-        )
+    raise RuntimeError(msg)
 
 
 def _collect_htp_diagnostics() -> str:

@@ -1,24 +1,30 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "ultralytics",
+#   "onnx>=1.12.0,<2.0.0",
+#   "onnxslim>=0.1.71",
+#   "onnx2tf>=1.26.3,<1.29.0",
+#   "onnx_graphsurgeon>=0.3.26",
+#   "sng4onnx>=1.0.1",
+#   "tf_keras<=2.19.0",
+# ]
+# ///
+
 """Convert YOLO26n to TFLite for QCS6490 acceleration via ultralytics.
 
 The converted ``model.tflite`` (float32) and ``model_int8.tflite`` are written
-alongside the existing ``model.onnx`` in
-``src/moment_to_action/models/_vendored/yolo/``. ``YOLOStage`` and
-``YOLOBenchmark`` use the INT8 variant on NPU and float32 variant on GPU.
+under ``src/moment_to_action/models/_vendored/yolo/``. ``YOLOStage`` and
+``YOLOBenchmark`` use the INT8 variant on NPU and float32 on GPU.
 
 Pass ``--imgsz 320`` to produce a 320x320 INT8 model (``model_int8_320.tflite``)
-that fits within Hexagon HTP TCM constraints on the QCS6490.  The 640x640
-model exceeds TCM requirements (~2.56 MB per tensor vs. ~4 MB available).
+that fits within Hexagon HTP TCM constraints on the QCS6490.
 
-Requires ``ultralytics`` and its TFLite export dependencies (not in the default project
-dependencies).  Pass them all explicitly so uv manages the install instead of letting
-ultralytics attempt a ``pip install`` that fails on PEP 668 / externally-managed systems:
+Usage:
 
-    uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,\
-onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,\
-tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py
-    uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,\
-onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,\
-tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py --imgsz 320
+    uv run scripts/convert_yolo_to_tflite.py
+    uv run scripts/convert_yolo_to_tflite.py --imgsz 320
 """
 
 from __future__ import annotations
@@ -43,20 +49,6 @@ _DEFAULT_IMGSZ = 640
 _NPU_IMGSZ = 320
 
 
-def _check_ultralytics() -> None:
-    try:
-        import ultralytics  # noqa: F401
-    except ImportError:
-        print(
-            "ultralytics is not installed.\n"
-            'Run:  uv run --with "ultralytics,onnx>=1.12.0,<2.0.0,onnxslim>=0.1.71,'
-            "onnx2tf>=1.26.3,<1.29.0,onnx_graphsurgeon>=0.3.26,sng4onnx>=1.0.1,"
-            'tf_keras<=2.19.0" python scripts/convert_yolo_to_tflite.py',
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-
 def _pick_tflite(candidates: list[Path], preferred_keyword: str) -> Path:
     if not candidates:
         msg = "ultralytics did not produce a .tflite file — check the output for errors."
@@ -74,7 +66,6 @@ def convert(imgsz: int = 640) -> None:
                model requires ~2.56 MB per tensor, exceeding the ~2 MB default
                VTCM allocation.
     """
-    _check_ultralytics()
     from ultralytics import YOLO
 
     suffix = f"_{imgsz}" if imgsz != _DEFAULT_IMGSZ else ""

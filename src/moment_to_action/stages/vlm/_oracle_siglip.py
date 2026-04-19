@@ -9,7 +9,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import numpy as np
 import torch
+from PIL import Image
 from transformers import AutoModel, AutoProcessor
 
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
@@ -39,15 +41,12 @@ class OracleSigLipStage(Stage):
         if not isinstance(msg, FrameTensorMessage):
             return None
 
-        # Denormalize and reshape tensor (CHW -> HWC)
-        import numpy as np
-        from PIL import Image
+        with metrics.start_span(SpanType.PREPROCESS, "model pre-processing"):
+            img_tensor = msg.tensor.squeeze(0).transpose(1, 2, 0)
+            if img_tensor.max() <= 1.0:
+                img_tensor = img_tensor * 255
 
-        img_tensor = msg.tensor.squeeze(0).transpose(1, 2, 0)
-        if img_tensor.max() <= 1.0:
-            img_tensor = img_tensor * 255
-
-        image = Image.fromarray(img_tensor.astype(np.uint8))
+            image = Image.fromarray(img_tensor.astype(np.uint8))
 
         with metrics.start_span(SpanType.MODEL_INFERENCE, "SigLIP inference"):
             inputs = self._processor(

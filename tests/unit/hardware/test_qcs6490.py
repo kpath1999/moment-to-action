@@ -11,7 +11,10 @@ from moment_to_action.hardware._platforms.qcs6490._backend import (
     QCS6490Backend,
     _ModelHandle,
 )
-from moment_to_action.hardware._platforms.qcs6490._litert import QCS6490LiteRTBackend
+from moment_to_action.hardware._platforms.qcs6490._litert import (
+    QCS6490LiteRTBackend,
+    _ensure_fastrpc_permissions,
+)
 from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
 from moment_to_action.hardware._platforms.qcs6490._resources import QCS6490ResourceMonitor
 from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
@@ -161,7 +164,7 @@ class TestQCS6490Backend:
 
             assert isinstance(handle, _ModelHandle)
             assert handle.backend == mock_litert_cpu
-            assert backend.get_supported_unit() == ComputeUnit.CPU
+            assert backend.get_supported_unit() == ComputeUnit.NPU
 
     def test_qcs6490_load_onnx_routes_correctly(self) -> None:
         """Test QCS6490Backend.load_model routes .onnx to ONNX."""
@@ -433,6 +436,15 @@ class TestQCS6490LiteRTBackend:
         delegates = backend._get_delegates()
 
         assert delegates == []
+
+    def test_ensure_fastrpc_permissions_raises_when_group_missing(self) -> None:
+        """Test that NPU permission checks fail explicitly without re-execing."""
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._litert._is_in_fastrpc_group",
+            return_value=False,
+        ):
+            with pytest.raises(RuntimeError, match="fastrpc"):
+                _ensure_fastrpc_permissions()
 
     def test_get_delegates_npu_unit_loads_qnn_delegate(self) -> None:
         """Test _get_delegates loads QNN delegate for NPU unit."""
