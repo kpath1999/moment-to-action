@@ -25,7 +25,7 @@ from moment_to_action.messages import ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager, ModelID
 from moment_to_action.sensors import FileImageSensor as FileSensor
-from moment_to_action.stages import Pipeline
+from moment_to_action.stages import Pipeline, ImageSourceStage
 from moment_to_action.stages import PromptFormatterStage
 from moment_to_action.stages.llm import LLMStage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
@@ -64,6 +64,7 @@ manager = ModelManager()
 # Stages resolve their own model paths via ModelManager.
 pipeline = Pipeline(
     stages=[
+        ImageSourceStage(source_path=args.image),
         PreprocessorStage(target_size=(640, 640), letterbox=True),
         YOLOStage(
             backend=compute_backend,
@@ -84,12 +85,13 @@ pipeline = Pipeline(
 )
 
 # ── load frame via FileSensor, then run pipeline ───────────────────
-with FileSensor(args.image) as sensor:
-    msg = sensor.read()
+#with FileSensor(args.image) as sensor:
+#    msg = sensor.read()
 
 t_total = time.perf_counter()
 with metrics.start_trace():
-    result = pipeline.run(msg, metrics=metrics)
+#    result = pipeline.run(msg, metrics=metrics)
+    result = pipeline.run(metrics=metrics)
 total_ms = (time.perf_counter() - t_total) * 1000
 
 # ── print results ──────────────────────────────────────────────────

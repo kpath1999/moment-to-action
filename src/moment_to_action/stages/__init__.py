@@ -10,6 +10,7 @@ Consumers import from the submodules directly::
 from __future__ import annotations
 
 from moment_to_action.pipeline import Pipeline
+from .sources import ImageSourceStage, AudioSourceStage
 
 from . import audio, llm, video, vlm
 from ._base import Stage

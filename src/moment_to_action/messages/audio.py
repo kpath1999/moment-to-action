@@ -11,6 +11,13 @@ from numpy.typing import NDArray  # noqa: TC002
 from pydantic import Field
 
 from ._base import BaseMessage
+from .sensor import AudioInput
+
+class RawAudioMessage(AudioInput):
+    """Raw audio loaded directly from a file source."""
+
+    source_path: str = ""
+    """Path to the source audio file on disk."""
 
 
 class AudioTensorMessage(BaseMessage):

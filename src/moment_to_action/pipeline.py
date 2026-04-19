@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from moment_to_action.metrics import NullMetricsCollector, SpanType
 
@@ -27,11 +27,16 @@ class Pipeline:
         """Return the list of stages."""
         return self._stages
 
-    def run(self, msg: Message, metrics: MetricsCollector | None = None) -> Message | None:
+    def run(
+        self,
+        msg: Message | None = None,
+        metrics: MetricsCollector | None = None,
+    ) -> Message | None:
         """Run the message through all stages sequentially.
 
         Args:
             msg: The input message to process through the pipeline.
+                May be omitted when the first stage is a source stage.
             metrics: MetricsCollector to use for collecting metrics during pipeline execution.
                 If not provided, a NullMetricsCollector will be used that does nothing.
         """
@@ -40,14 +45,18 @@ class Pipeline:
             metrics = NullMetricsCollector()
 
         # Start a trace for this pipeline execution
-        current: Message = msg
+        current: Message | None = msg
 
         # Start a span for the entire pipeline execution
         with metrics.start_span(SpanType.PIPELINE, "Pipeline Run"):
             # Run through the stages sequentially
-            for stage in self._stages:
+            for stage_idx, stage in enumerate(self._stages, start=1):
                 # run the stage and check if we should exit
-                new = stage.process(current, metrics=metrics)
+                new = stage.process(
+                    cast("Message", current),
+                    stage_idx=stage_idx,
+                    metrics=metrics,
+                )
                 if new is None:
                     return None
 
