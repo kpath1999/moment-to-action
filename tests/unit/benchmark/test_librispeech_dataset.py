@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from moment_to_action.benchmark._librispeech_dataset import LibriSpeechDataset
+from moment_to_action.benchmark._datasets._librispeech_dataset import LibriSpeechDataset
 
 
 @pytest.mark.unit

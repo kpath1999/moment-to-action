@@ -7,7 +7,7 @@ import pytest
 import torch
 
 from moment_to_action.benchmark import SmolVLM2Benchmark
-from moment_to_action.benchmark._msrvtt_dataset import MsrvttItem
+from moment_to_action.benchmark._datasets._msrvtt_dataset import MsrvttItem
 from moment_to_action.models import ModelID, ModelManager
 
 
@@ -32,11 +32,11 @@ def test_smolvlm2_load_uses_torch_policy() -> None:
 
     with (
         mock.patch(
-            "moment_to_action.benchmark._smolvlm2.AutoProcessor.from_pretrained",
+            "moment_to_action.benchmark._benchmarks._smolvlm2.AutoProcessor.from_pretrained",
             return_value=processor,
         ) as mock_processor,
         mock.patch(
-            "moment_to_action.benchmark._smolvlm2.AutoModelForImageTextToText.from_pretrained",
+            "moment_to_action.benchmark._benchmarks._smolvlm2.AutoModelForImageTextToText.from_pretrained",
             return_value=model,
         ) as mock_model,
     ):
@@ -62,7 +62,7 @@ def test_smolvlm2_evaluate_accuracy_exact_match() -> None:
     with (
         mock.patch.object(SmolVLM2Benchmark, "_cast_handle", return_value=mock.MagicMock()),
         mock.patch(
-            "moment_to_action.benchmark._smolvlm2._sample_video_frames",
+            "moment_to_action.benchmark._benchmarks._smolvlm2._sample_video_frames",
             return_value=[mock.MagicMock()],
         ),
         mock.patch.object(

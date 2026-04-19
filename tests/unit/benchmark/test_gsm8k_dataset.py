@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from moment_to_action.benchmark._gsm8k_dataset import GSM8KDataset
+from moment_to_action.benchmark._datasets._gsm8k_dataset import GSM8KDataset
 
 
 @pytest.mark.unit

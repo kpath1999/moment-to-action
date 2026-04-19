@@ -9,14 +9,14 @@ import open_clip
 from PIL import Image
 
 from moment_to_action.benchmark._accuracy import mean_embedding_similarity
-from moment_to_action.benchmark._base import ModelBenchmark
+from moment_to_action.benchmark._benchmarks._base import ModelBenchmark
 from moment_to_action.benchmark._oracle_ground_truth import OracleStore
 from moment_to_action.benchmark._retrieval_metrics import compute_retrieval_metrics
 from moment_to_action.models import ModelID
 from moment_to_action.utils.ml import cosine_similarity, softmax
 
 if TYPE_CHECKING:
-    from moment_to_action.benchmark._coco_dataset import CocoDataset
+    from moment_to_action.benchmark._datasets._coco_dataset import CocoDataset
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
 

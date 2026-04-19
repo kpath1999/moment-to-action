@@ -7,7 +7,7 @@ import pytest
 import torch
 
 from moment_to_action.benchmark import Qwen3Benchmark
-from moment_to_action.benchmark._gsm8k_dataset import GSM8KItem
+from moment_to_action.benchmark._datasets._gsm8k_dataset import GSM8KItem
 from moment_to_action.models import ModelID, ModelManager
 
 
@@ -30,11 +30,11 @@ def test_qwen3_load_uses_torch_policy() -> None:
 
     with (
         mock.patch(
-            "moment_to_action.benchmark._qwen3.AutoTokenizer.from_pretrained",
+            "moment_to_action.benchmark._benchmarks._qwen3.AutoTokenizer.from_pretrained",
             return_value=tokenizer,
         ) as mock_tokenizer,
         mock.patch(
-            "moment_to_action.benchmark._qwen3.AutoModelForCausalLM.from_pretrained",
+            "moment_to_action.benchmark._benchmarks._qwen3.AutoModelForCausalLM.from_pretrained",
             return_value=model,
         ) as mock_model,
     ):

@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from moment_to_action.benchmark import WhisperTinyBenchmark
-from moment_to_action.benchmark._librispeech_dataset import LibriSpeechItem
+from moment_to_action.benchmark._datasets._librispeech_dataset import LibriSpeechItem
 from moment_to_action.models import ModelID, ModelManager
 
 
@@ -33,11 +33,11 @@ def test_whisper_load_uses_torch_policy() -> None:
 
     with (
         mock.patch(
-            "moment_to_action.benchmark._whisper.AutoProcessor.from_pretrained",
+            "moment_to_action.benchmark._benchmarks._whisper.AutoProcessor.from_pretrained",
             return_value=processor,
         ) as mock_processor,
         mock.patch(
-            "moment_to_action.benchmark._whisper.AutoModelForSpeechSeq2Seq.from_pretrained",
+            "moment_to_action.benchmark._benchmarks._whisper.AutoModelForSpeechSeq2Seq.from_pretrained",
             return_value=model,
         ) as mock_model,
     ):

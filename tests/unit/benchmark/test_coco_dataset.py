@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from moment_to_action.benchmark._coco_dataset import CocoDataset
+from moment_to_action.benchmark._datasets._coco_dataset import CocoDataset
 from moment_to_action.benchmark._oracle_ground_truth import OracleBox
 
 if TYPE_CHECKING:

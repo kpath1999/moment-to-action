@@ -7,13 +7,13 @@ import attrs
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from moment_to_action.benchmark._base import ModelBenchmark
+from moment_to_action.benchmark._benchmarks._base import ModelBenchmark
 from moment_to_action.models import ModelID
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
-    from moment_to_action.benchmark._gsm8k_dataset import GSM8KDataset
+    from moment_to_action.benchmark._datasets._gsm8k_dataset import GSM8KDataset
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
 

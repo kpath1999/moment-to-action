@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image
 
 from moment_to_action.benchmark._accuracy import compute_map50, parse_yolo_outputs
-from moment_to_action.benchmark._base import ModelBenchmark
+from moment_to_action.benchmark._benchmarks._base import ModelBenchmark
 from moment_to_action.benchmark._detection_metrics import compute_detection_map
 from moment_to_action.benchmark._oracle_ground_truth import OracleBox, OracleDetection, OracleStore
 from moment_to_action.hardware._types import ComputeUnit
@@ -16,7 +16,7 @@ from moment_to_action.models import ModelID
 from moment_to_action.stages.video._yolo import YOLOStage
 
 if TYPE_CHECKING:
-    from moment_to_action.benchmark._coco_dataset import CocoDataset
+    from moment_to_action.benchmark._datasets._coco_dataset import CocoDataset
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
 

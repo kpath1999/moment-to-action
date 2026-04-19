@@ -17,7 +17,7 @@ import torch
 from PIL import Image
 from transformers import AutoModel, AutoProcessor
 
-from moment_to_action.benchmark._base import ModelBenchmark
+from moment_to_action.benchmark._benchmarks._base import ModelBenchmark
 from moment_to_action.benchmark._oracle_ground_truth import (
     OracleClassification,
     OracleGroundTruth,
@@ -27,7 +27,7 @@ from moment_to_action.hardware._platforms._detection import detect_platform
 from moment_to_action.models import ModelID
 
 if TYPE_CHECKING:
-    from moment_to_action.benchmark._coco_dataset import CocoDataset
+    from moment_to_action.benchmark._datasets._coco_dataset import CocoDataset
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
 

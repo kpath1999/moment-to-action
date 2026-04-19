@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from moment_to_action.benchmark._msrvtt_dataset import MsrvttDataset
+from moment_to_action.benchmark._datasets._msrvtt_dataset import MsrvttDataset
 
 
 @pytest.mark.unit

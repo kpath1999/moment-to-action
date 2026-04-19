@@ -231,11 +231,17 @@ def test_yolo_evaluate_coco_accuracy_uses_native_dataset_gt() -> None:
     metrics = mock.MagicMock(map_50=0.7, map_50_95=0.6, recall_50=0.8)
     with (
         mock.patch(
-            "moment_to_action.benchmark._yolo._load_yolo_tensor",
+            "moment_to_action.benchmark._benchmarks._yolo._load_yolo_tensor",
             return_value=np.zeros((1, 3, 640, 640), dtype=np.float32),
         ),
-        mock.patch("moment_to_action.benchmark._yolo._parse_yolo_boxes", return_value=[]),
-        mock.patch("moment_to_action.benchmark._yolo.compute_detection_map", return_value=metrics),
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo._parse_yolo_boxes",
+            return_value=[],
+        ),
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo.compute_detection_map",
+            return_value=metrics,
+        ),
     ):
         result = benchmark._evaluate_coco_accuracy(handle=object(), backend=backend)
 

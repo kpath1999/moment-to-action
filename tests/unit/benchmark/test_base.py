@@ -49,8 +49,11 @@ def test_profile_collects_metrics(tmp_path: Path) -> None:
     ]
 
     with (
-        mock.patch("moment_to_action.benchmark._base.psutil.Process", return_value=process),
-        mock.patch("moment_to_action.benchmark._base.detect_platform") as mock_platform,
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._base.psutil.Process",
+            return_value=process,
+        ),
+        mock.patch("moment_to_action.benchmark._benchmarks._base.detect_platform") as mock_platform,
     ):
         mock_platform.return_value = mock.MagicMock(name="platform")
         mock_platform.return_value.name = "X86_64"

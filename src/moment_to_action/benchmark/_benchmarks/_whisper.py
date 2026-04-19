@@ -8,14 +8,14 @@ import numpy as np
 import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
-from moment_to_action.benchmark._base import ModelBenchmark
+from moment_to_action.benchmark._benchmarks._base import ModelBenchmark
 from moment_to_action.models import ModelID
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
     from transformers.processing_utils import ProcessorMixin
 
-    from moment_to_action.benchmark._librispeech_dataset import LibriSpeechDataset
+    from moment_to_action.benchmark._datasets._librispeech_dataset import LibriSpeechDataset
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
 
