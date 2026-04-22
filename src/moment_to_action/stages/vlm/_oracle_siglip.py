@@ -14,6 +14,9 @@ import torch
 from PIL import Image
 from transformers import AutoModel, AutoProcessor
 
+from moment_to_action.hardware._platforms._runtimes._torch_policy import (
+    resolve_torch_execution_policy,
+)
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
@@ -29,13 +32,19 @@ logger = logging.getLogger(__name__)
 class OracleSigLipStage(Stage):
     """Runs SigLIP for oracle ground truth classification."""
 
-    def __init__(self, text_prompts: list[str], manager: ModelManager) -> None:
+    def __init__(
+        self,
+        text_prompts: list[str],
+        manager: ModelManager,
+        torch_device: str = "auto",
+    ) -> None:
         super().__init__()
         model_path = manager.get_path(ModelID.SIGLIP_SO400M)
+        self._device = resolve_torch_execution_policy(torch_device).device
         self._processor = AutoProcessor.from_pretrained(model_path)
-        self._model = AutoModel.from_pretrained(model_path).to("mps")
+        self._model = AutoModel.from_pretrained(model_path).to(self._device)
         self._text_prompts = text_prompts
-        logger.info("OracleSigLipStage: loaded %s", model_path)
+        logger.info("OracleSigLipStage: loaded %s (device=%s)", model_path, self._device)
 
     def _process(self, msg: Message, metrics: MetricsCollector) -> ClassificationMessage | None:
         if not isinstance(msg, FrameTensorMessage):
@@ -51,16 +60,17 @@ class OracleSigLipStage(Stage):
         with metrics.start_span(SpanType.MODEL_INFERENCE, "SigLIP inference"):
             inputs = self._processor(
                 text=self._text_prompts, images=image, padding="max_length", return_tensors="pt"
-            ).to("mps")
+            ).to(self._device)
             with torch.no_grad():
                 outputs = self._model(**inputs)
 
+        with metrics.start_span(SpanType.POSTPROCESS, "model post-processing"):
             logits_per_image = outputs.logits_per_image
             probs = torch.sigmoid(logits_per_image).cpu().numpy().tolist()[0]
 
-        best_idx = np.argmax(probs)
-        label = self._text_prompts[best_idx]
-        confidence = float(probs[best_idx])
+            best_idx = np.argmax(probs)
+            label = self._text_prompts[best_idx]
+            confidence = float(probs[best_idx])
 
         return ClassificationMessage(
             label=label,

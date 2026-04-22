@@ -147,11 +147,11 @@ class MetricsCollector:
             mem_usage=MemoryUsageSample(
                 rss_bytes=proc_mem_info.rss,
                 vms_bytes=proc_mem_info.vms,
-                shared_bytes=getattr(proc_mem_info, "shared", 0),
-                text_bytes=getattr(proc_mem_info, "text", 0),
-                lib_bytes=getattr(proc_mem_info, "lib", 0),
-                data_bytes=getattr(proc_mem_info, "data", 0),
-                dirty_bytes=getattr(proc_mem_info, "dirty", 0),
+                shared_bytes=getattr(proc_mem_info, "shared", None),
+                text_bytes=getattr(proc_mem_info, "text", None),
+                lib_bytes=getattr(proc_mem_info, "lib", None),
+                data_bytes=getattr(proc_mem_info, "data", None),
+                dirty_bytes=getattr(proc_mem_info, "dirty", None),
             ),
         )
         self._current_trace.resource_usage_samples.append(sample)

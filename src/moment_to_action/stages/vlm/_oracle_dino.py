@@ -14,6 +14,9 @@ import torch
 from PIL import Image
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
+from moment_to_action.hardware._platforms._runtimes._torch_policy import (
+    resolve_torch_execution_policy,
+)
 from moment_to_action.messages import BoundingBox, DetectionMessage, FrameTensorMessage
 from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
@@ -29,13 +32,21 @@ logger = logging.getLogger(__name__)
 class OracleGroundingDinoStage(Stage):
     """Runs Grounding DINO for oracle ground truth object detection."""
 
-    def __init__(self, text_queries: list[str], manager: ModelManager) -> None:
+    def __init__(
+        self,
+        text_queries: list[str],
+        manager: ModelManager,
+        torch_device: str = "auto",
+    ) -> None:
         super().__init__()
         model_path = manager.get_path(ModelID.GROUNDING_DINO_BASE)
+        self._device = resolve_torch_execution_policy(torch_device).device
         self._processor = AutoProcessor.from_pretrained(model_path)
-        self._model = AutoModelForZeroShotObjectDetection.from_pretrained(model_path).to("mps")
+        self._model = AutoModelForZeroShotObjectDetection.from_pretrained(model_path).to(
+            self._device
+        )
         self._text_queries = text_queries
-        logger.info("OracleGroundingDinoStage: loaded %s", model_path)
+        logger.info("OracleGroundingDinoStage: loaded %s (device=%s)", model_path, self._device)
 
     def _process(self, msg: Message, metrics: MetricsCollector) -> DetectionMessage | None:
         if not isinstance(msg, FrameTensorMessage):
@@ -50,32 +61,33 @@ class OracleGroundingDinoStage(Stage):
             text = ". ".join(self._text_queries) + "."
 
         with metrics.start_span(SpanType.MODEL_INFERENCE, "GroundingDINO inference"):
-            inputs = self._processor(images=image, text=text, return_tensors="pt").to("mps")
+            inputs = self._processor(images=image, text=text, return_tensors="pt").to(self._device)
             with torch.no_grad():
                 outputs = self._model(**inputs)
 
-        results = self._processor.post_process_grounded_object_detection(
-            outputs,
-            inputs.input_ids,
-            threshold=0.3,
-            text_threshold=0.3,
-            target_sizes=[image.size[::-1]],
-        )[0]
+        with metrics.start_span(SpanType.POSTPROCESS, "model post-processing"):
+            results = self._processor.post_process_grounded_object_detection(
+                outputs,
+                inputs.input_ids,
+                threshold=0.3,
+                text_threshold=0.3,
+                target_sizes=[image.size[::-1]],
+            )[0]
 
-        boxes = []
-        for box, score, label in zip(
-            results["boxes"], results["scores"], results["labels"], strict=False
-        ):
-            boxes.append(
-                BoundingBox(
-                    x1=float(box[0]),
-                    y1=float(box[1]),
-                    x2=float(box[2]),
-                    y2=float(box[3]),
-                    confidence=float(score),
-                    class_id=0,
-                    label=str(label),
+            boxes = []
+            for box, score, label in zip(
+                results["boxes"], results["scores"], results["labels"], strict=False
+            ):
+                boxes.append(
+                    BoundingBox(
+                        x1=float(box[0]),
+                        y1=float(box[1]),
+                        x2=float(box[2]),
+                        y2=float(box[3]),
+                        confidence=float(score),
+                        class_id=0,
+                        label=str(label),
+                    )
                 )
-            )
 
         return DetectionMessage(boxes=boxes, timestamp=msg.timestamp)

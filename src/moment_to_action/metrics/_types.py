@@ -50,6 +50,9 @@ class SpanType(Enum):
     MODEL_INFERENCE = auto()
     """Time taken for a model inference (e.g. vision, LLM)."""
 
+    POSTPROCESS = auto()
+    """Time taken for post-processing steps after a model inference (e.g. decoding outputs)."""
+
 
 @attrs.frozen
 class MemoryUsageSample:
@@ -61,20 +64,20 @@ class MemoryUsageSample:
     vms_bytes: int
     """Virtual Memory Size (VMS) in bytes."""
 
-    shared_bytes: int
-    """Shared memory size in bytes."""
+    shared_bytes: int | None
+    """Shared memory size in bytes. ``None`` when unavailable on this platform."""
 
-    text_bytes: int
-    """Text (code) memory size in bytes."""
+    text_bytes: int | None
+    """Text (code) memory size in bytes. ``None`` on platforms that do not expose this field."""
 
-    lib_bytes: int
-    """Library memory size in bytes."""
+    lib_bytes: int | None
+    """Library memory size in bytes. ``None`` on platforms that do not expose this field."""
 
-    data_bytes: int
-    """Data memory size in bytes."""
+    data_bytes: int | None
+    """Data memory size in bytes. ``None`` on platforms that do not expose this field."""
 
-    dirty_bytes: int
-    """Dirty memory size in bytes."""
+    dirty_bytes: int | None
+    """Dirty memory size in bytes. ``None`` on platforms that do not expose this field."""
 
     def json(self) -> dict[str, t.Any]:
         """Generate a JSON-serializable dictionary representation of this memory usage sample."""

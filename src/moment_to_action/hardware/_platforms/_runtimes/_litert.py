@@ -52,9 +52,7 @@ class LiteRTBackend(InferenceBackend):
 
     def __init__(self, compute_unit: ComputeUnit = ComputeUnit.CPU) -> None:
         self._unit = compute_unit
-        self._active_unit = compute_unit
         self._interpreter_cache: dict[str, object] = {}
-        self._model_unit_cache: dict[str, ComputeUnit] = {}
 
     def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load a TFLite model, caching interpreters by path.
@@ -70,14 +68,11 @@ class LiteRTBackend(InferenceBackend):
         """
         path = os.fspath(path)  # normalise to str for cache key
         if path in self._interpreter_cache:
-            self._active_unit = self._model_unit_cache[path]
             logger.debug("Model cache hit: %s", path)
             return self._interpreter_cache[path]
 
         interp, actual_unit = self._load_interpreter(path)
         self._interpreter_cache[path] = interp
-        self._model_unit_cache[path] = actual_unit
-        self._active_unit = actual_unit
         logger.info("Loaded %s on %s", path, actual_unit.name)
         return interp
 
@@ -113,8 +108,8 @@ class LiteRTBackend(InferenceBackend):
         return cast("_Interpreter", handle).get_output_details()
 
     def get_supported_unit(self) -> ComputeUnit:
-        """Return the compute unit currently active for this backend."""
-        return self._active_unit
+        """Return the compute unit this backend is configured for."""
+        return self._unit
 
     # ------------------------------------------------------------------
     # Private helpers

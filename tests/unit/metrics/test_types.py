@@ -61,7 +61,8 @@ class TestSpanType:
         assert "STAGE" in members
         assert "PREPROCESS" in members
         assert "MODEL_INFERENCE" in members
-        assert len(members) == 4
+        assert "POSTPROCESS" in members
+        assert len(members) == 5
 
 
 @pytest.mark.unit
