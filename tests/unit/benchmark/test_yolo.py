@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 from unittest import mock
 
 import numpy as np
 import pytest
 
 from moment_to_action.benchmark import YOLOBenchmark
+from moment_to_action.benchmark._oracle_ground_truth import (
+    OracleBox,
+    OracleDetection,
+    OracleGroundTruth,
+)
 from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.models import ModelID, ModelManager
 
@@ -97,6 +103,25 @@ def test_yolo_load_falls_back_to_onnx_when_tflite_unavailable() -> None:
 
     inputs = benchmark._make_dummy_input(None, batch_size=1)
     assert inputs.shape == (1, 3, 640, 640)  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+def test_yolo_load_non_cpu_uses_float_tflite() -> None:
+    """On non-CPU/non-NPU units, float TFLite variant is preferred when available."""
+    benchmark = YOLOBenchmark()
+    backend = mock.MagicMock()
+    backend.active_unit = ComputeUnit.GPU
+    manager = mock.MagicMock(spec=ModelManager)
+    manager.is_available.side_effect = lambda model: model == ModelID.YOLO_V8_TFLITE
+    manager.get_path.return_value = Path("/tmp/yolo.tflite")
+    backend.get_input_details.return_value = [{"shape": [1, 320, 320, 3], "name": "input"}]
+
+    handle = benchmark._load_model(backend=backend, manager=manager)
+
+    assert handle is not None
+    manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
+    dummy = cast("np.ndarray", benchmark._make_dummy_input(handle, batch_size=1))
+    assert dummy.shape == (1, 320, 320, 3)
 
 
 @pytest.mark.unit
@@ -247,3 +272,266 @@ def test_yolo_evaluate_coco_accuracy_uses_native_dataset_gt() -> None:
 
     dataset.instance_detections.assert_called_once()
     assert result == pytest.approx(0.6)
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_accuracy_oracle_path_recall(tmp_path: Path) -> None:
+    img_file = tmp_path / "img.jpg"
+    img_file.write_bytes(b"jpg")
+
+    gt = OracleGroundTruth(
+        detections=[
+            OracleDetection(
+                image_name=img_file.name,
+                boxes=[OracleBox(10.0, 10.0, 20.0, 20.0, "person", 1.0)],
+            )
+        ],
+        classifications=[],
+        text_queries=[],
+        text_prompts=[],
+        hardware_target="x86_64",
+        recorded_at="now",
+        dataset_name="project",
+    )
+
+    benchmark = YOLOBenchmark()
+    backend = mock.MagicMock()
+    backend.run.return_value = [np.zeros((1, 84, 1), dtype=np.float32)]
+
+    with (
+        mock.patch("moment_to_action.benchmark._benchmarks._yolo.OracleStore") as mock_store,
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo._default_sample_images",
+            return_value=[img_file],
+        ),
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo._load_yolo_tensor",
+            return_value=np.zeros((1, 3, 640, 640), dtype=np.float32),
+        ),
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo._parse_yolo_boxes",
+            return_value=[OracleBox(10.0, 10.0, 20.0, 20.0, "person", 0.9)],
+        ),
+    ):
+        mock_store.return_value.load.return_value = gt
+        result = benchmark._evaluate_accuracy(object(), backend, mock.MagicMock())
+
+    assert result == pytest.approx(1.0)
+    details = benchmark._accuracy_details()
+    assert details is not None
+    assert details["recall_50"] == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_accuracy_delegates_to_coco_path() -> None:
+    """_evaluate_accuracy should delegate to COCO evaluator when dataset is configured."""
+    dataset = mock.MagicMock()
+    benchmark = YOLOBenchmark(coco_dataset=dataset)
+
+    with mock.patch.object(benchmark, "_evaluate_coco_accuracy", return_value=0.33) as eval_coco:
+        result = benchmark._evaluate_accuracy(object(), mock.MagicMock(), mock.MagicMock())
+
+    assert result == pytest.approx(0.33)
+    eval_coco.assert_called_once()
+
+
+@pytest.mark.unit
+def test_yolo_oracle_path_returns_none_when_no_sample_images() -> None:
+    """Oracle path should return None when no default sample images exist."""
+    gt = OracleGroundTruth(
+        detections=[
+            OracleDetection(
+                image_name="missing.jpg",
+                boxes=[OracleBox(0.0, 0.0, 1.0, 1.0, "person", 1.0)],
+            )
+        ],
+        classifications=[],
+        text_queries=[],
+        text_prompts=[],
+        hardware_target="x86_64",
+        recorded_at="now",
+        dataset_name="project",
+    )
+    benchmark = YOLOBenchmark()
+
+    with (
+        mock.patch("moment_to_action.benchmark._benchmarks._yolo.OracleStore") as store,
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo._default_sample_images",
+            return_value=[],
+        ),
+    ):
+        store.return_value.load.return_value = gt
+        result = benchmark._evaluate_accuracy(object(), mock.MagicMock(), mock.MagicMock())
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_yolo_oracle_path_returns_none_when_no_matched_boxes(tmp_path: Path) -> None:
+    """Oracle evaluation should return None when no usable gt boxes are matched."""
+    image_path = tmp_path / "img.jpg"
+    image_path.write_bytes(b"jpg")
+    gt = OracleGroundTruth(
+        detections=[
+            OracleDetection(image_name="other.jpg", boxes=[OracleBox(0, 0, 1, 1, "p", 1.0)]),
+            OracleDetection(image_name=image_path.name, boxes=[]),
+        ],
+        classifications=[],
+        text_queries=[],
+        text_prompts=[],
+        hardware_target="x86_64",
+        recorded_at="now",
+        dataset_name="project",
+    )
+    benchmark = YOLOBenchmark()
+
+    with (
+        mock.patch("moment_to_action.benchmark._benchmarks._yolo.OracleStore") as store,
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo._default_sample_images",
+            return_value=[image_path],
+        ),
+    ):
+        store.return_value.load.return_value = gt
+        result = benchmark._evaluate_accuracy(object(), mock.MagicMock(), mock.MagicMock())
+
+    assert result is None
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_coco_accuracy_handles_none_or_empty_dataset() -> None:
+    """COCO evaluator should early-return when dataset is None or has no detections."""
+    no_dataset_benchmark = YOLOBenchmark(coco_dataset=None)
+    assert no_dataset_benchmark._evaluate_coco_accuracy(object(), mock.MagicMock()) is None
+
+    dataset = mock.MagicMock()
+    dataset.instance_detections.return_value = []
+    empty_dataset_benchmark = YOLOBenchmark(coco_dataset=dataset)
+    assert empty_dataset_benchmark._evaluate_coco_accuracy(object(), mock.MagicMock()) is None
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_coco_accuracy_returns_none_when_predictions_empty() -> None:
+    """COCO evaluator returns None when all images referenced by GT are missing."""
+    dataset = mock.MagicMock()
+    dataset.images.return_value = []
+    dataset.instance_detections.return_value = [OracleDetection(image_name="x.jpg", boxes=[])]
+    benchmark = YOLOBenchmark(coco_dataset=dataset)
+    result = benchmark._evaluate_coco_accuracy(object(), mock.MagicMock())
+    assert result is None
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_coco_accuracy_scales_boxes_nhwc(tmp_path: Path) -> None:
+    """COCO evaluator should scale model-space boxes to original image size in NHWC mode."""
+    from PIL import Image
+
+    image_path = tmp_path / "frame.jpg"
+    Image.fromarray(np.zeros((640, 1280, 3), dtype=np.uint8)).save(image_path)
+
+    gt_det = OracleDetection(
+        image_name=image_path.name,
+        boxes=[OracleBox(2.0, 4.0, 6.0, 8.0, "person", 1.0)],
+    )
+    dataset = mock.MagicMock()
+    dataset.images.return_value = [image_path]
+    dataset.instance_detections.return_value = [gt_det]
+
+    benchmark = YOLOBenchmark(coco_dataset=dataset)
+    benchmark._input_shape = (1, 320, 640, 3)
+    backend = mock.MagicMock()
+    backend.run.return_value = [np.zeros((1, 84, 1), dtype=np.float32)]
+
+    captured_predictions: list[OracleDetection] = []
+
+    def _capture_metrics(
+        predictions: list[OracleDetection],
+        ground_truth: list[OracleDetection],
+    ) -> object:
+        del ground_truth
+        captured_predictions.extend(predictions)
+        return mock.MagicMock(map_50=0.5, map_50_95=0.4, recall_50=0.6)
+
+    with (
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo._load_yolo_tensor",
+            return_value=np.zeros((1, 320, 640, 3), dtype=np.float32),
+        ),
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo._parse_yolo_boxes",
+            return_value=[OracleBox(1.0, 2.0, 3.0, 4.0, "person", 0.9)],
+        ),
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo.compute_detection_map",
+            side_effect=_capture_metrics,
+        ),
+    ):
+        result = benchmark._evaluate_coco_accuracy(object(), backend)
+
+    assert result == pytest.approx(0.4)
+    assert captured_predictions
+    scaled = captured_predictions[0].boxes[0]
+    assert scaled.x1 == pytest.approx(2.0)
+    assert scaled.y1 == pytest.approx(4.0)
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_eval_images_nhwc_and_scale_branch(tmp_path: Path) -> None:
+    """Eval-images path should use NHWC preprocessing and coordinate scaling when needed."""
+    img_file = tmp_path / "img.jpg"
+    img_file.write_bytes(b"jpg")
+
+    benchmark = YOLOBenchmark(eval_image_paths=[img_file])
+    backend = mock.MagicMock()
+    backend.get_input_details.return_value = [{"shape": [1, 320, 320, 3]}]
+    backend.run.return_value = [np.zeros((1, 84, 1), dtype=np.float32)]
+
+    manager = mock.MagicMock(spec=ModelManager)
+    manager.get_path.return_value = Path("/tmp/yolo.onnx")
+    cpu_backend = mock.MagicMock()
+    cpu_backend.load_model.return_value = object()
+    cpu_backend.run.return_value = [np.zeros((1, 84, 1), dtype=np.float32)]
+
+    fake_image = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    with (
+        mock.patch("moment_to_action.hardware.ComputeBackend", return_value=cpu_backend),
+        mock.patch("cv2.imread", return_value=fake_image),
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo.parse_yolo_outputs",
+            side_effect=[
+                [np.array([10.0, 20.0, 30.0, 40.0], dtype=np.float32)],
+                [np.array([5.0, 10.0, 15.0, 20.0], dtype=np.float32)],
+            ],
+        ),
+        mock.patch(
+            "moment_to_action.benchmark._benchmarks._yolo.compute_map50",
+            return_value=0.7,
+        ),
+    ):
+        result = benchmark._evaluate_eval_images(object(), backend, manager)
+
+    assert result == pytest.approx(0.7)
+
+
+@pytest.mark.unit
+def test_yolo_evaluate_eval_images_returns_none_when_all_images_missing() -> None:
+    benchmark = YOLOBenchmark(eval_image_paths=[Path("/tmp/missing.jpg")])
+    backend = mock.MagicMock()
+    backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640]}]
+    manager = mock.MagicMock(spec=ModelManager)
+    manager.get_path.return_value = Path("/tmp/yolo.onnx")
+
+    import cv2
+
+    with (
+        mock.patch("moment_to_action.hardware.ComputeBackend") as mock_cpu_backend,
+        mock.patch.object(cv2, "imread", return_value=None),
+    ):
+        cpu_backend = mock.MagicMock()
+        cpu_backend.load_model.return_value = object()
+        mock_cpu_backend.return_value = cpu_backend
+        result = benchmark._evaluate_eval_images(object(), backend, manager)
+
+    assert result is None

@@ -44,6 +44,25 @@ class TestYOLOParseOutputs:
         manager.get_path.return_value = Path("/fake/model.onnx")
         return manager
 
+    def test_constructor_non_cpu_prefers_float_tflite(
+        self,
+        mock_backend: MagicMock,
+        mock_manager: MagicMock,
+    ) -> None:
+        """Constructor should select float TFLite model on non-CPU accelerated units."""
+        mock_backend.active_unit = ComputeUnit.GPU
+        mock_manager.is_available.return_value = True
+        mock_manager.get_path.side_effect = [Path("/fake/model.tflite")]
+
+        YOLOStage(
+            backend=mock_backend,
+            manager=mock_manager,
+            confidence_threshold=0.5,
+        )
+
+        mock_manager.is_available.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
+        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
+
     def test_parse_outputs_basic(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test parsing basic YOLO outputs."""
         stage = YOLOStage(

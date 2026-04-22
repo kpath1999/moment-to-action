@@ -64,3 +64,18 @@ def test_run_model_missing_registration_raises() -> None:
 
     with pytest.raises(RuntimeError, match="No benchmark registered"):
         harness.run_model(ModelID.QWEN2_5_4B)
+
+
+@pytest.mark.unit
+def test_harness_registry_property_and_run_model_success() -> None:
+    backend = mock.MagicMock()
+    manager = mock.MagicMock()
+    registry = VariantRegistry()
+    harness = BenchmarkHarness(backend=backend, manager=manager, registry=registry)
+
+    profile = mock.MagicMock(variant_id=mock.MagicMock(model_id=ModelID.YOLO_V8))
+    harness.register_benchmark(_MockBenchmark(ModelID.YOLO_V8, profile))
+
+    assert harness.registry is registry
+    result = harness.run_model(ModelID.YOLO_V8)
+    assert result == profile

@@ -91,6 +91,17 @@ def test_match_low_iou_counts_as_fp() -> None:
     assert fn == 1
 
 
+@pytest.mark.unit
+def test_match_detections_skips_already_matched_gt() -> None:
+    gt = np.array([0.0, 0.0, 10.0, 10.0], dtype=np.float32)
+    pred1 = np.array([0.0, 0.0, 10.0, 10.0], dtype=np.float32)
+    pred2 = np.array([0.0, 0.0, 10.0, 10.0], dtype=np.float32)
+    tp, fp, fn = match_detections([pred1, pred2], [gt], iou_threshold=0.5)
+    assert tp == 1
+    assert fp == 1
+    assert fn == 0
+
+
 # ---------------------------------------------------------------------------
 # compute_map50
 # ---------------------------------------------------------------------------
@@ -218,3 +229,26 @@ def test_parse_yolo_malformed_tensor_returns_empty() -> None:
     dummy = np.zeros((1, 10, 4), dtype=np.float32)
     result = parse_yolo_outputs([dummy, dummy])
     assert result == []
+
+
+@pytest.mark.unit
+def test_parse_yolo_1tensor_malformed_matrix_returns_empty() -> None:
+    raw = np.zeros((1, 10, 2), dtype=np.float32)
+    assert parse_yolo_outputs([raw]) == []
+
+
+@pytest.mark.unit
+def test_parse_yolo_3tensor_all_below_threshold_returns_empty() -> None:
+    boxes = np.array([[[10.0, 20.0, 30.0, 40.0]]], dtype=np.float32)
+    scores = np.array([[0.1]], dtype=np.float32)
+    class_ids = np.array([[0]], dtype=np.uint8)
+    assert parse_yolo_outputs([boxes, scores, class_ids], confidence_threshold=0.5) == []  # type: ignore[list-item]
+
+
+@pytest.mark.unit
+def test_parse_yolo_3tensor_runs_nms_branch() -> None:
+    boxes = np.array([[[0.0, 0.0, 10.0, 10.0], [0.5, 0.5, 10.5, 10.5]]], dtype=np.float32)
+    scores = np.array([[0.9, 0.8]], dtype=np.float32)
+    class_ids = np.array([[0, 0]], dtype=np.uint8)
+    parsed = parse_yolo_outputs([boxes, scores, class_ids], confidence_threshold=0.1)  # type: ignore[list-item]
+    assert len(parsed) == 1

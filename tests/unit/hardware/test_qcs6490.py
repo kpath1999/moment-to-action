@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -13,7 +15,10 @@ from moment_to_action.hardware._platforms.qcs6490._backend import (
 )
 from moment_to_action.hardware._platforms.qcs6490._litert import (
     QCS6490LiteRTBackend,
+    _collect_htp_diagnostics,
     _ensure_fastrpc_permissions,
+    _is_in_fastrpc_group,
+    _probe_delegate_load,
 )
 from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
 from moment_to_action.hardware._platforms.qcs6490._resources import QCS6490ResourceMonitor
@@ -530,6 +535,135 @@ class TestQCS6490LiteRTBackend:
             with pytest.raises(RuntimeError, match="NPU delegate unavailable"):
                 QCS6490LiteRTBackend(compute_unit=ComputeUnit.NPU)._get_delegates()
 
+    def test_is_in_fastrpc_group_true_for_primary_group(self) -> None:
+        """Test group check returns True when fastrpc is the primary gid."""
+        with (
+            patch("grp.getgrnam", return_value=MagicMock(gr_gid=123)),
+            patch("os.getgid", return_value=123),
+        ):
+            assert _is_in_fastrpc_group() is True
+
+    def test_is_in_fastrpc_group_true_for_supplementary_group(self) -> None:
+        """Group check returns True when fastrpc appears in supplementary gids."""
+        with (
+            patch("grp.getgrnam", return_value=MagicMock(gr_gid=123)),
+            patch("os.getgid", return_value=999),
+            patch("os.getgroups", return_value=[12, 123, 456]),
+        ):
+            assert _is_in_fastrpc_group() is True
+
+    def test_is_in_fastrpc_group_false_when_group_missing(self) -> None:
+        """Test group check returns False when fastrpc group does not exist."""
+        with patch("grp.getgrnam", side_effect=KeyError("fastrpc")):
+            assert _is_in_fastrpc_group() is False
+
+    def test_probe_delegate_load_timeout_and_failure_paths(self) -> None:
+        """Test delegate probe timeout, segfault, and generic failure formatting."""
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="x", timeout=1),
+        ):
+            timeout_result = _probe_delegate_load("lib.so", {"backend_type": "htp"})
+        assert timeout_result is not None
+        assert "timed out" in timeout_result
+
+        proc = MagicMock(returncode=139, stderr=b"segv", stdout=b"")
+        with patch("subprocess.run", return_value=proc):
+            crash_result = _probe_delegate_load("lib.so", {"backend_type": "htp"})
+        assert crash_result is not None
+        assert "SIGSEGV" in crash_result
+
+        proc2 = MagicMock(returncode=5, stderr=b"oops", stdout=b"")
+        with patch("subprocess.run", return_value=proc2):
+            fail_result = _probe_delegate_load("lib.so", {"backend_type": "gpu"})
+        assert fail_result is not None
+        assert "delegate probe exited 5" in fail_result
+
+    def test_collect_htp_diagnostics_includes_env(self) -> None:
+        """Test HTP diagnostics include the ADSP library path from environment."""
+        with patch.dict("os.environ", {"ADSP_LIBRARY_PATH": "/tmp/adsp"}, clear=False):
+            diagnostics = _collect_htp_diagnostics()
+        assert "ADSP_LIBRARY_PATH=/tmp/adsp" in diagnostics
+
+    def test_collect_htp_diagnostics_reads_remoteproc_entries(self, tmp_path: Path) -> None:
+        """Diagnostics should include remoteproc entries with missing firmware fallback."""
+        remoteproc = tmp_path / "remoteproc0"
+        remoteproc.mkdir(parents=True)
+        (remoteproc / "name").write_text("cdsp", encoding="utf-8")
+        (remoteproc / "state").write_text("running", encoding="utf-8")
+
+        with patch(
+            "pathlib.Path.glob",
+            side_effect=lambda self, _pattern: (
+                [remoteproc] if str(self) == "/sys/class/remoteproc" else []
+            ),
+            autospec=True,
+        ):
+            diagnostics = _collect_htp_diagnostics()
+
+        assert "cdsp:running:?" in diagnostics
+
+    def test_collect_htp_diagnostics_skips_incomplete_remoteproc(self, tmp_path: Path) -> None:
+        """Diagnostics should skip remoteproc entries without both name/state files."""
+        remoteproc = tmp_path / "remoteproc1"
+        remoteproc.mkdir(parents=True)
+        (remoteproc / "name").write_text("cdsp", encoding="utf-8")
+
+        with patch(
+            "pathlib.Path.glob",
+            side_effect=lambda self, _pattern: (
+                [remoteproc] if str(self) == "/sys/class/remoteproc" else []
+            ),
+            autospec=True,
+        ):
+            diagnostics = _collect_htp_diagnostics()
+
+        assert "cdsp:" not in diagnostics
+
+    def test_ensure_fastrpc_permissions_noop_when_group_present(self) -> None:
+        """Permission guard should not raise when membership check succeeds."""
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._litert._is_in_fastrpc_group",
+            return_value=True,
+        ):
+            _ensure_fastrpc_permissions()
+
+    def test_is_in_fastrpc_group_outer_exception_returns_false(self) -> None:
+        """Unexpected errors in group checks should degrade to False."""
+        with patch("grp.getgrnam", side_effect=RuntimeError("unexpected")):
+            assert _is_in_fastrpc_group() is False
+
+    def test_probe_delegate_load_success_and_start_failure_paths(self) -> None:
+        """Probe should return None on success and message when subprocess cannot start."""
+        ok_proc = MagicMock(returncode=0, stderr=b"", stdout=b"")
+        with patch("subprocess.run", return_value=ok_proc):
+            assert _probe_delegate_load("lib.so", {"backend_type": "htp"}) is None
+
+        with patch("subprocess.run", side_effect=OSError("boom")):
+            err = _probe_delegate_load("lib.so", {"backend_type": "gpu"})
+        assert err is not None
+        assert "could not be started" in err
+
+    def test_get_delegates_gpu_unit_raises_on_load_delegate_exception(self) -> None:
+        """GPU path should wrap delegate load exceptions in RuntimeError."""
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
+                return_value=None,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._load_delegate",
+                side_effect=RuntimeError("gpu delegate load failed"),
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="GPU delegate unavailable"):
+                QCS6490LiteRTBackend(compute_unit=ComputeUnit.GPU)._get_delegates()
+
+    def test_get_delegates_unhandled_unit_returns_empty(self) -> None:
+        """Unhandled compute units should return no delegates."""
+        backend = QCS6490LiteRTBackend(compute_unit=ComputeUnit.DSP)
+        assert backend._get_delegates() == []
+
 
 @pytest.mark.unit
 class TestQCS6490ONNXBackend:
@@ -775,6 +909,70 @@ class TestQCS6490ResourceMonitor:
             assert sample2.power_mw == 800.0
             assert sample1.device == ComputeUnit.GPU
             assert sample2.device == ComputeUnit.GPU
+
+    def test_qcs6490_discover_power_now_prefers_qcom_and_battery(self, tmp_path: Path) -> None:
+        """Discovery should prioritize qcom-battmgr-bat then battery paths."""
+        root = tmp_path / "power_supply"
+        qcom = root / "qcom-battmgr-bat"
+        qcom.mkdir(parents=True)
+        qcom_power = qcom / "power_now"
+        qcom_power.write_text("1", encoding="utf-8")
+
+        with patch.object(QCS6490ResourceMonitor, "SYSFS_POWER_PATH", str(root)):
+            monitor = QCS6490ResourceMonitor()
+        assert monitor._power_now_path == qcom_power
+
+    def test_qcs6490_discover_power_now_fallback_and_oserror(self, tmp_path: Path) -> None:
+        """Discovery should use first iterdir power_now and handle iterdir OSError."""
+        root = tmp_path / "power_supply"
+        root.mkdir(parents=True)
+
+        supply = root / "supply0"
+        supply.mkdir()
+        fallback_power = supply / "power_now"
+        fallback_power.write_text("1", encoding="utf-8")
+
+        with patch.object(QCS6490ResourceMonitor, "SYSFS_POWER_PATH", str(root)):
+            monitor = QCS6490ResourceMonitor()
+        assert monitor._power_now_path == fallback_power
+
+        with (
+            patch.object(QCS6490ResourceMonitor, "SYSFS_POWER_PATH", str(root)),
+            patch("pathlib.Path.iterdir", side_effect=OSError("no access")),
+        ):
+            monitor2 = QCS6490ResourceMonitor()
+        assert monitor2._power_now_path is None
+
+    def test_qcs6490_discover_power_now_returns_none_without_candidates(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Discovery should return None when power_supply exists but has no power_now files."""
+        root = tmp_path / "power_supply"
+        supply = root / "supply0"
+        supply.mkdir(parents=True)
+
+        with patch.object(QCS6490ResourceMonitor, "SYSFS_POWER_PATH", str(root)):
+            monitor = QCS6490ResourceMonitor()
+
+        assert monitor._power_now_path is None
+
+    def test_qcs6490_read_hw_sensor_none_path_and_freq_none(self) -> None:
+        """Hardware read should estimate when path is None and CPU freq may be None."""
+        with patch.object(
+            QCS6490ResourceMonitor,
+            "_discover_power_now_path",
+            return_value=None,
+        ):
+            monitor = QCS6490ResourceMonitor()
+
+        monitor._hw_available = True
+        monitor._power_now_path = None
+        sample = monitor._read_hw_sensor(ComputeUnit.CPU)
+        assert sample.power_mw == 300.0
+
+        with patch("psutil.cpu_freq", return_value=None):
+            assert QCS6490ResourceMonitor._read_frequency_mhz(ComputeUnit.CPU) == 0.0
 
     def test_qcs6490_read_frequency_mhz_cpu_error_fallback(self) -> None:
         """Test _read_frequency_mhz returns 0.0 when psutil.cpu_freq raises for CPU.

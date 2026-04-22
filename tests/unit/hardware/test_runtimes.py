@@ -211,6 +211,74 @@ class TestLiteRTBackend:
         assert len(outputs) == 1
         assert mock_interp.set_tensor.call_count == 2
 
+    @patch("moment_to_action.hardware._platforms._runtimes._litert._Interpreter")
+    def test_litert_load_interpreter_logs_heterogeneous_execution(
+        self, mock_interpreter_class: Mock
+    ) -> None:
+        """Execution-plan logging should report CPU fallback when delegate plan is mixed."""
+        mock_interp = MagicMock()
+        mock_interp._get_execution_plan.return_value = [-1, 0, 1]
+        mock_interpreter_class.return_value = mock_interp
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.NPU)
+        with (
+            patch.object(backend, "_get_delegates", return_value=["delegate"]),
+            patch(
+                "moment_to_action.hardware._platforms._runtimes._litert.logger.isEnabledFor",
+                return_value=True,
+            ),
+            patch("moment_to_action.hardware._platforms._runtimes._litert.logger.warning") as warn,
+        ):
+            backend._load_interpreter("/tmp/model.tflite")
+
+        warn.assert_called_once()
+
+    @patch("moment_to_action.hardware._platforms._runtimes._litert._Interpreter")
+    def test_litert_load_interpreter_skips_execution_plan_when_unavailable(
+        self, mock_interpreter_class: Mock
+    ) -> None:
+        """Execution-plan probe should be safely skipped on older runtimes."""
+        mock_interp = MagicMock()
+        mock_interp._get_execution_plan.side_effect = AttributeError("missing")
+        mock_interpreter_class.return_value = mock_interp
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.NPU)
+        with (
+            patch.object(backend, "_get_delegates", return_value=["delegate"]),
+            patch(
+                "moment_to_action.hardware._platforms._runtimes._litert.logger.isEnabledFor",
+                return_value=True,
+            ),
+            patch("moment_to_action.hardware._platforms._runtimes._litert.logger.debug") as debug,
+        ):
+            backend._load_interpreter("/tmp/model.tflite")
+
+        assert any(
+            "_get_execution_plan unavailable" in str(call.args[0]) for call in debug.call_args_list
+        )
+
+    @patch("moment_to_action.hardware._platforms._runtimes._litert._Interpreter")
+    def test_litert_load_interpreter_logs_full_acceleration(
+        self, mock_interpreter_class: Mock
+    ) -> None:
+        """Execution-plan logging should report full acceleration when no CPU nodes exist."""
+        mock_interp = MagicMock()
+        mock_interp._get_execution_plan.return_value = [-1, -2]
+        mock_interpreter_class.return_value = mock_interp
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.NPU)
+        with (
+            patch.object(backend, "_get_delegates", return_value=["delegate"]),
+            patch(
+                "moment_to_action.hardware._platforms._runtimes._litert.logger.isEnabledFor",
+                return_value=True,
+            ),
+            patch("moment_to_action.hardware._platforms._runtimes._litert.logger.debug") as debug,
+        ):
+            backend._load_interpreter("/tmp/model.tflite")
+
+        assert any("Full acceleration" in str(call.args[0]) for call in debug.call_args_list)
+
 
 @pytest.mark.unit
 class TestONNXBackend:

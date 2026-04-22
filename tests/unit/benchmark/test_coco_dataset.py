@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import Self
 
 import pytest
 
 from moment_to_action.benchmark._datasets._coco_dataset import CocoDataset
 from moment_to_action.benchmark._oracle_ground_truth import OracleBox
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 @pytest.mark.unit
@@ -121,3 +119,168 @@ def test_coco_dataset_instance_detections_from_native_annotations(
     ]
     assert by_name["000000000002.jpg"].boxes[0].label == "bicycle"
     assert by_name["000000000003.jpg"].boxes == []
+
+
+@pytest.mark.unit
+def test_coco_download_file_rejects_non_https(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Only HTTPS"):
+        CocoDataset._download_file("http://example.com/file.zip", tmp_path / "file.zip")
+
+
+@pytest.mark.unit
+def test_coco_download_file_skips_existing(tmp_path: Path) -> None:
+    destination = tmp_path / "existing.zip"
+    destination.write_bytes(b"ok")
+    CocoDataset._download_file("https://example.com/file.zip", destination)
+    assert destination.read_bytes() == b"ok"
+
+
+@pytest.mark.unit
+def test_coco_ensure_dataset_files_downloads_and_extracts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    dataset = object.__new__(CocoDataset)
+    dataset.cache_dir = tmp_path
+
+    extracted: list[str] = []
+
+    class _FakeZip:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            del exc_type, exc, tb
+
+        def extractall(self, path: Path) -> None:
+            (path / "val2017").mkdir(parents=True, exist_ok=True)
+            (path / "val2017" / "000000000001.jpg").write_bytes(b"jpg")
+
+        def extract(self, member: str, path: Path) -> None:
+            extracted.append(member)
+            out = path / member
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        CocoDataset,
+        "_download_file",
+        lambda _self, _url, dest: dest.write_bytes(b"zip"),
+    )
+    monkeypatch.setattr("zipfile.ZipFile", lambda _path, **_kwargs: _FakeZip())
+
+    CocoDataset._ensure_dataset_files(dataset)
+
+    assert (tmp_path / "val2017").is_dir()
+    assert "annotations/captions_val2017.json" in extracted
+    assert "annotations/instances_val2017.json" in extracted
+
+
+@pytest.mark.unit
+def test_coco_load_captions_and_instances_skip_invalid(tmp_path: Path) -> None:
+    dataset = object.__new__(CocoDataset)
+    dataset.cache_dir = tmp_path
+
+    ann_dir = tmp_path / "annotations"
+    ann_dir.mkdir(parents=True)
+
+    (ann_dir / "captions_val2017.json").write_text(
+        json.dumps(
+            {
+                "images": [{"id": 1, "file_name": "1.jpg"}],
+                "annotations": [
+                    {"image_id": 1, "caption": "ok"},
+                    {"image_id": 2, "caption": "skip"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    captions = CocoDataset._load_captions_map(dataset)
+    assert captions == {"1.jpg": ["ok"]}
+
+    (ann_dir / "instances_val2017.json").write_text(
+        json.dumps(
+            {
+                "images": [{"id": 1, "file_name": "1.jpg"}],
+                "categories": [{"id": 3, "name": "cat"}],
+                "annotations": [
+                    {"image_id": 1, "category_id": 3, "bbox": [1, 2, 3, 4]},
+                    {"image_id": 1, "category_id": 3, "bbox": [1, 2, -1, 4]},
+                    {"image_id": 99, "category_id": 3, "bbox": [1, 2, 3, 4]},
+                    {"image_id": 1, "category_id": 3, "bbox": [1, 2, 3]},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    instances = CocoDataset._load_instances_map(dataset)
+    assert len(instances["1.jpg"]) == 1
+    assert instances["1.jpg"][0].label == "cat"
+
+
+@pytest.mark.unit
+def test_coco_select_subset_images_raises_for_empty_or_no_eligible(tmp_path: Path) -> None:
+    dataset = object.__new__(CocoDataset)
+    dataset.cache_dir = tmp_path
+    dataset.n_images = 1
+    dataset.seed = 1
+    dataset._captions_by_image = {}
+
+    (tmp_path / "val2017").mkdir(parents=True)
+    with pytest.raises(RuntimeError, match="image directory is empty"):
+        CocoDataset._select_subset_images(dataset)
+
+    (tmp_path / "val2017" / "000000000001.jpg").write_bytes(b"jpg")
+    with pytest.raises(RuntimeError, match="No COCO images with captions"):
+        CocoDataset._select_subset_images(dataset)
+
+
+@pytest.mark.unit
+def test_coco_items_all_captions_and_dataset_name(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    cache_dir = tmp_path / "coco"
+    images_dir = cache_dir / "val2017"
+    annotations_dir = cache_dir / "annotations"
+    images_dir.mkdir(parents=True)
+    annotations_dir.mkdir(parents=True)
+    (images_dir / "000000000001.jpg").write_bytes(b"jpg")
+
+    (annotations_dir / "captions_val2017.json").write_text(
+        json.dumps(
+            {
+                "images": [{"id": 1, "file_name": "000000000001.jpg"}],
+                "annotations": [{"image_id": 1, "caption": "cap"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(CocoDataset, "_ensure_dataset_files", lambda _self: None)
+    dataset = CocoDataset(n_images=1, cache_dir=cache_dir)
+    assert dataset.items() == dataset.images()
+    assert dataset.all_captions() == {"000000000001.jpg": ["cap"]}
+    assert dataset.dataset_name == "coco_val2017"
+
+
+@pytest.mark.unit
+def test_coco_download_file_https_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    destination = tmp_path / "file.bin"
+
+    class _Resp:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            del exc_type, exc, tb
+
+        @staticmethod
+        def read() -> bytes:
+            return b"payload"
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _url, **_kwargs: _Resp())
+
+    CocoDataset._download_file("https://example.com/file.bin", destination)
+    assert destination.read_bytes() == b"payload"
