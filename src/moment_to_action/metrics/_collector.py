@@ -849,7 +849,7 @@ class NullMetricsCollector(MetricsCollector):
             slow_traces=[],
         )
 
-    def log_stage(  # noqa: D102
+    def log_stage(
         self,
         stage_name: str,
         stage_idx: int,
@@ -867,7 +867,7 @@ class NullMetricsCollector(MetricsCollector):
             metadata,
         )
 
-    def log_llm(  # noqa: D102, PLR0913
+    def log_llm(  # noqa: PLR0913
         self,
         stage_name: str,
         stage_idx: int,
