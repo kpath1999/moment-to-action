@@ -33,7 +33,7 @@ jobs:
 
       - name: Check Formatting (Ruff)
         # This will fail if the code is not formatted correctly
-        run: uv run ruff format --check src --output-format github
+        run: uv run ruff format --check src --output-format github --preview
 
       - name: Run Linting (Ruff)
         # Using 'uv run' ensures we use the ruff version in your lockfile
