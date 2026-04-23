@@ -8,6 +8,7 @@ import subprocess
 import time
 
 import numpy as np
+import numpy.typing as npt
 
 from moment_to_action.messages.sensor import AudioInput
 
@@ -123,19 +124,25 @@ class FileAudioSensor(BaseSensor):
     @staticmethod
     def _pcm_bytes_to_float32(raw: bytes, sample_width: int) -> np.ndarray:
         if sample_width == _UINT8_SAMPLE_WIDTH:
-            data = np.frombuffer(raw, dtype=np.uint8).astype(np.float32)
-            return (data - _UINT8_PCM_ZERO) / _UINT8_PCM_SCALE
+            float_data: npt.NDArray[np.float32] = np.frombuffer(raw, dtype=np.uint8).astype(
+                np.float32
+            )
+            return (float_data - _UINT8_PCM_ZERO) / _UINT8_PCM_SCALE
         if sample_width == _INT16_SAMPLE_WIDTH:
             return np.frombuffer(raw, dtype="<i2").astype(np.float32) / _INT16_PCM_SCALE
         if sample_width == _INT24_SAMPLE_WIDTH:
             bytes_ = np.frombuffer(raw, dtype=np.uint8).reshape(-1, _INT24_SAMPLE_WIDTH)
-            data = (
+            int_data: npt.NDArray[np.int32] = (
                 bytes_[:, 0].astype(np.int32)
                 | (bytes_[:, 1].astype(np.int32) << 8)
                 | (bytes_[:, 2].astype(np.int32) << 16)
             )
-            data = np.where(data & _INT24_SIGN_BIT, data | _INT24_SIGN_EXTEND_MASK, data)
-            return data.astype(np.float32) / _INT24_PCM_SCALE
+            signed_data: npt.NDArray[np.int32] = np.where(
+                int_data & _INT24_SIGN_BIT,
+                int_data | _INT24_SIGN_EXTEND_MASK,
+                int_data,
+            )
+            return signed_data.astype(np.float32) / _INT24_PCM_SCALE
         if sample_width == _INT32_SAMPLE_WIDTH:
             return np.frombuffer(raw, dtype="<i4").astype(np.float32) / _INT32_PCM_SCALE
 
