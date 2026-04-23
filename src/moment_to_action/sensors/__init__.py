@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ._base import BaseSensor
 from ._camera_stream import CameraStreamSensor
-from ._file_image import FileImageSensor
 from ._file_audio import FileAudioSensor
+from ._file_image import FileImageSensor
 
-__all__ = ["BaseSensor", "CameraStreamSensor", "FileImageSensor", "FileAudioSensor"]
+__all__ = ["BaseSensor", "CameraStreamSensor", "FileAudioSensor", "FileImageSensor"]

@@ -6,12 +6,12 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from moment_to_action.messages.sensor import AudioInput, RawFrameMessage
 from moment_to_action.sensors import FileAudioSensor, FileImageSensor
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
     from moment_to_action.messages import Message
+    from moment_to_action.messages.sensor import AudioInput, RawFrameMessage
     from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)

@@ -15,9 +15,9 @@ from .audio import AudioClassificationMessage, AudioTensorMessage, AudioTranscri
 from .llm import ReasoningMessage
 from .prompt import PromptMessage
 from .sensor import AudioInput, RawFrameMessage
+from .trigger import TriggerMessage
 from .video import BoundingBox, DetectionMessage, FrameTensorMessage, VideoClipMessage
 from .vlm import ClassificationMessage
-from .trigger import TriggerMessage
 
 # Union of every concrete message type in the pipeline.
 # Use this alias for ``isinstance`` checks or exhaustive ``match`` statements.
@@ -51,6 +51,6 @@ __all__ = [
     "PromptMessage",
     "RawFrameMessage",
     "ReasoningMessage",
-    "VideoClipMessage",
     "TriggerMessage",
+    "VideoClipMessage",
 ]

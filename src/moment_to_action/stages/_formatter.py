@@ -26,9 +26,9 @@ Output: PromptMessage
 
 from __future__ import annotations
 
+import collections.abc
 import json
 import logging
-import collections.abc
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from moment_to_action.messages import (

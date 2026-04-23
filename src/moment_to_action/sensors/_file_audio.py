@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
-import subprocess  # noqa: S404
+import subprocess
 import time
 
 import numpy as np
@@ -104,7 +104,7 @@ class FileAudioSensor(BaseSensor):
             "pipe:1",
         ]
         try:
-            result = subprocess.run(  # noqa: S603, S607
+            result = subprocess.run(  # noqa: S603
                 command,
                 capture_output=True,
                 check=False,

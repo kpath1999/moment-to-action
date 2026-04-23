@@ -48,7 +48,7 @@ class ONNXBackend(InferenceBackend):
         if self.device == "NPU":
             providers = ["QNNExecutionProvider"]
             provider_options = [{"backend_path": "libQnnHtp.so"}]
-            # provider_options = [{"backend_path": "libQnnGpu.so"}]
+            # Change the backend path here if we ever need the GPU QNN runtime instead.
         else:
             providers = ["CPUExecutionProvider"]
             provider_options = [{}]
