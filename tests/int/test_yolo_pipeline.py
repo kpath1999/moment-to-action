@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from unittest import mock
 
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import DetectionMessage, FrameTensorMessage, ReasoningMessage
 from moment_to_action.models import ModelManager
 from moment_to_action.pipeline import Pipeline
 from moment_to_action.sensors import FileImageSensor
+from moment_to_action.stages import PromptFormatterStage
 from moment_to_action.stages.llm import ReasoningStage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
 
@@ -51,16 +53,33 @@ def test_yolo_pipeline_full(test_image_path: Path) -> None:
 
     backend = ComputeBackend()
     manager = ModelManager()
-    # Stages resolve their own model paths via ModelManager.
-    pipeline = Pipeline(
-        [
-            _preprocess_stage(),
-            YOLOStage(backend=backend, manager=manager),
-            ReasoningStage(),
-        ]
-    )
+    with (
+        mock.patch("moment_to_action.stages.llm._reasoning.OpenAI") as mock_openai,
+        mock.patch("moment_to_action.stages.llm._reasoning.httpx.get") as mock_httpx_get,
+        mock.patch(
+            "moment_to_action.stages.llm._reasoning.psutil.process_iter",
+            return_value=[],
+        ),
+    ):
+        mock_client = mock.MagicMock()
+        mock_choice = mock.MagicMock()
+        mock_choice.message.content = '{"decision":"alert","reason":"integration"}'
+        mock_response = mock.MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai.return_value = mock_client
+        mock_httpx_get.return_value.json.return_value = [{"n_past": 8, "n_ctx": 512}]
 
-    result = pipeline.run(raw_msg)
+        pipeline = Pipeline(
+            [
+                _preprocess_stage(),
+                YOLOStage(backend=backend, manager=manager),
+                PromptFormatterStage(),
+                ReasoningStage(),
+            ]
+        )
+
+        result = pipeline.run(raw_msg)
 
     assert isinstance(result, ReasoningMessage), (
         f"Final message should be ReasoningMessage, got {type(result).__name__}"

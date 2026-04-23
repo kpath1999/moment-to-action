@@ -753,34 +753,67 @@ class NullMetricsCollector(MetricsCollector):
         # state that report() and the properties access.
         self._session_id = "null"
         self._latency_budget = timedelta(seconds=5)
+        self._pipeline_log: list[PipelineRecord] = []
+        self._stage_log: list[StageRecord] = []
+        self._event_log: list[EventRecord] = []
+        self._resource_sample_interval = timedelta(seconds=0.1)
+        self._current_id = 0
         self._traces: dict[int, Trace] = {}
         self._spans: dict[int, Span] = {}
         self._span_stack: list[Span] = []
         self._current_trace: Trace | None = None
+        self._last_trace: Trace | None = None
+        self._last_span: Span | None = None
         self._lock = Lock()
 
     @contextlib.contextmanager
     def start_trace(self) -> t.Generator[Trace, None, None]:
         """No-op trace context manager."""
-        yield Trace(id_=0, start=datetime.now(tz=UTC), end=datetime.now(tz=UTC))
+        trace = Trace(
+            id_=0,
+            start=datetime.now(tz=UTC),
+            end=datetime.now(tz=UTC),
+            latency_ns=0,
+        )
+        start_ns = time.perf_counter_ns()
+        try:
+            yield trace
+        finally:
+            end_ns = time.perf_counter_ns()
+            with _unfreeze(trace):
+                trace.end = datetime.now(tz=UTC)
+                trace.latency_ns = end_ns - start_ns
+            self._last_trace = trace
 
     @contextlib.contextmanager
     def start_span(
         self, type_: SpanType, name: str, metadata: dict[str, t.Any] | None = None
     ) -> t.Generator[Span, None, None]:
         """No-op span context manager."""
-        yield Span(
+        span = Span(
             id_=0,
             parent_id=None,
             type_=type_,
             name=name,
             start=datetime.now(tz=UTC),
             end=datetime.now(tz=UTC),
+            latency_ns=0,
             metadata=metadata or {},
         )
+        start_ns = time.perf_counter_ns()
+        try:
+            yield span
+        finally:
+            end_ns = time.perf_counter_ns()
+            with _unfreeze(span):
+                span.end = datetime.now(tz=UTC)
+                span.latency_ns = end_ns - start_ns
+            self._last_span = span
 
     def get_span(self, span_id: int) -> Span:  # noqa: ARG002
         """Get a span - returns dummy span for null collector."""
+        if self._last_span is not None:
+            return self._last_span
         return Span(
             id_=0,
             parent_id=None,
@@ -788,12 +821,20 @@ class NullMetricsCollector(MetricsCollector):
             name="null",
             start=datetime.now(tz=UTC),
             end=datetime.now(tz=UTC),
+            latency_ns=0,
             metadata={},
         )
 
     def get_trace(self, trace_id: int) -> Trace:  # noqa: ARG002
         """Get a trace - returns dummy trace for null collector."""
-        return Trace(id_=0, start=datetime.now(tz=UTC), end=datetime.now(tz=UTC))
+        if self._last_trace is not None:
+            return self._last_trace
+        return Trace(
+            id_=0,
+            start=datetime.now(tz=UTC),
+            end=datetime.now(tz=UTC),
+            latency_ns=0,
+        )
 
     # ------------------------------------------------------------------
     # Reporting
@@ -806,4 +847,54 @@ class NullMetricsCollector(MetricsCollector):
             latency_budget=self.latency_budget,
             traces=[],
             slow_traces=[],
+        )
+
+    def log_stage(  # noqa: D102
+        self,
+        stage_name: str,
+        stage_idx: int,
+        latency_ms: float,
+        init_memory_bytes: int,
+        runtime_memory_bytes: int,
+        metadata: dict | None = None,
+    ) -> None:
+        _ = (
+            stage_name,
+            stage_idx,
+            latency_ms,
+            init_memory_bytes,
+            runtime_memory_bytes,
+            metadata,
+        )
+
+    def log_llm(  # noqa: D102, PLR0913
+        self,
+        stage_name: str,
+        stage_idx: int,
+        latency_ms: float,
+        init_memory_bytes: int = 0,
+        runtime_memory_bytes: int = 0,
+        prompt_ms: float = 0.0,
+        gen_ms: float = 0.0,
+        prompt_tokens: int = 0,
+        gen_tokens: int = 0,
+        kv_cache_used: int = 0,
+        kv_cache_total: int = 0,
+        server_rss_bytes: int = 0,
+        metadata: dict | None = None,
+    ) -> None:
+        _ = (
+            stage_name,
+            stage_idx,
+            latency_ms,
+            init_memory_bytes,
+            runtime_memory_bytes,
+            prompt_ms,
+            gen_ms,
+            prompt_tokens,
+            gen_tokens,
+            kv_cache_used,
+            kv_cache_total,
+            server_rss_bytes,
+            metadata,
         )

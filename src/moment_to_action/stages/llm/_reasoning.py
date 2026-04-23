@@ -42,7 +42,7 @@ ws     ::= [ \t\n]*
 ''')
 """
 
-# Few-shot system prompt — examples teach the model what each field means
+# Few-shot system prompt - examples teach the model what each field means
 # and how to reason from detections to a decision.
 _SYSTEM_PROMPT = """\
 You analyze object detections from a wearable camera and decide what action to take.
@@ -163,7 +163,6 @@ Now respond the same way for following detections:
 """
 
 
-# ── Metrics dataclass ────────────────────────────────────────────────────────
 @dataclass
 class InferenceMetrics:
     turn: int
@@ -193,7 +192,7 @@ class InferenceMetrics:
 
     def pretty(self) -> str:
         return (
-            f"\n── Turn {self.turn} metrics ──────────────────────\n"
+            f"\n-- Turn {self.turn} metrics ----------------------\n"
             f"  input_tokens      {self.input_tokens}\n"
             f"  output_tokens     {self.output_tokens}\n"
             f"  wall_time_s       {self.wall_time_s:.3f}\n"
@@ -229,8 +228,9 @@ class LLMStage(Stage):
         # model_path argument takes precedence over config file
 
         self._handle = None
+        model_path = None
         if model_id is not None:
-            # Resolve model path through the manager — downloads/caches as needed.
+            # Resolve model path through the manager - downloads/caches as needed.
             if manager is None:
                 msg = "Model manager is required when a model ID is provided!"
                 raise ValueError(msg)
@@ -273,7 +273,7 @@ class LLMStage(Stage):
     def _build_messages(self, user_content: str) -> list[dict]:
         """Assemble [system] + sliding history window + new user message."""
         messages = [{"role": "system", "content": self._system_prompt}]
-        messages.extend(self._history)  # already bounded by deque maxlen
+        messages.extend(self._history)
         messages.append({"role": "user", "content": user_content})
         return messages
 
@@ -285,13 +285,12 @@ class LLMStage(Stage):
         t_end: float,
         messages: list[dict],
     ) -> InferenceMetrics:
-        #Pull timing data from llama-cpp-python response + wall clock.
+        # Pull timing data from llama-cpp-python response + wall clock.
         usage = response.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)
         comp_tokens = usage.get("completion_tokens", 0)
         wall = t_end - t_start
 
-        # llama.cpp internal timings (available in most builds)
         timings = None
         try:
             timings = self.llm._ctx.get_timings()
@@ -304,7 +303,6 @@ class LLMStage(Stage):
             prefill_tps = timings.n_p_eval / (prefill_ms / 1000) if prefill_ms else 0
             decode_tps = timings.n_eval / (decode_ms / 1000) if decode_ms else 0
         else:
-            # fallback estimates from wall clock
             prefill_ms = 0.0
             decode_ms = wall * 1000
             prefill_tps = 0.0
@@ -332,11 +330,9 @@ class LLMStage(Stage):
         self._turn += 1
         prompt = msg.prompt
 
-        # LLM inference — tokenize, run, decode
         system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)
         messages = [{"role": "user", "content": system}]
 
-        # Start client
         client = OpenAI(base_url="http://localhost:8080/v1", api_key="none")
 
         response = client.chat.completions.create(
@@ -380,14 +376,12 @@ class LLMStage(Stage):
                 return proc.info["memory_info"].rss
         return 0
 
-    # in LLMStage
-    # These log the metrics specific to the LLM, and send them to the logging method in _base.py
     def _llm_metrics(self) -> dict:
         slots = httpx.get(f"{self._LLAMA_BASE_URL}/slots").json()
         slot = slots[0]
         return {
             "prompt_ms": 0.0,
-            "gen_ms": 0.0,  # stored in _process()
+            "gen_ms": 0.0,
             "kv_cache_used": slot.get("n_past", 0),
             "kv_cache_total": slot.get("n_ctx", 512),
             "server_rss_bytes": self._server_rss_bytes(),

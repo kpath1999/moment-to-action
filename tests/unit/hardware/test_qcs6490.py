@@ -449,7 +449,7 @@ class TestQCS6490ResourceMonitor:
         ):
 
             def path_side_effect(path_str: str) -> MagicMock:
-                if "battery/power_now" in path_str:
+                if "power_now" in path_str:
                     return mock_power_path
                 # Default for sysfs check in __init__
                 return mock_sysfs_root
@@ -497,7 +497,7 @@ class TestQCS6490ResourceMonitor:
         ):
 
             def path_side_effect(path_str: str) -> MagicMock:
-                if "battery/power_now" in path_str:
+                if "power_now" in path_str:
                     return mock_power_path
                 # Default for sysfs check in __init__
                 return mock_sysfs_root

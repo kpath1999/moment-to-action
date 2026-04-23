@@ -55,7 +55,6 @@ class MobileCLIPStage(Stage):
         self._handle = self._backend.load_model(model_path)
         self._text_prompts = text_prompts
         self._text_tokens = self._tokenize(text_prompts)
-        # NEW: Pre-compute text embeddings
         logger.info("Pre-computing text embeddings...")
         self._text_embeddings = self._precompute_text_embeddings()
         logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))
@@ -77,7 +76,6 @@ class MobileCLIPStage(Stage):
             text_embeddings_list.append(np.asarray(text_emb))
 
         text_embeddings = np.stack(text_embeddings_list)
-        # Pre-normalize
         norms = np.linalg.norm(text_embeddings, axis=1, keepdims=True)
         return text_embeddings / (norms + 1e-8)
 
@@ -88,9 +86,7 @@ class MobileCLIPStage(Stage):
             err = f"MobileCLIPStage expects FrameTensorMessage, got {type(msg).__name__}"
             raise TypeError(err)
 
-        # Run model ONCE (only image encoder matters)
         dummy_tokens = self._text_tokens[0][np.newaxis, ...].astype(np.int64)
-
         outputs = self._backend.run(
             self._handle,
             {
@@ -99,41 +95,9 @@ class MobileCLIPStage(Stage):
             },
         )
 
-        """
-        scores = []
-        for tokens in self._text_tokens:
-            token_tensor = tokens[np.newaxis, ...].astype(np.int64)  # [1, 77]
-            with metrics.start_span(SpanType.MODEL_INFERENCE, "MobileCLIP text inference"):
-                outputs = self._backend.run(
-                    self._handle,
-                    {
-                        "serving_default_args_0:0": msg.tensor,  # [1, 3, 256, 256]
-                        "serving_default_args_1:0": token_tensor,  # [1, 77]
-                    },
-                )
-            image_emb = outputs[1][0]  # [512]
-            text_emb = outputs[0][0]  # [512]
-            scores.append(self._cosine_similarity(image_emb, text_emb))
-        num_prompts = len(self._text_tokens)
-        image_batch = np.repeat(msg.tensor, num_prompts, axis=0)
-        text_batch = self._text_tokens.astype(np.int64)
-        outputs = self._backend.run(
-            self._handle,
-            {
-                "serving_default_args_0:0": image_batch,  # [N, 3, 256, 256]
-                "serving_default_args_1:0": text_batch,   # [N, 77]
-            },
-        )
-        image_embs = outputs[1]  # [N, 512]
-        text_embs = outputs[0]   # [N, 512]
-        scores = self._cosine_similarity_batch(image_embs, text_embs)
-        """
-
         image_emb = outputs[1][0]  # [512]
         image_emb = image_emb / (np.linalg.norm(image_emb) + 1e-8)
-
-        # Compare with ALL pre-computed text embeddings (vectorized!)
-        scores = np.dot(self._text_embeddings, image_emb)  # [5] scores
+        scores = np.dot(self._text_embeddings, image_emb)
 
         scores_arr = np.array(scores, dtype=np.float32)
         scores_softmax = softmax(scores_arr)
@@ -157,6 +121,7 @@ class MobileCLIPStage(Stage):
         """Swap prompts at runtime without reloading the model."""
         self._text_prompts = prompts
         self._text_tokens = self._tokenize(prompts)
+        self._text_embeddings = self._precompute_text_embeddings()
 
     def _tokenize(self, prompts: list[str]) -> np.ndarray:
         tokenizer = open_clip.get_tokenizer("MobileCLIP-S2")

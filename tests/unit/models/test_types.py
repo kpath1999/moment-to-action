@@ -32,8 +32,8 @@ class TestModelID:
         assert ModelID.MOBILECLIP_S2.value == "mobileclip_s2"
 
     def test_model_id_enum_count(self) -> None:
-        """Test that ModelID has exactly three members."""
-        assert len(list(ModelID)) == 3
+        """Test that ModelID stays in sync with the registry."""
+        assert len(list(ModelID)) == len(MODEL_REGISTRY)
 
     @pytest.mark.parametrize(
         "model_id",
@@ -322,8 +322,8 @@ class TestModelRegistry:
         assert info.id == ModelID.SMOLVLM2_2_2B
 
     def test_registry_has_exactly_two_entries(self) -> None:
-        """Test that MODEL_REGISTRY has exactly three entries."""
-        assert len(MODEL_REGISTRY) == 3
+        """Test that MODEL_REGISTRY covers every declared model ID."""
+        assert len(MODEL_REGISTRY) == len(ModelID)
 
     def test_yolo_v8_is_vendored(self) -> None:
         """Test that YOLO_V8 has VendoredSource."""
