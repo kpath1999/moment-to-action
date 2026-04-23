@@ -28,7 +28,7 @@ class _FakeCOCO:
 class _FakeCOCOeval:
     def __init__(self, coco_gt: object, coco_dt: object, iouType: str) -> None:  # noqa: N803
         del coco_gt, coco_dt, iouType
-        self.stats = np.array([0.42, 0.61] + [0.0] * 10, dtype=np.float32)
+        self.stats = np.array([0.42, 0.61, 0.53] + [0.0] * 9, dtype=np.float32)
         self.eval = {
             "precision": np.array([[[[[0.8]], [[0.6]]], [[[0.8]], [[0.6]]]]], dtype=np.float32)
         }
@@ -71,8 +71,8 @@ def test_compute_detection_map_with_fake_pycocotools(monkeypatch: pytest.MonkeyP
 
     metrics = compute_detection_map(predictions=preds, ground_truth=gt)
 
-    assert metrics.map_50_95 == pytest.approx(0.42)
     assert metrics.map_50 == pytest.approx(0.61)
+    assert metrics.map_75 == pytest.approx(0.53)
     assert metrics.recall_50 == pytest.approx(1.0)
     assert metrics.per_class_ap["person"] == pytest.approx(0.8)
 
@@ -81,7 +81,7 @@ def test_compute_detection_map_with_fake_pycocotools(monkeypatch: pytest.MonkeyP
 def test_compute_detection_map_returns_zero_for_empty_inputs() -> None:
     metrics = compute_detection_map(predictions=[], ground_truth=[])
     assert metrics.map_50 == 0.0
-    assert metrics.map_50_95 == 0.0
+    assert metrics.map_75 == 0.0
     assert metrics.recall_50 == 0.0
 
 

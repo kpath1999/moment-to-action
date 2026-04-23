@@ -77,8 +77,8 @@ and storing queryable variant profiles.
 - Built-in benchmarks for:
   - `YOLOBenchmark`
   - `MobileCLIPBenchmark`
-  - `SmolVLM2Benchmark`
-  - `Qwen3Benchmark`
+  - `GroundingDINOBenchmark`
+  - `SigLIPBenchmark`
 - `VariantRegistry` for persistent JSON storage and querying.
 
 ### Quick usage
@@ -87,9 +87,9 @@ and storing queryable variant profiles.
 from moment_to_action.benchmark import (
     BenchmarkConfig,
     BenchmarkHarness,
+  GroundingDINOBenchmark,
     MobileCLIPBenchmark,
-    Qwen3Benchmark,
-    SmolVLM2Benchmark,
+  SigLIPBenchmark,
     VariantRegistry,
     YOLOBenchmark,
 )
@@ -103,8 +103,8 @@ registry = VariantRegistry()
 harness = BenchmarkHarness(backend=backend, manager=manager, registry=registry)
 harness.register_benchmark(YOLOBenchmark())
 harness.register_benchmark(MobileCLIPBenchmark())
-harness.register_benchmark(SmolVLM2Benchmark())
-harness.register_benchmark(Qwen3Benchmark())
+harness.register_benchmark(GroundingDINOBenchmark())
+harness.register_benchmark(SigLIPBenchmark())
 
 config = BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1])
 profiles = harness.run_all(config=config)
@@ -137,8 +137,6 @@ Notes:
 
 ## TODOs
 
-- Collect full benchmark profiles for `Qwen3Benchmark` across available units.
-- Collect full benchmark profiles for `SmolVLM2Benchmark` across available units.
 - Improve accuracy evaluation methodology for all benchmarked models.
 - Investigate and fix `MobileCLIP` GPU accuracy instability (`NaN` embeddings on GPU).
 - Add explicit reporting for unavailable accuracy (separate from numeric score) in CSV and plots.

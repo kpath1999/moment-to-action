@@ -16,7 +16,7 @@ class DetectionMetrics:
     """Detection metrics summary for pseudo-ground-truth evaluation."""
 
     map_50: float
-    map_50_95: float
+    map_75: float
     recall_50: float
     per_class_ap: dict[str, float]
 
@@ -39,14 +39,24 @@ def compute_detection_map(  # noqa: C901, PLR0912, PLR0915
     image_names = sorted(gt_by_name)
 
     if not image_names:
-        return DetectionMetrics(map_50=0.0, map_50_95=0.0, recall_50=0.0, per_class_ap={})
+        return DetectionMetrics(
+            map_50=0.0,
+            map_75=0.0,
+            recall_50=0.0,
+            per_class_ap={},
+        )
 
     category_names = sorted(
         {box.label for det in ground_truth for box in det.boxes}
         | {box.label for det in predictions for box in det.boxes}
     )
     if not category_names:
-        return DetectionMetrics(map_50=0.0, map_50_95=0.0, recall_50=0.0, per_class_ap={})
+        return DetectionMetrics(
+            map_50=0.0,
+            map_75=0.0,
+            recall_50=0.0,
+            per_class_ap={},
+        )
 
     category_id_by_name = {name: idx + 1 for idx, name in enumerate(category_names)}
     image_id_by_name = {name: idx + 1 for idx, name in enumerate(image_names)}
@@ -99,10 +109,20 @@ def compute_detection_map(  # noqa: C901, PLR0912, PLR0915
             )
 
     if not coco_gt["annotations"]:
-        return DetectionMetrics(map_50=0.0, map_50_95=0.0, recall_50=0.0, per_class_ap={})
+        return DetectionMetrics(
+            map_50=0.0,
+            map_75=0.0,
+            recall_50=0.0,
+            per_class_ap={},
+        )
 
     if not coco_dt:
-        return DetectionMetrics(map_50=0.0, map_50_95=0.0, recall_50=0.0, per_class_ap={})
+        return DetectionMetrics(
+            map_50=0.0,
+            map_75=0.0,
+            recall_50=0.0,
+            per_class_ap={},
+        )
 
     from pycocotools.coco import COCO
     from pycocotools.cocoeval import COCOeval
@@ -118,10 +138,15 @@ def compute_detection_map(  # noqa: C901, PLR0912, PLR0915
     evaluator.summarize()
 
     if not isinstance(evaluator.stats, np.ndarray) or evaluator.stats.size == 0:
-        return DetectionMetrics(map_50=0.0, map_50_95=0.0, recall_50=0.0, per_class_ap={})
+        return DetectionMetrics(
+            map_50=0.0,
+            map_75=0.0,
+            recall_50=0.0,
+            per_class_ap={},
+        )
 
-    map_50_95 = float(evaluator.stats[0])
     map_50 = float(evaluator.stats[1])
+    map_75 = float(evaluator.stats[2])
     recall_50 = _recall_at_iou_50(predictions=predictions, ground_truth=ground_truth)
 
     per_class_ap: dict[str, float] = {}
@@ -135,7 +160,7 @@ def compute_detection_map(  # noqa: C901, PLR0912, PLR0915
 
     return DetectionMetrics(
         map_50=map_50,
-        map_50_95=map_50_95,
+        map_75=map_75,
         recall_50=recall_50,
         per_class_ap=per_class_ap,
     )

@@ -1,17 +1,16 @@
-"""Profile a single model across CPU, GPU, and NPU compute units.
+"""Profile a COCO benchmark model across CPU, GPU, and NPU compute units.
 
 For each requested compute unit, loads the model, runs warmup iterations,
 then collects latency percentiles, peak memory, power draw, model size,
-and accuracy metrics when the benchmark provides them. Results are printed as
-a Rich table, saved under a timestamped results directory, and can also be
-written to the variant registry or an explicit JSON file.
+and COCO accuracy metrics. Results are printed as a Rich table, saved under
+a timestamped results directory, and can also be written to the variant
+registry or an explicit JSON file.
 
 Usage::
 
-    uv run python scripts/benchmark_model.py --model yolo
-    uv run python scripts/benchmark_model.py --model mobileclip --units cpu npu
-    uv run python scripts/benchmark_model.py --model grounding-dino --units cpu
-    uv run python scripts/benchmark_model.py --model siglip --oracle-path logs/oracle.json
+    uv run python scripts/benchmark_model.py --model yolo_v12_n
+    uv run python scripts/benchmark_model.py --model mobileclip_s2 --units cpu npu
+    uv run python scripts/benchmark_model.py --model siglip --n-images 300
 """
 
 from __future__ import annotations
@@ -31,13 +30,10 @@ from rich.table import Table
 
 from moment_to_action.benchmark import (
     BenchmarkConfig,
-    GroundingDINOBenchmark,
+    CocoDataset,
     MobileCLIPBenchmark,
     ModelBenchmark,
-    OracleStore,
-    Qwen3Benchmark,
     SigLIPBenchmark,
-    SmolVLM2Benchmark,
     VariantProfile,
     VariantRegistry,
     YOLOBenchmark,
@@ -65,11 +61,8 @@ _UNIT_MAP: dict[str, ComputeUnit] = {
 }
 
 _MODEL_NAMES = (
-    "yolo",
-    "mobileclip",
-    "smolvlm2",
-    "qwen3",
-    "grounding-dino",
+    "yolo_v12_n",
+    "mobileclip_s2",
     "siglip",
 )
 
@@ -92,6 +85,13 @@ parser.add_argument(
     default=["cpu", "gpu", "npu"],
     metavar="UNIT",
     help="Compute units to profile (default: cpu gpu npu).",
+)
+parser.add_argument(
+    "--n-images",
+    type=int,
+    default=500,
+    metavar="N",
+    help="Number of COCO val images used for accuracy evaluation (default: 500).",
 )
 parser.add_argument(
     "--n-warmup",
@@ -129,21 +129,6 @@ parser.add_argument(
     help="Persist results into the default VariantRegistry cache.",
 )
 parser.add_argument(
-    "--oracle-path",
-    type=Path,
-    default=None,
-    metavar="FILE",
-    help=(
-        "Path to the oracle ground truth JSON file. Defaults to the platform cache directory. "
-        "Oracle models (grounding-dino, siglip) write here."
-    ),
-)
-parser.add_argument(
-    "--no-plot",
-    action="store_true",
-    help="Skip generating bar-chart PNG plots.",
-)
-parser.add_argument(
     "--log-level",
     default="INFO",
     choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -164,21 +149,15 @@ results_dir.mkdir(parents=True, exist_ok=True)
 logger.info("Results will be saved to %s", results_dir)
 
 model_choices: dict[str, tuple[ModelID, ModelBenchmark]] = {
-    "yolo": (ModelID.YOLO_V8, YOLOBenchmark()),
-    "mobileclip": (ModelID.MOBILECLIP_S2, MobileCLIPBenchmark()),
-    "smolvlm2": (ModelID.SMOLVLM2_2_2B, SmolVLM2Benchmark()),
-    "qwen3": (ModelID.QWEN2_5_4B, Qwen3Benchmark()),
-    "grounding-dino": (ModelID.GROUNDING_DINO_BASE, GroundingDINOBenchmark()),
-    "siglip": (ModelID.SIGLIP_SO400M, SigLIPBenchmark()),
+    "yolo_v12_n": (ModelID.YOLO_V12_N, YOLOBenchmark(coco_dataset=CocoDataset(args.n_images))),
+    "mobileclip_s2": (
+        ModelID.MOBILECLIP_S2,
+        MobileCLIPBenchmark(coco_dataset=CocoDataset(args.n_images)),
+    ),
+    "siglip": (ModelID.SIGLIP_SO400M, SigLIPBenchmark(coco_dataset=CocoDataset(args.n_images))),
 }
 
 model_id, benchmark = model_choices[args.model]
-if args.oracle_path is not None:
-    oracle_store = OracleStore(path=args.oracle_path)
-    if args.model == "grounding-dino":
-        benchmark = GroundingDINOBenchmark(oracle_store=oracle_store)
-    elif args.model == "siglip":
-        benchmark = SigLIPBenchmark(oracle_store=oracle_store)
 
 manager = ModelManager()
 config = BenchmarkConfig(n_warmup=args.n_warmup, n_runs=args.n_runs, batch_sizes=[1])
@@ -348,32 +327,5 @@ with csv_path.open("w", newline="", encoding="utf-8") as file_handle:
             }
         )
 logger.info("CSV table written to %s", csv_path)
-
-if not args.no_plot:
-    try:
-        from plot_benchmark import plot_profiles
-
-        plot_profiles(profiles, model_name=args.model, output_dir=results_dir)
-        logger.info("Plots written to %s", results_dir)
-    except ImportError:
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location(
-            "plot_benchmark",
-            scripts_dir / "plot_benchmark.py",
-        )
-        if spec is not None and spec.loader is not None:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)  # type: ignore[union-attr]
-            module.plot_profiles(  # type: ignore[attr-defined]
-                profiles,
-                model_name=args.model,
-                output_dir=results_dir,
-            )
-            logger.info("Plots written to %s", results_dir)
-        else:
-            logger.warning("plot_benchmark.py not found -- skipping plots")
-    except Exception:
-        logger.exception("Plot generation failed -- skipping")
 
 stdout_console.print(f"\n[bold]Results dir:[/] {results_dir}")

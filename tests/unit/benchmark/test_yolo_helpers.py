@@ -7,7 +7,6 @@ import pytest
 
 from moment_to_action.benchmark._benchmarks._yolo import (
     _build_oracle_boxes,
-    _default_sample_images,
     _letterbox_resize,
     _load_yolo_tensor,
     _nms_numpy,
@@ -87,13 +86,6 @@ def test_letterbox_resize_shape() -> None:
 
 
 @pytest.mark.unit
-def test_default_sample_images_handles_missing_dir() -> None:
-    images = _default_sample_images()
-    assert isinstance(images, list)
-    assert all(isinstance(path, Path) for path in images)
-
-
-@pytest.mark.unit
 def test_nms_numpy_single_box_kept() -> None:
     boxes = np.array([[1.0, 1.0, 2.0, 2.0]], dtype=np.float32)
     scores = np.array([0.5], dtype=np.float32)
@@ -152,10 +144,3 @@ def test_parse_yolo_boxes_rejects_small_feature_matrix() -> None:
     arr = np.zeros((1, 4), dtype=np.float32)
     parsed = _parse_yolo_boxes(arr, (1, 3, 64, 64), conf_threshold=0.1)
     assert parsed == []
-
-
-@pytest.mark.unit
-def test_default_sample_images_returns_empty_when_images_dir_missing() -> None:
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setattr(Path, "is_dir", lambda _self: False)
-        assert _default_sample_images() == []

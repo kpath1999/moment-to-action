@@ -14,7 +14,7 @@ from moment_to_action.models import ModelID
 class _DummyBenchmark(ModelBenchmark):
     @property
     def model_id(self) -> ModelID:
-        return ModelID.YOLO_V8
+        return ModelID.YOLO_V12_N
 
     def _load_model(self, backend: object, manager: object) -> object:
         del backend, manager
@@ -63,7 +63,7 @@ def test_profile_collects_metrics(tmp_path: Path) -> None:
             config=BenchmarkConfig(n_warmup=1, n_runs=2, batch_sizes=[1]),
         )
 
-    assert profile.variant_id.model_id == ModelID.YOLO_V8
+    assert profile.variant_id.model_id == ModelID.YOLO_V12_N
     assert profile.n_runs == 2
     assert profile.model_size_bytes == 3
     assert profile.peak_memory_mb >= 100.0

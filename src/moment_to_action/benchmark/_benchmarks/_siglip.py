@@ -1,14 +1,8 @@
-"""SigLIP oracle benchmark.
-
-Runs SigLIP on the project sample images and records per-image classification
-scores as ground truth in the OracleStore.  The recorded scores are consumed
-by MobileCLIPBenchmark._evaluate_accuracy.
-"""
+"""SigLIP benchmark for direct COCO text-to-image retrieval evaluation."""
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import attrs
@@ -18,29 +12,18 @@ from PIL import Image
 from transformers import AutoModel, AutoProcessor
 
 from moment_to_action.benchmark._benchmarks._base import ModelBenchmark
-from moment_to_action.benchmark._oracle_ground_truth import (
-    OracleClassification,
-    OracleGroundTruth,
-    OracleStore,
-)
-from moment_to_action.hardware._platforms._detection import detect_platform
+from moment_to_action.benchmark._retrieval_metrics import compute_retrieval_metrics
 from moment_to_action.models import ModelID
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from moment_to_action.benchmark._datasets._coco_dataset import CocoDataset
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
 
 logger = logging.getLogger(__name__)
-
-# Default text prompts used when none are supplied.
-_DEFAULT_PROMPTS: list[str] = [
-    "a person",
-    "a weapon",
-    "a happy person",
-    "a pedestrian walking",
-    "smoke or fire",
-]
+_MAX_RETRIEVAL_ITEMS = 64
 
 
 @attrs.frozen
@@ -53,40 +36,13 @@ class _SigLIPHandle:
 
 
 class SigLIPBenchmark(ModelBenchmark):
-    """Oracle benchmark for SigLIP.
-
-    Records ground truth classification scores for the project sample images
-    via SigLIP and persists them to the OracleStore.  The recorded scores are
-    consumed by MobileCLIPBenchmark._evaluate_accuracy.
-
-    Parameters
-    ----------
-    text_prompts:
-        Labels to score (e.g. ``["a person", "a weapon"]``).  Defaults to
-        ``_DEFAULT_PROMPTS`` when omitted.
-    sample_images:
-        Paths to images to run inference on.  Defaults to every ``*.jpg``
-        inside the project ``images/`` directory when omitted.
-    oracle_store:
-        OracleStore instance used to persist results.  A default store is
-        created when omitted.
-    """
+    """Benchmark implementation for SigLIP text-to-image retrieval on COCO."""
 
     def __init__(
         self,
-        text_prompts: list[str] | None = None,
-        sample_images: list[Path] | None = None,
-        oracle_store: OracleStore | None = None,
         coco_dataset: CocoDataset | None = None,
     ) -> None:
         self._coco_dataset = coco_dataset
-        self._text_prompts = text_prompts or _DEFAULT_PROMPTS
-        self._sample_images = sample_images or (
-            coco_dataset.images() if coco_dataset is not None else _default_sample_images()
-        )
-        self._oracle_store = oracle_store or OracleStore(
-            dataset_name=(coco_dataset.dataset_name if coco_dataset is not None else "project")
-        )
 
     @property
     def model_id(self) -> ModelID:
@@ -108,7 +64,7 @@ class SigLIPBenchmark(ModelBenchmark):
         h = self._cast_handle(handle)
         image = Image.fromarray(np.zeros((384, 384, 3), dtype=np.uint8))
         inputs = h.processor(  # type: ignore[operator]
-            text=self._text_prompts,
+            text=["a photo"],
             images=image,
             padding="max_length",
             return_tensors="pt",
@@ -124,29 +80,45 @@ class SigLIPBenchmark(ModelBenchmark):
         with torch.inference_mode():
             h.model(**inputs)  # type: ignore[operator]
 
-    # ── Oracle-specific: record ground truth after profiling ─────────────────
-
     def _evaluate_accuracy(
         self,
         handle: object,
         backend: ComputeBackend,
         manager: ModelManager,
     ) -> float | None:
-        """Run SigLIP on all sample images and persist classification ground truth."""
         del backend, manager
+        if self._coco_dataset is None:
+            return None
+
+        return self._evaluate_coco_accuracy(handle)
+
+    def _evaluate_coco_accuracy(self, handle: object) -> float | None:
+        """Evaluate SigLIP text-to-image retrieval on COCO using recall@1."""
         h = self._cast_handle(handle)
-        oracle_classifications: list[OracleClassification] = []
+        dataset = self._coco_dataset
+        if dataset is None:
+            return None
 
-        for img_path in self._sample_images:
-            image = Image.open(img_path).convert("RGB")
-            prompts = self._text_prompts
-            if self._coco_dataset is not None:
-                prompts = self._coco_dataset.captions(img_path.name)
-            if not prompts:
+        paired_items: list[tuple[Path, str]] = []
+        for image_path in dataset.images():
+            captions = dataset.captions(image_path.name)
+            if not captions:
                 continue
+            paired_items.append((image_path, captions[0]))
 
+        if not paired_items:
+            return None
+
+        paired_items = paired_items[: min(len(paired_items), _MAX_RETRIEVAL_ITEMS)]
+        prompt_bank = [caption for _, caption in paired_items]
+
+        predicted_scores: dict[str, list[float]] = {}
+        target_scores: dict[str, list[float]] = {}
+
+        for image_idx, (img_path, _caption) in enumerate(paired_items):
+            image = Image.open(img_path).convert("RGB")
             inputs = h.processor(  # type: ignore[operator]
-                text=prompts,
+                text=prompt_bank,
                 images=image,
                 padding="max_length",
                 return_tensors="pt",
@@ -157,39 +129,21 @@ class SigLIPBenchmark(ModelBenchmark):
                 outputs = h.model(**inputs)  # type: ignore[operator]
 
             logits = outputs.logits_per_image  # type: ignore[union-attr]
-            probs: list[float] = torch.sigmoid(logits).cpu().numpy().tolist()[0]
-            best_idx = int(np.argmax(probs))
+            probs: list[float] = torch.sigmoid(logits).cpu().numpy().tolist()[0]  # type: ignore[index]
 
-            oracle_classifications.append(
-                OracleClassification(
-                    image_name=img_path.name,
-                    top_label=prompts[best_idx],
-                    scores={p: float(s) for p, s in zip(prompts, probs, strict=False)},
-                )
-            )
-            logger.info(
-                "SigLIPBenchmark: %s → '%s' (%.3f)",
-                img_path.name,
-                prompts[best_idx],
-                probs[best_idx],
-            )
+            image_name = img_path.name
+            predicted_scores[image_name] = [float(score) for score in probs]
+            target = [0.0] * len(prompt_bank)
+            target[image_idx] = 1.0
+            target_scores[image_name] = target
 
-        # Merge with any existing oracle ground truth (preserve detections).
-        existing = self._oracle_store.load()
-        gt = OracleGroundTruth(
-            detections=existing.detections if existing is not None else [],
-            classifications=oracle_classifications,
-            text_queries=existing.text_queries if existing is not None else [],
-            text_prompts=self._text_prompts if self._coco_dataset is None else [],
-            hardware_target=detect_platform().name.lower(),
-            recorded_at=OracleStore.now_iso(),
-            dataset_name=(
-                self._coco_dataset.dataset_name if self._coco_dataset is not None else "project"
-            ),
+        metrics = compute_retrieval_metrics(
+            predictions=predicted_scores,
+            ground_truth=target_scores,
         )
-        self._oracle_store.save(gt, merge=True)
-        logger.info("SigLIPBenchmark: ground truth saved to %s", self._oracle_store.path)
-        return None
+        self._set_accuracy_details({"recall_at_1": metrics.recall_at_1})
+        logger.info("SigLIPBenchmark COCO retrieval: R@1=%.3f", metrics.recall_at_1)
+        return metrics.recall_at_1
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -199,11 +153,3 @@ class SigLIPBenchmark(ModelBenchmark):
             msg = f"Expected _SigLIPHandle, got {type(handle).__name__}"
             raise TypeError(msg)
         return handle
-
-
-def _default_sample_images() -> list[Path]:
-    """Locate the project images/ directory relative to this file."""
-    candidate = Path(__file__).parents[4] / "images"
-    if candidate.is_dir():
-        return sorted(candidate.glob("*.jpg"))
-    return []

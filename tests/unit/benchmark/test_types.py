@@ -15,7 +15,7 @@ class TestBenchmarkTypes:
 
     def test_variant_id_is_hashable(self) -> None:
         """VariantID is usable as a dict key."""
-        variant_id = VariantID(model_id=ModelID.YOLO_V8, compute_unit=ComputeUnit.CPU)
+        variant_id = VariantID(model_id=ModelID.YOLO_V12_N, compute_unit=ComputeUnit.CPU)
         data = {variant_id: "ok"}
         assert data[variant_id] == "ok"
 
