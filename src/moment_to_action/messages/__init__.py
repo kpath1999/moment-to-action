@@ -17,6 +17,7 @@ from .prompt import PromptMessage
 from .sensor import AudioInput, RawFrameMessage
 from .video import BoundingBox, DetectionMessage, FrameTensorMessage, VideoClipMessage
 from .vlm import ClassificationMessage
+from .trigger import TriggerMessage
 
 # Union of every concrete message type in the pipeline.
 # Use this alias for ``isinstance`` checks or exhaustive ``match`` statements.
@@ -32,7 +33,10 @@ type Message = (
     | ReasoningMessage
     | ClassificationMessage
     | PromptMessage
+    | TriggerMessage
 )
+
+TriggerMessage.model_rebuild(_types_namespace={"Message": Message})
 
 __all__ = [
     "AudioClassificationMessage",
@@ -48,4 +52,5 @@ __all__ = [
     "RawFrameMessage",
     "ReasoningMessage",
     "VideoClipMessage",
+    "TriggerMessage",
 ]

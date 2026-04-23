@@ -25,10 +25,12 @@ from moment_to_action.messages import ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager, ModelID
 from moment_to_action.sensors import FileImageSensor as FileSensor
-from moment_to_action.stages import Pipeline, ImageSourceStage
+from moment_to_action.stages import Pipeline, ImageSourceStage, AudioSourceStage
 from moment_to_action.stages import PromptFormatterStage
 from moment_to_action.stages.llm import LLMStage
+from moment_to_action.stages.vlm import MobileCLIPStage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
+from moment_to_action.stages import TriggerStage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,8 +43,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+PROMPTS = [
+    #"a photo of a person eating food",
+    #"a photo of a person not eating food",
+    #"a photo of food",
+    "a photo of a person working on a laptop",
+    #"a photo of a person in distress"
+    #"a photo of a person sitting in front of the laptop not interacting",
+    "a photo of a person not working on a laptop",
+    "a photo of a laptop",
+]
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--image", required=True)
+#parser.add_argument("--image2", required=True)
 parser.add_argument("--device", choices=["cpu", "npu"], default="cpu")
 parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold")
 args = parser.parse_args()
@@ -67,16 +81,30 @@ pipeline = Pipeline(
         ImageSourceStage(source_path=args.image),
         PreprocessorStage(target_size=(640, 640), letterbox=True),
         YOLOStage(
-            backend=compute_backend,
+            #backend=compute_backend,
+            backend=ComputeBackend(preferred_unit=ComputeUnit.NPU),
             manager=manager,
             confidence_threshold=args.conf,
         ),
+        TriggerStage(),
+        ImageSourceStage(source_path=args.image),
+        PreprocessorStage(
+            target_size=(256,256),
+            mean=(0.0,0.0,0.0),
+            std=(1.0,1.0,1.0),
+            letterbox=False,
+        ),
+        MobileCLIPStage(
+            text_prompts=PROMPTS,
+            backend=compute_backend,
+            manager=manager,
+        ),
+        #TriggerStage(),
         #PromptFormatterStage(
         #    template="json",
         #    min_confidence=0.3,
         #    top_k=5),
         #Replacing the ReasoningStage() with LLMStage()
-        #ReasoningStage(),
         #LLMStage(
         #    model_id=ModelID.QWEN_2_5,
         #    manager=manager,

@@ -28,10 +28,15 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+import collections.abc
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from moment_to_action.messages import ClassificationMessage, DetectionMessage
+from moment_to_action.messages import (
+    AudioClassificationMessage,
+    AudioTranscriptionMessage,
+    ClassificationMessage,
+    DetectionMessage,
+)
 from moment_to_action.messages.prompt import PromptMessage
 from moment_to_action.stages._base import Stage
 
@@ -48,7 +53,7 @@ logger = logging.getLogger(__name__)
 # A handler receives the raw message plus filtering params and returns a
 # structured dict that will be handed to the template renderer.
 # Signature: (msg, min_confidence, top_k) -> dict
-FormatHandler = Callable[["Message", float, int], dict[str, Any]]
+FormatHandler = collections.abc.Callable[["Message", float, int], dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +108,55 @@ def _handle_classification(
     }
 
 
+def _handle_audio_classification(
+    msg: AudioClassificationMessage,
+    min_confidence: float,
+    top_k: int,
+) -> dict:
+    """Serialize an AudioClassificationMessage into a structured context dict."""
+    filtered = {
+        label: score for label, score in msg.top_predictions.items() if score >= min_confidence
+    }
+    top_predictions = sorted(filtered.items(), key=lambda kv: -kv[1])[:top_k]
+
+    predictions = [
+        {"label": label, "confidence": round(score, 2)} for label, score in top_predictions
+    ]
+
+    return {
+        "source": "audio_classification",
+        "input_source": msg.source,
+        "sample_rate": msg.sample_rate,
+        "top_predictions": predictions,
+    }
+
+
+def _handle_audio_transcription(
+    msg: AudioTranscriptionMessage,
+    _min_confidence: float,
+    top_k: int,
+) -> dict:
+    """Serialize an AudioTranscriptionMessage into a structured context dict."""
+    segments = [
+        {
+            "start": segment.get("start"),
+            "end": segment.get("end"),
+            "text": segment.get("text", ""),
+        }
+        for segment in msg.segments[:top_k]
+    ]
+
+    return {
+        "source": "audio_transcription",
+        "input_source": msg.source,
+        "sample_rate": msg.sample_rate,
+        "text": msg.text,
+        "language": msg.language,
+        "confidence": None if msg.confidence is None else round(msg.confidence, 2),
+        "segments": segments,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Template protocol + built-in templates
 # ---------------------------------------------------------------------------
@@ -125,6 +179,8 @@ def natural_language_template(context: dict) -> str:
     Example output:
         Detected: person (0.95), knife (0.90)
         Classified: indoor scene (0.88)
+        Audio classified: speech (0.91), music (0.62)
+        Transcribed audio: "hello"
     """
     parts = []
 
@@ -137,6 +193,28 @@ def natural_language_template(context: dict) -> str:
             f"{c['label']} ({c['confidence']:.0%})" for c in context["classifications"]
         )
         parts.append(f"Classified: {items}" if items else "Classified: nothing above threshold")
+
+    if "top_predictions" in context:
+        items = ", ".join(
+            f"{p['label']} ({p['confidence']:.0%})" for p in context["top_predictions"]
+        )
+        parts.append(
+            f"Audio classified: {items}"
+            if items
+            else "Audio classified: nothing above threshold"
+        )
+
+    if context.get("source") == "audio_transcription":
+        text = context.get("text") or ""
+        language = context.get("language")
+        confidence = context.get("confidence")
+        prefix = "Transcribed audio"
+        if language:
+            prefix += f" ({language}"
+            if confidence is not None:
+                prefix += f", {confidence:.0%}"
+            prefix += ")"
+        parts.append(f'{prefix}: "{text}"' if text else f"{prefix}: no speech detected")
 
     # Fall back gracefully for unknown context shapes from custom handlers
     if not parts:
@@ -237,6 +315,8 @@ class PromptFormatterStage(Stage):
         self._registry: dict[type, FormatHandler] = {
             DetectionMessage: cast("FormatHandler", _handle_detection),
             ClassificationMessage: cast("FormatHandler", _handle_classification),
+            AudioClassificationMessage: cast("FormatHandler", _handle_audio_classification),
+            AudioTranscriptionMessage: cast("FormatHandler", _handle_audio_transcription),
         }
         if extra_handlers:
             self._registry.update(extra_handlers)
@@ -288,7 +368,13 @@ class PromptFormatterStage(Stage):
         logger.debug(
             "PromptFormatterStage: source=%s items=%d prompt=%r",
             context.get("source", "unknown"),
-            len(context.get("detections") or context.get("classifications") or []),
+            len(
+                context.get("detections")
+                or context.get("classifications")
+                or context.get("top_predictions")
+                or context.get("segments")
+                or []
+            ),
             prompt[:120],
         )
 
@@ -298,3 +384,4 @@ class PromptFormatterStage(Stage):
             raw_context=context,
             timestamp=msg.timestamp,
         )
+

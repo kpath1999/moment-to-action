@@ -15,5 +15,6 @@ from .sources import ImageSourceStage, AudioSourceStage
 from . import audio, llm, video, vlm
 from ._base import Stage
 from ._formatter import PromptFormatterStage
+from ._trigger import TriggerStage
 
 __all__ = ["Pipeline", "PromptFormatterStage", "Stage", "audio", "llm", "video", "vlm"]

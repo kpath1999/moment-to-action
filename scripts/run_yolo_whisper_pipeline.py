@@ -25,10 +25,12 @@ from moment_to_action.messages import ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager, ModelID
 from moment_to_action.sensors import FileImageSensor as FileSensor
-from moment_to_action.stages import Pipeline, ImageSourceStage
+from moment_to_action.stages import Pipeline, ImageSourceStage, AudioSourceStage
 from moment_to_action.stages import PromptFormatterStage
 from moment_to_action.stages.llm import LLMStage
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
+from moment_to_action.stages.audio import WhisperPreprocessorStage, WhisperStage
+from moment_to_action.stages import TriggerStage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +45,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--image", required=True)
+parser.add_argument("--audio", required=True)
 parser.add_argument("--device", choices=["cpu", "npu"], default="cpu")
 parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold")
 args = parser.parse_args()
@@ -67,20 +70,31 @@ pipeline = Pipeline(
         ImageSourceStage(source_path=args.image),
         PreprocessorStage(target_size=(640, 640), letterbox=True),
         YOLOStage(
-            backend=compute_backend,
+            #backend=compute_backend,
+            backend=ComputeBackend(preferred_unit=ComputeUnit.NPU),
             manager=manager,
             confidence_threshold=args.conf,
         ),
-        #PromptFormatterStage(
-        #    template="json",
-        #    min_confidence=0.3,
-        #    top_k=5),
+        TriggerStage(),
+        AudioSourceStage(source_path=args.audio),
+        WhisperPreprocessorStage(),
+        WhisperStage(
+            model_size_or_path="small",
+            device="cpu",
+            compute_type="int8",
+            beam_size=5,
+            vad_filter=False,
+        ),        
+        TriggerStage(),
+        PromptFormatterStage(
+            template="json",
+            min_confidence=0.3,
+            top_k=5),
         #Replacing the ReasoningStage() with LLMStage()
-        #ReasoningStage(),
-        #LLMStage(
-        #    model_id=ModelID.QWEN_2_5,
-        #    manager=manager,
-        #),
+        LLMStage(
+            model_id=ModelID.QWEN_2_5,
+            manager=manager,
+        ),
     ],
 )
 
