@@ -13,6 +13,7 @@ from pydantic import Field
 from ._base import BaseMessage
 from .sensor import AudioInput
 
+
 class RawAudioMessage(AudioInput):
     """Raw audio loaded directly from a file source."""
 

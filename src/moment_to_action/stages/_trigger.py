@@ -37,4 +37,3 @@ class TriggerStage(Stage):
     @staticmethod
     def _trigger_source(msg: Message) -> str:
         return cast("str", getattr(msg, "source_stage", type(msg).__name__))
-

@@ -500,16 +500,14 @@ class MetricsReport:
     def _trace_lines(self, traces: list[Trace], *, rich: bool) -> list[str]:
         lines: list[str] = []
         for trace in traces:
-            lines.extend(
-                [
-                    "-" * 40,
-                    "",
-                    trace.summary_rich(self.latency_budget)
-                    if rich
-                    else trace.summary(self.latency_budget),
-                    "",
-                ]
-            )
+            lines.extend([
+                "-" * 40,
+                "",
+                trace.summary_rich(self.latency_budget)
+                if rich
+                else trace.summary(self.latency_budget),
+                "",
+            ])
         return lines
 
     def summary(self) -> str:

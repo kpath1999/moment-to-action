@@ -26,4 +26,3 @@ class TriggerMessage(BaseMessage):
 
     trigger_source: str
     """Name of the stage or message type that produced ``payload``."""
-

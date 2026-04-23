@@ -199,9 +199,7 @@ def natural_language_template(context: dict) -> str:
             f"{p['label']} ({p['confidence']:.0%})" for p in context["top_predictions"]
         )
         parts.append(
-            f"Audio classified: {items}"
-            if items
-            else "Audio classified: nothing above threshold"
+            f"Audio classified: {items}" if items else "Audio classified: nothing above threshold"
         )
 
     if context.get("source") == "audio_transcription":
@@ -384,4 +382,3 @@ class PromptFormatterStage(Stage):
             raw_context=context,
             timestamp=msg.timestamp,
         )
-
