@@ -229,3 +229,7 @@ archive/
 # Ignore log outputs
 logs/
 data/
+.venv*
+*.whl
+*.csv
+__pycache__/
