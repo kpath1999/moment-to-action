@@ -38,6 +38,15 @@ class ONNXBackend(InferenceBackend):
         """
         return ["CPUExecutionProvider"]
 
+    def _make_inference_session(self, path: str) -> ort.InferenceSession:
+        """Create an ONNX Runtime inference session for *path*.
+
+        Subclasses override this to use alternative session-creation paths,
+        e.g. plugin EPs via ``SessionOptions.add_provider_for_devices()``.
+        The default implementation uses :meth:`_get_providers`.
+        """
+        return ort.InferenceSession(path, providers=self._get_providers())
+
     def load_model(self, path: str | os.PathLike[str]) -> object:
         """Load an ONNX model, caching sessions by path.
 
@@ -52,7 +61,7 @@ class ONNXBackend(InferenceBackend):
             logger.debug("ONNX cache hit: %s", path)
             return self._session_cache[path]
 
-        session = ort.InferenceSession(path, providers=self._get_providers())
+        session = self._make_inference_session(path)
         self._session_cache[path] = session
         logger.info("Loaded %s via onnxruntime", path)
         return session

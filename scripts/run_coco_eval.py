@@ -95,6 +95,13 @@ def _run_yolo_eval(
         config=BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1]),
     )
 
+    """
+    Commands to run:
+    uv run python scripts/run_coco_eval.py --n-images 5000 --model yolo_v12_n --edge-unit cpu
+    uv run python scripts/run_coco_eval.py --n-images 5000 --model yolo_v12_n --edge-unit gpu
+    uv run python scripts/run_coco_eval.py --n-images 5000 --model yolo_v12_n --edge-unit npu
+    """
+
     payload: dict[str, float | None] = {"inference_mean_ms": profile.inference_mean_ms}
     if profile.accuracy_details is not None:
         payload.update(profile.accuracy_details)

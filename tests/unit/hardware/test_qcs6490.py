@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -690,53 +691,221 @@ class TestQCS6490ONNXBackend:
         providers = backend._get_providers()
         assert providers == ["CPUExecutionProvider"]
 
-    def test_get_providers_npu_returns_qnn_ep_with_htp(self) -> None:
-        """Test _get_providers returns QNNExecutionProvider with HTP for NPU."""
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_available_providers",
-            return_value=["QNNExecutionProvider", "CPUExecutionProvider"],
-        ):
-            backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.NPU)
-            providers = backend._get_providers()
-
-        assert providers == [("QNNExecutionProvider", {"backend_path": "HTP"})]
-
-    def test_get_providers_gpu_returns_qnn_ep_with_gpu(self) -> None:
-        """Test _get_providers returns QNNExecutionProvider with GPU for GPU unit."""
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_available_providers",
-            return_value=["QNNExecutionProvider", "CPUExecutionProvider"],
-        ):
-            backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.GPU)
-            providers = backend._get_providers()
-
-        assert providers == [("QNNExecutionProvider", {"backend_path": "GPU"})]
-
-    def test_get_providers_npu_raises_when_qnn_unavailable(self) -> None:
-        """Test _get_providers raises RuntimeError when QNN EP not registered."""
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_available_providers",
-            return_value=["CPUExecutionProvider"],
-        ):
-            backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.NPU)
-            with pytest.raises(RuntimeError, match="QNN ONNX EP unavailable"):
-                backend._get_providers()
-
-    def test_get_providers_gpu_raises_when_qnn_unavailable(self) -> None:
-        """Test _get_providers raises RuntimeError for GPU when QNN EP absent."""
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_available_providers",
-            return_value=["CPUExecutionProvider"],
-        ):
-            backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.GPU)
-            with pytest.raises(RuntimeError, match="QNN ONNX EP unavailable"):
-                backend._get_providers()
+    def test_get_providers_npu_returns_cpu_ep(self) -> None:
+        """Test _get_providers always returns CPUExecutionProvider (NPU handled elsewhere)."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.NPU)
+        providers = backend._get_providers()
+        assert providers == ["CPUExecutionProvider"]
 
     def test_get_providers_dsp_falls_back_to_cpu_ep(self) -> None:
         """Test _get_providers returns CPUExecutionProvider for unhandled units."""
         backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.DSP)
         providers = backend._get_providers()
         assert providers == ["CPUExecutionProvider"]
+
+    def test_make_inference_session_cpu_delegates_to_base(self) -> None:
+        """Test _make_inference_session for CPU delegates to base class."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.CPU)
+        mock_session = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.InferenceSession",
+            return_value=mock_session,
+        ) as mock_cls:
+            result = backend._make_inference_session("/tmp/model.onnx")
+        assert result is mock_session
+        _, kwargs = mock_cls.call_args
+        assert kwargs.get("providers") == ["CPUExecutionProvider"]
+
+    def test_make_inference_session_dsp_delegates_to_base(self) -> None:
+        """Test _make_inference_session for DSP falls through to base class (CPU)."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.DSP)
+        mock_session = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._onnx.ort.InferenceSession",
+            return_value=mock_session,
+        ):
+            result = backend._make_inference_session("/tmp/model.onnx")
+        assert result is mock_session
+
+    def test_make_inference_session_npu_creates_qnn_session(self) -> None:
+        """Test _make_inference_session creates QNN plugin EP session for NPU."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.NPU)
+        mock_device = MagicMock()
+        mock_device.ep_name = "QNNExecutionProvider"
+        mock_session = MagicMock()
+        mock_so = MagicMock()
+
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx._ensure_qnn_ep_registered",
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_ep_devices",
+                return_value=[mock_device],
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx._qnn_backend_path",
+                return_value="/path/to/libQnnHtp.so",
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort.SessionOptions",
+                return_value=mock_so,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort.InferenceSession",
+                return_value=mock_session,
+            ),
+        ):
+            result = backend._make_inference_session("/tmp/model.onnx")
+
+        assert result is mock_session
+        mock_so.add_provider_for_devices.assert_called_once_with(
+            [mock_device], {"backend_path": "/path/to/libQnnHtp.so"}
+        )
+
+    def test_make_inference_session_gpu_creates_qnn_session(self) -> None:
+        """Test _make_inference_session creates QNN plugin EP session for GPU."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.GPU)
+        mock_device = MagicMock()
+        mock_device.ep_name = "QNNExecutionProvider"
+        mock_session = MagicMock()
+        mock_so = MagicMock()
+
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx._ensure_qnn_ep_registered",
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_ep_devices",
+                return_value=[mock_device],
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx._qnn_backend_path",
+                return_value="/path/to/libQnnGpu.so",
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort.SessionOptions",
+                return_value=mock_so,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort.InferenceSession",
+                return_value=mock_session,
+            ),
+        ):
+            result = backend._make_inference_session("/tmp/model.onnx")
+
+        assert result is mock_session
+        mock_so.add_provider_for_devices.assert_called_once_with(
+            [mock_device], {"backend_path": "/path/to/libQnnGpu.so"}
+        )
+
+    def test_make_inference_session_npu_raises_when_no_devices(self) -> None:
+        """Test _make_inference_session raises RuntimeError when no QNN devices found."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.NPU)
+
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx._ensure_qnn_ep_registered",
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_ep_devices",
+                return_value=[],
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="QNN plugin EP unavailable"):
+                backend._make_inference_session("/tmp/model.onnx")
+
+    def test_make_inference_session_gpu_raises_when_no_devices(self) -> None:
+        """Test _make_inference_session raises RuntimeError for GPU when no devices."""
+        backend = QCS6490ONNXBackend(compute_unit=ComputeUnit.GPU)
+
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx._ensure_qnn_ep_registered",
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort.get_ep_devices",
+                return_value=[],
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="QNN plugin EP unavailable"):
+                backend._make_inference_session("/tmp/model.onnx")
+
+    def test_ensure_qnn_ep_registered_no_op_when_already_registered(self) -> None:
+        """Test _ensure_qnn_ep_registered is a no-op when already registered."""
+        import moment_to_action.hardware._platforms.qcs6490._onnx as onnx_mod
+        from moment_to_action.hardware._platforms.qcs6490._onnx import _ensure_qnn_ep_registered
+
+        original = onnx_mod._QNN_EP_REGISTERED
+        onnx_mod._QNN_EP_REGISTERED = True
+        try:
+            with patch(
+                "moment_to_action.hardware._platforms.qcs6490._onnx.ort"
+                ".register_execution_provider_library"
+            ) as mock_reg:
+                _ensure_qnn_ep_registered()
+            mock_reg.assert_not_called()
+        finally:
+            onnx_mod._QNN_EP_REGISTERED = original
+
+    def test_ensure_qnn_ep_registered_registers_library(self) -> None:
+        """Test _ensure_qnn_ep_registered calls register_execution_provider_library."""
+        import moment_to_action.hardware._platforms.qcs6490._onnx as onnx_mod
+        from moment_to_action.hardware._platforms.qcs6490._onnx import _ensure_qnn_ep_registered
+
+        original = onnx_mod._QNN_EP_REGISTERED
+        onnx_mod._QNN_EP_REGISTERED = False
+        mock_qnn = MagicMock()
+        mock_qnn.get_library_path.return_value = "/fake/libonnxruntime_providers_qnn.so"
+        try:
+            with (
+                patch.dict(sys.modules, {"onnxruntime_qnn": mock_qnn}),
+                patch(
+                    "moment_to_action.hardware._platforms.qcs6490._onnx.ort"
+                    ".register_execution_provider_library"
+                ) as mock_reg,
+            ):
+                _ensure_qnn_ep_registered()
+            mock_reg.assert_called_once_with(
+                "QNNExecutionProvider", "/fake/libonnxruntime_providers_qnn.so"
+            )
+            assert onnx_mod._QNN_EP_REGISTERED is True
+        finally:
+            onnx_mod._QNN_EP_REGISTERED = original
+
+    def test_ensure_qnn_ep_registered_raises_when_not_installed(self) -> None:
+        """Test _ensure_qnn_ep_registered raises RuntimeError when package absent."""
+        import moment_to_action.hardware._platforms.qcs6490._onnx as onnx_mod
+        from moment_to_action.hardware._platforms.qcs6490._onnx import _ensure_qnn_ep_registered
+
+        original = onnx_mod._QNN_EP_REGISTERED
+        onnx_mod._QNN_EP_REGISTERED = False
+        try:
+            with patch.dict(sys.modules, {"onnxruntime_qnn": None}):
+                with pytest.raises(RuntimeError, match="onnxruntime-qnn is not installed"):
+                    _ensure_qnn_ep_registered()
+        finally:
+            onnx_mod._QNN_EP_REGISTERED = original
+
+    def test_qnn_backend_path_npu_returns_htp_path(self) -> None:
+        """Test _qnn_backend_path returns HTP library path for NPU."""
+        from moment_to_action.hardware._platforms.qcs6490._onnx import _qnn_backend_path
+
+        mock_qnn = MagicMock()
+        mock_qnn.get_qnn_htp_path.return_value = "/path/to/libQnnHtp.so"
+        with patch.dict(sys.modules, {"onnxruntime_qnn": mock_qnn}):
+            result = _qnn_backend_path(ComputeUnit.NPU)
+        assert result == "/path/to/libQnnHtp.so"
+
+    def test_qnn_backend_path_gpu_returns_gpu_path(self) -> None:
+        """Test _qnn_backend_path returns GPU library path for GPU."""
+        from moment_to_action.hardware._platforms.qcs6490._onnx import _qnn_backend_path
+
+        mock_qnn = MagicMock()
+        mock_qnn.get_qnn_gpu_path.return_value = "/path/to/libQnnGpu.so"
+        with patch.dict(sys.modules, {"onnxruntime_qnn": mock_qnn}):
+            result = _qnn_backend_path(ComputeUnit.GPU)
+        assert result == "/path/to/libQnnGpu.so"
 
 
 @pytest.mark.unit
