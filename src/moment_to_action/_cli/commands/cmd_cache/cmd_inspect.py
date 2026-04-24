@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-import rich
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
@@ -20,9 +19,6 @@ from moment_to_action.utils.cli import format_size
 
 if TYPE_CHECKING:
     from moment_to_action.models import ModelStatus
-
-_MAX_PATH_LEN = rich.get_console().size.width - 60
-_TRUNCATED_PATH_LEN = _MAX_PATH_LEN - 3
 
 
 @click.command()
@@ -83,6 +79,8 @@ def _output_table(statuses: list[ModelStatus]) -> None:
         statuses: List of ModelStatus objects.
     """
     console = Console()
+    max_path_len = max(40, min(console.size.width - 60, 200))
+    truncated_path_len = max_path_len - 3
     table = Table(title="Model Cache Status")
 
     table.add_column("Model ID", style="cyan")
@@ -109,8 +107,8 @@ def _output_table(statuses: list[ModelStatus]) -> None:
 
         # Format path (truncate if very long)
         path_str = str(status.path) if status.path else "-"
-        if len(path_str) > _MAX_PATH_LEN:
-            path_str = "..." + path_str[-_TRUNCATED_PATH_LEN:]
+        if len(path_str) > max_path_len:
+            path_str = "..." + path_str[-truncated_path_len:]
 
         table.add_row(
             status.info.id.value,

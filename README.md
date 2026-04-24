@@ -35,6 +35,10 @@ Rubik Pi uses the `onnxruntime-qnn` wheel with AI Engine Direct bindings. This p
 QNN runtime. If you are setting up on the device, install the board-provided wheel before
 running `uv sync`.
 
+```bash
+uv pip install https://cdn.edgeimpulse.com/qc-ai-docs/wheels/onnxruntime_qnn-1.23.0-cp312-cp312-linux_aarch64.whl
+```
+
 ## Contributing
 
 To contribute code to this repository, do the following (assuming you've already set up the repo):

@@ -6,6 +6,9 @@ resolution-markers = [
     "sys_platform == 'emscripten'",
     "sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
+required-markers = [
+    "platform_machine == 'arm64' and sys_platform == 'darwin'",
+]
 
 [[package]]
 name = "absl-py"
@@ -1524,7 +1527,7 @@ dependencies = [
     { name = "num2words" },
     { name = "numpy" },
     { name = "onnxruntime" },
-    { name = "onnxruntime-qnn", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "onnxruntime-qnn", marker = "sys_platform != 'darwin'" },
     { name = "open-clip-torch" },
     { name = "opencv-python-headless" },
     { name = "platformdirs" },
@@ -1567,7 +1570,7 @@ requires-dist = [
     { name = "num2words", specifier = ">=0.5.14" },
     { name = "numpy", specifier = ">=2.4.3" },
     { name = "onnxruntime", specifier = "==1.23.0" },
-    { name = "onnxruntime-qnn", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = "==1.23.0" },
+    { name = "onnxruntime-qnn", marker = "sys_platform != 'darwin'", specifier = "==1.23.0" },
     { name = "open-clip-torch", specifier = ">=3.3.0" },
     { name = "opencv-python-headless", specifier = ">=4.13.0.92" },
     { name = "platformdirs", specifier = ">=4.0.0" },
@@ -1994,6 +1997,10 @@ dependencies = [
     { name = "packaging" },
     { name = "protobuf" },
     { name = "sympy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/eb/d83391412db7df55a4549f447b2c7f126e6d24e129177a7b420d0810a965/onnxruntime_qnn-1.23.0-cp312-cp312-win_amd64.whl", hash = "sha256:1e11944349be689c055a15ce53bb83d435f489eb13637a53fe4d98ddf9cc5737", size = 88916621, upload-time = "2025-09-25T19:16:24.185Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/9d/e4143e28751b598e30769833e88241088062e8ae37907f04ccfcfcfacde4/onnxruntime_qnn-1.23.0-cp312-cp312-win_arm64.whl", hash = "sha256:f743a79f1ae23f5a953a2ef3461ebe7c6dde2191867fb30348fcd66c87418e22", size = 54961698, upload-time = "2025-09-25T19:15:54.778Z" },
 ]
 
 [[package]]
