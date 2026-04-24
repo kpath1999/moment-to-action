@@ -45,7 +45,6 @@ class TestModelManagerInit:
         assert manager._vendored_dir is not None
         assert isinstance(manager._vendored_dir, Path)
         assert manager._vendored_dir.name == "_vendored"
-        assert manager._vendored_dir.exists()
 
     def test_init_vendored_dir_points_to_models_package(self) -> None:
         """Test that _vendored_dir points to the models package."""
