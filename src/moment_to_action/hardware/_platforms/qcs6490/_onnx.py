@@ -108,9 +108,7 @@ class QCS6490ONNXBackend(ONNXBackend):
         _ensure_qnn_ep_registered()
         logger.info("[QCS6490ONNXBackend] QNN EP registration complete")
 
-        devices = [
-            d for d in ort.get_ep_devices() if d.ep_name == _QNN_EP_NAME
-        ]
+        devices = [d for d in ort.get_ep_devices() if d.ep_name == _QNN_EP_NAME]
         logger.info(
             "[QCS6490ONNXBackend] Discovered %d QNN device(s): %s",
             len(devices),
@@ -127,23 +125,17 @@ class QCS6490ONNXBackend(ONNXBackend):
             backend_path,
         )
 
-        logger.info(
-            "[QCS6490ONNXBackend] Creating SessionOptions and adding QNN provider..."
-        )
+        logger.info("[QCS6490ONNXBackend] Creating SessionOptions and adding QNN provider...")
         so = ort.SessionOptions()
         so.add_provider_for_devices(devices, {"backend_path": backend_path})
         logger.info(
-            "[QCS6490ONNXBackend] SessionOptions configured with"
-            " add_provider_for_devices()"
+            "[QCS6490ONNXBackend] SessionOptions configured with add_provider_for_devices()"
         )
 
-        logger.info(
-            "[QCS6490ONNXBackend] Creating InferenceSession with QNN provider..."
-        )
+        logger.info("[QCS6490ONNXBackend] Creating InferenceSession with QNN provider...")
         session = ort.InferenceSession(path, sess_opts=so)
         logger.info(
-            "[QCS6490ONNXBackend] ✓ InferenceSession created successfully with"
-            " QNN provider"
+            "[QCS6490ONNXBackend] ✓ InferenceSession created successfully with QNN provider"
         )
         return session
 

@@ -6,12 +6,12 @@ readme = "README.md"
 authors = [
     { name = "Nikola Vuk Maruszewski", email = "nikola@gatech.edu" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "ai-edge-litert>=2.1.3",
     "numpy>=2.4.3",
-    "onnxruntime>=1.24.3",
-    "onnxruntime-qnn>=2.1.0; platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "onnxruntime==1.23.0",
+    "onnxruntime-qnn==1.23.0; platform_machine == 'aarch64' and sys_platform == 'linux'",
     "open-clip-torch>=3.3.0",
     "torch>=2.0",
     "opencv-python-headless>=4.13.0.92",
@@ -87,11 +87,6 @@ ignore = [
     "INP001",
     # we can (and have to) print in scripts
     "T201",
-]
-
-"archive/*.py" = [
-    # archive/ contains historical one-off modules, not an importable package
-    "INP001",
 ]
 
 # Tests: exceptions for the many things that are OK in tests

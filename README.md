@@ -28,6 +28,13 @@ then set up the rest of your repository.
 $ just setup
 ```
 
+### Rubik Pi (QNN)
+
+Rubik Pi uses the `onnxruntime-qnn` wheel with AI Engine Direct bindings. This project pins
+`onnxruntime` and `onnxruntime-qnn` to 1.23.0 and requires Python 3.12 to match the Rubik Pi
+QNN runtime. If you are setting up on the device, install the board-provided wheel before
+running `uv sync`.
+
 ## Contributing
 
 To contribute code to this repository, do the following (assuming you've already set up the repo):
@@ -63,82 +70,3 @@ uv run python scripts/run_mobileclip_pipeline.py \
   --image images/fighting.jpg \
   --device cpu
 ```
-
-## Benchmark module
-
-The repository now includes an INFaaS-style benchmark subsystem under
-`moment_to_action.benchmark` for profiling model variants across compute units
-and storing queryable variant profiles.
-
-### What it provides
-
-- `BenchmarkHarness` to run one or many benchmarks.
-- `ModelBenchmark` base class with a template `profile()` flow.
-- Built-in benchmarks for:
-  - `YOLOBenchmark`
-  - `MobileCLIPBenchmark`
-  - `GroundingDINOBenchmark`
-  - `SigLIPBenchmark`
-- `VariantRegistry` for persistent JSON storage and querying.
-
-### Quick usage
-
-```python
-from moment_to_action.benchmark import (
-    BenchmarkConfig,
-    BenchmarkHarness,
-  GroundingDINOBenchmark,
-    MobileCLIPBenchmark,
-  SigLIPBenchmark,
-    VariantRegistry,
-    YOLOBenchmark,
-)
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.models import ModelID, ModelManager
-
-backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
-manager = ModelManager()
-registry = VariantRegistry()
-
-harness = BenchmarkHarness(backend=backend, manager=manager, registry=registry)
-harness.register_benchmark(YOLOBenchmark())
-harness.register_benchmark(MobileCLIPBenchmark())
-harness.register_benchmark(GroundingDINOBenchmark())
-harness.register_benchmark(SigLIPBenchmark())
-
-config = BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1])
-profiles = harness.run_all(config=config)
-
-# Query and persist
-fastest_yolo = registry.best_variant(ModelID.YOLO_V12_N, objective="latency")
-registry.save()  # saves to the default cache location
-```
-
-### Testing the benchmark module
-
-Use the existing task helpers:
-
-```bash
-just test-unit
-just lint
-```
-
-For benchmark-focused tests only:
-
-```bash
-uv run pytest tests/unit/benchmark
-```
-
-Notes:
-- Unit tests for the benchmark module mock backends and model loaders, so they
-  do not require real hardware accelerators or large model downloads.
-- Real-world latency/accuracy numbers should be collected in your own runtime
-  environment with the target hardware.
-
-## TODOs
-
-- Improve accuracy evaluation methodology for all benchmarked models.
-- Investigate and fix `MobileCLIP` GPU accuracy instability (`NaN` embeddings on GPU).
-- Add explicit reporting for unavailable accuracy (separate from numeric score) in CSV and plots.
-- Expand evaluation image set and add stronger coverage across classes/scenes.
-- Add a reproducible benchmark matrix in CI docs (model x unit x metrics).

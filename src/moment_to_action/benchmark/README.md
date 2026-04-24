@@ -99,3 +99,84 @@ The two additional types still worth considering for completeness:
 - Plot accuracy on the y-axis and latency on the x-axis.
 
 Pareto-front of different combinations; accuracy will take care of the candidates
+
+## Benchmark Module
+
+An INFaaS-style benchmark subsystem for profiling model variants across compute
+units, storing queryable variant profiles, and evaluating accuracy metrics.
+
+### Architecture
+
+- **`BenchmarkHarness`** — orchestrates multiple benchmarks and collects results.
+- **`ModelBenchmark`** — abstract base class defining the `profile()` template.
+- **Concrete benchmarks** — one per candidate model, handling model-specific setup
+  and evaluation (e.g., `YOLOBenchmark`, `MobileCLIPBenchmark`).
+- **`VariantRegistry`** — persistent JSON storage and querying of benchmark
+  results.
+- **Metrics** — `DetectionMetrics` (COCO-style bbox evaluation), `RetrievalMetrics`
+  (image-text alignment scoring).
+- **Datasets** — `CocoDataset` for unified evaluation across all benchmarks.
+
+### Built-in benchmarks
+
+| Model | File | Purpose |
+|-------|------|---------|
+| YOLO v12-n | `_yolo.py` | Object detection candidate |
+| MobileCLIP-S2 | `_mobileclip.py` | Image-text retrieval candidate |
+| SigLIP (ViT-B/16) | `_siglip.py` | Image-text retrieval baseline |
+| SSD-MobileNet-v2 | `_ssd_mobilenetv2.py` | Detection candidate (CNN baseline) |
+| RF-DETR-n | `_rf_detr_n.py` | Detection candidate (transformer baseline) |
+
+### Quick usage
+
+```python
+from moment_to_action.benchmark import (
+    BenchmarkConfig,
+    BenchmarkHarness,
+    MobileCLIPBenchmark,
+    SigLIPBenchmark,
+    VariantRegistry,
+    YOLOBenchmark,
+)
+from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.models import ModelManager
+
+backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
+manager = ModelManager()
+registry = VariantRegistry()
+
+harness = BenchmarkHarness(backend=backend, manager=manager, registry=registry)
+harness.register_benchmark(YOLOBenchmark())
+harness.register_benchmark(MobileCLIPBenchmark())
+harness.register_benchmark(SigLIPBenchmark())
+
+config = BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1])
+results = harness.run_all(config=config)
+
+# Query and persist
+for profile in results.profiles:
+    print(f"{profile.model_id}: {profile.avg_latency_ms:.2f}ms")
+
+registry.save()
+```
+
+### Testing the benchmark module
+
+Unit tests use mocked backends and models, requiring no hardware or large downloads:
+
+```bash
+just test-unit
+just test-unit -k benchmark  # benchmark-specific tests only
+just lint
+```
+
+Real-world latency/accuracy numbers should be collected in your target runtime
+environment with the actual hardware.
+
+## TODOs
+
+- Improve accuracy evaluation methodology for all benchmarked models.
+- Investigate and fix `MobileCLIP` GPU accuracy instability (`NaN` embeddings on GPU).
+- Add explicit reporting for unavailable accuracy (separate from numeric score) in CSV and plots.
+- Expand evaluation image set and add stronger coverage across classes/scenes.
+- Add a reproducible benchmark matrix in CI docs (model x unit x metrics).

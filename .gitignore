@@ -229,6 +229,3 @@ archive/
 # Ignore log outputs
 logs/
 data/
-
-# Large model files in edgeperceive reference implementation
-src/moment_to_action/edgeperceive/models/**/*.tflite
