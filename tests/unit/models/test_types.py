@@ -21,25 +21,20 @@ from moment_to_action.models._types import (
 class TestModelID:
     """Tests for ModelID enum."""
 
-    def test_model_id_has_yolo_v8(self) -> None:
-        """Test that ModelID enum has YOLO_V8."""
-        assert hasattr(ModelID, "YOLO_V8")
-        assert ModelID.YOLO_V8.value == "yolo_v8"
+    def test_model_id_has_yolo_v12_n(self) -> None:
+        """Test that ModelID enum has YOLO_V12_N."""
+        assert hasattr(ModelID, "YOLO_V12_N")
+        assert ModelID.YOLO_V12_N.value == "yolo_v12_n"
 
-    def test_model_id_has_yolo_v8_tflite(self) -> None:
-        """Test that ModelID enum has YOLO_V8_TFLITE."""
-        assert hasattr(ModelID, "YOLO_V8_TFLITE")
-        assert ModelID.YOLO_V8_TFLITE.value == "yolo_v8_tflite"
+    def test_model_id_has_rf_detr_n(self) -> None:
+        """Test that ModelID enum has RF_DETR_N."""
+        assert hasattr(ModelID, "RF_DETR_N")
+        assert ModelID.RF_DETR_N.value == "rf_detr_n"
 
-    def test_model_id_has_yolo_v8_tflite_int8(self) -> None:
-        """Test that ModelID enum has YOLO_V8_TFLITE_INT8."""
-        assert hasattr(ModelID, "YOLO_V8_TFLITE_INT8")
-        assert ModelID.YOLO_V8_TFLITE_INT8.value == "yolo_v8_tflite_int8"
-
-    def test_model_id_has_yolo_v8_tflite_int8_320(self) -> None:
-        """Test that ModelID enum has YOLO_V8_TFLITE_INT8_320."""
-        assert hasattr(ModelID, "YOLO_V8_TFLITE_INT8_320")
-        assert ModelID.YOLO_V8_TFLITE_INT8_320.value == "yolo_v8_tflite_int8_320"
+    def test_model_id_has_ssd_mobilenetv2(self) -> None:
+        """Test that ModelID enum has SSD_MOBILENETV2."""
+        assert hasattr(ModelID, "SSD_MOBILENETV2")
+        assert ModelID.SSD_MOBILENETV2.value == "ssd_mobilenetv2"
 
     def test_model_id_has_mobileclip_s2(self) -> None:
         """Test that ModelID enum has MOBILECLIP_S2."""
@@ -49,10 +44,9 @@ class TestModelID:
     @pytest.mark.parametrize(
         "model_id",
         [
-            ModelID.YOLO_V8,
-            ModelID.YOLO_V8_TFLITE,
-            ModelID.YOLO_V8_TFLITE_INT8,
-            ModelID.YOLO_V8_TFLITE_INT8_320,
+            ModelID.YOLO_V12_N,
+            ModelID.RF_DETR_N,
+            ModelID.SSD_MOBILENETV2,
             ModelID.MOBILECLIP_S2,
             ModelID.SMOLVLM2_2_2B,
             ModelID.QWEN2_5_4B,
@@ -174,36 +168,45 @@ class TestModelInfo:
         """Test that ModelInfo requires filename field."""
         with pytest.raises(TypeError):
             ModelInfo(  # type: ignore[call-arg]
-                id=ModelID.YOLO_V8,
-                source=VendoredSource(subdir="yolo"),
+                id=ModelID.YOLO_V12_N,
+                source=DownloadSource(
+                    hf_repo_id="webnn/yolo12n",
+                    hf_filename="onnx/yolo12n.onnx",
+                ),
             )
 
     def test_model_info_source_required(self) -> None:
         """Test that ModelInfo requires source field."""
         with pytest.raises(TypeError):
             ModelInfo(  # type: ignore[call-arg]
-                id=ModelID.YOLO_V8,
-                filename="model.onnx",
+                id=ModelID.YOLO_V12_N,
+                filename="yolo12n.onnx",
             )
 
     def test_model_info_stores_all_fields(self) -> None:
         """Test that ModelInfo stores all fields correctly."""
-        source = VendoredSource(subdir="yolo")
+        source = DownloadSource(
+            hf_repo_id="webnn/yolo12n",
+            hf_filename="onnx/yolo12n.onnx",
+        )
         info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
+            id=ModelID.YOLO_V12_N,
+            filename="yolo12n.onnx",
             source=source,
         )
-        assert info.id == ModelID.YOLO_V8
-        assert info.filename == "model.onnx"
+        assert info.id == ModelID.YOLO_V12_N
+        assert info.filename == "yolo12n.onnx"
         assert info.source is source
 
     def test_model_info_is_frozen(self) -> None:
         """Test that ModelInfo is frozen (immutable)."""
         info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=VendoredSource(subdir="yolo"),
+            id=ModelID.YOLO_V12_N,
+            filename="yolo12n.onnx",
+            source=DownloadSource(
+                hf_repo_id="webnn/yolo12n",
+                hf_filename="onnx/yolo12n.onnx",
+            ),
         )
         with pytest.raises(AttributeError):
             info.id = ModelID.MOBILECLIP_S2  # type: ignore[misc]
@@ -212,8 +215,8 @@ class TestModelInfo:
         """Test ModelInfo with VendoredSource."""
         source = VendoredSource(subdir="yolo")
         info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
+            id=ModelID.YOLO_V12_N,
+            filename="yolo12n.onnx",
             source=source,
         )
         assert isinstance(info.source, VendoredSource)
@@ -280,9 +283,12 @@ class TestModelStatus:
     def test_model_status_stores_all_fields(self) -> None:
         """Test that ModelStatus stores all fields correctly."""
         info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=VendoredSource(subdir="yolo"),
+            id=ModelID.YOLO_V12_N,
+            filename="yolo12n.onnx",
+            source=DownloadSource(
+                hf_repo_id="webnn/yolo12n",
+                hf_filename="onnx/yolo12n.onnx",
+            ),
         )
         path = Path("/path/to/model.onnx")
         status = ModelStatus(
@@ -319,9 +325,12 @@ class TestModelStatus:
     def test_model_status_is_frozen(self) -> None:
         """Test that ModelStatus is frozen (immutable)."""
         info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=VendoredSource(subdir="yolo"),
+            id=ModelID.YOLO_V12_N,
+            filename="yolo12n.onnx",
+            source=DownloadSource(
+                hf_repo_id="webnn/yolo12n",
+                hf_filename="onnx/yolo12n.onnx",
+            ),
         )
         status = ModelStatus(
             info=info,
@@ -337,23 +346,29 @@ class TestModelStatus:
 class TestModelRegistry:
     """Tests for MODEL_REGISTRY."""
 
-    def test_registry_contains_yolo_v8(self) -> None:
-        """Test that MODEL_REGISTRY contains YOLO_V8."""
-        assert ModelID.YOLO_V8 in MODEL_REGISTRY
-        info = MODEL_REGISTRY[ModelID.YOLO_V8]
-        assert info.id == ModelID.YOLO_V8
+    def test_registry_contains_yolo_v12_n(self) -> None:
+        """Test that MODEL_REGISTRY contains YOLO_V12_N."""
+        assert ModelID.YOLO_V12_N in MODEL_REGISTRY
+        info = MODEL_REGISTRY[ModelID.YOLO_V12_N]
+        assert info.id == ModelID.YOLO_V12_N
+
+    def test_registry_contains_rf_detr_n(self) -> None:
+        """Test that MODEL_REGISTRY contains RF_DETR_N."""
+        assert ModelID.RF_DETR_N in MODEL_REGISTRY
+        info = MODEL_REGISTRY[ModelID.RF_DETR_N]
+        assert info.id == ModelID.RF_DETR_N
+
+    def test_registry_contains_ssd_mobilenetv2(self) -> None:
+        """Test that MODEL_REGISTRY contains SSD_MOBILENETV2."""
+        assert ModelID.SSD_MOBILENETV2 in MODEL_REGISTRY
+        info = MODEL_REGISTRY[ModelID.SSD_MOBILENETV2]
+        assert info.id == ModelID.SSD_MOBILENETV2
 
     def test_registry_contains_mobileclip_s2(self) -> None:
         """Test that MODEL_REGISTRY contains MOBILECLIP_S2."""
         assert ModelID.MOBILECLIP_S2 in MODEL_REGISTRY
         info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
         assert info.id == ModelID.MOBILECLIP_S2
-
-    def test_registry_contains_yolo_v8_tflite_int8(self) -> None:
-        """Test that MODEL_REGISTRY contains YOLO_V8_TFLITE_INT8."""
-        assert ModelID.YOLO_V8_TFLITE_INT8 in MODEL_REGISTRY
-        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8]
-        assert info.id == ModelID.YOLO_V8_TFLITE_INT8
 
     def test_registry_contains_smolvlm2_2_2b(self) -> None:
         """Test that MODEL_REGISTRY contains SMOLVLM2_2_2B."""
@@ -367,43 +382,21 @@ class TestModelRegistry:
         info = MODEL_REGISTRY[ModelID.QWEN2_5_4B]
         assert info.id == ModelID.QWEN2_5_4B
 
-    def test_yolo_v8_is_vendored(self) -> None:
-        """Test that YOLO_V8 has VendoredSource."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8]
-        assert isinstance(info.source, VendoredSource)
+    def test_yolo_v12_n_is_downloadable(self) -> None:
+        """Test that YOLO_V12_N has DownloadSource."""
+        info = MODEL_REGISTRY[ModelID.YOLO_V12_N]
+        assert isinstance(info.source, DownloadSource)
 
-    def test_yolo_v8_has_correct_subdir(self) -> None:
-        """Test that YOLO_V8 has correct subdir."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8]
-        assert isinstance(info.source, VendoredSource)
-        assert info.source.subdir == "yolo"
+    def test_yolo_v12_n_has_correct_hf_repo(self) -> None:
+        """Test that YOLO_V12_N has correct HF repo."""
+        info = MODEL_REGISTRY[ModelID.YOLO_V12_N]
+        assert isinstance(info.source, DownloadSource)
+        assert info.source.hf_repo_id == "webnn/yolo12n"
 
-    def test_yolo_v8_has_correct_filename(self) -> None:
-        """Test that YOLO_V8 has correct filename."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8]
-        assert info.filename == "model.onnx"
-
-    def test_yolo_v8_tflite_int8_has_correct_filename(self) -> None:
-        """Test that YOLO_V8_TFLITE_INT8 has correct filename."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8]
-        assert info.filename == "model_int8.tflite"
-
-    def test_yolo_v8_tflite_int8_320_is_in_registry(self) -> None:
-        """Test that YOLO_V8_TFLITE_INT8_320 is registered."""
-        assert ModelID.YOLO_V8_TFLITE_INT8_320 in MODEL_REGISTRY
-        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8_320]
-        assert info.id == ModelID.YOLO_V8_TFLITE_INT8_320
-
-    def test_yolo_v8_tflite_int8_320_has_correct_filename(self) -> None:
-        """Test that YOLO_V8_TFLITE_INT8_320 has the 320 filename."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8_320]
-        assert info.filename == "model_int8_320.tflite"
-
-    def test_yolo_v8_tflite_int8_320_is_vendored(self) -> None:
-        """Test that YOLO_V8_TFLITE_INT8_320 uses VendoredSource."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8_TFLITE_INT8_320]
-        assert isinstance(info.source, VendoredSource)
-        assert info.source.subdir == "yolo"
+    def test_yolo_v12_n_has_correct_filename(self) -> None:
+        """Test that YOLO_V12_N has correct filename."""
+        info = MODEL_REGISTRY[ModelID.YOLO_V12_N]
+        assert info.filename == "yolo12n.onnx"
 
     def test_mobileclip_s2_is_downloadable(self) -> None:
         """Test that MOBILECLIP_S2 has DownloadSource."""
@@ -462,8 +455,8 @@ class TestModelRegistry:
     @pytest.mark.parametrize(
         "model_id",
         [
-            ModelID.YOLO_V8,
-            ModelID.YOLO_V8_TFLITE_INT8,
+            ModelID.YOLO_V12_N,
+            ModelID.RF_DETR_N,
             ModelID.MOBILECLIP_S2,
             ModelID.SMOLVLM2_2_2B,
             ModelID.QWEN2_5_4B,
@@ -477,8 +470,8 @@ class TestModelRegistry:
     @pytest.mark.parametrize(
         "model_id",
         [
-            ModelID.YOLO_V8,
-            ModelID.YOLO_V8_TFLITE_INT8,
+            ModelID.YOLO_V12_N,
+            ModelID.RF_DETR_N,
             ModelID.MOBILECLIP_S2,
             ModelID.SMOLVLM2_2_2B,
             ModelID.QWEN2_5_4B,

@@ -81,6 +81,24 @@ def test_main_all_models_output(
             "inference_mean_ms": 33.0,
         },
     )
+    monkeypatch.setattr(
+        module,
+        "_run_ssd_eval",
+        lambda dataset, manager, unit: {  # noqa: ARG005
+            "map_50": 0.31,
+            "map_75": 0.21,
+            "inference_mean_ms": 44.0,
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_run_rfdetr_eval",
+        lambda dataset, manager, unit: {  # noqa: ARG005
+            "map_50": 0.41,
+            "map_75": 0.29,
+            "inference_mean_ms": 55.0,
+        },
+    )
 
     monkeypatch.setattr(sys, "argv", ["run_coco_eval.py", "--n-images", "3", "--model", "all"])
     module.main()
@@ -91,6 +109,6 @@ def test_main_all_models_output(
     assert payload["yolo_v12_n"]["map_50"] == pytest.approx(0.5)
     assert payload["mobileclip_s2"]["recall_at_1"] == pytest.approx(0.33)
     assert payload["siglip"]["recall_at_1"] == pytest.approx(0.44)
-    assert payload["rf_detr_n"]["status"] == "unsupported"
-    assert payload["ssd_mobilenetv2"]["status"] == "unsupported"
+    assert payload["rf_detr_n"]["map_50"] == pytest.approx(0.41)
+    assert payload["ssd_mobilenetv2"]["map_50"] == pytest.approx(0.31)
     assert payload["tinyclip_8m"]["status"] == "unsupported"

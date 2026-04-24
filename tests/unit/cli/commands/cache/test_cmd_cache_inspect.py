@@ -18,7 +18,6 @@ from moment_to_action.models import (
     ModelManager,
     ModelStatus,
     TransformersSource,
-    VendoredSource,
 )
 
 
@@ -37,13 +36,16 @@ class TestCacheInspectCommand:
 
         # Mock ModelManager to return sample models
         yolo_info = MagicMock()
-        yolo_info.id = ModelID.YOLO_V8
-        yolo_info.source = VendoredSource(subdir="yolo")
+        yolo_info.id = ModelID.YOLO_V12_N
+        yolo_info.source = DownloadSource(
+            hf_repo_id="webnn/yolo12n",
+            hf_filename="onnx/yolo12n.onnx",
+        )
 
         yolo_status = ModelStatus(
             info=yolo_info,
             available=True,
-            path=Path("/cache/yolo.onnx"),
+            path=Path("/cache/yolo12n.onnx"),
             size_bytes=50_000_000,
         )
 
@@ -79,22 +81,25 @@ class TestCacheInspectCommand:
         assert "Size" in result.output
         assert "Path" in result.output
 
-    def test_table_shows_yolo_as_vendored_available(self) -> None:
-        """Table shows YOLO_V8 as 'vendored' and 'Available'.
+    def test_table_shows_yolo_v12_n_as_download_available(self) -> None:
+        """Table shows YOLO_V12_N as 'download' and 'Available'.
 
-        Verifies that the YOLO_V8 model is correctly displayed as vendored
+        Verifies that the YOLO_V12_N model is correctly displayed as download
         source with available status in the table output.
         """
         from moment_to_action._cli import cli
 
         yolo_info = MagicMock()
-        yolo_info.id = ModelID.YOLO_V8
-        yolo_info.source = VendoredSource(subdir="yolo")
+        yolo_info.id = ModelID.YOLO_V12_N
+        yolo_info.source = DownloadSource(
+            hf_repo_id="webnn/yolo12n",
+            hf_filename="onnx/yolo12n.onnx",
+        )
 
         yolo_status = ModelStatus(
             info=yolo_info,
             available=True,
-            path=Path("/cache/yolo.onnx"),
+            path=Path("/cache/yolo12n.onnx"),
             size_bytes=50_000_000,
         )
 
@@ -109,8 +114,8 @@ class TestCacheInspectCommand:
                 result = CliRunner().invoke(cli, ["cache", "inspect"])
 
         assert result.exit_code == 0
-        assert "yolo_v8" in result.output
-        assert "vendored" in result.output
+        assert "yolo_v12_n" in result.output
+        assert "download" in result.output
 
     def test_table_shows_mobileclip_as_download_unavailable(self) -> None:
         """Table shows MOBILECLIP_S2 as 'download' and 'Not Available'.
@@ -188,13 +193,16 @@ class TestCacheInspectCommand:
         from moment_to_action._cli import cli
 
         yolo_info = MagicMock()
-        yolo_info.id = ModelID.YOLO_V8
-        yolo_info.source = VendoredSource(subdir="yolo")
+        yolo_info.id = ModelID.YOLO_V12_N
+        yolo_info.source = DownloadSource(
+            hf_repo_id="webnn/yolo12n",
+            hf_filename="onnx/yolo12n.onnx",
+        )
 
         yolo_status = ModelStatus(
             info=yolo_info,
             available=True,
-            path=Path("/cache/yolo.onnx"),
+            path=Path("/cache/yolo12n.onnx"),
             size_bytes=50_000_000,
         )
 
@@ -272,13 +280,16 @@ class TestCacheInspectCommand:
         from moment_to_action._cli import cli
 
         yolo_info = MagicMock()
-        yolo_info.id = ModelID.YOLO_V8
-        yolo_info.source = VendoredSource(subdir="yolo")
+        yolo_info.id = ModelID.YOLO_V12_N
+        yolo_info.source = DownloadSource(
+            hf_repo_id="webnn/yolo12n",
+            hf_filename="onnx/yolo12n.onnx",
+        )
 
         yolo_status = ModelStatus(
             info=yolo_info,
             available=True,
-            path=Path("/cache/yolo.onnx"),
+            path=Path("/cache/yolo12n.onnx"),
             size_bytes=50_000_000,
         )
 
@@ -307,20 +318,23 @@ class TestCacheInspectCommand:
     def test_json_yolo_available_true_with_size_and_path(self) -> None:
         """JSON YOLO model has available=true, size_bytes > 0, path not null.
 
-        Verifies that an available vendored model (YOLO_V8) is represented
+        Verifies that an available download model (YOLO_V12_N) is represented
         in JSON with available=true, a positive size_bytes value, and a valid
         path string.
         """
         from moment_to_action._cli import cli
 
         yolo_info = MagicMock()
-        yolo_info.id = ModelID.YOLO_V8
-        yolo_info.source = VendoredSource(subdir="yolo")
+        yolo_info.id = ModelID.YOLO_V12_N
+        yolo_info.source = DownloadSource(
+            hf_repo_id="webnn/yolo12n",
+            hf_filename="onnx/yolo12n.onnx",
+        )
 
         yolo_status = ModelStatus(
             info=yolo_info,
             available=True,
-            path=Path("/cache/yolo.onnx"),
+            path=Path("/cache/yolo12n.onnx"),
             size_bytes=50_000_000,
         )
 
@@ -339,7 +353,7 @@ class TestCacheInspectCommand:
         output_json = json.loads(result.output)
 
         model = output_json["models"][0]
-        assert model["id"] == "yolo_v8"
+        assert model["id"] == "yolo_v12_n"
         assert model["available"] is True
         assert model["size_bytes"] == 50_000_000
         assert model["path"] is not None
@@ -455,9 +469,12 @@ class TestCacheInspectCommand:
         long_path.write_text("model")
 
         info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=VendoredSource(subdir="test"),
+            id=ModelID.YOLO_V12_N,
+            filename="yolo12n.onnx",
+            source=DownloadSource(
+                hf_repo_id="webnn/yolo12n",
+                hf_filename="onnx/yolo12n.onnx",
+            ),
         )
         status = ModelStatus(
             info=info,

@@ -42,7 +42,7 @@ def _profile(
 @pytest.mark.unit
 def test_register_get_and_all_profiles() -> None:
     registry = VariantRegistry()
-    profile = _profile(ModelID.YOLO_V8, ComputeUnit.CPU, latency=10.0, accuracy=0.5, energy=1.0)
+    profile = _profile(ModelID.YOLO_V12_N, ComputeUnit.CPU, latency=10.0, accuracy=0.5, energy=1.0)
 
     registry.register(profile)
 
@@ -53,15 +53,15 @@ def test_register_get_and_all_profiles() -> None:
 @pytest.mark.unit
 def test_query_filters() -> None:
     registry = VariantRegistry()
-    p1 = _profile(ModelID.YOLO_V8, ComputeUnit.CPU, latency=10.0, accuracy=0.6, energy=1.0)
-    p2 = _profile(ModelID.YOLO_V8, ComputeUnit.NPU, latency=5.0, accuracy=0.7, energy=0.6)
+    p1 = _profile(ModelID.YOLO_V12_N, ComputeUnit.CPU, latency=10.0, accuracy=0.6, energy=1.0)
+    p2 = _profile(ModelID.YOLO_V12_N, ComputeUnit.NPU, latency=5.0, accuracy=0.7, energy=0.6)
     p3 = _profile(ModelID.MOBILECLIP_S2, ComputeUnit.CPU, latency=12.0, accuracy=None, energy=None)
 
     registry.register(p1)
     registry.register(p2)
     registry.register(p3)
 
-    assert registry.query(model_id=ModelID.YOLO_V8) == [p1, p2]
+    assert registry.query(model_id=ModelID.YOLO_V12_N) == [p1, p2]
     assert registry.query(compute_unit=ComputeUnit.NPU) == [p2]
     assert registry.query(max_latency_ms=6.0) == [p2]
     assert registry.query(min_accuracy=0.65) == [p2]
@@ -70,17 +70,17 @@ def test_query_filters() -> None:
 @pytest.mark.unit
 def test_best_variant_objectives() -> None:
     registry = VariantRegistry()
-    p1 = _profile(ModelID.YOLO_V8, ComputeUnit.CPU, latency=10.0, accuracy=0.8, energy=2.0)
-    p2 = _profile(ModelID.YOLO_V8, ComputeUnit.NPU, latency=4.0, accuracy=0.7, energy=0.5)
+    p1 = _profile(ModelID.YOLO_V12_N, ComputeUnit.CPU, latency=10.0, accuracy=0.8, energy=2.0)
+    p2 = _profile(ModelID.YOLO_V12_N, ComputeUnit.NPU, latency=4.0, accuracy=0.7, energy=0.5)
     registry.register(p1)
     registry.register(p2)
 
-    assert registry.best_variant(ModelID.YOLO_V8, "latency") == p2
-    assert registry.best_variant(ModelID.YOLO_V8, "accuracy") == p1
-    assert registry.best_variant(ModelID.YOLO_V8, "efficiency") == p2
+    assert registry.best_variant(ModelID.YOLO_V12_N, "latency") == p2
+    assert registry.best_variant(ModelID.YOLO_V12_N, "accuracy") == p1
+    assert registry.best_variant(ModelID.YOLO_V12_N, "efficiency") == p2
 
     with pytest.raises(ValueError, match="Unknown objective"):
-        registry.best_variant(ModelID.YOLO_V8, "throughput")
+        registry.best_variant(ModelID.YOLO_V12_N, "throughput")
 
 
 @pytest.mark.unit
@@ -112,9 +112,11 @@ def test_variant_registry_path_and_load_missing_noop(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_best_variant_returns_none_for_no_candidates_or_missing_metrics() -> None:
     registry = VariantRegistry()
-    assert registry.best_variant(ModelID.YOLO_V8, "latency") is None
+    assert registry.best_variant(ModelID.YOLO_V12_N, "latency") is None
 
-    p_no_acc = _profile(ModelID.YOLO_V8, ComputeUnit.CPU, latency=10.0, accuracy=None, energy=1.0)
+    p_no_acc = _profile(
+        ModelID.YOLO_V12_N, ComputeUnit.CPU, latency=10.0, accuracy=None, energy=1.0
+    )
     p_no_energy = _profile(
         ModelID.MOBILECLIP_S2,
         ComputeUnit.CPU,
@@ -125,18 +127,18 @@ def test_best_variant_returns_none_for_no_candidates_or_missing_metrics() -> Non
     registry.register(p_no_acc)
     registry.register(p_no_energy)
 
-    assert registry.best_variant(ModelID.YOLO_V8, "accuracy") is None
+    assert registry.best_variant(ModelID.YOLO_V12_N, "accuracy") is None
     assert registry.best_variant(ModelID.MOBILECLIP_S2, "efficiency") is None
 
 
 @pytest.mark.unit
 def test_query_filters_by_hardware_target() -> None:
     registry = VariantRegistry()
-    cpu = _profile(ModelID.YOLO_V8, ComputeUnit.CPU, latency=10.0, accuracy=0.5, energy=1.0)
-    npu = _profile(ModelID.YOLO_V8, ComputeUnit.NPU, latency=5.0, accuracy=0.6, energy=0.6)
+    cpu = _profile(ModelID.YOLO_V12_N, ComputeUnit.CPU, latency=10.0, accuracy=0.5, energy=1.0)
+    npu = _profile(ModelID.YOLO_V12_N, ComputeUnit.NPU, latency=5.0, accuracy=0.6, energy=0.6)
     npu = attrs.evolve(npu, hardware_target="qcs6490")
     registry.register(cpu)
     registry.register(npu)
 
-    matches = registry.query(model_id=ModelID.YOLO_V8, hardware_target="qcs6490")
+    matches = registry.query(model_id=ModelID.YOLO_V12_N, hardware_target="qcs6490")
     assert matches == [npu]

@@ -11,7 +11,9 @@ from moment_to_action.benchmark import (
     BenchmarkConfig,
     CocoDataset,
     MobileCLIPBenchmark,
+    RFDETRBenchmark,
     SigLIPBenchmark,
+    SSDMobileNetV2Benchmark,
     YOLOBenchmark,
 )
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
@@ -26,8 +28,6 @@ _UNIT_MAP: dict[str, ComputeUnit] = {
 }
 
 _UNSUPPORTED_MODELS = {
-    "rf_detr_n": "runner not implemented yet",
-    "ssd_mobilenetv2": "runner not implemented yet",
     "tinyclip_8m": "runner not implemented yet",
 }
 
@@ -139,6 +139,44 @@ def _run_siglip_eval(
     return payload
 
 
+def _run_ssd_eval(
+    dataset: CocoDataset,
+    manager: ModelManager,
+    unit: ComputeUnit,
+) -> dict[str, float | None]:
+    backend = ComputeBackend(preferred_unit=unit)
+    benchmark = SSDMobileNetV2Benchmark(coco_dataset=dataset)
+    profile = benchmark.profile(
+        backend=backend,
+        manager=manager,
+        config=BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1]),
+    )
+
+    payload: dict[str, float | None] = {"inference_mean_ms": profile.inference_mean_ms}
+    if profile.accuracy_details is not None:
+        payload.update(profile.accuracy_details)
+    return payload
+
+
+def _run_rfdetr_eval(
+    dataset: CocoDataset,
+    manager: ModelManager,
+    unit: ComputeUnit,
+) -> dict[str, float | None]:
+    backend = ComputeBackend(preferred_unit=unit)
+    benchmark = RFDETRBenchmark(coco_dataset=dataset)
+    profile = benchmark.profile(
+        backend=backend,
+        manager=manager,
+        config=BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1]),
+    )
+
+    payload: dict[str, float | None] = {"inference_mean_ms": profile.inference_mean_ms}
+    if profile.accuracy_details is not None:
+        payload.update(profile.accuracy_details)
+    return payload
+
+
 def main() -> None:
     """Execute COCO model evaluation flow."""
     parser = _build_parser()
@@ -161,6 +199,22 @@ def main() -> None:
             manager=manager,
             unit=_UNIT_MAP[args.edge_unit],
             conf_threshold=args.conf_threshold,
+        )
+
+    if args.model in {"ssd_mobilenetv2", "all"}:
+        logger.info("Running SSD-MobileNet-v2 COCO detection evaluation...")
+        results["ssd_mobilenetv2"] = _run_ssd_eval(
+            dataset=dataset,
+            manager=manager,
+            unit=_UNIT_MAP[args.edge_unit],
+        )
+
+    if args.model in {"rf_detr_n", "all"}:
+        logger.info("Running RF-DETR-n COCO detection evaluation...")
+        results["rf_detr_n"] = _run_rfdetr_eval(
+            dataset=dataset,
+            manager=manager,
+            unit=_UNIT_MAP[args.edge_unit],
         )
 
     if args.model in {"mobileclip_s2", "all"}:

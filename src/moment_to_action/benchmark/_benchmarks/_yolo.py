@@ -9,7 +9,6 @@ from PIL import Image
 from moment_to_action.benchmark._benchmarks._base import ModelBenchmark
 from moment_to_action.benchmark._detection_metrics import compute_detection_map
 from moment_to_action.benchmark._oracle_ground_truth import OracleBox, OracleDetection
-from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.models import ModelID
 from moment_to_action.stages.video._yolo import YOLOStage
 
@@ -33,13 +32,7 @@ _YOLO_FEATURE_DIM = 84
 
 
 class YOLOBenchmark(ModelBenchmark):
-    """Benchmark implementation for YOLOv12-n.
-
-    Loads the TFLite variant (``YOLO_V12_N_TFLITE``) on accelerated compute units
-    so inference runs through the LiteRT/QNN path instead of ONNX/CPU. Falls
-    back to the ONNX variant when the TFLite model has not yet been converted or
-    when the active unit is CPU.
-    """
+    """Benchmark implementation for YOLOv12-n ONNX."""
 
     def __init__(
         self,
@@ -57,25 +50,6 @@ class YOLOBenchmark(ModelBenchmark):
         return ModelID.YOLO_V12_N
 
     def _load_model(self, backend: ComputeBackend, manager: ModelManager) -> object:
-        if backend.active_unit == ComputeUnit.NPU:
-            for npu_model_id in (
-                ModelID.YOLO_V12_N_TFLITE_INT8_320,
-                ModelID.YOLO_V12_N_TFLITE_INT8,
-            ):
-                if manager.is_available(npu_model_id):
-                    handle = backend.load_model(manager.get_path(npu_model_id))
-                    details = backend.get_input_details(handle)
-                    self._input_shape = tuple(int(dimension) for dimension in details[0]["shape"])
-                    return handle
-
-        if backend.active_unit != ComputeUnit.CPU and manager.is_available(
-            ModelID.YOLO_V12_N_TFLITE
-        ):
-            handle = backend.load_model(manager.get_path(ModelID.YOLO_V12_N_TFLITE))
-            details = backend.get_input_details(handle)
-            self._input_shape = tuple(int(dimension) for dimension in details[0]["shape"])
-            return handle
-
         self._input_shape = (1, 3, 640, 640)
         return backend.load_model(manager.get_path(ModelID.YOLO_V12_N))
 

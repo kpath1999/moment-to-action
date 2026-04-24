@@ -47,10 +47,10 @@ def test_run_all_registers_profiles() -> None:
     registry = VariantRegistry()
     harness = BenchmarkHarness(backend=backend, manager=manager, registry=registry)
 
-    profile1 = mock.MagicMock(variant_id=mock.MagicMock(model_id=ModelID.YOLO_V8))
+    profile1 = mock.MagicMock(variant_id=mock.MagicMock(model_id=ModelID.YOLO_V12_N))
     profile2 = mock.MagicMock(variant_id=mock.MagicMock(model_id=ModelID.MOBILECLIP_S2))
 
-    harness.register_benchmark(_MockBenchmark(ModelID.YOLO_V8, profile1))
+    harness.register_benchmark(_MockBenchmark(ModelID.YOLO_V12_N, profile1))
     harness.register_benchmark(_MockBenchmark(ModelID.MOBILECLIP_S2, profile2))
 
     results = harness.run_all()
@@ -73,9 +73,9 @@ def test_harness_registry_property_and_run_model_success() -> None:
     registry = VariantRegistry()
     harness = BenchmarkHarness(backend=backend, manager=manager, registry=registry)
 
-    profile = mock.MagicMock(variant_id=mock.MagicMock(model_id=ModelID.YOLO_V8))
-    harness.register_benchmark(_MockBenchmark(ModelID.YOLO_V8, profile))
+    profile = mock.MagicMock(variant_id=mock.MagicMock(model_id=ModelID.YOLO_V12_N))
+    harness.register_benchmark(_MockBenchmark(ModelID.YOLO_V12_N, profile))
 
     assert harness.registry is registry
-    result = harness.run_model(ModelID.YOLO_V8)
+    result = harness.run_model(ModelID.YOLO_V12_N)
     assert result == profile

@@ -9,7 +9,7 @@ Example::
     from moment_to_action.models import ModelManager, ModelID
 
     manager = ModelManager()
-    yolo_path = manager.get_path(ModelID.YOLO_V8)
+    yolo_path = manager.get_path(ModelID.YOLO_V12_N)
 
     # Check availability
     if manager.is_available(ModelID.MOBILECLIP_S2):

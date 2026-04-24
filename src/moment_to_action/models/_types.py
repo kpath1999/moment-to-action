@@ -23,14 +23,7 @@ __all__ = [
 class ModelID(Enum):
     """Unique identifier for each model in the registry."""
 
-    YOLO_V8 = "yolo_v8"
-    YOLO_V8_TFLITE = "yolo_v8_tflite"
-    YOLO_V8_TFLITE_INT8 = "yolo_v8_tflite_int8"
-    YOLO_V8_TFLITE_INT8_320 = "yolo_v8_tflite_int8_320"
     YOLO_V12_N = "yolo_v12_n"
-    YOLO_V12_N_TFLITE = "yolo_v12_n_tflite"
-    YOLO_V12_N_TFLITE_INT8 = "yolo_v12_n_tflite_int8"
-    YOLO_V12_N_TFLITE_INT8_320 = "yolo_v12_n_tflite_int8_320"
     RF_DETR_N = "rf_detr_n"
     SSD_MOBILENETV2 = "ssd_mobilenetv2"
     TINYCLIP_8M = "tinyclip_8m"

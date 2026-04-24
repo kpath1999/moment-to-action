@@ -5,7 +5,9 @@ from __future__ import annotations
 from ._benchmarks import (
     MobileCLIPBenchmark,
     ModelBenchmark,
+    RFDETRBenchmark,
     SigLIPBenchmark,
+    SSDMobileNetV2Benchmark,
     YOLOBenchmark,
 )
 from ._datasets import (
@@ -27,7 +29,9 @@ __all__ = [
     "DetectionMetrics",
     "MobileCLIPBenchmark",
     "ModelBenchmark",
+    "RFDETRBenchmark",
     "RetrievalMetrics",
+    "SSDMobileNetV2Benchmark",
     "SigLIPBenchmark",
     "VariantID",
     "VariantProfile",

@@ -110,7 +110,7 @@ config = BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1])
 profiles = harness.run_all(config=config)
 
 # Query and persist
-fastest_yolo = registry.best_variant(ModelID.YOLO_V8, objective="latency")
+fastest_yolo = registry.best_variant(ModelID.YOLO_V12_N, objective="latency")
 registry.save()  # saves to the default cache location
 ```
 

@@ -365,7 +365,7 @@ class TestCacheClearCommand:
         mock_manager = MagicMock()
         mock_manager.clear_cache.return_value = (
             200_000_000,
-            [ModelID.MOBILECLIP_S2, ModelID.YOLO_V8],
+            [ModelID.MOBILECLIP_S2, ModelID.YOLO_V12_N],
         )
         mock_manager.cache_dir = Path("/tmp/cache")
 

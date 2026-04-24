@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 
-from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.messages.video import BoundingBox, DetectionMessage, FrameTensorMessage
 from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
@@ -136,16 +135,7 @@ class YOLOStage(Stage):
         # On other accelerated units, prefer the float32 TFLite variant so
         # inference routes through the LiteRT/QNN delegate. Fall back to
         # ONNX/CPU when no suitable TFLite artifact is available.
-        if backend.active_unit == ComputeUnit.NPU and manager.is_available(
-            ModelID.YOLO_V8_TFLITE_INT8
-        ):
-            model_path = manager.get_path(ModelID.YOLO_V8_TFLITE_INT8)
-        elif backend.active_unit != ComputeUnit.CPU and manager.is_available(
-            ModelID.YOLO_V8_TFLITE
-        ):
-            model_path = manager.get_path(ModelID.YOLO_V8_TFLITE)
-        else:
-            model_path = manager.get_path(ModelID.YOLO_V8)
+        model_path = manager.get_path(ModelID.YOLO_V12_N)
 
         self._handle = self._backend.load_model(model_path)
 
@@ -208,7 +198,7 @@ class YOLOStage(Stage):
         outputs: list[np.ndarray],
         original_size: tuple,
     ) -> list[BoundingBox]:
-        """Parse YOLOv8 model outputs — handles two formats automatically.
+        """Parse YOLO model outputs — handles two formats automatically.
 
         **3-tensor format** (ONNX / onnx2tf-converted TFLite):
 

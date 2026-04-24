@@ -10,6 +10,17 @@ import pytest
 from moment_to_action.models._manager import ModelManager
 from moment_to_action.models._types import ModelID
 
+YOLO_MODEL_ID = ModelID.YOLO_V12_N
+YOLO_FILENAME = "yolo12n.onnx"
+
+
+def _cache_model(cache_dir: Path, model_id: ModelID, filename: str) -> Path:
+    model_cache = cache_dir / model_id.value
+    model_cache.mkdir(parents=True, exist_ok=True)
+    cached_file = model_cache / filename
+    cached_file.write_text("fake model content")
+    return cached_file
+
 
 @pytest.mark.unit
 class TestModelManagerInit:
@@ -56,41 +67,50 @@ class TestModelManagerInit:
 class TestModelManagerGetPath:
     """Tests for ModelManager.get_path()."""
 
-    def test_get_path_for_yolo_v8_returns_path(self) -> None:
-        """Test get_path() for YOLO_V8 returns correct path."""
-        manager = ModelManager()
-        path = manager.get_path(ModelID.YOLO_V8)
-        assert isinstance(path, Path)
-        assert path.name == "model.onnx"
+    def test_get_path_for_yolo_v12_n_returns_cached_path(self, tmp_path: Path) -> None:
+        """Test get_path() for YOLO_V12_N returns the cached path."""
+        cache_dir = tmp_path / "cache"
+        manager = ModelManager(cache_dir=cache_dir, show_progress=False)
+        cached_file = _cache_model(cache_dir, YOLO_MODEL_ID, YOLO_FILENAME)
 
-    def test_get_path_for_yolo_v8_file_exists(self) -> None:
-        """Test get_path() for YOLO_V8 returns path that exists."""
-        manager = ModelManager()
-        path = manager.get_path(ModelID.YOLO_V8)
+        path = manager.get_path(YOLO_MODEL_ID)
+
+        assert path == cached_file
+
+    def test_get_path_for_yolo_v12_n_file_exists(self, tmp_path: Path) -> None:
+        """Test get_path() for YOLO_V12_N returns a path that exists."""
+        cache_dir = tmp_path / "cache"
+        manager = ModelManager(cache_dir=cache_dir, show_progress=False)
+        _cache_model(cache_dir, YOLO_MODEL_ID, YOLO_FILENAME)
+
+        path = manager.get_path(YOLO_MODEL_ID)
+
         assert path.exists()
 
-    def test_get_path_for_yolo_v8_is_file(self) -> None:
-        """Test get_path() for YOLO_V8 returns path to a file."""
-        manager = ModelManager()
-        path = manager.get_path(ModelID.YOLO_V8)
+    def test_get_path_for_yolo_v12_n_is_file(self, tmp_path: Path) -> None:
+        """Test get_path() for YOLO_V12_N returns a file path."""
+        cache_dir = tmp_path / "cache"
+        manager = ModelManager(cache_dir=cache_dir, show_progress=False)
+        _cache_model(cache_dir, YOLO_MODEL_ID, YOLO_FILENAME)
+
+        path = manager.get_path(YOLO_MODEL_ID)
+
         assert path.is_file()
 
-    def test_get_path_for_missing_vendored_raises_file_not_found(self, tmp_path: Path) -> None:
-        """Test get_path() raises FileNotFoundError for missing vendored model."""
-        # Create a manager with custom vendored dir that doesn't have the model
+    def test_get_path_for_missing_yolo_download_raises_runtime_error(self, tmp_path: Path) -> None:
+        """Test get_path() surfaces download failures for uncached YOLO_V12_N."""
         manager = ModelManager(cache_dir=tmp_path / "cache")
-        manager._vendored_dir = tmp_path / "empty_vendored"
-        manager._vendored_dir.mkdir(exist_ok=True)
 
-        with pytest.raises(FileNotFoundError):
-            manager.get_path(ModelID.YOLO_V8)
+        with mock.patch.object(manager, "_download_from_hf", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError, match="boom"):
+                manager.get_path(YOLO_MODEL_ID)
 
     def test_get_path_for_invalid_model_raises_runtime_error(self) -> None:
         """Test get_path() raises RuntimeError for unknown model ID."""
         manager = ModelManager()
         # Create a fake ModelID that's not in the registry by directly checking
         # that accessing an unknown ID in _get_model_info raises the error
-        fake_id = ModelID.YOLO_V8
+        fake_id = YOLO_MODEL_ID
         # Temporarily empty the registry to test error handling
         from moment_to_action.models import _manager
 
@@ -151,18 +171,19 @@ class TestModelManagerGetPath:
 class TestModelManagerIsAvailable:
     """Tests for ModelManager.is_available()."""
 
-    def test_is_available_for_yolo_v8_returns_true(self) -> None:
-        """Test is_available() returns True for vendored YOLO_V8."""
-        manager = ModelManager()
-        assert manager.is_available(ModelID.YOLO_V8) is True
+    def test_is_available_for_cached_yolo_v12_n_returns_true(self, tmp_path: Path) -> None:
+        """Test is_available() returns True for cached YOLO_V12_N."""
+        cache_dir = tmp_path / "cache"
+        manager = ModelManager(cache_dir=cache_dir, show_progress=False)
+        _cache_model(cache_dir, YOLO_MODEL_ID, YOLO_FILENAME)
 
-    def test_is_available_for_missing_vendored_returns_false(self, tmp_path: Path) -> None:
-        """Test is_available() returns False for missing vendored model."""
+        assert manager.is_available(YOLO_MODEL_ID) is True
+
+    def test_is_available_for_uncached_yolo_v12_n_returns_false(self, tmp_path: Path) -> None:
+        """Test is_available() returns False for uncached YOLO_V12_N."""
         manager = ModelManager(cache_dir=tmp_path / "cache")
-        manager._vendored_dir = tmp_path / "empty_vendored"
-        manager._vendored_dir.mkdir(exist_ok=True)
 
-        assert manager.is_available(ModelID.YOLO_V8) is False
+        assert manager.is_available(YOLO_MODEL_ID) is False
 
     def test_is_available_for_non_cached_downloadable_returns_false(self, tmp_path: Path) -> None:
         """Test is_available() returns False for non-cached downloadable model."""
@@ -197,22 +218,26 @@ class TestModelManagerListModels:
         statuses = manager.list_models()
         assert isinstance(statuses, list)
 
-    def test_list_models_yolo_is_available(self) -> None:
-        """Test list_models() shows YOLO_V8 as available."""
-        manager = ModelManager()
-        statuses = manager.list_models()
-        yolo_status = next(s for s in statuses if s.info.id == ModelID.YOLO_V8)
-        assert yolo_status.available is True
-        assert yolo_status.path is not None
-        assert yolo_status.path.exists()
+    def test_list_models_yolo_is_available_when_cached(self, tmp_path: Path) -> None:
+        """Test list_models() shows cached YOLO_V12_N as available."""
+        cache_dir = tmp_path / "cache"
+        manager = ModelManager(cache_dir=cache_dir, show_progress=False)
+        cached_file = _cache_model(cache_dir, YOLO_MODEL_ID, YOLO_FILENAME)
 
-    def test_list_models_yolo_has_size(self) -> None:
-        """Test list_models() includes size for available YOLO_V8."""
-        manager = ModelManager()
         statuses = manager.list_models()
-        yolo_status = next(s for s in statuses if s.info.id == ModelID.YOLO_V8)
-        assert yolo_status.size_bytes is not None
-        assert yolo_status.size_bytes > 0
+        yolo_status = next(s for s in statuses if s.info.id == YOLO_MODEL_ID)
+        assert yolo_status.available is True
+        assert yolo_status.path == cached_file
+
+    def test_list_models_yolo_has_size_when_cached(self, tmp_path: Path) -> None:
+        """Test list_models() includes size for cached YOLO_V12_N."""
+        cache_dir = tmp_path / "cache"
+        manager = ModelManager(cache_dir=cache_dir, show_progress=False)
+        cached_file = _cache_model(cache_dir, YOLO_MODEL_ID, YOLO_FILENAME)
+
+        statuses = manager.list_models()
+        yolo_status = next(s for s in statuses if s.info.id == YOLO_MODEL_ID)
+        assert yolo_status.size_bytes == cached_file.stat().st_size
 
     def test_list_models_mobileclip_not_available_by_default(
         self,
@@ -308,19 +333,15 @@ class TestModelManagerClearCache:
         assert ModelID.MOBILECLIP_S2 in removed_ids
         assert bytes_freed == len("fake model content")
 
-    def test_clear_cache_does_not_remove_vendored(self, tmp_path: Path) -> None:
-        """Test clear_cache() does not remove vendored models."""
+    def test_clear_cache_does_not_include_uncached_yolo(self, tmp_path: Path) -> None:
+        """Test clear_cache() does not report uncached YOLO_V12_N as removed."""
         cache_dir = tmp_path / "cache"
         cache_dir.mkdir()
         manager = ModelManager(cache_dir=cache_dir)
 
-        # clear_cache should only remove downloadable models
         _bytes_freed, removed_ids = manager.clear_cache()
 
-        # YOLO_V8 is vendored, so it should not be in removed_ids
-        assert ModelID.YOLO_V8 not in removed_ids
-        # YOLO_V8 should still exist
-        assert manager.get_path(ModelID.YOLO_V8).exists()
+        assert YOLO_MODEL_ID not in removed_ids
 
     def test_clear_cache_returns_bytes_freed(self, tmp_path: Path) -> None:
         """Test clear_cache() returns correct bytes freed."""
@@ -389,12 +410,12 @@ class TestModelManagerClearCache:
 class TestModelManagerGetModelInfo:
     """Tests for ModelManager._get_model_info()."""
 
-    def test_get_model_info_for_yolo_v8(self) -> None:
-        """Test _get_model_info() for valid YOLO_V8."""
+    def test_get_model_info_for_yolo_v12_n(self) -> None:
+        """Test _get_model_info() for valid YOLO_V12_N."""
         manager = ModelManager()
-        info = manager._get_model_info(ModelID.YOLO_V8)
-        assert info.id == ModelID.YOLO_V8
-        assert info.filename == "model.onnx"
+        info = manager._get_model_info(YOLO_MODEL_ID)
+        assert info.id == YOLO_MODEL_ID
+        assert info.filename == YOLO_FILENAME
 
     def test_get_model_info_for_mobileclip_s2(self) -> None:
         """Test _get_model_info() for valid MOBILECLIP_S2."""
@@ -408,7 +429,7 @@ class TestModelManagerGetModelInfo:
     ) -> None:
         """Test _get_model_info() raises RuntimeError for unknown model."""
         manager = ModelManager()
-        fake_id = ModelID.YOLO_V8
+        fake_id = YOLO_MODEL_ID
         from moment_to_action.models import _manager
 
         saved_registry = _manager.MODEL_REGISTRY.copy()
@@ -424,34 +445,44 @@ class TestModelManagerGetModelInfo:
 class TestModelManagerResolvePath:
     """Tests for ModelManager._resolve_path()."""
 
-    def test_resolve_path_for_vendored_model(self) -> None:
-        """Test _resolve_path() for vendored model."""
-        manager = ModelManager()
-        info = manager._get_model_info(ModelID.YOLO_V8)
-        path = manager._resolve_path(info)
-        assert path.exists()
-        assert path.name == "model.onnx"
+    def test_resolve_path_for_cached_yolo_v12_n(self, tmp_path: Path) -> None:
+        """Test _resolve_path() uses the cached YOLO_V12_N file."""
+        cache_dir = tmp_path / "cache"
+        manager = ModelManager(cache_dir=cache_dir, show_progress=False)
+        cached_file = _cache_model(cache_dir, YOLO_MODEL_ID, YOLO_FILENAME)
+        info = manager._get_model_info(YOLO_MODEL_ID)
 
-    def test_resolve_path_uses_match_case(self) -> None:
+        path = manager._resolve_path(info)
+
+        assert path == cached_file
+
+    def test_resolve_path_uses_match_case(self, tmp_path: Path) -> None:
         """Test _resolve_path() uses match/case on ModelSource union."""
-        manager = ModelManager()
+        manager = ModelManager(cache_dir=tmp_path / "cache", show_progress=False)
         from moment_to_action.models._types import (
             DownloadSource,
+            ModelInfo,
             TransformersSource,
             VendoredSource,
         )
 
-        # Test with VendoredSource
-        vendored_info = manager._get_model_info(ModelID.YOLO_V8)
+        vendored_file = tmp_path / "vendored" / "test" / "test.onnx"
+        vendored_file.parent.mkdir(parents=True)
+        vendored_file.write_text("fake vendored content")
+        manager._vendored_dir = tmp_path / "vendored"
+
+        vendored_info = ModelInfo(
+            id=YOLO_MODEL_ID,
+            filename="test.onnx",
+            source=VendoredSource(subdir="test"),
+        )
         assert isinstance(vendored_info.source, VendoredSource)
         path = manager._resolve_path(vendored_info)
-        assert path.exists()
+        assert path == vendored_file
 
-        # Confirm MOBILECLIP_S2 uses DownloadSource
-        download_info = manager._get_model_info(ModelID.MOBILECLIP_S2)
+        download_info = manager._get_model_info(YOLO_MODEL_ID)
         assert isinstance(download_info.source, DownloadSource)
 
-        # Confirm SMOLVLM2 uses TransformersSource
         smol_info = manager._get_model_info(ModelID.SMOLVLM2_2_2B)
         assert isinstance(smol_info.source, TransformersSource)
 
@@ -490,12 +521,18 @@ class TestModelManagerResolvePath:
         assert (cache_dir / "config.json").exists()
 
     def test_resolve_path_vendored_missing_raises_file_not_found(self, tmp_path: Path) -> None:
-        """Test _resolve_path() raises FileNotFoundError for missing vendored."""
+        """Test _resolve_path() raises FileNotFoundError for missing vendored info."""
         manager = ModelManager(cache_dir=tmp_path / "cache")
         manager._vendored_dir = tmp_path / "empty_vendored"
         manager._vendored_dir.mkdir(exist_ok=True)
 
-        info = manager._get_model_info(ModelID.YOLO_V8)
+        from moment_to_action.models._types import ModelInfo, VendoredSource
+
+        info = ModelInfo(
+            id=YOLO_MODEL_ID,
+            filename="test.onnx",
+            source=VendoredSource(subdir="test"),
+        )
         with pytest.raises(FileNotFoundError, match="Vendored model not found"):
             manager._resolve_path(info)
 
@@ -504,13 +541,23 @@ class TestModelManagerResolvePath:
 class TestModelManagerResolvePathLocal:
     """Tests for ModelManager._resolve_path_local()."""
 
-    def test_resolve_path_local_for_vendored_model(self) -> None:
+    def test_resolve_path_local_for_vendored_model(self, tmp_path: Path) -> None:
         """_resolve_path_local() returns vendored file path."""
-        manager = ModelManager()
-        info = manager._get_model_info(ModelID.YOLO_V8)
+        manager = ModelManager(cache_dir=tmp_path / "cache")
+        manager._vendored_dir = tmp_path / "vendored"
+        vendored_file = manager._vendored_dir / "test" / "test.onnx"
+        vendored_file.parent.mkdir(parents=True)
+        vendored_file.write_text("fake vendored content")
+
+        from moment_to_action.models._types import ModelInfo, VendoredSource
+
+        info = ModelInfo(
+            id=YOLO_MODEL_ID,
+            filename="test.onnx",
+            source=VendoredSource(subdir="test"),
+        )
         path = manager._resolve_path_local(info)
-        assert path.exists()
-        assert path.name == "model.onnx"
+        assert path == vendored_file
 
     def test_resolve_path_local_for_downloadable_returns_cache_path(self, tmp_path: Path) -> None:
         """_resolve_path_local() returns cache path for downloadable model (no download)."""
@@ -536,7 +583,13 @@ class TestModelManagerResolvePathLocal:
         manager._vendored_dir = tmp_path / "empty"
         manager._vendored_dir.mkdir()
 
-        info = manager._get_model_info(ModelID.YOLO_V8)
+        from moment_to_action.models._types import ModelInfo, VendoredSource
+
+        info = ModelInfo(
+            id=YOLO_MODEL_ID,
+            filename="test.onnx",
+            source=VendoredSource(subdir="test"),
+        )
         with pytest.raises(FileNotFoundError, match="Vendored model not found"):
             manager._resolve_path_local(info)
 
@@ -545,13 +598,21 @@ class TestModelManagerResolvePathLocal:
 class TestModelManagerResolvePathVendoredOnly:
     """Tests for ModelManager._resolve_path_vendored_only()."""
 
-    def test_resolve_path_vendored_only_for_vendored_model(self) -> None:
+    def test_resolve_path_vendored_only_for_vendored_model(self, tmp_path: Path) -> None:
         """Test _resolve_path_vendored_only() for vendored model."""
-        manager = ModelManager()
-        info = manager._get_model_info(ModelID.YOLO_V8)
+        manager = ModelManager(cache_dir=tmp_path / "cache")
+        manager._vendored_dir = tmp_path / "vendored"
+
+        from moment_to_action.models._types import ModelInfo, VendoredSource
+
+        info = ModelInfo(
+            id=YOLO_MODEL_ID,
+            filename="test.onnx",
+            source=VendoredSource(subdir="test"),
+        )
         path = manager._resolve_path_vendored_only(info)
         assert isinstance(path, Path)
-        assert path.name == "model.onnx"
+        assert path.name == "test.onnx"
 
     def test_resolve_path_vendored_only_for_download_raises_file_not_found(
         self,
@@ -773,12 +834,12 @@ class TestModelManagerStreamWithProgress:
                 from moment_to_action.models._types import ModelInfo, VendoredSource
 
                 mock_info.return_value = ModelInfo(
-                    id=ModelID.YOLO_V8,
+                    id=YOLO_MODEL_ID,
                     filename="test.onnx",
                     source=VendoredSource(subdir="test"),
                 )
 
-                result = manager.is_available(ModelID.YOLO_V8)
+                result = manager.is_available(YOLO_MODEL_ID)
                 assert result is False
 
     def test_list_models_exception_on_resolve_path(self, tmp_path: Path) -> None:

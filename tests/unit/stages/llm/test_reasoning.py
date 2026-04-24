@@ -451,10 +451,10 @@ class TestReasoningStage:
         from moment_to_action.models import ModelID
 
         with pytest.raises(ValueError, match="Model manager is required"):
-            ReasoningStage(model_id=ModelID.YOLO_V8)
+            ReasoningStage(model_id=ModelID.YOLO_V12_N)
 
         with pytest.raises(ValueError, match="Model manager is required"):
-            ReasoningStage(model_id=ModelID.YOLO_V8, manager=None)
+            ReasoningStage(model_id=ModelID.YOLO_V12_N, manager=None)
 
     def test_reasoning_stage_with_model_id_mocked(self) -> None:
         """Test ReasoningStage initialisation with a model_id (mocked backend + manager).
@@ -480,10 +480,10 @@ class TestReasoningStage:
             "moment_to_action.stages.llm._reasoning.ComputeBackend",
             return_value=mock_backend,
         ):
-            stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
+            stage = ReasoningStage(model_id=ModelID.YOLO_V12_N, manager=mock_manager)
 
         # Backend and handle should be set (not stub mode).
         assert stage._backend is mock_backend
         assert stage._handle is mock_handle
-        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
+        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V12_N)
         mock_backend.load_model.assert_called_once_with(fake_path)

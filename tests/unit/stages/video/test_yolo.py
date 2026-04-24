@@ -44,15 +44,13 @@ class TestYOLOParseOutputs:
         manager.get_path.return_value = Path("/fake/model.onnx")
         return manager
 
-    def test_constructor_non_cpu_prefers_float_tflite(
+    def test_constructor_always_uses_yolo_v12_n(
         self,
         mock_backend: MagicMock,
         mock_manager: MagicMock,
     ) -> None:
-        """Constructor should select float TFLite model on non-CPU accelerated units."""
+        """Constructor always loads YOLO_V12_N regardless of compute unit."""
         mock_backend.active_unit = ComputeUnit.GPU
-        mock_manager.is_available.return_value = True
-        mock_manager.get_path.side_effect = [Path("/fake/model.tflite")]
 
         YOLOStage(
             backend=mock_backend,
@@ -60,8 +58,7 @@ class TestYOLOParseOutputs:
             confidence_threshold=0.5,
         )
 
-        mock_manager.is_available.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
-        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE)
+        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V12_N)
 
     def test_parse_outputs_basic(self, mock_backend: MagicMock, mock_manager: MagicMock) -> None:
         """Test parsing basic YOLO outputs."""
@@ -641,7 +638,7 @@ class TestYOLOStageE2E:
         )
 
         # ModelManager.get_path should be called, and load_model receives its result as str.
-        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
+        mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V12_N)
         mock_backend.load_model.assert_called_once_with(mock_manager.get_path.return_value)
 
     def test_yolo_stage_box_attributes(
@@ -793,41 +790,30 @@ class TestYOLOTFLiteIntegration:
         assert len(result) == 1
         assert result[0].confidence == pytest.approx(0.8)
 
-    def test_tflite_int8_model_preferred_when_unit_is_npu(self) -> None:
-        """YOLOStage loads YOLO_V8_TFLITE_INT8 when backend is NPU and available."""
-        backend = MagicMock()
-        backend.load_model.return_value = MagicMock()
-        backend.active_unit = ComputeUnit.NPU
-        backend.get_input_details.return_value = [{"shape": [1, 640, 640, 3], "name": "input"}]
-
-        manager = mock.MagicMock(spec=ModelManager)
-        manager.is_available.return_value = True
-        tflite_path = Path("/fake/model_int8.tflite")
-        manager.get_path.return_value = tflite_path
-
-        YOLOStage(backend=backend, manager=manager)
-
-        manager.is_available.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8)
-        manager.get_path.assert_called_once_with(ModelID.YOLO_V8_TFLITE_INT8)
-
-    def test_onnx_model_used_when_npu_int8_unavailable(self) -> None:
-        """YOLOStage falls back to YOLO_V8 when NPU INT8 TFLite is unavailable."""
+    def test_yolo_v12_n_loaded_on_npu(self) -> None:
+        """YOLOStage always loads YOLO_V12_N regardless of compute unit."""
         backend = MagicMock()
         backend.load_model.return_value = MagicMock()
         backend.active_unit = ComputeUnit.NPU
         backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
 
         manager = mock.MagicMock(spec=ModelManager)
-        manager.is_available.return_value = False
-        onnx_path = Path("/fake/model.onnx")
-        manager.get_path.return_value = onnx_path
+        manager.get_path.return_value = Path("/fake/yolo12n.onnx")
 
         YOLOStage(backend=backend, manager=manager)
 
-        manager.is_available.assert_has_calls(
-            [
-                mock.call(ModelID.YOLO_V8_TFLITE_INT8),
-                mock.call(ModelID.YOLO_V8_TFLITE),
-            ]
-        )
-        manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
+        manager.get_path.assert_called_once_with(ModelID.YOLO_V12_N)
+
+    def test_onnx_model_used_when_unit_is_cpu(self) -> None:
+        """YOLOStage loads YOLO_V12_N on CPU."""
+        backend = MagicMock()
+        backend.load_model.return_value = MagicMock()
+        backend.active_unit = ComputeUnit.CPU
+        backend.get_input_details.return_value = [{"shape": [1, 3, 640, 640], "name": "input"}]
+
+        manager = mock.MagicMock(spec=ModelManager)
+        manager.get_path.return_value = Path("/fake/yolo12n.onnx")
+
+        YOLOStage(backend=backend, manager=manager)
+
+        manager.get_path.assert_called_once_with(ModelID.YOLO_V12_N)

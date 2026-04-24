@@ -17,18 +17,16 @@ def test_yolo_model_id_is_v12() -> None:
 
 
 @pytest.mark.unit
-def test_yolo_load_prefers_v12_int8_320_on_npu() -> None:
+def test_yolo_load_always_uses_v12_n() -> None:
     benchmark = YOLOBenchmark(coco_dataset=mock.MagicMock())
     backend = mock.MagicMock()
     backend.active_unit = ComputeUnit.NPU
-    backend.get_input_details.return_value = [{"shape": [1, 320, 320, 3]}]
 
     manager = mock.MagicMock(spec=ModelManager)
-    manager.is_available.side_effect = lambda model: model == ModelID.YOLO_V12_N_TFLITE_INT8_320
-    manager.get_path.return_value = Path("/tmp/model_int8_320.tflite")
+    manager.get_path.return_value = Path("/tmp/yolo12n.onnx")
 
     benchmark._load_model(backend=backend, manager=manager)
-    manager.get_path.assert_called_once_with(ModelID.YOLO_V12_N_TFLITE_INT8_320)
+    manager.get_path.assert_called_once_with(ModelID.YOLO_V12_N)
 
 
 @pytest.mark.unit
