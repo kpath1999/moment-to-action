@@ -483,10 +483,14 @@ class TestCacheInspectCommand:
             size_bytes=1024,
         )
 
-        with mock.patch.object(manager, "list_models", return_value=[status]):
-            runner = CliRunner()
-            result = runner.invoke(inspect, [])
+        with patch(
+            "moment_to_action._cli.commands.cmd_cache.cmd_inspect.ModelManager",
+            return_value=manager,
+        ):
+            with mock.patch.object(manager, "list_models", return_value=[status]):
+                runner = CliRunner()
+                result = runner.invoke(inspect, [])
 
-            assert result.exit_code == 0
-            # Path should be truncated with "..."
-            assert "..." in result.output
+                assert result.exit_code == 0
+                # Path should be truncated with "..."
+                assert "..." in result.output
