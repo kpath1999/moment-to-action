@@ -80,64 +80,69 @@ class QCS6490ONNXBackend(ONNXBackend):
         For ``CPU`` (and any unhandled unit), delegates to the base-class
         implementation which uses ``CPUExecutionProvider``.
 
-        For ``NPU`` or ``GPU``, registers the ``onnxruntime-qnn`` plugin,
-        discovers available QNN devices, configures ``SessionOptions`` with
-        the appropriate backend library path, and creates the session.
-
-        Args:
-            path: Filesystem path to the ``.onnx`` model file.
-
-        Returns:
-            A freshly created ``ort.InferenceSession``.
-
-        Raises:
-            RuntimeError: If ``onnxruntime-qnn`` is not installed or no QNN
-                devices are available on this system.
+        For ``NPU`` or ``GPU``, configures the QNNExecutionProvider directly,
+        matching the logic in test_all_drivers.py, without requiring the
+        onnxruntime-qnn Python package.
         """
-        if self._unit not in (ComputeUnit.NPU, ComputeUnit.GPU):
-            logger.debug("[QCS6490ONNXBackend] CPU/DSP unit, delegating to base class")
-            return super()._make_inference_session(path)
-
         logger.info(
-            "[QCS6490ONNXBackend] GPU/NPU path for unit=%s, model=%s",
+            "[QCS6490ONNXBackend] Requested compute unit: %s for model: %s",
             self._unit.name,
             path,
         )
+        if self._unit not in (ComputeUnit.NPU, ComputeUnit.GPU):
+            logger.info(
+                "[QCS6490ONNXBackend] Using CPUExecutionProvider (unit=%s)",
+                self._unit.name,
+            )
+            return super()._make_inference_session(path)
 
-        logger.info("[QCS6490ONNXBackend] Calling _ensure_qnn_ep_registered()...")
-        _ensure_qnn_ep_registered()
-        logger.info("[QCS6490ONNXBackend] QNN EP registration complete")
+        if self._unit == ComputeUnit.GPU:
+            providers = [
+                (
+                    "QNNExecutionProvider",
+                    {
+                        "backend_path": "/usr/lib/libQnnGpu.so",
+                        "profiling_level": "basic",
+                        "profiling_file_path": "qnn_profile_gpu.csv",
+                    },
+                ),
+                "CPUExecutionProvider",
+            ]
+            logger.info(
+                "[QCS6490ONNXBackend] Configured QNNExecutionProvider for GPU with fallback to CPU."
+            )
+        elif self._unit == ComputeUnit.NPU:
+            providers = [
+                (
+                    "QNNExecutionProvider",
+                    {
+                        "backend_path": "/usr/lib/libQnnHtp.so",
+                        "profiling_level": "basic",
+                        "profiling_file_path": "qnn_profile_npu.csv",
+                    },
+                ),
+                "CPUExecutionProvider",
+            ]
+            logger.info(
+                "[QCS6490ONNXBackend] Configured QNNExecutionProvider for NPU with fallback to CPU."
+            )
+        else:
+            providers = ["CPUExecutionProvider"]
+            logger.info(
+                "[QCS6490ONNXBackend] Fallback to CPUExecutionProvider only (unexpected unit: %s)",
+                self._unit.name,
+            )
 
-        devices = [d for d in ort.get_ep_devices() if d.ep_name == _QNN_EP_NAME]
-        logger.info(
-            "[QCS6490ONNXBackend] Discovered %d QNN device(s): %s",
-            len(devices),
-            [d.device for d in devices],
-        )
-        if not devices:
-            msg = f"{self._unit.name} QNN plugin EP unavailable (no devices discovered)"
-            raise RuntimeError(msg)
-
-        backend_path = _qnn_backend_path(self._unit)
-        logger.info(
-            "[QCS6490ONNXBackend] Backend path for %s: %s",
-            self._unit.name,
-            backend_path,
-        )
-
-        logger.info("[QCS6490ONNXBackend] Creating SessionOptions and adding QNN provider...")
         so = ort.SessionOptions()
-        so.add_provider_for_devices(devices, {"backend_path": backend_path})
-        logger.info(
-            "[QCS6490ONNXBackend] SessionOptions configured with add_provider_for_devices()"
-        )
-
-        logger.info("[QCS6490ONNXBackend] Creating InferenceSession with QNN provider...")
-        session = ort.InferenceSession(path, sess_opts=so)
-        logger.info(
-            "[QCS6490ONNXBackend] ✓ InferenceSession created successfully with QNN provider"
-        )
-        return session
+        logger.info("[QCS6490ONNXBackend] Creating InferenceSession with providers: %s", providers)
+        try:
+            return ort.InferenceSession(path, sess_options=so, providers=providers)
+        except Exception:
+            logger.exception(
+                "[QCS6490ONNXBackend] Failed to create InferenceSession for unit=%s",
+                self._unit.name,
+            )
+            raise
 
     def get_supported_unit(self) -> ComputeUnit:
         """Return the compute unit this backend was configured for."""
