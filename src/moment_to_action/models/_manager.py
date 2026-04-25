@@ -296,8 +296,75 @@ class ModelManager:
                 import shutil
 
                 shutil.move("yolo12n.onnx", cache_path)
+                self._fix_dfl_softmax_boundary(cache_path)
                 logger.info("Ultralytics YOLO export complete: %s", cache_path)
                 return cache_path
+
+    @staticmethod
+    def _fix_dfl_softmax_boundary(model_path: Path) -> None:
+        """Wrap the DFL Softmax node with explicit FP32 Cast nodes.
+
+        QNN GPU falls back the Softmax to CPUExecutionProvider but the boundary
+        tensor may have incorrect layout/dtype. Explicit casts ensure the CPU
+        fallback always receives and returns float32, fixing the NaN/overflow
+        corruption in the decoded box coordinates.
+
+        This is a no-op if the graph has already been patched (cast nodes present).
+        """
+        import onnx
+        from onnx import TensorProto, helper
+
+        model = onnx.load(str(model_path))
+        graph = model.graph
+
+        # Find the DFL Softmax node
+        softmax_node = None
+        for node in graph.node:
+            if node.op_type == "Softmax" and "dfl" in node.name.lower():
+                softmax_node = node
+                break
+
+        if softmax_node is None:
+            logger.debug("DFL Softmax node not found — graph may already be patched.")
+            return
+
+        original_input = softmax_node.input[0]
+        original_output = softmax_node.output[0]
+
+        cast_in_name = original_input + "_cast_fp32_in"
+        cast_out_name = original_output + "_cast_fp32_out"
+
+        # Cast input to explicit float32 before Softmax
+        cast_in_node = helper.make_node(
+            "Cast",
+            inputs=[original_input],
+            outputs=[cast_in_name],
+            to=TensorProto.FLOAT,
+            name="Cast_DFL_Softmax_in",
+        )
+
+        # Update Softmax to consume the cast tensor
+        softmax_node.input[0] = cast_in_name
+        softmax_node.output[0] = cast_out_name + "_raw"
+
+        # Cast output back to float32 (no-op for FP32 model, but makes
+        # the boundary contract explicit regardless of QNN internal dtype)
+        cast_out_node = helper.make_node(
+            "Cast",
+            inputs=[cast_out_name + "_raw"],
+            outputs=[original_output],
+            to=TensorProto.FLOAT,
+            name="Cast_DFL_Softmax_out",
+        )
+
+        # Insert nodes into graph immediately around the Softmax
+        idx = list(graph.node).index(softmax_node)
+        graph.node.insert(idx, cast_in_node)
+        graph.node.insert(idx + 2, cast_out_node)
+
+        onnx.checker.check_model(model)
+        onnx.save(model, str(model_path))
+        logger.info("Patched DFL Softmax boundary with explicit FP32 Cast nodes: %s", model_path)
 
     def _resolve_path_local(self, info: ModelInfo) -> Path:
         """Resolve the local path for a model without triggering a download.
