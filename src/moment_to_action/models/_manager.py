@@ -295,7 +295,7 @@ class ModelManager:
                 # Move the exported ONNX file to the cache path
                 import shutil
 
-                shutil.move("model.onnx", cache_path)
+                shutil.move("yolo12n.onnx", cache_path)
                 logger.info("Ultralytics YOLO export complete: %s", cache_path)
                 return cache_path
 
