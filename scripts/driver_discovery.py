@@ -1,5 +1,8 @@
+"""driver_discovery.py — ONNX backend discovery and latency test."""
+
 import sys
 import time
+
 import numpy as np
 import onnxruntime as ort
 
@@ -7,32 +10,30 @@ import onnxruntime as ort
 # Model path
 # -----------------------------
 model_path = (
-    sys.argv[1]
-    if len(sys.argv) > 1
-    else "src/moment_to_action/models/_vendored/yolo/model.onnx"
+    sys.argv[1] if len(sys.argv) > 1 else "src/moment_to_action/models/_vendored/yolo/model.onnx"
 )
 
 # -----------------------------
 # Dummy input helper
 # -----------------------------
-def get_dummy_input(session):
+
+
+def get_dummy_input(session: ort.InferenceSession) -> np.ndarray:
+    """Return a dummy input tensor matching the session's first input shape."""
     input_shape = session.get_inputs()[0].shape
-
-    # Replace dynamic dims with 1
-    shape = [
-        1 if isinstance(dim, str) or dim is None else dim
-        for dim in input_shape
-    ]
-
-    return np.random.rand(*shape).astype(np.float32)
+    shape = [1 if isinstance(dim, str) or dim is None else dim for dim in input_shape]
+    rng = np.random.default_rng()
+    return rng.random(shape, dtype=np.float32)
 
 
 # -----------------------------
 # Run inference on a backend
 # -----------------------------
-def run_backend(name, providers):
-    print(f"\n===== Running on {name} =====")
 
+
+def run_backend(name: str, providers: list) -> bool | None:
+    """Run inference on a backend and print latency."""
+    print(f"\n===== Running on {name} =====")
     try:
         so = ort.SessionOptions()
         sess = ort.InferenceSession(
@@ -40,26 +41,20 @@ def run_backend(name, providers):
             sess_options=so,
             providers=providers,
         )
-
         print("Active providers:", sess.get_providers())
-
         dummy = get_dummy_input(sess)
-
         input_name = sess.get_inputs()[0].name
-
         start = time.time()
-        outputs = sess.run(None, {input_name: dummy})
+        _ = sess.run(None, {input_name: dummy})
         end = time.time()
-
         print(f"{name} inference OK")
         print(f"Latency: {(end - start) * 1000:.2f} ms")
-
-        return True
-
-    except Exception as e:
+    except Exception as exc:  # noqa: BLE001
         print(f"{name} FAILED:")
-        print(e)
-        return False
+        print(exc)
+        return None
+    else:
+        return True
 
 
 # -----------------------------
@@ -69,20 +64,26 @@ def run_backend(name, providers):
 CPU_PROVIDERS = ["CPUExecutionProvider"]
 
 NPU_PROVIDERS = [
-    ("QNNExecutionProvider", {
-        "backend_type": "htp",
-        "profiling_level": "detailed",
-        "profiling_file_path": "qnn_profile_npu.csv",
-    }),
+    (
+        "QNNExecutionProvider",
+        {
+            "backend_type": "htp",
+            "profiling_level": "detailed",
+            "profiling_file_path": "qnn_profile_npu.csv",
+        },
+    ),
     "CPUExecutionProvider",
 ]
 
 GPU_PROVIDERS = [
-    ("QNNExecutionProvider", {
-        "backend_type": "gpu",
-        "profiling_level": "detailed",
-        "profiling_file_path": "qnn_profile_gpu.csv",
-    }),
+    (
+        "QNNExecutionProvider",
+        {
+            "backend_type": "gpu",
+            "profiling_level": "detailed",
+            "profiling_file_path": "qnn_profile_gpu.csv",
+        },
+    ),
     "CPUExecutionProvider",
 ]
 
@@ -91,7 +92,6 @@ GPU_PROVIDERS = [
 # Main
 # -----------------------------
 if __name__ == "__main__":
-
     print("Model:", model_path)
 
     results = {}

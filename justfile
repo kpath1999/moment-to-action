@@ -38,6 +38,12 @@ coverage-html *args:
     cd {{cov_path_html}} && python -m http.server 8000
 
 # lint source + tests
+
+# sync dependencies and run post-sync script
+sync:
+    uv sync
+    chmod +x scripts/post_uv_sync.sh
+    bash scripts/post_uv_sync.sh
 lint:
     -uv run ruff format --check src tests scripts
     -uv run ruff check src tests scripts

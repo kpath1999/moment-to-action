@@ -54,9 +54,6 @@ required-environments = [
     "sys_platform == 'linux' and platform_machine == 'aarch64'",
 ]
 
-[tool.uv.sources]
-onnxruntime-qnn = { url = "https://cdn.edgeimpulse.com/qc-ai-docs/wheels/onnxruntime_qnn-1.23.0-cp312-cp312-linux_aarch64.whl", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" }
-
 [dependency-groups]
 dev = [
     "jupyter>=1.1.1",
@@ -175,3 +172,14 @@ exclude_also = [
     'class .*\bProtocol\):',
     '@(abc\.)?abstractmethod',
 ]
+
+# After running `uv sync`, run the following to install the onnxruntime_qnn wheel (if not on macOS):
+#
+#   bash scripts/post_uv_sync.sh
+#
+# To remove and regenerate the uv.lock file:
+#
+#   rm -f uv.lock
+#   uv sync
+#
+# This ensures the correct onnxruntime_qnn wheel is installed on Linux/aarch64 (Rubik Pi).
