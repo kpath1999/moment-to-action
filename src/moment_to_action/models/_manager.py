@@ -14,6 +14,7 @@ from ._types import (
     ModelInfo,
     ModelStatus,
     TransformersSource,
+    UltralyticsSource,
     VendoredSource,
 )
 
@@ -211,7 +212,7 @@ class ModelManager:
             raise RuntimeError(msg)
         return MODEL_REGISTRY[model]
 
-    def _resolve_path(self, info: ModelInfo) -> Path:
+    def _resolve_path(self, info: ModelInfo) -> Path:  # noqa: PLR0911
         """Resolve path, handling download if necessary.
 
         Uses match/case on the ModelSource union to dispatch vendored vs
@@ -260,6 +261,41 @@ class ModelManager:
                 logger.info("Transformers model downloaded successfully: %s", cache_dir)
                 return cache_dir
 
+            case UltralyticsSource(pt_weights=pt_weights):
+                cache_path = self._cache_dir / info.id.value / info.filename
+                if cache_path.exists():
+                    logger.debug("Using cached Ultralytics-exported model: %s", cache_path)
+                    return cache_path
+                logger.info("Exporting YOLO model from Ultralytics weights: %s", pt_weights)
+                try:
+                    from ultralytics import YOLO
+                except ImportError as exc:
+                    msg = (
+                        "Ultralytics is not installed. Please install with "
+                        "'pip install ultralytics'."
+                    )
+                    logger.exception(msg)
+                    exc_msg = "Ultralytics is required for YOLO export but is not installed."
+                    raise RuntimeError(exc_msg) from exc
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                model = YOLO(pt_weights)
+                # Export ONNX with decode head stripped, float32 I/O, opset 17, imgsz 640
+                model.export(
+                    format="onnx",
+                    simplify=True,
+                    opset=17,
+                    nms=False,
+                    imgsz=640,
+                    dynamic=False,
+                    half=False,
+                    optimize=False,
+                    verbose=False,
+                    device="cpu",
+                    output=cache_path,
+                )
+                logger.info("Ultralytics YOLO export complete: %s", cache_path)
+                return cache_path
+
     def _resolve_path_local(self, info: ModelInfo) -> Path:
         """Resolve the local path for a model without triggering a download.
 
@@ -287,6 +323,8 @@ class ModelManager:
                 return self._cache_dir / info.id.value / info.filename
             case TransformersSource():
                 return self._cache_dir / info.id.value
+        msg = "Unknown ModelSource type in _resolve_path_local"
+        raise NotImplementedError(msg)
 
     def _resolve_path_vendored_only(self, info: ModelInfo) -> Path:
         """Resolve path for vendored models only (no download).
@@ -309,6 +347,8 @@ class ModelManager:
             case TransformersSource():
                 msg = f"Model {info.id} is downloadable, not vendored"
                 raise FileNotFoundError(msg)
+        msg = "Unknown ModelSource type in _resolve_path_vendored_only"
+        raise NotImplementedError(msg)
 
     def _download_from_hf(self, repo_id: str, filename: str, dest_path: Path) -> None:
         """Download a model from HuggingFace Hub with a Rich progress bar.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._types import DownloadSource, ModelID, ModelInfo, TransformersSource
+from ._types import DownloadSource, ModelID, ModelInfo, TransformersSource, UltralyticsSource
 
 __all__ = ["MODEL_REGISTRY"]
 
@@ -12,10 +12,7 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
     ModelID.YOLO_V12_N: ModelInfo(
         id=ModelID.YOLO_V12_N,
         filename="yolo12n.onnx",
-        source=DownloadSource(
-            hf_repo_id="webnn/yolo12n",
-            hf_filename="onnx/yolo12n.onnx",
-        ),
+        source=UltralyticsSource(pt_weights="yolo12n.pt"),
     ),
     ModelID.RF_DETR_N: ModelInfo(
         id=ModelID.RF_DETR_N,

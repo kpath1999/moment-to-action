@@ -73,7 +73,20 @@ class TransformersSource:
     hf_repo_id: str
 
 
-type ModelSource = VendoredSource | DownloadSource | TransformersSource
+@attrs.frozen
+class UltralyticsSource:
+    """Ultralytics YOLO model export from PyTorch weights (.pt).
+
+    Automatically downloads weights if needed.
+
+    Attributes:
+        pt_weights: Model identifier for YOLO(), e.g. 'yolo12n.pt'.
+    """
+
+    pt_weights: str
+
+
+type ModelSource = VendoredSource | DownloadSource | TransformersSource | UltralyticsSource
 
 
 @attrs.frozen
