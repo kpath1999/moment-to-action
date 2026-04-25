@@ -106,10 +106,10 @@ class QCS6490ONNXBackend(ONNXBackend):
                         "profiling_file_path": "qnn_profile_gpu.csv",
                     },
                 ),
-                "CPUExecutionProvider",
+                # "CPUExecutionProvider",
             ]
             logger.info(
-                "[QCS6490ONNXBackend] Configured QNNExecutionProvider for GPU with fallback to CPU."
+                "[QCS6490ONNXBackend] Configured QNNExecutionProvider for GPU with no fallback."
             )
         elif self._unit == ComputeUnit.NPU:
             providers = [
@@ -121,10 +121,10 @@ class QCS6490ONNXBackend(ONNXBackend):
                         "profiling_file_path": "qnn_profile_npu.csv",
                     },
                 ),
-                "CPUExecutionProvider",
+                # "CPUExecutionProvider",
             ]
             logger.info(
-                "[QCS6490ONNXBackend] Configured QNNExecutionProvider for NPU with fallback to CPU."
+                "[QCS6490ONNXBackend] Configured QNNExecutionProvider for NPU with no fallback."
             )
         else:
             providers = ["CPUExecutionProvider"]

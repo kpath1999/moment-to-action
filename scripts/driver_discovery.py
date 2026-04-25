@@ -72,7 +72,7 @@ NPU_PROVIDERS = [
             "profiling_file_path": "qnn_profile_npu.csv",
         },
     ),
-    "CPUExecutionProvider",
+    # "CPUExecutionProvider",
 ]
 
 GPU_PROVIDERS = [
@@ -84,7 +84,7 @@ GPU_PROVIDERS = [
             "profiling_file_path": "qnn_profile_gpu.csv",
         },
     ),
-    "CPUExecutionProvider",
+    # "CPUExecutionProvider",
 ]
 
 
