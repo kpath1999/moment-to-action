@@ -66,7 +66,7 @@ def _resolve_paths(fp32_override: str | None) -> tuple[Path, Path, Path]:
         fp32 = Path(fp32_override).resolve()
     else:
         manager = ModelManager()
-        fp32 = Path(manager.get_model_path(ModelID.YOLO_V12_N))  # type: ignore[attr-defined]
+        fp32 = manager.get_path(ModelID.YOLO_V12_N)
 
     fp16 = fp32.with_name(fp32.stem + "_fp16.onnx")
     qdq = fp32.with_name(fp32.stem + "_qdq.onnx")
