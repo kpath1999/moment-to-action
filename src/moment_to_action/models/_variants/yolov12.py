@@ -126,11 +126,16 @@ def get_yolov12_model_for_unit(
     """Return the correct YOLOv12 model path for the given compute unit (cpu/gpu/npu)."""
     from moment_to_action.hardware import ComputeUnit
 
-    fp32, fp16, qdq = resolve_yolov12_paths(manager, fp32_override)
-    if unit is None or unit == ComputeUnit.CPU or str(unit).lower() == "cpu":
+    fp32, _, qdq = resolve_yolov12_paths(manager, fp32_override)
+    # Use FP32 for both CPU and GPU for correct mAP, only NPU uses QDQ INT8
+    if (
+        unit is None
+        or unit == ComputeUnit.CPU
+        or str(unit).lower() == "cpu"
+        or unit == ComputeUnit.GPU
+        or str(unit).lower() == "gpu"
+    ):
         return fp32
-    if unit == ComputeUnit.GPU or str(unit).lower() == "gpu":
-        return ensure_fp16(fp32, fp16)
     if unit == ComputeUnit.NPU or str(unit).lower() == "npu":
         return ensure_qdq(fp32, qdq)
     msg = f"Unknown compute unit: {unit}"
