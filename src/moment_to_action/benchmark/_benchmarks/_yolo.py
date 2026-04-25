@@ -39,11 +39,13 @@ class YOLOBenchmark(ModelBenchmark):
         *,
         coco_dataset: CocoDataset | None = None,
         conf_threshold: float = 0.25,
+        model_path: str | None = None,
     ) -> None:
         super().__init__()
         self._input_shape: tuple[int, ...] = (1, 3, 640, 640)
         self._coco_dataset = coco_dataset
         self._conf_threshold = conf_threshold
+        self._model_path = model_path
 
     @property
     def model_id(self) -> ModelID:
@@ -51,6 +53,8 @@ class YOLOBenchmark(ModelBenchmark):
 
     def _load_model(self, backend: ComputeBackend, manager: ModelManager) -> object:
         self._input_shape = (1, 3, 640, 640)
+        if self._model_path is not None:
+            return backend.load_model(self._model_path)
         return backend.load_model(manager.get_path(ModelID.YOLO_V12_N))
 
     def _make_dummy_input(self, handle: object, batch_size: int = 1) -> object:

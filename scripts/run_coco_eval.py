@@ -18,6 +18,7 @@ from moment_to_action.benchmark import (
 )
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.models import ModelManager
+from moment_to_action.models._variants.yolov12 import get_yolov12_model_for_unit
 
 logger = logging.getLogger(__name__)
 
@@ -88,19 +89,18 @@ def _run_yolo_eval(
     conf_threshold: float,
 ) -> dict[str, float | None]:
     backend = ComputeBackend(preferred_unit=unit)
-    benchmark = YOLOBenchmark(coco_dataset=dataset, conf_threshold=conf_threshold)
+    # Resolve the correct YOLOv12 model path for the compute unit
+    model_path = get_yolov12_model_for_unit(manager, unit=unit)
+    benchmark = YOLOBenchmark(
+        coco_dataset=dataset,
+        conf_threshold=conf_threshold,
+        model_path=str(model_path),
+    )
     profile = benchmark.profile(
         backend=backend,
         manager=manager,
         config=BenchmarkConfig(n_warmup=3, n_runs=10, batch_sizes=[1]),
     )
-
-    """
-    Commands to run:
-    uv run python scripts/run_coco_eval.py --n-images 5000 --model yolo_v12_n --edge-unit cpu
-    uv run python scripts/run_coco_eval.py --n-images 5000 --model yolo_v12_n --edge-unit gpu
-    uv run python scripts/run_coco_eval.py --n-images 5000 --model yolo_v12_n --edge-unit npu
-    """
 
     payload: dict[str, float | None] = {"inference_mean_ms": profile.inference_mean_ms}
     if profile.accuracy_details is not None:
