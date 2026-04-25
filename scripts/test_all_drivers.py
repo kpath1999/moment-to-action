@@ -121,9 +121,15 @@ class _CocoCalibReader(CalibrationDataReader):
         h, w = input_hw
 
         for img_meta in images:
-            # CocoDataset.images() returns dicts with a 'file_name' or 'path' key.
-            # Adjust the key name to match whatever your CocoDataset actually returns.
-            img_path = img_meta.get("file_name") or img_meta.get("path", "")  # type: ignore[attr-defined]
+            if isinstance(img_meta, Path):
+                img_path = img_meta
+            elif isinstance(img_meta, str):
+                img_path = Path(img_meta)
+            elif isinstance(img_meta, dict):
+                img_path = Path(img_meta.get("file_name") or img_meta.get("path", ""))
+            else:
+                continue
+
             img = cv2.imread(str(img_path))
             if img is None:
                 continue
@@ -322,11 +328,15 @@ if __name__ == "__main__":
         CPU_PROVIDERS,
         fp32_model,
     )
-    results["NPU  (QDQ INT8)"] = run_backend(
-        "NPU — QNN HTP / QDQ INT8",
-        NPU_PROVIDERS,
-        qdq_model or "",
-    )
+    if qdq_model is None:
+        print("[npu] SKIPPED: QDQ model generation failed.")
+        results["NPU  (QDQ INT8)"] = None
+    else:
+        results["NPU  (QDQ INT8)"] = run_backend(
+            "NPU — QNN HTP / QDQ INT8",
+            NPU_PROVIDERS,
+            qdq_model,
+        )
     results["GPU  (FP16)"] = run_backend(
         "GPU — QNN Adreno / FP16",
         GPU_PROVIDERS,
