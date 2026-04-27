@@ -152,15 +152,12 @@ def get_yolov12_model_for_unit(
         raise ValueError(msg)
 
     base = Path(__file__).parent.parent / "_vendored" / "yolo"
-    if unit_str in ("cpu", "gpu"):
-        model_path = base / unit_str / "yolov8_det-onnx-w8a8" / "yolov8_det.onnx"
+    if unit_str == "cpu":
+        model_path = base / unit_str / "yolov8_det" / "yolov8n_float32.tflite"
+    elif unit_str == "gpu":
+        model_path = base / unit_str / "yolov8_det" / "yolov8n_float16.tflite"
     elif unit_str == "npu":
-        model_path = (
-            base
-            / unit_str
-            / "yolov8_det-precompiled_qnn_onnx-w8a8-qualcomm_qcs6490"
-            / "yolov8_det.onnx"
-        )
+        model_path = base / unit_str / "yolov8_det" / "yolov8n_w8a8.tflite"
     else:
         msg = f"Unsupported compute unit: {unit_str}"
         raise ValueError(msg)
