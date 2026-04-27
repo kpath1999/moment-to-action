@@ -146,6 +146,8 @@ class YOLOStage(Stage):
         shape = details[0]["shape"]
         self._nhwc: bool = len(shape) == 4 and int(shape[-1]) == 3 and int(shape[1]) != 3  # noqa: PLR2004
 
+        logger.info("YOLOStage: detected model input shape: %s, nhwc=%s", shape, self._nhwc)
+
         logger.info("YOLOStage: loaded %s (nhwc=%s)", model_path.name, self._nhwc)
 
     @property
@@ -164,6 +166,8 @@ class YOLOStage(Stage):
         if self._nhwc:
             # TFLite model expects NHWC — transpose [1, C, H, W] → [1, H, W, C]
             tensor = np.transpose(tensor, (0, 2, 3, 1))
+
+        logger.debug("YOLOStage: input tensor shape before backend.run: %s", tensor.shape)
 
         with metrics.start_span(SpanType.MODEL_INFERENCE, "YOLO inference"):
             outputs = self._backend.run(self._handle, tensor)
