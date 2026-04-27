@@ -121,22 +121,51 @@ def ensure_qdq(fp32: Path, qdq: Path) -> Path:
 
 
 def get_yolov12_model_for_unit(
-    manager: ModelManager, unit: str | None = None, fp32_override: str | None = None
+    # manager: ModelManager,
+    unit: str | None = None,
+    fp32_override: str | None = None,  # noqa: ARG001
 ) -> Path:
-    """Return the correct YOLOv12 model path for the given compute unit (cpu/gpu/npu)."""
+    """Return the YOLOv8 ONNX model path for the given compute unit.
+
+    Loads from models/_vendored/yolo/{unit}/yolov8_det-onnx-w8a8/yolov8_det.onnx.
+    manager and fp32_override are unused, but kept for API compatibility.
+    """
     from moment_to_action.hardware import ComputeUnit
 
-    fp32, _, qdq = resolve_yolov12_paths(manager, fp32_override)
-    # Use FP32 for both CPU and GPU for correct mAP, only NPU uses QDQ INT8
-    if (
-        unit is None
-        or unit == ComputeUnit.CPU
+    if unit is None:
+        unit_str = "npu"
+    elif (
+        unit == ComputeUnit.CPU
         or str(unit).lower() == "cpu"
         or unit == ComputeUnit.GPU
         or str(unit).lower() == "gpu"
     ):
-        return fp32
-    if unit == ComputeUnit.NPU or str(unit).lower() == "npu":
-        return ensure_qdq(fp32, qdq)
-    msg = f"Unknown compute unit: {unit}"
-    raise ValueError(msg)
+        unit_str = (
+            str(unit).lower()
+            if isinstance(unit, str)
+            else ("cpu" if unit == ComputeUnit.CPU else "gpu")
+        )
+    elif unit == ComputeUnit.NPU or str(unit).lower() == "npu":
+        unit_str = "npu"
+    else:
+        msg = f"Unknown compute unit: {unit}"
+        raise ValueError(msg)
+
+    base = Path(__file__).parent.parent / "_vendored" / "yolo"
+    if unit_str in ("cpu", "gpu"):
+        model_path = base / unit_str / "yolov8_det-onnx-w8a8" / "yolov8_det.onnx"
+    elif unit_str == "npu":
+        model_path = (
+            base
+            / unit_str
+            / "yolov8_det-precompiled_qnn_onnx-w8a8-qualcomm_qcs6490"
+            / "yolov8_det.onnx"
+        )
+    else:
+        msg = f"Unsupported compute unit: {unit_str}"
+        raise ValueError(msg)
+
+    if not model_path.exists():
+        err_msg = f"YOLOv8 model not found at {model_path}"
+        raise FileNotFoundError(err_msg)
+    return model_path.resolve()

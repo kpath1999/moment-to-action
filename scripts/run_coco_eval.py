@@ -90,7 +90,7 @@ def _run_yolo_eval(
 ) -> dict[str, float | None]:
     backend = ComputeBackend(preferred_unit=unit)
     # Resolve the correct YOLOv12 model path for the compute unit
-    model_path = get_yolov12_model_for_unit(manager, unit=unit)
+    model_path = get_yolov12_model_for_unit(unit=unit)
     benchmark = YOLOBenchmark(
         coco_dataset=dataset,
         conf_threshold=conf_threshold,
