@@ -25,6 +25,7 @@ _IOU_RECALL_THRESHOLD = 0.5
 _BBOX_COORDS = 4
 _INPUT_NDIM = 4
 _CHANNEL_AXIS = 1
+_NHWC_CHANNEL_AXIS = 3
 _RGB_CHANNELS = 3
 _OUTPUT_NDIM = 3
 _MATRIX_NDIM = 2
@@ -42,24 +43,31 @@ class YOLOBenchmark(ModelBenchmark):
         model_path: str | None = None,
     ) -> None:
         super().__init__()
-        self._input_shape: tuple[int, ...] = (1, 3, 640, 640)
         self._coco_dataset = coco_dataset
         self._conf_threshold = conf_threshold
         self._model_path = model_path
+        self._is_tflite = model_path is not None and str(model_path).endswith(".tflite")
+        # Default input shape; will be set in _load_model
+        self._input_shape: tuple[int, ...] = (1, 3, 640, 640)
 
     @property
     def model_id(self) -> ModelID:
         return ModelID.YOLO_V12_N
 
     def _load_model(self, backend: ComputeBackend, manager: ModelManager) -> object:
-        self._input_shape = (1, 3, 640, 640)
-        if self._model_path is not None:
-            return backend.load_model(self._model_path)
-        return backend.load_model(manager.get_path(ModelID.YOLO_V12_N))
+        # Detect TFLite by file extension
+        model_path = self._model_path or manager.get_path(ModelID.YOLO_V12_N)
+        self._is_tflite = str(model_path).endswith(".tflite")
+        if self._is_tflite:
+            self._input_shape = (1, 640, 640, 3)  # NHWC
+        else:
+            self._input_shape = (1, 3, 640, 640)  # NCHW
+        return backend.load_model(model_path)
 
     def _make_dummy_input(self, handle: object, batch_size: int = 1) -> object:
         del handle
-        shape = (batch_size, *self._input_shape[1:])
+        # Use NHWC for TFLite, NCHW for ONNX
+        shape = (batch_size, 640, 640, 3) if self._is_tflite else (batch_size, 3, 640, 640)
         return np.zeros(shape, dtype=np.float32)
 
     def _run_inference(self, handle: object, inputs: object, backend: ComputeBackend) -> None:
@@ -162,20 +170,22 @@ def _load_yolo_tensor(
     input_shape: tuple[int, ...],
 ) -> np.ndarray:
     """Load a PIL image and convert to a float32 tensor matching input_shape."""
+    # Detect NHWC vs NCHW by input_shape
     if len(input_shape) == _INPUT_NDIM and input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS:
         _, _, height, width = input_shape
-        nchw = True
-    else:
-        _, height, width, _ = input_shape
-        nchw = False
-
-    image = Image.open(img_path).convert("RGB").resize((width, height), Image.Resampling.BILINEAR)
-    arr = np.asarray(image, dtype=np.float32) / 255.0
-
-    if nchw:
+        image = Image.open(img_path).convert("RGB")
+        image = image.resize((width, height), Image.Resampling.BILINEAR)
+        arr = np.asarray(image, dtype=np.float32) / 255.0
         arr = arr.transpose(2, 0, 1)
-
-    return arr[np.newaxis]
+        return arr[np.newaxis]
+    if len(input_shape) == _INPUT_NDIM and input_shape[_NHWC_CHANNEL_AXIS] == _RGB_CHANNELS:
+        _, height, width, _ = input_shape
+        image = Image.open(img_path).convert("RGB")
+        image = image.resize((width, height), Image.Resampling.BILINEAR)
+        arr = np.asarray(image, dtype=np.float32) / 255.0
+        return arr[np.newaxis]
+    msg = f"Unsupported input shape for YOLO tensor: {input_shape}"
+    raise ValueError(msg)
 
 
 def _letterbox_resize(
