@@ -107,6 +107,24 @@ class YOLOBenchmark(ModelBenchmark):
         with Image.open(img_path) as _pil:
             orig_w, orig_h = _pil.size
 
+        # Always scale for TFLite/ONNX models (self._is_tflite is set for TFLite)
+        def clamp01(x: float) -> float:
+            return max(0.0, min(1.0, x))
+
+        if self._is_tflite:
+            return [
+                OracleBox(
+                    x1=clamp01(b.x1) * orig_w,
+                    y1=clamp01(b.y1) * orig_h,
+                    x2=clamp01(b.x2) * orig_w,
+                    y2=clamp01(b.y2) * orig_h,
+                    label=b.label,
+                    confidence=b.confidence,
+                )
+                for b in yolo_boxes
+            ]
+
+        # Fallback: original logic for ONNX or other models
         def is_normalized(box: OracleBox) -> bool:
             return (
                 0.0 <= box.x1 <= 1.0
