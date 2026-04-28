@@ -453,6 +453,8 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
     boxes_xywh = arr[:, :_BBOX_COORDS]
     class_scores = arr[:, _BBOX_COORDS:]
+    # Apply sigmoid activation to class scores for TFLite/ONNX outputs
+    class_scores = 1 / (1 + np.exp(-class_scores))
     confidences = class_scores.max(axis=1)
 
     mask = confidences >= conf_threshold
