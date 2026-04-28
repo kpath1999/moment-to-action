@@ -46,10 +46,16 @@ class YOLOBenchmark(ModelBenchmark):
         yolo_boxes: list[OracleBox],
         pre_nms_count: int | None,
         post_nms_count: int,
+        img_path: Path | None = None,
     ) -> None:
         if idx >= _GPU_DEBUG_LOG_IMAGES:
             return
-        # Raw output
+        self._log_gpu_raw_output(raw_outputs)
+        self._log_gpu_box_counts(gt_det, pre_nms_count, post_nms_count)
+        self._log_gpu_pred_boxes(yolo_boxes, img_path)
+        self._log_gpu_gt_boxes(gt_det)
+
+    def _log_gpu_raw_output(self, raw_outputs: object) -> None:
         if isinstance(raw_outputs, (list, tuple)):
             arr = raw_outputs[0]
         elif isinstance(raw_outputs, dict):
@@ -65,16 +71,27 @@ class YOLOBenchmark(ModelBenchmark):
                 arr.max(),
             )
             logger.info("[GPU DEBUG] Raw output sample: %s", arr.flatten()[:10])
-        # Box counts
+
+    def _log_gpu_box_counts(
+        self,
+        gt_det: OracleDetection,
+        pre_nms_count: int | None,
+        post_nms_count: int,
+    ) -> None:
         logger.info("[GPU DEBUG] Image: %s", gt_det.image_name)
         logger.info("[GPU DEBUG] Pre-NMS candidate boxes: %s", pre_nms_count)
         logger.info("[GPU DEBUG] Post-NMS boxes: %s", post_nms_count)
-        # Predicted boxes
+
+    def _log_gpu_pred_boxes(
+        self,
+        yolo_boxes: list[OracleBox],
+        img_path: Path | None = None,
+    ) -> None:
         if yolo_boxes:
             for i, b in enumerate(yolo_boxes[:_GPU_DEBUG_LOG_IMAGES]):
                 logger.info(
-                    "[GPU DEBUG] Pred box %d: x1=%.1f, y1=%.1f, x2=%.1f, "
-                    "y2=%.1f, label=%s, conf=%.3f",
+                    "[GPU DEBUG] Pred box (normalized) %d: x1=%.3f, y1=%.3f, x2=%.3f, "
+                    "y2=%.3f, label=%s, conf=%.3f",
                     i,
                     b.x1,
                     b.y1,
@@ -83,9 +100,28 @@ class YOLOBenchmark(ModelBenchmark):
                     b.label,
                     b.confidence,
                 )
+            if img_path is not None:
+                try:
+                    with Image.open(img_path) as _pil:
+                        orig_w, orig_h = _pil.size
+                    for i, b in enumerate(yolo_boxes[:_GPU_DEBUG_LOG_IMAGES]):
+                        logger.info(
+                            "[GPU DEBUG] Pred box (pixels) %d: x1=%.1f, y1=%.1f, x2=%.1f, "
+                            "y2=%.1f, label=%s, conf=%.3f",
+                            i,
+                            b.x1 * orig_w,
+                            b.y1 * orig_h,
+                            b.x2 * orig_w,
+                            b.y2 * orig_h,
+                            b.label,
+                            b.confidence,
+                        )
+                except (OSError, ValueError) as e:
+                    logger.warning("[GPU DEBUG] Could not log pixel boxes: %r", e)
         else:
             logger.info("[GPU DEBUG] No predicted boxes after NMS/threshold.")
-        # Ground truth boxes
+
+    def _log_gpu_gt_boxes(self, gt_det: OracleDetection) -> None:
         for i, b in enumerate(gt_det.boxes[:_GPU_DEBUG_LOG_IMAGES]):
             logger.info(
                 "[GPU DEBUG] GT box %d: x1=%.1f, y1=%.1f, x2=%.1f, y2=%.1f, label=%s",
@@ -256,6 +292,7 @@ class YOLOBenchmark(ModelBenchmark):
                 yolo_boxes,
                 pre_nms_count,
                 post_nms_count,
+                img_path=img_path,
             )
             scaled_boxes = self._scale_predicted_boxes(yolo_boxes, img_path)
             predictions.append(OracleDetection(image_name=gt_det.image_name, boxes=scaled_boxes))
