@@ -234,10 +234,18 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         mean: tuple,
         std: tuple,
     ) -> ProcessedFrame:
-        """Normalize pixel values with mean/std. Scale [0,255]→[0,1] first."""
+        """Normalize pixel values with mean/std. Scale to [0,1]."""
         data = frame.data.copy()
+        # Only scale to [0,1] for YOLO (mean=(0,0,0), std=(1,1,1)), skip further normalization
+        if mean == (0.0, 0.0, 0.0) and std == (1.0, 1.0, 1.0):
+            if data.max() > 1.0:
+                data = data / 255.0
+            return ProcessedFrame(
+                data=data, original_size=frame.original_size, timestamp=frame.timestamp
+            )
+        # Otherwise, apply mean/std normalization (e.g., for ImageNet models)
         if data.max() > 1.0:
-            data /= 255.0
+            data = data / 255.0
         mean_arr = np.array(mean, dtype=np.float32)
         std_arr = np.array(std, dtype=np.float32)
         data = (data - mean_arr) / std_arr

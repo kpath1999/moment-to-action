@@ -33,6 +33,7 @@ _YOLO_FEATURE_DIM = 84
 
 
 class YOLOBenchmark(ModelBenchmark):
+    _input_dtype: type[np.generic]
     """Benchmark implementation for YOLOv12-n ONNX."""
 
     def __init__(
@@ -58,9 +59,15 @@ class YOLOBenchmark(ModelBenchmark):
         # Detect TFLite by file extension
         model_path = self._model_path or manager.get_path(ModelID.YOLO_V12_N)
         self._is_tflite = str(model_path).endswith(".tflite")
+        # INT8 models (QNN delegate) expect uint8 input, float32 for FP32/FP16
         if self._is_tflite:
+            if "w8a8" in str(model_path) or "int8" in str(model_path):
+                self._input_dtype = np.uint8
+            else:
+                self._input_dtype = np.float32
             self._input_shape = (1, 640, 640, 3)  # NHWC
         else:
+            self._input_dtype = np.float32
             self._input_shape = (1, 3, 640, 640)  # NCHW
         return backend.load_model(model_path)
 
@@ -68,7 +75,8 @@ class YOLOBenchmark(ModelBenchmark):
         del handle
         # Use NHWC for TFLite, NCHW for ONNX
         shape = (batch_size, 640, 640, 3) if self._is_tflite else (batch_size, 3, 640, 640)
-        return np.zeros(shape, dtype=np.float32)
+        dtype = getattr(self, "_input_dtype", np.float32)
+        return np.zeros(shape, dtype=dtype)
 
     def _run_inference(self, handle: object, inputs: object, backend: ComputeBackend) -> None:
         if not isinstance(inputs, np.ndarray):
@@ -171,18 +179,23 @@ def _load_yolo_tensor(
 ) -> np.ndarray:
     """Load a PIL image and convert to a float32 tensor matching input_shape."""
     # Detect NHWC vs NCHW by input_shape
-    if len(input_shape) == _INPUT_NDIM and input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS:
+    # INT8 TFLite expects uint8 [0,255], float models expect float32 [0,1]
+    is_nhwc = len(input_shape) == _INPUT_NDIM and input_shape[_NHWC_CHANNEL_AXIS] == _RGB_CHANNELS
+    is_nchw = len(input_shape) == _INPUT_NDIM and input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS
+    if is_nchw:
         _, _, height, width = input_shape
         image = Image.open(img_path).convert("RGB")
         image = image.resize((width, height), Image.Resampling.BILINEAR)
         arr = np.asarray(image, dtype=np.float32) / 255.0
         arr = arr.transpose(2, 0, 1)
         return arr[np.newaxis]
-    if len(input_shape) == _INPUT_NDIM and input_shape[_NHWC_CHANNEL_AXIS] == _RGB_CHANNELS:
+    if is_nhwc:
         _, height, width, _ = input_shape
         image = Image.open(img_path).convert("RGB")
         image = image.resize((width, height), Image.Resampling.BILINEAR)
-        arr = np.asarray(image, dtype=np.float32) / 255.0
+        arr = np.asarray(image, dtype=np.float32)
+        # Always return float32 in [0,1] here; let the caller cast to uint8 if needed
+        arr = arr / 255.0
         return arr[np.newaxis]
     msg = f"Unsupported input shape for YOLO tensor: {input_shape}"
     raise ValueError(msg)
