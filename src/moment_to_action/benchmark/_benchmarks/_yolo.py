@@ -38,6 +38,117 @@ _NMS_DIM_3 = 3
 
 
 class YOLOBenchmark(ModelBenchmark):
+    def _predict_image(
+        self,
+        img_path: Path,
+        gt_det: OracleDetection,
+        handle: object,
+        backend: ComputeBackend,
+    ) -> OracleDetection:
+        """Run prediction and post-processing for a single image."""
+        img_tensor = _load_yolo_tensor(
+            img_path,
+            self._input_shape,
+            getattr(self, "_input_quant", None),
+        )
+        raw_outputs = backend.run(handle, img_tensor)
+        # Dequantize outputs if needed (NPU quantized model)
+        output_quant = getattr(self, "_output_quant", None)
+        if output_quant is not None and isinstance(raw_outputs, (list, tuple)):
+            from typing import Any
+
+            deq_outputs: list[Any] = []
+            for i, out in enumerate(raw_outputs):
+                if isinstance(out, np.ndarray) and out.dtype == output_quant["dtype"]:
+                    deq = (out.astype(np.float32) - output_quant["zero_point"]) * output_quant[
+                        "scale"
+                    ]
+                    logger.info(
+                        "[YOLO NPU] Dequantized output[%d]: min=%.6f, max=%.6f, shape=%s",
+                        i,
+                        deq.min(),
+                        deq.max(),
+                        deq.shape,
+                    )
+                    deq_outputs.append(deq)
+                else:
+                    deq_outputs.append(out)
+            raw_outputs = tuple(deq_outputs)  # type: ignore[assignment]
+        elif (
+            output_quant is not None
+            and isinstance(raw_outputs, np.ndarray)
+            and raw_outputs.dtype == output_quant["dtype"]
+        ):
+            raw_outputs = (
+                raw_outputs.astype(np.float32) - output_quant["zero_point"]
+            ) * output_quant["scale"]
+            logger.info(
+                "[YOLO NPU] Dequantized output: min=%.6f, max=%.6f, shape=%s",
+                raw_outputs.min(),
+                raw_outputs.max(),
+                raw_outputs.shape,
+            )
+        # Pre-thresholding: count number of raw candidate boxes (if possible)
+        pre_nms_count = None
+        if (
+            isinstance(raw_outputs, (list, tuple))
+            and len(raw_outputs) > 0
+            and isinstance(raw_outputs[0], np.ndarray)
+        ):
+            arr = raw_outputs[0]
+            if arr.ndim == _NMS_DIM_3 and arr.shape[0] == 1:
+                arr = arr[0]
+            if arr.ndim == _NMS_DIM_2:
+                pre_nms_count = arr.shape[0]
+        yolo_boxes = _parse_yolo_boxes(
+            raw_outputs,
+            self._input_shape,
+            conf_threshold=self._conf_threshold,
+            class_labels=YOLOStage.COCO_LABELS,
+        )
+        post_nms_count = len(yolo_boxes)
+        # Ensure idx is int for _log_gpu_debug
+        idx = 0
+        if hasattr(gt_det, "image_name"):
+            try:
+                idx = int(gt_det.image_name.split(".")[0])
+            except (ValueError, AttributeError, TypeError):
+                idx = 0
+
+        self._log_gpu_debug(
+            idx,
+            raw_outputs,
+            gt_det,
+            yolo_boxes,
+            pre_nms_count,
+            post_nms_count,
+            img_path=img_path,
+        )
+        scaled_boxes = self._scale_predicted_boxes(yolo_boxes, img_path)
+        return OracleDetection(image_name=gt_det.image_name, boxes=scaled_boxes)
+
+    def _get_output_quant(self, model_path: str) -> dict | None:
+        """Read output quantization info from TFLite model if quantized."""
+        try:
+            import tflite_runtime.interpreter as tflite
+        except ImportError:
+            import tensorflow.lite as tflite
+        interpreter = tflite.Interpreter(model_path=str(model_path))
+        interpreter.allocate_tensors()
+        output_details = interpreter.get_output_details()[0]
+        scale = output_details.get("quantization", (1.0, 0))[0]
+        zero_point = output_details.get("quantization", (1.0, 0))[1]
+        dtype = output_details.get("dtype", None)
+        logger.info(
+            "[YOLO NPU] Output quantization: scale=%.6f, zero_point=%d, dtype=%s",
+            scale,
+            zero_point,
+            dtype,
+        )
+        if dtype is not None and dtype is not float:
+            return {"scale": scale, "zero_point": zero_point, "dtype": dtype}
+        return None
+
     def _log_gpu_debug(
         self,
         idx: int,
@@ -211,6 +322,7 @@ class YOLOBenchmark(ModelBenchmark):
         self._is_tflite = str(model_path).endswith(".tflite")
         self._input_quant = None
         # INT8 models (QNN delegate) expect uint8 input, float32 for FP32/FP16
+        self._output_quant = None
         if self._is_tflite:
             if "w8a8" in str(model_path) or "int8" in str(model_path):
                 self._input_dtype = np.uint8
@@ -232,14 +344,18 @@ class YOLOBenchmark(ModelBenchmark):
                     zero_point,
                     dtype,
                 )
+                # Output quantization
+                self._output_quant = self._get_output_quant(str(model_path))
             else:
                 self._input_dtype = np.float32
                 self._input_quant = None
+                self._output_quant = None
             self._input_shape = (1, 640, 640, 3)  # NHWC
         else:
             self._input_dtype = np.float32
             self._input_shape = (1, 3, 640, 640)  # NCHW
             self._input_quant = None
+            self._output_quant = None
         logger.info(
             "[YOLO NPU] Model input dtype: %s, shape: %s",
             self._input_dtype,
@@ -284,48 +400,12 @@ class YOLOBenchmark(ModelBenchmark):
 
         image_map = {path.name: path for path in dataset.images()}
         predictions = []
-        for _idx, gt_det in enumerate(gt_detections):
+        for gt_det in gt_detections:
             img_path = image_map.get(gt_det.image_name)
             if img_path is None:
                 continue
-
-            img_tensor = _load_yolo_tensor(
-                img_path,
-                self._input_shape,
-                getattr(self, "_input_quant", None),
-            )
-            raw_outputs = backend.run(handle, img_tensor)
-
-            # Pre-thresholding: count number of raw candidate boxes (if possible)
-            pre_nms_count = None
-            if (
-                isinstance(raw_outputs, (list, tuple))
-                and len(raw_outputs) > 0
-                and isinstance(raw_outputs[0], np.ndarray)
-            ):
-                arr = raw_outputs[0]
-                if arr.ndim == _NMS_DIM_3 and arr.shape[0] == 1:
-                    arr = arr[0]
-                if arr.ndim == _NMS_DIM_2:
-                    pre_nms_count = arr.shape[0]
-            yolo_boxes = _parse_yolo_boxes(
-                raw_outputs,
-                self._input_shape,
-                conf_threshold=self._conf_threshold,
-                class_labels=YOLOStage.COCO_LABELS,
-            )
-            post_nms_count = len(yolo_boxes)
-            self._log_gpu_debug(
-                _idx,
-                raw_outputs,
-                gt_det,
-                yolo_boxes,
-                pre_nms_count,
-                post_nms_count,
-                img_path=img_path,
-            )
-            scaled_boxes = self._scale_predicted_boxes(yolo_boxes, img_path)
-            predictions.append(OracleDetection(image_name=gt_det.image_name, boxes=scaled_boxes))
+            pred = self._predict_image(img_path, gt_det, handle, backend)
+            predictions.append(pred)
 
         if not predictions:
             return None
