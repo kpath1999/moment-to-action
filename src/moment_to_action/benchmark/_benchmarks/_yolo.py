@@ -372,7 +372,7 @@ def _build_oracle_boxes(
     return results
 
 
-def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912
+def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912, PLR0915
     raw_outputs: object,
     input_shape: tuple[int, ...],
     conf_threshold: float = 0.25,
@@ -387,6 +387,9 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912
     * **1-tensor combined** ``(1, 84, N)`` — cx/cy/w/h + 80 class scores.
       Produced by the standard Ultralytics TFLite export.
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
     if len(input_shape) == _INPUT_NDIM and input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS:
         _, _, img_h, img_w = input_shape
     else:
@@ -406,10 +409,17 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912
 
             mask = scores >= conf_threshold
             boxes_xyxy, scores, class_ids = boxes_xyxy[mask], scores[mask], class_ids[mask]
+            logger.info(
+                "[YOLO PARSE] 3-tensor: candidate boxes before mask: %d, after mask: %d",
+                len(boxes_arr[0]),
+                len(boxes_xyxy),
+            )
             if len(boxes_xyxy) == 0:
+                logger.info("[YOLO PARSE] No boxes after confidence threshold.")
                 return []
 
             keep = _nms_numpy(boxes_xyxy, scores)
+            logger.info("[YOLO PARSE] 3-tensor: boxes after NMS: %d", len(keep))
             return _build_oracle_boxes(
                 boxes_xyxy[keep], scores[keep], class_ids[keep], img_w, img_h, class_labels
             )
@@ -423,17 +433,22 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912
         arr = raw_outputs
 
     if not isinstance(arr, np.ndarray):
+        logger.warning("[YOLO PARSE] Output is not ndarray: %r", type(arr))
         return []
 
     if arr.ndim == _OUTPUT_NDIM and arr.shape[0] == 1:
         arr = arr[0]
-
-    if arr.ndim != _MATRIX_NDIM:
+    if arr.shape[0] == _YOLO_FEATURE_DIM and arr.shape[1] != _YOLO_FEATURE_DIM:
+        arr = arr.T
+        logger.info("[YOLO PARSE] Transposed output to (N, 84): %s", arr.shape)
+    elif arr.shape[1] == _YOLO_FEATURE_DIM and arr.shape[0] != _YOLO_FEATURE_DIM:
+        logger.info("[YOLO PARSE] Output already (N, 84): %s", arr.shape)
+    else:
+        logger.warning("[YOLO PARSE] Unexpected output shape: %s", arr.shape)
         return []
 
-    if arr.shape[0] == _YOLO_FEATURE_DIM:
-        arr = arr.T
     if arr.shape[0] == 0 or arr.shape[1] <= _BBOX_COORDS:
+        logger.info("[YOLO PARSE] No candidate boxes after shape check.")
         return []
 
     boxes_xywh = arr[:, :_BBOX_COORDS]
@@ -441,11 +456,17 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912
     confidences = class_scores.max(axis=1)
 
     mask = confidences >= conf_threshold
+    logger.info(
+        "[YOLO PARSE] Combined: candidate boxes before mask: %d, after mask: %d",
+        arr.shape[0],
+        np.count_nonzero(mask),
+    )
     boxes_xywh = boxes_xywh[mask]
     confidences = confidences[mask]
     class_ids_raw: np.ndarray = class_scores[mask].argmax(axis=1)
 
     if len(boxes_xywh) == 0:
+        logger.info("[YOLO PARSE] No boxes after confidence threshold.")
         return []
 
     x1s = boxes_xywh[:, 0] - boxes_xywh[:, 2] / 2
@@ -455,6 +476,7 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912
     boxes_xyxy_raw = np.stack([x1s, y1s, x2s, y2s], axis=1)
 
     keep = _nms_numpy(boxes_xyxy_raw, confidences)
+    logger.info("[YOLO PARSE] Combined: boxes after NMS: %d", len(keep))
     return _build_oracle_boxes(
         boxes_xyxy_raw[keep], confidences[keep], class_ids_raw[keep], img_w, img_h, class_labels
     )
