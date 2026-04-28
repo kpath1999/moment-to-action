@@ -108,50 +108,57 @@ class YOLOBenchmark(ModelBenchmark):
 
         image_map = {path.name: path for path in dataset.images()}
         predictions = []
-        for gt_det in gt_detections:
+        for _idx, gt_det in enumerate(gt_detections):
             img_path = image_map.get(gt_det.image_name)
             if img_path is None:
                 continue
 
             img_tensor = _load_yolo_tensor(img_path, self._input_shape)
             raw_outputs = backend.run(handle, img_tensor)
+            # ...existing code...
+
             yolo_boxes = _parse_yolo_boxes(
                 raw_outputs,
                 self._input_shape,
                 conf_threshold=self._conf_threshold,
                 class_labels=YOLOStage.COCO_LABELS,
             )
+            # ...existing code...
             # Scale boxes from model input space (e.g. 640x640) to original image space
             # so they align with COCO ground-truth coordinates.
             if yolo_boxes:
                 with Image.open(img_path) as _pil:
                     orig_w, orig_h = _pil.size
-                model_h = (
-                    self._input_shape[2]
-                    if self._input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS
-                    else self._input_shape[1]
-                )
-                model_w = (
-                    self._input_shape[3]
-                    if self._input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS
-                    else self._input_shape[2]
-                )
-                sx = orig_w / model_w
-                sy = orig_h / model_h
-                scaled_boxes = [
-                    OracleBox(
-                        x1=b.x1 * sx,
-                        y1=b.y1 * sy,
-                        x2=b.x2 * sx,
-                        y2=b.y2 * sy,
-                        label=b.label,
-                        confidence=b.confidence,
+
+                # Check if boxes are in [0,1] (normalized), and scale to pixel coordinates if so
+                def is_normalized(box: OracleBox) -> bool:
+                    return (
+                        0.0 <= box.x1 <= 1.0
+                        and 0.0 <= box.y1 <= 1.0
+                        and 0.0 <= box.x2 <= 1.0
+                        and 0.0 <= box.y2 <= 1.0
                     )
-                    for b in yolo_boxes
-                ]
+
+                if all(is_normalized(b) for b in yolo_boxes):
+                    scaled_boxes = [
+                        OracleBox(
+                            x1=b.x1 * orig_w,
+                            y1=b.y1 * orig_h,
+                            x2=b.x2 * orig_w,
+                            y2=b.y2 * orig_h,
+                            label=b.label,
+                            confidence=b.confidence,
+                        )
+                        for b in yolo_boxes
+                    ]
+                else:
+                    scaled_boxes = yolo_boxes
             else:
                 scaled_boxes = []
+            # ...existing code...
             predictions.append(OracleDetection(image_name=gt_det.image_name, boxes=scaled_boxes))
+
+        # ...existing code...
 
         if not predictions:
             return None
