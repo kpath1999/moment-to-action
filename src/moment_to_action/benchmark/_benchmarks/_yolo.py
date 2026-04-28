@@ -31,8 +31,104 @@ _OUTPUT_NDIM = 3
 _MATRIX_NDIM = 2
 _YOLO_FEATURE_DIM = 84
 
+# Debug/branch constants
+_GPU_DEBUG_LOG_IMAGES = 3
+_NMS_DIM_2 = 2
+_NMS_DIM_3 = 3
+
 
 class YOLOBenchmark(ModelBenchmark):
+    def _log_gpu_debug(
+        self,
+        idx: int,
+        raw_outputs: object,
+        gt_det: OracleDetection,
+        yolo_boxes: list[OracleBox],
+        pre_nms_count: int | None,
+        post_nms_count: int,
+    ) -> None:
+        if idx >= _GPU_DEBUG_LOG_IMAGES:
+            return
+        # Raw output
+        if isinstance(raw_outputs, (list, tuple)):
+            arr = raw_outputs[0]
+        elif isinstance(raw_outputs, dict):
+            arr = next(iter(raw_outputs.values()))
+        else:
+            arr = raw_outputs
+        if isinstance(arr, np.ndarray):
+            logger.info(
+                "[GPU DEBUG] Raw output shape: %s, dtype: %s, min: %s, max: %s",
+                arr.shape,
+                arr.dtype,
+                arr.min(),
+                arr.max(),
+            )
+            logger.info("[GPU DEBUG] Raw output sample: %s", arr.flatten()[:10])
+        # Box counts
+        logger.info("[GPU DEBUG] Image: %s", gt_det.image_name)
+        logger.info("[GPU DEBUG] Pre-NMS candidate boxes: %s", pre_nms_count)
+        logger.info("[GPU DEBUG] Post-NMS boxes: %s", post_nms_count)
+        # Predicted boxes
+        if yolo_boxes:
+            for i, b in enumerate(yolo_boxes[:_GPU_DEBUG_LOG_IMAGES]):
+                logger.info(
+                    "[GPU DEBUG] Pred box %d: x1=%.1f, y1=%.1f, x2=%.1f, "
+                    "y2=%.1f, label=%s, conf=%.3f",
+                    i,
+                    b.x1,
+                    b.y1,
+                    b.x2,
+                    b.y2,
+                    b.label,
+                    b.confidence,
+                )
+        else:
+            logger.info("[GPU DEBUG] No predicted boxes after NMS/threshold.")
+        # Ground truth boxes
+        for i, b in enumerate(gt_det.boxes[:_GPU_DEBUG_LOG_IMAGES]):
+            logger.info(
+                "[GPU DEBUG] GT box %d: x1=%.1f, y1=%.1f, x2=%.1f, y2=%.1f, label=%s",
+                i,
+                b.x1,
+                b.y1,
+                b.x2,
+                b.y2,
+                b.label,
+            )
+
+    def _scale_predicted_boxes(
+        self,
+        yolo_boxes: list[OracleBox],
+        img_path: Path,
+    ) -> list[OracleBox]:
+        if not yolo_boxes:
+            return []
+        with Image.open(img_path) as _pil:
+            orig_w, orig_h = _pil.size
+
+        def is_normalized(box: OracleBox) -> bool:
+            return (
+                0.0 <= box.x1 <= 1.0
+                and 0.0 <= box.y1 <= 1.0
+                and 0.0 <= box.x2 <= 1.0
+                and 0.0 <= box.y2 <= 1.0
+            )
+
+        if all(is_normalized(b) for b in yolo_boxes):
+            return [
+                OracleBox(
+                    x1=b.x1 * orig_w,
+                    y1=b.y1 * orig_h,
+                    x2=b.x2 * orig_w,
+                    y2=b.y2 * orig_h,
+                    label=b.label,
+                    confidence=b.confidence,
+                )
+                for b in yolo_boxes
+            ]
+        return yolo_boxes
+
     _input_dtype: type[np.generic]
     """Benchmark implementation for YOLOv12-n ONNX."""
 
@@ -115,50 +211,36 @@ class YOLOBenchmark(ModelBenchmark):
 
             img_tensor = _load_yolo_tensor(img_path, self._input_shape)
             raw_outputs = backend.run(handle, img_tensor)
-            # ...existing code...
 
+            # Pre-thresholding: count number of raw candidate boxes (if possible)
+            pre_nms_count = None
+            if (
+                isinstance(raw_outputs, (list, tuple))
+                and len(raw_outputs) > 0
+                and isinstance(raw_outputs[0], np.ndarray)
+            ):
+                arr = raw_outputs[0]
+                if arr.ndim == _NMS_DIM_3 and arr.shape[0] == 1:
+                    arr = arr[0]
+                if arr.ndim == _NMS_DIM_2:
+                    pre_nms_count = arr.shape[0]
             yolo_boxes = _parse_yolo_boxes(
                 raw_outputs,
                 self._input_shape,
                 conf_threshold=self._conf_threshold,
                 class_labels=YOLOStage.COCO_LABELS,
             )
-            # ...existing code...
-            # Scale boxes from model input space (e.g. 640x640) to original image space
-            # so they align with COCO ground-truth coordinates.
-            if yolo_boxes:
-                with Image.open(img_path) as _pil:
-                    orig_w, orig_h = _pil.size
-
-                # Check if boxes are in [0,1] (normalized), and scale to pixel coordinates if so
-                def is_normalized(box: OracleBox) -> bool:
-                    return (
-                        0.0 <= box.x1 <= 1.0
-                        and 0.0 <= box.y1 <= 1.0
-                        and 0.0 <= box.x2 <= 1.0
-                        and 0.0 <= box.y2 <= 1.0
-                    )
-
-                if all(is_normalized(b) for b in yolo_boxes):
-                    scaled_boxes = [
-                        OracleBox(
-                            x1=b.x1 * orig_w,
-                            y1=b.y1 * orig_h,
-                            x2=b.x2 * orig_w,
-                            y2=b.y2 * orig_h,
-                            label=b.label,
-                            confidence=b.confidence,
-                        )
-                        for b in yolo_boxes
-                    ]
-                else:
-                    scaled_boxes = yolo_boxes
-            else:
-                scaled_boxes = []
-            # ...existing code...
+            post_nms_count = len(yolo_boxes)
+            self._log_gpu_debug(
+                _idx,
+                raw_outputs,
+                gt_det,
+                yolo_boxes,
+                pre_nms_count,
+                post_nms_count,
+            )
+            scaled_boxes = self._scale_predicted_boxes(yolo_boxes, img_path)
             predictions.append(OracleDetection(image_name=gt_det.image_name, boxes=scaled_boxes))
-
-        # ...existing code...
 
         if not predictions:
             return None
