@@ -45,9 +45,6 @@ _EMPTY_MASK_DEBUG_TOPK = 10
 _GT_COLOR = (0, 200, 0)
 _PRED_COLOR = (220, 20, 60)
 _HIGH_PASS_RATIO = 0.95
-_CH4_OBJ_DOMINANCE_RATIO = 5.0
-_CH5_MIN_SIGNAL_FOR_OBJ_MODE = 1e-3
-_LOW_ACTIVATED_P99 = 0.05
 # Default confidence threshold for GPU TFLite path: FP16 models produce sparser
 # class probability distributions than CPU/NPU paths, so a lower threshold is
 # needed to recover detections.
@@ -85,15 +82,8 @@ def _looks_like_probability(arr: np.ndarray) -> bool:
     return float(arr.min()) >= _PROB_MIN and float(arr.max()) <= _PROB_MAX
 
 
-def _activate_maybe_logits(arr: np.ndarray, *, force_sigmoid: bool = False) -> np.ndarray:
-    """Return probabilities, applying sigmoid when channels look logit-like.
-
-    GPU TFLite exports occasionally produce very low positive ranges (e.g. p99 < 0.05)
-    that satisfy [0, 1] checks but still behave like logits. In those cases, sigmoid
-    restores score dynamic range for confidence composition.
-    """
-    if force_sigmoid:
-        return 1 / (1 + np.exp(-arr))
+def _activate_maybe_logits(arr: np.ndarray) -> np.ndarray:
+    """Return probabilities, applying sigmoid only when channels look logit-like."""
     if _looks_like_probability(arr):
         return np.clip(arr, 0.0, 1.0)
     return 1 / (1 + np.exp(-arr))
@@ -1029,43 +1019,12 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912, PLR0915
             float(np.percentile(ch_rest, 99)),
         )
 
-        ch4_mean = float(ch4.mean())
-        ch_rest_mean = float(ch_rest.mean())
-        ch4_p99 = float(np.percentile(ch4, 99))
-        ch_rest_p99 = float(np.percentile(ch_rest, 99))
-        ch_rest_max = float(ch_rest.max())
-        ch4_dominates = (
-            ch_rest.shape[1] > 0
-            and ch_rest_max >= _CH5_MIN_SIGNAL_FOR_OBJ_MODE
-            and ch4_mean > (_CH4_OBJ_DOMINANCE_RATIO * max(ch_rest_mean, 1e-12))
-            and ch4_p99 > (_CH4_OBJ_DOMINANCE_RATIO * max(ch_rest_p99, 1e-12))
+        class_scores = _activate_maybe_logits(class_scores_raw)
+        confidences = class_scores.max(axis=1)
+        class_ids_raw = class_scores.argmax(axis=1)
+        logger.info(
+            "[YOLO PARSE] 84-ch decode: using fused class-prob path across all 80 channels."
         )
-
-        if ch4_dominates:
-            # Interpret 84-ch output as [cx, cy, w, h, obj, cls1..] when ch4 is
-            # strongly separated from remaining channels.
-            force_obj_sigmoid = ch4_p99 <= _LOW_ACTIVATED_P99
-            force_cls_sigmoid = ch_rest_p99 <= _LOW_ACTIVATED_P99
-            obj_scores = _activate_maybe_logits(ch4, force_sigmoid=force_obj_sigmoid)
-            class_scores = _activate_maybe_logits(ch_rest, force_sigmoid=force_cls_sigmoid)
-            class_max = class_scores.max(axis=1)
-            confidences = obj_scores * class_max
-            class_ids_raw = class_scores.argmax(axis=1) + 1
-            logger.info(
-                "[YOLO PARSE] 84-ch decode: using Ch4 as objectness and Ch5+ as class scores "
-                "(force_obj_sigmoid=%s force_cls_sigmoid=%s).",
-                force_obj_sigmoid,
-                force_cls_sigmoid,
-            )
-        else:
-            force_sigmoid = float(np.percentile(class_scores_raw, 99)) <= _LOW_ACTIVATED_P99
-            class_scores = _activate_maybe_logits(class_scores_raw, force_sigmoid=force_sigmoid)
-            confidences = class_scores.max(axis=1)
-            class_ids_raw = class_scores.argmax(axis=1)
-            logger.info(
-                "[YOLO PARSE] 84-ch decode: using fused class-prob path (force_sigmoid=%s).",
-                force_sigmoid,
-            )
 
     logger.info(
         "[YOLO PARSE] Combined class-prob stats: min=%.6f max=%.6f mean=%.6f p99=%.6f",

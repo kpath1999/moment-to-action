@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.benchmark._benchmarks._yolo import (
+    _activate_maybe_logits,
     _build_oracle_boxes,
     _letterbox_resize,
     _load_yolo_tensor,
@@ -148,11 +149,7 @@ def test_parse_yolo_boxes_rejects_small_feature_matrix() -> None:
 
 @pytest.mark.unit
 def test_parse_yolo_boxes_gpu_low_confidence_passes_with_low_threshold() -> None:
-    """Simulates sparse GPU output where corrected decode restores confidence.
-
-    With Ch4/Ch5 interpretation and sigmoid on tiny logit-like channels,
-    the anchor should be recovered even at a 0.25 threshold.
-    """
+    """Simulates sparse GPU output where a low threshold recovers detections."""
     # Shape (1, 84, 1): one anchor with cx=0.5, cy=0.5, w=0.2, h=0.2,
     # class[0] score = 0.08 (typical for a sparse GPU FP16 model).
     arr = np.zeros((1, 84, 1), dtype=np.float32)
@@ -163,8 +160,11 @@ def test_parse_yolo_boxes_gpu_low_confidence_passes_with_low_threshold() -> None
     arr[0, 4, 0] = 0.08  # class[0] score — low but valid for GPU path
 
     result = _parse_yolo_boxes([arr], (1, 3, 640, 640), conf_threshold=0.25)
+    assert result == []
+
+    result = _parse_yolo_boxes([arr], (1, 3, 640, 640), conf_threshold=0.05)
     assert len(result) == 1
-    assert result[0].confidence > 0.25
+    assert result[0].confidence == pytest.approx(0.08)
 
 
 @pytest.mark.unit
@@ -200,30 +200,18 @@ def test_parse_yolo_boxes_cpu_and_gpu_outputs_share_same_decoder() -> None:
 
 
 @pytest.mark.unit
-def test_parse_yolo_boxes_84ch_ch4_obj_confidence_composition() -> None:
-    """When Ch4 dominates Ch5+, decode as objectness * class probability.
+def test_activate_maybe_logits_keeps_small_probabilities_unchanged() -> None:
+    """Already-activated sparse scores must not be inflated toward 0.5."""
+    arr = np.array([0.0, 0.0002, 0.03, 0.17], dtype=np.float32)
 
-    This simulates the GPU pattern where Ch4 statistics are much larger than
-    other channels and scores are low enough to require sigmoid handling.
-    """
-    arr = np.zeros((1, 84, 1), dtype=np.float32)
-    arr[0, 0, 0] = 0.5
-    arr[0, 1, 0] = 0.5
-    arr[0, 2, 0] = 0.2
-    arr[0, 3, 0] = 0.2
-    arr[0, 4, 0] = 0.04  # Ch4 candidate objectness (logit-like tiny positive)
-    arr[0, 5, 0] = 0.03  # Ch5 class score (logit-like tiny positive)
+    activated = _activate_maybe_logits(arr)
 
-    parsed = _parse_yolo_boxes([arr], (1, 3, 640, 640), conf_threshold=0.05)
-
-    assert len(parsed) == 1
-    # sigmoid(0.04) * sigmoid(0.03) ~= 0.259
-    assert parsed[0].confidence > 0.2
+    assert activated.tolist() == pytest.approx(arr.tolist())
 
 
 @pytest.mark.unit
-def test_parse_yolo_boxes_84ch_fallback_keeps_fused_path_when_ch5_is_empty() -> None:
-    """Do not switch to Ch4-objectness mode when Ch5+ has no signal."""
+def test_parse_yolo_boxes_84ch_keeps_class_zero_available() -> None:
+    """The 84-channel path must preserve COCO class 0 instead of shifting labels."""
     arr = np.zeros((1, 84, 1), dtype=np.float32)
     arr[0, 0, 0] = 320.0
     arr[0, 1, 0] = 320.0
@@ -231,7 +219,13 @@ def test_parse_yolo_boxes_84ch_fallback_keeps_fused_path_when_ch5_is_empty() -> 
     arr[0, 3, 0] = 100.0
     arr[0, 4, 0] = 0.9
 
-    parsed = _parse_yolo_boxes([arr], (1, 3, 640, 640), conf_threshold=0.5)
+    parsed = _parse_yolo_boxes(
+        [arr],
+        (1, 3, 640, 640),
+        conf_threshold=0.5,
+        class_labels=("person", "bicycle"),
+    )
 
     assert len(parsed) == 1
     assert parsed[0].confidence == pytest.approx(0.9)
+    assert parsed[0].label == "person"
