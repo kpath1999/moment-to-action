@@ -1152,6 +1152,38 @@ class TestQCS6490ResourceMonitor:
             freq = QCS6490ResourceMonitor._read_frequency_mhz(ComputeUnit.CPU)
             assert freq == 0.0
 
+    def test_qcs6490_read_hw_sensor_typeerror_falls_back_to_estimate(self) -> None:
+        """TypeError from sysfs read (e.g. NoneType concat) must not crash profiling."""
+        mock_power_path = MagicMock()
+        mock_power_path.read_text.side_effect = TypeError("can't concat NoneType to bytes")
+
+        with patch.object(
+            QCS6490ResourceMonitor,
+            "_discover_power_now_path",
+            return_value=mock_power_path,
+        ):
+            monitor = QCS6490ResourceMonitor()
+
+        sample = monitor._read_hw_sensor(ComputeUnit.GPU)
+        assert sample.power_mw == pytest.approx(800.0)
+        assert sample.device == ComputeUnit.GPU
+
+    def test_qcs6490_read_hw_sensor_oserror_falls_back_to_estimate(self) -> None:
+        """OSError (e.g. permission denied) on power_now must not crash profiling."""
+        mock_power_path = MagicMock()
+        mock_power_path.read_text.side_effect = OSError("permission denied")
+
+        with patch.object(
+            QCS6490ResourceMonitor,
+            "_discover_power_now_path",
+            return_value=mock_power_path,
+        ):
+            monitor = QCS6490ResourceMonitor()
+
+        sample = monitor._read_hw_sensor(ComputeUnit.NPU)
+        assert sample.power_mw == pytest.approx(500.0)
+        assert sample.device == ComputeUnit.NPU
+
         """Test .tflite loading uses accel backend when it succeeds.
 
         Covers the return path through the accelerator handle (line 212 in

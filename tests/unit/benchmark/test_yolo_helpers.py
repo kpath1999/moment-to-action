@@ -144,3 +144,60 @@ def test_parse_yolo_boxes_rejects_small_feature_matrix() -> None:
     arr = np.zeros((1, 4), dtype=np.float32)
     parsed = _parse_yolo_boxes(arr, (1, 3, 64, 64), conf_threshold=0.1)
     assert parsed == []
+
+
+@pytest.mark.unit
+def test_parse_yolo_boxes_gpu_low_confidence_passes_with_low_threshold() -> None:
+    """Simulates GPU TFLite output: max class prob ~0.08, sparse distribution.
+
+    With conf_threshold=0.25 (CPU default) no boxes are returned.
+    With conf_threshold=0.05 (GPU default) the anchor is recovered.
+    """
+    # Shape (1, 84, 1): one anchor with cx=0.5, cy=0.5, w=0.2, h=0.2,
+    # class[0] score = 0.08 (typical for a sparse GPU FP16 model).
+    arr = np.zeros((1, 84, 1), dtype=np.float32)
+    arr[0, 0, 0] = 0.5  # cx (normalized)
+    arr[0, 1, 0] = 0.5  # cy
+    arr[0, 2, 0] = 0.2  # w
+    arr[0, 3, 0] = 0.2  # h
+    arr[0, 4, 0] = 0.08  # class[0] score — low but valid for GPU path
+
+    # CPU default threshold: no boxes.
+    assert _parse_yolo_boxes([arr], (1, 3, 640, 640), conf_threshold=0.25) == []
+
+    # GPU threshold: box is recovered.
+    result = _parse_yolo_boxes([arr], (1, 3, 640, 640), conf_threshold=0.05)
+    assert len(result) == 1
+    assert result[0].confidence == pytest.approx(0.08)
+
+
+@pytest.mark.unit
+def test_parse_yolo_boxes_cpu_and_gpu_outputs_share_same_decoder() -> None:
+    """CPU and GPU backends produce OracleBoxes via identical decode logic.
+
+    Verifies that when the same anchor data is present in both a "high-confidence
+    CPU-like" tensor and a "low-confidence GPU-like" tensor, the decoder returns
+    consistent geometry and label regardless of the confidence magnitude.
+    """
+
+    def _make_tensor(class_score: float) -> list[np.ndarray]:
+        arr = np.zeros((1, 84, 1), dtype=np.float32)
+        arr[0, 0, 0] = 320.0  # cx in input pixels
+        arr[0, 1, 0] = 240.0  # cy
+        arr[0, 2, 0] = 100.0  # w
+        arr[0, 3, 0] = 80.0  # h
+        arr[0, 4, 0] = class_score  # class[0]
+        return [arr]
+
+    cpu_result = _parse_yolo_boxes(_make_tensor(0.6), (1, 3, 640, 640), conf_threshold=0.25)
+    gpu_result = _parse_yolo_boxes(_make_tensor(0.08), (1, 3, 640, 640), conf_threshold=0.05)
+
+    assert len(cpu_result) == 1
+    assert len(gpu_result) == 1
+
+    # Geometry must be identical — only confidence differs.
+    assert cpu_result[0].x1 == pytest.approx(gpu_result[0].x1)
+    assert cpu_result[0].y1 == pytest.approx(gpu_result[0].y1)
+    assert cpu_result[0].x2 == pytest.approx(gpu_result[0].x2)
+    assert cpu_result[0].y2 == pytest.approx(gpu_result[0].y2)
+    assert cpu_result[0].label == gpu_result[0].label

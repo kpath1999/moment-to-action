@@ -113,7 +113,7 @@ class QCS6490ResourceMonitor(ResourceMonitor):
                 memory_mb=self.used_memory_mb(),
                 power_mw=power_uw / 1000.0,
             )
-        except (FileNotFoundError, ValueError) as e:
+        except (OSError, ValueError, TypeError) as e:
             logger.warning("HW power sensor read failed: %s", e)
             return self._estimate(unit)
 

@@ -45,6 +45,10 @@ _EMPTY_MASK_DEBUG_TOPK = 10
 _GT_COLOR = (0, 200, 0)
 _PRED_COLOR = (220, 20, 60)
 _HIGH_PASS_RATIO = 0.95
+# Default confidence threshold for GPU TFLite path: FP16 models produce sparser
+# class probability distributions than CPU/NPU paths, so a lower threshold is
+# needed to recover detections.
+_GPU_CONF_THRESHOLD = 0.05
 
 
 def _box_iou(box_a: OracleBox, box_b: OracleBox) -> float:
@@ -76,6 +80,37 @@ def _label_key(label: str) -> str:
 def _looks_like_probability(arr: np.ndarray) -> bool:
     """Return True when values are already in [0, 1] (allowing small numeric slack)."""
     return float(arr.min()) >= _PROB_MIN and float(arr.max()) <= _PROB_MAX
+
+
+def _effective_conf_threshold(
+    base_threshold: float,
+    per_unit_thresholds: dict[str, float] | None,
+    backend: object,
+) -> float:
+    """Return the conf threshold to use, respecting per-unit overrides.
+
+    The GPU TFLite FP16 path typically produces much sparser/lower class
+    probability distributions than CPU or NPU paths for the same model file.
+    Callers pass a *per_unit_thresholds* dict keyed by ``ComputeUnit.value``
+    strings (e.g. ``{"gpu": 0.05}``) to lower the threshold for those units.
+    """
+    if per_unit_thresholds and hasattr(backend, "active_unit"):
+        unit_key = getattr(backend.active_unit, "value", None)
+        if unit_key is not None:
+            # Keys are compared case-insensitively so callers may use either
+            # "gpu" or "GPU" without ambiguity.
+            override = per_unit_thresholds.get(unit_key) or per_unit_thresholds.get(
+                unit_key.lower()
+            )
+            if override is not None:
+                logger.info(
+                    "[YOLO PARSE] Using per-unit conf_threshold=%.6f for unit=%s (base=%.6f)",
+                    override,
+                    unit_key,
+                    base_threshold,
+                )
+                return override
+    return base_threshold
 
 
 def _count_pre_nms_candidates(raw_outputs: object) -> int | None:
@@ -171,10 +206,15 @@ class YOLOBenchmark(ModelBenchmark):
             )
         # Pre-thresholding: count number of raw candidate boxes (if possible)
         pre_nms_count = _count_pre_nms_candidates(raw_outputs)
+        effective_threshold = _effective_conf_threshold(
+            self._conf_threshold,
+            self._per_unit_conf_thresholds,
+            backend,
+        )
         yolo_boxes = _parse_yolo_boxes(
             raw_outputs,
             self._input_shape,
-            conf_threshold=self._conf_threshold,
+            conf_threshold=effective_threshold,
             class_labels=YOLOStage.COCO_LABELS,
         )
         post_nms_count = len(yolo_boxes)
@@ -539,6 +579,7 @@ class YOLOBenchmark(ModelBenchmark):
         coco_dataset: CocoDataset | None = None,
         conf_threshold: float = 0.25,
         model_path: str | None = None,
+        per_unit_conf_thresholds: dict[str, float] | None = None,
     ) -> None:
         super().__init__()
         self._coco_dataset = coco_dataset
@@ -548,6 +589,14 @@ class YOLOBenchmark(ModelBenchmark):
         # Default input shape; will be set in _load_model
         self._input_shape: tuple[int, ...] = (1, 3, 640, 640)
         self._debug_image_counter = 0
+        # Per-unit confidence threshold overrides.  If None, defaults to
+        # {"gpu": _GPU_CONF_THRESHOLD} so the GPU TFLite FP16 path is usable
+        # out of the box without manual tuning.
+        self._per_unit_conf_thresholds: dict[str, float] = (
+            per_unit_conf_thresholds
+            if per_unit_conf_thresholds is not None
+            else {"gpu": _GPU_CONF_THRESHOLD}
+        )
 
     @property
     def model_id(self) -> ModelID:
@@ -940,6 +989,27 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912, PLR0915
             float(class_scores_raw.max()),
             float(class_scores_raw.mean()),
             float(np.percentile(class_scores_raw, 99)),
+        )
+        # Log channel 4 (first class channel) separately to help distinguish between
+        # a potential objectness/conf channel and a true class probability channel.
+        # If ch4 has a distinctly higher mean/p99 than the class channels that follow,
+        # the model likely has a 85-ch layout but was exported as 84.
+        ch4 = class_scores_raw[:, 0]
+        ch_rest = class_scores_raw[:, 1:] if class_scores_raw.shape[1] > 1 else class_scores_raw
+        logger.info(
+            "[YOLO PARSE] Ch4 (first non-box channel) stats: min=%.6f max=%.6f mean=%.6f p99=%.6f",
+            float(ch4.min()),
+            float(ch4.max()),
+            float(ch4.mean()),
+            float(np.percentile(ch4, 99)),
+        )
+        logger.info(
+            "[YOLO PARSE] Ch5+ (remaining class channels) stats: "
+            "min=%.6f max=%.6f mean=%.6f p99=%.6f",
+            float(ch_rest.min()),
+            float(ch_rest.max()),
+            float(ch_rest.mean()),
+            float(np.percentile(ch_rest, 99)),
         )
 
         if _looks_like_probability(class_scores_raw):
