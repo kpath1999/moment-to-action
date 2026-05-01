@@ -139,6 +139,57 @@ def _count_pre_nms_candidates(raw_outputs: object) -> int | None:
     return int(arr.shape[0])
 
 
+def _letterbox_params(
+    orig_w: int,
+    orig_h: int,
+    target_w: int,
+    target_h: int,
+) -> tuple[float, float, float]:
+    """Return resize scale and padding used by letterbox preprocessing."""
+    scale = min(target_w / orig_w, target_h / orig_h)
+    resized_w = orig_w * scale
+    resized_h = orig_h * scale
+    pad_left = (target_w - resized_w) / 2.0
+    pad_top = (target_h - resized_h) / 2.0
+    return scale, pad_left, pad_top
+
+
+def _project_tflite_box_to_original(
+    box: OracleBox,
+    *,
+    orig_w: int,
+    orig_h: int,
+    model_w: int,
+    model_h: int,
+) -> OracleBox:
+    """Map a TFLite YOLO box from letterboxed model space back to original pixels."""
+
+    def clamp(value: float, lower: float, upper: float) -> float:
+        return max(lower, min(upper, value))
+
+    scale, pad_left, pad_top = _letterbox_params(orig_w, orig_h, model_w, model_h)
+    is_normalized = all(0.0 <= coord <= 1.0 for coord in (box.x1, box.y1, box.x2, box.y2))
+
+    x1_model = box.x1 * model_w if is_normalized else box.x1
+    y1_model = box.y1 * model_h if is_normalized else box.y1
+    x2_model = box.x2 * model_w if is_normalized else box.x2
+    y2_model = box.y2 * model_h if is_normalized else box.y2
+
+    x1 = clamp((x1_model - pad_left) / scale, 0.0, float(orig_w))
+    y1 = clamp((y1_model - pad_top) / scale, 0.0, float(orig_h))
+    x2 = clamp((x2_model - pad_left) / scale, 0.0, float(orig_w))
+    y2 = clamp((y2_model - pad_top) / scale, 0.0, float(orig_h))
+
+    return OracleBox(
+        x1=x1,
+        y1=y1,
+        x2=x2,
+        y2=y2,
+        label=box.label,
+        confidence=box.confidence,
+    )
+
+
 def _find_best_iou_match(gt: OracleBox, pred_boxes: list[OracleBox]) -> tuple[int, float]:
     """Return (index, iou) of the pred box with the highest IoU against *gt*."""
     best_idx = -1
@@ -537,19 +588,15 @@ class YOLOBenchmark(ModelBenchmark):
         with Image.open(img_path) as _pil:
             orig_w, orig_h = _pil.size
 
-        # Always scale for TFLite/ONNX models (self._is_tflite is set for TFLite)
-        def clamp01(x: float) -> float:
-            return max(0.0, min(1.0, x))
-
         if self._is_tflite:
+            _, model_h, model_w, _ = self._input_shape
             return [
-                OracleBox(
-                    x1=clamp01(b.x1) * orig_w,
-                    y1=clamp01(b.y1) * orig_h,
-                    x2=clamp01(b.x2) * orig_w,
-                    y2=clamp01(b.y2) * orig_h,
-                    label=b.label,
-                    confidence=b.confidence,
+                _project_tflite_box_to_original(
+                    b,
+                    orig_w=orig_w,
+                    orig_h=orig_h,
+                    model_w=model_w,
+                    model_h=model_h,
                 )
                 for b in yolo_boxes
             ]

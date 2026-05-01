@@ -27,6 +27,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _letterbox_params(
+    orig_w: int,
+    orig_h: int,
+    target_w: int,
+    target_h: int,
+) -> tuple[float, float, float]:
+    """Return resize scale and padding used by letterbox preprocessing."""
+    scale = min(target_w / orig_w, target_h / orig_h)
+    resized_w = orig_w * scale
+    resized_h = orig_h * scale
+    pad_left = (target_w - resized_w) / 2.0
+    pad_top = (target_h - resized_h) / 2.0
+    return scale, pad_left, pad_top
+
+
 class YOLOStage(Stage):
     """Runs YOLO on a preprocessed tensor and emits detections.
 
@@ -288,17 +303,15 @@ class YOLOStage(Stage):
         scores = scores[keep]
         class_ids = class_ids[keep]
 
-        # Scale from 640x640 input space to original image pixels
         orig_h, orig_w = original_size
-        sx = orig_w / 640.0
-        sy = orig_h / 640.0
+        scale, pad_left, pad_top = _letterbox_params(orig_w, orig_h, 640, 640)
 
         boxes = []
         for box, score, cid in zip(boxes_raw, scores, class_ids, strict=False):
-            x1 = max(0, float(box[0]) * sx)
-            y1 = max(0, float(box[1]) * sy)
-            x2 = min(orig_w, float(box[2]) * sx)
-            y2 = min(orig_h, float(box[3]) * sy)
+            x1 = max(0.0, min(float(orig_w), (float(box[0]) - pad_left) / scale))
+            y1 = max(0.0, min(float(orig_h), (float(box[1]) - pad_top) / scale))
+            x2 = max(0.0, min(float(orig_w), (float(box[2]) - pad_left) / scale))
+            y2 = max(0.0, min(float(orig_h), (float(box[3]) - pad_top) / scale))
             class_id = int(cid)
             label = (
                 self.COCO_LABELS[class_id] if class_id < len(self.COCO_LABELS) else str(class_id)

@@ -656,17 +656,15 @@ class TestYOLOStageE2E:
         class_ids = np.array([[0]], dtype=np.uint8)
 
         outputs: list[np.ndarray] = [boxes, scores, class_ids]
-        # Original size (480, 640) means scale factors are (640/640=1.0, 480/640=0.75)
+        # Original size (480, 640) was letterboxed into 640x640 with 80 px vertical padding.
         result = stage._parse_outputs(outputs, (480, 640))
 
         assert len(result) == 1
         box = result[0]
         assert box.x1 == pytest.approx(100.0)
-        # y1 scaled from 150 in 640x640 space to original 480 height: 150 * 480/640 = 112.5
-        assert box.y1 == pytest.approx(112.5)
+        assert box.y1 == pytest.approx(70.0)
         assert box.x2 == pytest.approx(300.0)
-        # y2 scaled: 350 * 480/640 = 262.5
-        assert box.y2 == pytest.approx(262.5)
+        assert box.y2 == pytest.approx(270.0)
         assert box.confidence == pytest.approx(0.95)
         assert box.class_id == 0
         assert box.label == "person"

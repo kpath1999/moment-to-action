@@ -9,8 +9,11 @@ import pytest
 from PIL import Image as PILImage
 
 from moment_to_action.benchmark import YOLOBenchmark
-from moment_to_action.benchmark._benchmarks._yolo import _effective_conf_threshold
-from moment_to_action.benchmark._oracle_ground_truth import OracleDetection
+from moment_to_action.benchmark._benchmarks._yolo import (
+    _effective_conf_threshold,
+    _project_tflite_box_to_original,
+)
+from moment_to_action.benchmark._oracle_ground_truth import OracleBox, OracleDetection
 from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.models import ModelID, ModelManager
 
@@ -166,3 +169,53 @@ def test_yolo_gpu_threshold_applied_in_predict_image(monkeypatch: pytest.MonkeyP
     benchmark._predict_image(tmp_path, gt_det, object(), backend)
 
     assert used_threshold == [pytest.approx(0.05)]
+
+
+@pytest.mark.unit
+def test_project_tflite_box_to_original_undoes_wide_image_letterbox() -> None:
+    box = OracleBox(
+        x1=0.25,
+        y1=0.3125,
+        x2=0.75,
+        y2=0.6875,
+        label="person",
+        confidence=0.9,
+    )
+
+    projected = _project_tflite_box_to_original(
+        box,
+        orig_w=400,
+        orig_h=200,
+        model_w=640,
+        model_h=640,
+    )
+
+    assert projected.x1 == pytest.approx(100.0)
+    assert projected.y1 == pytest.approx(25.0)
+    assert projected.x2 == pytest.approx(300.0)
+    assert projected.y2 == pytest.approx(175.0)
+
+
+@pytest.mark.unit
+def test_project_tflite_box_to_original_square_image_is_direct_scale() -> None:
+    box = OracleBox(
+        x1=0.1,
+        y1=0.2,
+        x2=0.6,
+        y2=0.8,
+        label="person",
+        confidence=0.9,
+    )
+
+    projected = _project_tflite_box_to_original(
+        box,
+        orig_w=640,
+        orig_h=640,
+        model_w=640,
+        model_h=640,
+    )
+
+    assert projected.x1 == pytest.approx(64.0)
+    assert projected.y1 == pytest.approx(128.0)
+    assert projected.x2 == pytest.approx(384.0)
+    assert projected.y2 == pytest.approx(512.0)

@@ -155,7 +155,8 @@ def get_yolov12_model_for_unit(
     if unit_str == "cpu":
         model_path = base / unit_str / "yolov8_det" / "yolov8n_float32.tflite"
     elif unit_str == "gpu":
-        model_path = base / unit_str / "yolov8_det" / "yolov8n_float16.tflite"
+        # (KAUSAR) switching to see if this affects model performance
+        model_path = base / unit_str / "yolov8_det" / "yolov8n_float32.tflite"
     elif unit_str == "npu":
         model_path = base / unit_str / "yolov8_det" / "yolov8n_w8a8.tflite"
     else:
