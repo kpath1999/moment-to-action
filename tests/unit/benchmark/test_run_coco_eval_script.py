@@ -31,6 +31,7 @@ def test_parser_defaults() -> None:
     assert args.model == "all"
     assert args.edge_unit == "npu"
     assert args.conf_threshold == pytest.approx(0.25)
+    assert args.gpu_conf_threshold_override is None
     assert "rf_detr_n" in parser._option_string_actions["--model"].choices
     assert "ssd_mobilenetv2" in parser._option_string_actions["--model"].choices
     assert "tinyclip_8m" in parser._option_string_actions["--model"].choices
@@ -59,7 +60,7 @@ def test_main_all_models_output(
     monkeypatch.setattr(
         module,
         "_run_yolo_eval",
-        lambda dataset, manager, unit, conf_threshold: {  # noqa: ARG005
+        lambda dataset, manager, unit, conf_threshold, gpu_conf_threshold_override: {  # noqa: ARG005
             "map_50": 0.5,
             "map_75": 0.4,
             "inference_mean_ms": 11.0,

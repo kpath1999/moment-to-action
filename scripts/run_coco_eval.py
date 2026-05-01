@@ -68,6 +68,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="YOLO confidence threshold used for prediction decoding.",
     )
     parser.add_argument(
+        "--gpu-conf-threshold-override",
+        type=float,
+        default=None,
+        help=(
+            "Optional GPU-only YOLO confidence threshold override for diagnostic runs. "
+            "Leave unset for apples-to-apples CPU/GPU evaluation."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -87,15 +96,30 @@ def _run_yolo_eval(
     manager: ModelManager,
     unit: ComputeUnit,
     conf_threshold: float,
+    gpu_conf_threshold_override: float | None,
 ) -> dict[str, float | None]:
-    logger.info("YOLO eval config: unit=%s conf_threshold=%.6f", unit.value, conf_threshold)
+    gpu_override_str = (
+        f"{gpu_conf_threshold_override:.6f}"
+        if gpu_conf_threshold_override is not None
+        else "<none>"
+    )
+    logger.info(
+        "YOLO eval config: unit=%s conf_threshold=%.6f gpu_conf_override=%s",
+        unit.value,
+        conf_threshold,
+        gpu_override_str,
+    )
     backend = ComputeBackend(preferred_unit=unit)
     # Resolve the correct YOLOv12 model path for the compute unit
     model_path = get_yolov12_model_for_unit(unit=unit)
+    per_unit_conf_thresholds = (
+        {"gpu": gpu_conf_threshold_override} if gpu_conf_threshold_override is not None else None
+    )
     benchmark = YOLOBenchmark(
         coco_dataset=dataset,
         conf_threshold=conf_threshold,
         model_path=str(model_path),
+        per_unit_conf_thresholds=per_unit_conf_thresholds,
     )
     profile = benchmark.profile(
         backend=backend,
@@ -207,6 +231,7 @@ def main() -> None:
             manager=manager,
             unit=_UNIT_MAP[args.edge_unit],
             conf_threshold=args.conf_threshold,
+            gpu_conf_threshold_override=args.gpu_conf_threshold_override,
         )
 
     if args.model in {"ssd_mobilenetv2", "all"}:

@@ -77,12 +77,10 @@ def test_yolo_coco_accuracy_emits_map50_and_map75(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.unit
-def test_yolo_default_gpu_threshold_is_lower_than_base() -> None:
-    """GPU unit should get a lower conf threshold than the 0.25 default."""
+def test_yolo_default_has_no_per_unit_threshold_override() -> None:
+    """Default YOLO benchmark config should compare units at the same threshold."""
     benchmark = YOLOBenchmark(conf_threshold=0.25)
-    gpu_thresh = benchmark._per_unit_conf_thresholds.get("gpu")
-    assert gpu_thresh is not None
-    assert gpu_thresh < 0.25
+    assert benchmark._per_unit_conf_thresholds is None
 
 
 @pytest.mark.unit

@@ -24,6 +24,7 @@ _QNN_BACKEND_KEY = "backend_type"
 # backend_path triggers a native crash in delegate init.
 _QNN_NPU_BACKEND = "htp"
 _QNN_GPU_BACKEND = "gpu"
+_QNN_GPU_OPTIONS_ENV = "MOMENT_TO_ACTION_QNN_GPU_DELEGATE_OPTIONS"
 
 # Timeout for the subprocess delegate probe.
 _DELEGATE_PROBE_TIMEOUT_S = 15
@@ -36,6 +37,33 @@ _ADSP_LIBRARY_DEFAULT = ";".join(  # noqa: FLY002
         "/usr/lib/rfsa/adsp/hexagon-v68",
     )
 )
+
+
+def _parse_delegate_options(env_var: str) -> dict[str, str]:
+    """Parse comma-separated delegate options from *env_var*.
+
+    Format: ``key=value,key2=value2``. Empty entries are ignored.
+    """
+    raw = os.environ.get(env_var, "").strip()
+    if not raw:
+        return {}
+
+    options: dict[str, str] = {}
+    for item in raw.split(","):
+        entry = item.strip()
+        if not entry:
+            continue
+        if "=" not in entry:
+            msg = f"Invalid delegate option {entry!r} in {env_var}; expected key=value"
+            raise ValueError(msg)
+        key, value = entry.split("=", maxsplit=1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            msg = f"Invalid delegate option {entry!r} in {env_var}; key is empty"
+            raise ValueError(msg)
+        options[key] = value
+    return options
 
 
 def _is_in_fastrpc_group() -> bool:
@@ -264,7 +292,10 @@ class QCS6490LiteRTBackend(LiteRTBackend):
                 return [qnn]
 
         if self._unit == ComputeUnit.GPU:
-            gpu_opts = {_QNN_BACKEND_KEY: _QNN_GPU_BACKEND}
+            gpu_opts = {
+                _QNN_BACKEND_KEY: _QNN_GPU_BACKEND,
+                **_parse_delegate_options(_QNN_GPU_OPTIONS_ENV),
+            }
             logger.debug(
                 "[get_delegates] probing QNN GPU delegate: lib=%s options=%r",
                 _QNN_DELEGATE_PATH,
@@ -283,8 +314,9 @@ class QCS6490LiteRTBackend(LiteRTBackend):
                 raise RuntimeError(msg) from e
             else:
                 logger.info(
-                    "[get_delegates] QNN delegate loaded from %s → Adreno GPU",
+                    "[get_delegates] QNN delegate loaded from %s → Adreno GPU options=%r",
                     _QNN_DELEGATE_PATH,
+                    gpu_opts,
                 )
                 return [qnn]
 

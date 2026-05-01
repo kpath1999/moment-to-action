@@ -167,8 +167,9 @@ class LiteRTBackend(InferenceBackend):
         interp.allocate_tensors()
         logger.debug("[load_interpreter] allocate_tensors() complete for %s", model_path)
 
-        # Log delegate partitioning stats if DEBUG level is enabled
-        if logger.isEnabledFor(logging.DEBUG) and delegates:
+        # Log delegate partitioning stats whenever a delegate is active so
+        # partial CPU fallback is visible during normal benchmark runs.
+        if delegates:
             try:
                 # Get execution plan - shows which nodes run on which delegate
                 # Negative node IDs indicate delegate execution, non-negative = CPU
@@ -187,15 +188,18 @@ class LiteRTBackend(InferenceBackend):
                         cpu_nodes,
                     )
                 else:
-                    logger.debug(
-                        "[load_interpreter] Full acceleration: %d/%d nodes on delegate",
+                    logger.info(
+                        "[load_interpreter] Full acceleration for %s: %d/%d nodes on delegate",
+                        model_path,
                         delegate_nodes,
                         total_nodes,
                     )
             except (AttributeError, Exception):  # noqa: BLE001
                 # _get_execution_plan may not exist in all TFLite versions
-                logger.debug(
-                    "[load_interpreter] _get_execution_plan unavailable, skipping delegate stats"
+                logger.info(
+                    "[load_interpreter] _get_execution_plan unavailable for %s; "
+                    "delegate partition stats not available",
+                    model_path,
                 )
 
         actual_unit = self._unit if delegates else ComputeUnit.CPU

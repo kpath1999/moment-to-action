@@ -45,10 +45,6 @@ _EMPTY_MASK_DEBUG_TOPK = 10
 _GT_COLOR = (0, 200, 0)
 _PRED_COLOR = (220, 20, 60)
 _HIGH_PASS_RATIO = 0.95
-# Default confidence threshold for GPU TFLite path: FP16 models produce sparser
-# class probability distributions than CPU/NPU paths, so a lower threshold is
-# needed to recover detections.
-_GPU_CONF_THRESHOLD = 0.05
 
 
 def _box_iou(box_a: OracleBox, box_b: OracleBox) -> float:
@@ -643,14 +639,10 @@ class YOLOBenchmark(ModelBenchmark):
         # Default input shape; will be set in _load_model
         self._input_shape: tuple[int, ...] = (1, 3, 640, 640)
         self._debug_image_counter = 0
-        # Per-unit confidence threshold overrides.  If None, defaults to
-        # {"gpu": _GPU_CONF_THRESHOLD} so the GPU TFLite FP16 path is usable
-        # out of the box without manual tuning.
-        self._per_unit_conf_thresholds: dict[str, float] = (
-            per_unit_conf_thresholds
-            if per_unit_conf_thresholds is not None
-            else {"gpu": _GPU_CONF_THRESHOLD}
-        )
+        # Per-unit confidence threshold overrides are opt-in. Keeping this
+        # unset by default ensures CPU and GPU evaluations use the same decode
+        # threshold unless a diagnostic run explicitly requests otherwise.
+        self._per_unit_conf_thresholds = per_unit_conf_thresholds
 
     @property
     def model_id(self) -> ModelID:

@@ -223,10 +223,6 @@ class TestLiteRTBackend:
         backend = LiteRTBackend(compute_unit=ComputeUnit.NPU)
         with (
             patch.object(backend, "_get_delegates", return_value=["delegate"]),
-            patch(
-                "moment_to_action.hardware._platforms._runtimes._litert.logger.isEnabledFor",
-                return_value=True,
-            ),
             patch("moment_to_action.hardware._platforms._runtimes._litert.logger.warning") as warn,
         ):
             backend._load_interpreter("/tmp/model.tflite")
@@ -245,16 +241,12 @@ class TestLiteRTBackend:
         backend = LiteRTBackend(compute_unit=ComputeUnit.NPU)
         with (
             patch.object(backend, "_get_delegates", return_value=["delegate"]),
-            patch(
-                "moment_to_action.hardware._platforms._runtimes._litert.logger.isEnabledFor",
-                return_value=True,
-            ),
-            patch("moment_to_action.hardware._platforms._runtimes._litert.logger.debug") as debug,
+            patch("moment_to_action.hardware._platforms._runtimes._litert.logger.info") as info,
         ):
             backend._load_interpreter("/tmp/model.tflite")
 
         assert any(
-            "_get_execution_plan unavailable" in str(call.args[0]) for call in debug.call_args_list
+            "_get_execution_plan unavailable" in str(call.args[0]) for call in info.call_args_list
         )
 
     @patch("moment_to_action.hardware._platforms._runtimes._litert._Interpreter")
@@ -269,15 +261,11 @@ class TestLiteRTBackend:
         backend = LiteRTBackend(compute_unit=ComputeUnit.NPU)
         with (
             patch.object(backend, "_get_delegates", return_value=["delegate"]),
-            patch(
-                "moment_to_action.hardware._platforms._runtimes._litert.logger.isEnabledFor",
-                return_value=True,
-            ),
-            patch("moment_to_action.hardware._platforms._runtimes._litert.logger.debug") as debug,
+            patch("moment_to_action.hardware._platforms._runtimes._litert.logger.info") as info,
         ):
             backend._load_interpreter("/tmp/model.tflite")
 
-        assert any("Full acceleration" in str(call.args[0]) for call in debug.call_args_list)
+        assert any("Full acceleration" in str(call.args[0]) for call in info.call_args_list)
 
 
 @pytest.mark.unit

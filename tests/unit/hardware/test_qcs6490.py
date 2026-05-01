@@ -19,6 +19,7 @@ from moment_to_action.hardware._platforms.qcs6490._litert import (
     _collect_htp_diagnostics,
     _ensure_fastrpc_permissions,
     _is_in_fastrpc_group,
+    _parse_delegate_options,
     _probe_delegate_load,
 )
 from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
@@ -506,6 +507,43 @@ class TestQCS6490LiteRTBackend:
 
             assert len(delegates) == 1
             assert delegates[0] == mock_delegate
+
+    def test_parse_delegate_options_parses_key_value_pairs(self) -> None:
+        """GPU delegate options should be configurable from env for diagnostics."""
+        with patch.dict(
+            "os.environ",
+            {"MOMENT_TO_ACTION_QNN_GPU_DELEGATE_OPTIONS": "precision_loss_allowed=0,foo=bar"},
+            clear=False,
+        ):
+            options = _parse_delegate_options("MOMENT_TO_ACTION_QNN_GPU_DELEGATE_OPTIONS")
+
+        assert options == {"precision_loss_allowed": "0", "foo": "bar"}
+
+    def test_get_delegates_gpu_unit_merges_env_options(self) -> None:
+        """GPU delegate load should include env-provided options."""
+        mock_delegate = MagicMock()
+        with (
+            patch.dict(
+                "os.environ",
+                {"MOMENT_TO_ACTION_QNN_GPU_DELEGATE_OPTIONS": "precision_loss_allowed=0"},
+                clear=False,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._probe_delegate_load",
+                return_value=None,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._litert._load_delegate",
+                return_value=mock_delegate,
+            ) as load_delegate,
+        ):
+            delegates = QCS6490LiteRTBackend(compute_unit=ComputeUnit.GPU)._get_delegates()
+
+        assert delegates == [mock_delegate]
+        load_delegate.assert_called_once_with(
+            "/usr/lib/libQnnTFLiteDelegate.so",
+            {"backend_type": "gpu", "precision_loss_allowed": "0"},
+        )
 
     def test_get_delegates_gpu_unit_raises_on_missing_delegate(self) -> None:
         """Test _get_delegates raises RuntimeError if GPU delegate load fails."""
