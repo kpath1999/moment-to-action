@@ -64,8 +64,20 @@ class Stage(ABC):
         elapsed_ms = metrics.get_span(span_id).latency_ms
         runtime_memory_bytes = round((mem_after_mb - mem_before_mb) * 1024 * 1024)
 
+        #if result is not None:
+        #    result = result.model_copy(update={"latency_ms": elapsed_ms})
+
+        ##asoma7 ADDITION#####################################
         if result is not None:
-            result = result.model_copy(update={"latency_ms": elapsed_ms})
+            if isinstance(result, list):
+                result = [
+                    item.model_copy(update={"latency_ms": elapsed_ms})
+                    if hasattr(item, "model_copy") else item
+                    for item in result
+                ]
+            elif hasattr(result, "model_copy"):
+                result = result.model_copy(update={"latency_ms": elapsed_ms})
+        ##asoma7##############################################
 
         if metrics is not None:
             # If LLMStage is the current stage, then it will have to use log_llm

@@ -29,7 +29,7 @@ from moment_to_action.stages import Pipeline, ImageSourceStage, AudioSourceStage
 from moment_to_action.stages import PromptFormatterStage
 from moment_to_action.stages.llm import LLMStage
 from moment_to_action.stages.vlm import MobileCLIPStage
-from moment_to_action.stages.video import PreprocessorStage, YOLOStage
+from moment_to_action.stages.video import PreprocessorStageFrame, YOLOStage
 from moment_to_action.stages import TriggerStage
 
 logging.basicConfig(
@@ -47,11 +47,23 @@ PROMPTS = [
     #"a photo of a person eating food",
     #"a photo of a person not eating food",
     #"a photo of food",
-    "a photo of a person working on a laptop",
+    #"a photo of a person working on a laptop",
     #"a photo of a person in distress"
     #"a photo of a person sitting in front of the laptop not interacting",
-    "a photo of a person not working on a laptop",
-    "a photo of a laptop",
+    #"a photo of a person not working on a laptop",
+    #"a photo of a laptop",
+    # positive
+    #"a construction worker with a yellow helmet on their head",
+    #"a worker wearing a hard hat on a construction site",
+    "a worker with a yellow hard hat on",
+    "a worker with an uncovered head",
+    #"a worker not wearing a hat on a construction site",
+    #"a person with protective headgear at a worksite",
+
+    # negative (describe bare head explicitly)
+    #"a construction worker with no helmet, bare head",
+    #"a worker with uncovered head on a construction site",
+    #"a person with exposed hair on a construction site",
 ]
 
 parser = argparse.ArgumentParser()
@@ -79,7 +91,7 @@ manager = ModelManager()
 pipeline = Pipeline(
     stages=[
         ImageSourceStage(source_path=args.image),
-        PreprocessorStage(target_size=(640, 640), letterbox=True),
+        PreprocessorStageFrame(target_size=(640, 640), letterbox=True),
         YOLOStage(
             #backend=compute_backend,
             backend=ComputeBackend(preferred_unit=ComputeUnit.NPU),
@@ -88,7 +100,7 @@ pipeline = Pipeline(
         ),
         TriggerStage(),
         ImageSourceStage(source_path=args.image),
-        PreprocessorStage(
+        PreprocessorStageFrame(
             target_size=(256,256),
             mean=(0.0,0.0,0.0),
             std=(1.0,1.0,1.0),

@@ -16,8 +16,10 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
     ModelID.YOLO_V8_TFLITE: ModelInfo(
         id=ModelID.YOLO_V8_TFLITE,
         filename="yolov8_det.tflite",
+        #filename="gear_guard_net-ppe-detection-w8a8.tflite",
         source=VendoredSource(subdir="yolo_tflite"),
-    ),
+        #source=VendoredSource(subdir="yolo_ppe"),
+    ),    
     ModelID.MOBILECLIP_S2: ModelInfo(
         id=ModelID.MOBILECLIP_S2,
         filename="mobileclip_s2_datacompdr_last.tflite",
@@ -26,6 +28,16 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
             hf_filename="mobileclip_s2_datacompdr_last.tflite",
         ),
     ),
+    ModelID.MOBILECLIP_S2_IMAGE: ModelInfo(
+        id=ModelID.MOBILECLIP_S2_IMAGE,
+        filename="mobileclip_image_gpu_b8_float32.tflite",
+        source=VendoredSource(subdir="vlm_models/mobileclip_mod/image/")
+    ),
+    ModelID.MOBILECLIP_S2_BATCHED: ModelInfo(
+        id=ModelID.MOBILECLIP_S2_BATCHED,
+        filename="mobileclip_s2_datacompdr_last_patched_float32.tflite",
+        source=VendoredSource(subdir="vlm_models/mobileclip-s2_batched/")
+    ),    
     ModelID.SMOLVLM2_2_2B: ModelInfo(
         id=ModelID.SMOLVLM2_2_2B,
         filename="__UNUSED__",

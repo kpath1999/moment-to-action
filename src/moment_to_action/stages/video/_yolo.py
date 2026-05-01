@@ -37,6 +37,11 @@ class YOLOStage(Stage):
     Output: DetectionMessage, or None if nothing detected
     """
 
+    PPE_LABELS: ClassVar[tuple[str, ...]] = (
+    "hardhat",      # class 0 — confirm with --probe
+    "lightsaber",   # class 1 — confirm with --probe
+    )
+
     # COCO class labels (80 classes)
     COCO_LABELS: ClassVar[tuple[str, ...]] = (
         "person",
@@ -129,7 +134,7 @@ class YOLOStage(Stage):
     ) -> None:
         super().__init__()
         self._backend = backend
-        model_path = manager.get_path(ModelID.YOLO_V8)
+        model_path = manager.get_path(ModelID.YOLO_V8_TFLITE)
         self._handle = self._backend.load_model(model_path)
         self._confidence_threshold = confidence_threshold
         logger.info("YOLOStage: loaded %s", model_path)
@@ -189,8 +194,10 @@ class YOLOStage(Stage):
             return []
 
         boxes_raw = outputs[0][0].astype(np.float32)  # [N, 4]
-        scores = outputs[1][0].astype(np.float32)  # [N]
+        #scores = outputs[1][0].astype(np.float32)  # [N]
+        scores = outputs[1][0].astype(np.float32) / 255.0  # [N]
         class_ids = outputs[2][0]  # [N]
+        mask = scores >= self.confidence_threshold
 
         # Filter by confidence first
         mask = scores >= self.confidence_threshold
@@ -209,8 +216,11 @@ class YOLOStage(Stage):
 
         # Scale from 640x640 input space to original image pixels
         orig_h, orig_w = original_size
-        sx = orig_w / 640.0
-        sy = orig_h / 640.0
+        print(f"original_size={original_size} orig_h={orig_h} orig_w={orig_w}")
+        #sx = orig_w / 640.0
+        #sy = orig_h / 640.0
+        sx = orig_w / 320.0
+        sy = orig_h / 192.0
 
         boxes = []
         for box, score, cid in zip(boxes_raw, scores, class_ids, strict=False):
@@ -221,6 +231,7 @@ class YOLOStage(Stage):
             class_id = int(cid)
             label = (
                 self.COCO_LABELS[class_id] if class_id < len(self.COCO_LABELS) else str(class_id)
+                #self.PPE_LABELS[class_id] if class_id < len(self.PPE_LABELS) else str(class_id)
             )
             boxes.append(
                 BoundingBox(

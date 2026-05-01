@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import cv2
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -48,7 +49,6 @@ class AudioSourceStage(Stage):
         with FileAudioSensor(self._source_path) as sensor:
             return sensor.read()
 
-
 class ImageSourceStage(Stage):
     """Load a raw image from a file path."""
 
@@ -80,3 +80,37 @@ class ImageSourceStage(Stage):
 
         with FileImageSensor(self._source_path) as sensor:
             return sensor.read()
+
+class VideoSourceStage(Stage):
+    """Load a raw image from a file path."""
+
+    def __init__(self, source_path: str, every_n: int = 3) -> None:
+        super().__init__()
+        self._source_path = Path(source_path)
+        self._every_n = every_n
+
+    def _process(self, _msg, _metrics) -> list[RawFrameMessage] | None:
+        if not self._source_path.is_file():
+            logger.warning("VideoSourceStage: file not found: %s", self._source_path)
+            return None
+
+        cap = cv2.VideoCapture(str(self._source_path))
+        messages = []
+        frame_idx = 0
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            if frame_idx % self._every_n == 0:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                messages.append(RawFrameMessage(
+                    frame=frame_rgb,
+                    timestamp=frame_idx,        # frame index as timestamp
+                    width=frame_rgb.shape[1],
+                    height=frame_rgb.shape[0],
+                ))
+            frame_idx += 1
+
+        cap.release()
+        return messages if messages else None        

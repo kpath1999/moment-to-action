@@ -75,6 +75,7 @@ class ImagePreprocessConfig:
     std: tuple[float, ...] = (0.229, 0.224, 0.225)
     to_rgb: bool = True
     letterbox: bool = False  # preserve aspect ratio + pad
+    normalize: bool = False  # set False for uint8 models like GearGuardNet
 
 
 # ---------------------------------------------------------------------------
@@ -145,12 +146,15 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         if self._config.crop_size is not None:
             frame = self._dispatch(self._center_crop, frame, self._config.crop_size)
 
-        return self._dispatch(
-            self._normalize,
-            frame,
-            self._config.mean,
-            self._config.std,
-        )
+        if self._config.normalize:
+            return self._dispatch(
+                self._normalize,
+                frame,
+                self._config.mean,
+                self._config.std,
+            )
+
+        return frame
 
     # ------------------------------------------------------------------
     # Vision-specific operations
@@ -279,13 +283,74 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
             config.crop_size,
         )
 
+# ---------------------------------------------------------------------------
+# PreprocessorStage for Video
+# ---------------------------------------------------------------------------
+
+class PreprocessorStageFrame(Stage):
+    """Resizes and normalizes a raw frame for a specific model.
+
+    Wraps ImagePreprocessor — config drives behaviour.
+
+    Input:  RawFrameMessage
+    Output: FrameTensorMessage  (was TensorMessage — renamed to FrameTensorMessage)
+    """
+
+    def __init__(
+        self,
+        target_size: tuple[int, int] = (640, 640),
+        #target_size: tuple[int, int] = (320, 192),
+        *,
+        letterbox: bool = True,
+        channels_first: bool = True,
+        mean: tuple = (0.0, 0.0, 0.0),
+        std: tuple = (1.0, 1.0, 1.0),
+    ) -> None:
+        self._preprocessor = ImagePreprocessor(
+            config=ImagePreprocessConfig(
+                target_size=target_size,
+                letterbox=letterbox,
+                mean=mean,
+                std=std,
+            )
+        )
+        self._channels_first = channels_first
+
+    def _process(self, msg: Message, metrics: MetricsCollector) -> FrameTensorMessage | None:
+        """Preprocess a raw frame into a model-ready tensor.
+
+        Returns a FrameTensorMessage (previously called TensorMessage).
+        """
+        if not isinstance(msg, RawFrameMessage):
+            err = f"PreprocessorStageFrame expects RawFrameMessage, got {type(msg).__name__}"
+            raise TypeError(err)
+        if msg.frame is None:
+            return None
+        img = RawFrameMessage(
+            frame=msg.frame,
+            timestamp=msg.timestamp,
+            width=msg.frame.shape[1],
+            height=msg.frame.shape[0],
+        )
+        processed = self._preprocessor.process(img, metrics=metrics)
+        data = processed.data  # [H, W, C]
+        if self._channels_first:
+            data = np.transpose(data, (2, 0, 1))  # [H,W,C] → [C,H,W]
+        #tensor = data[np.newaxis, ...].astype(np.float32)  # → [1,C,H,W] or [1,H,W,C]
+        tensor = data[np.newaxis, ...].astype(np.uint8)  # → [1,C,H,W] or [1,H,W,C]
+        # NOTE: output type is FrameTensorMessage (renamed from TensorMessage)
+        return FrameTensorMessage(
+            tensor=tensor,
+            original_size=processed.original_size,
+            timestamp=msg.timestamp,
+        )
 
 # ---------------------------------------------------------------------------
-# PreprocessorStage
+# PreprocessorStage for Video
 # ---------------------------------------------------------------------------
 
 
-class PreprocessorStage(Stage):
+class PreprocessorStageVideo(Stage):
     """Resizes and normalizes a raw frame for a specific model.
 
     Wraps ImagePreprocessor — config drives behaviour.
@@ -313,16 +378,13 @@ class PreprocessorStage(Stage):
         )
         self._channels_first = channels_first
 
-    def _process(self, msg: Message, metrics: MetricsCollector) -> FrameTensorMessage | None:
-        """Preprocess a raw frame into a model-ready tensor.
+    def _process(self, msg, metrics) -> list[FrameTensorMessage] | None:
+        if not isinstance(msg, list):
+        # fall back to original single-frame behaviour
+            return [self._process_single(msg, metrics)]
+        return [self._process_single(m, metrics) for m in msg if m.frame is not None]
 
-        Returns a FrameTensorMessage (previously called TensorMessage).
-        """
-        if not isinstance(msg, RawFrameMessage):
-            err = f"PreprocessorStage expects RawFrameMessage, got {type(msg).__name__}"
-            raise TypeError(err)
-        if msg.frame is None:
-            return None
+    def _process_single(self, msg: RawFrameMessage, metrics) -> FrameTensorMessage:
         img = RawFrameMessage(
             frame=msg.frame,
             timestamp=msg.timestamp,
@@ -330,11 +392,11 @@ class PreprocessorStage(Stage):
             height=msg.frame.shape[0],
         )
         processed = self._preprocessor.process(img, metrics=metrics)
-        data = processed.data  # [H, W, C]
+        data = processed.data
         if self._channels_first:
-            data = np.transpose(data, (2, 0, 1))  # [H,W,C] → [C,H,W]
-        tensor = data[np.newaxis, ...].astype(np.float32)  # → [1,C,H,W] or [1,H,W,C]
-        # NOTE: output type is FrameTensorMessage (renamed from TensorMessage)
+            data = np.transpose(data, (2, 0, 1))
+        tensor = data[np.newaxis, ...].astype(np.float32)
+        #tensor = data[np.newaxis, ...].astype(np.uint8)
         return FrameTensorMessage(
             tensor=tensor,
             original_size=processed.original_size,

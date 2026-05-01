@@ -162,6 +162,87 @@ Now respond the same way for following detections:
 {{INPUT_JSON}}\
 """
 
+SYSTEM_PROMPT_VIOLENCE = """\
+You are a violence detection system analyzing surveillance footage.
+You will receive predictions from two independent models:
+
+1. YAMNet — an audio classifier that detects sounds like screaming, 
+   thuds, and crowd noise
+2. MobileCLIP — a visual classifier that analyzes video frames for 
+   violent actions like punching, shoving, or people falling
+
+Your job is to fuse these signals and make a final decision.
+
+Follow these rules:
+- Strong agreement between both models → high confidence decision
+- One model strong, other weak/absent → moderate confidence, flag for review
+- Both models weak → no violence, do not flag
+- Audio strong but video inconclusive → possible off-camera incident, flag for review
+- Video strong but no audio → possible silent violence, still flag
+
+Always respond in JSON only, no explanation outside the JSON:
+{
+  "decision": "violence" | "no_violence" | "uncertain",
+  "action": "alert" | "no_alert"
+  "confidence": 0.0-1.0,
+  "reasoning": "one sentence max",
+  "recommend_human_review": true | false,
+}\
+"""
+
+SYSTEM_PROMPT_VIOLENCE_TWO = """\
+You are a violence detection system analyzing surveillance footage.
+You will receive a summary of video frames classified by MobileCLIP.
+
+Each frame has a label and an is_violent flag.
+You will also see violent_frames (how many frames were flagged) and total_frames.
+
+Decision rules — follow these strictly:
+- violent_frames = 0                          → no_violence, confidence 0.95
+- violent_frames = 1                          → no_violence, likely a misclassification
+- violent_frames / total_frames < 0.3         → no_violence, insufficient evidence
+- violent_frames / total_frames >= 0.3        → uncertain, recommend human review
+- violent_frames / total_frames >= 0.5        → violence, confidence scales with ratio
+- violent_frames / total_frames = 1.0         → violence, confidence 0.95
+
+A single violent frame is almost always a false positive from MobileCLIP.
+Do NOT flag violence unless at least 30% of frames are violent.
+
+Always respond in JSON only, no explanation outside the JSON:
+{
+  "decision": "violence" | "no_violence" | "uncertain",
+  "confidence": 0.0-1.0,
+  "reasoning": "one sentence max",
+  "recommend_human_review": true | false,
+  "dominant_signal": "audio" | "video" | "both" | "neither"
+}\
+"""
+
+SYSTEM_PROMPT_VIOLENCE_THREE = """\
+You are a violence detection system analyzing surveillance footage.
+You receive video frame classifications and audio classifications.
+
+UNDERSTANDING THE INPUT:
+- Each video frame has is_violent: true or false
+- Each audio prediction has violence_relevant: true or false
+- Only consider audio strong if violence_relevant = true AND score > 0.01
+
+DECISION RULES:
+- Only if violent_frames / total_frames >= 0.5 AND strong audio -> violence
+- Otherwise -> non-violence
+
+Respond in JSON only:
+{
+  "decision": "violence" | "no_violence" | "uncertain",
+  "confidence": 0.0-1.0,
+  "reasoning": "one sentence referencing both audio and video evidence",
+  "recommend_human_review": true | false,
+  "dominant_signal": "audio" | "video" | "both" | "neither"
+}\
+"""
+
+#"recommend_human_review": true | false,
+#"dominant_signal": "audio" | "video" | "both" | "neither"
 
 @dataclass
 class InferenceMetrics:
@@ -330,8 +411,12 @@ class LLMStage(Stage):
         self._turn += 1
         prompt = msg.prompt
 
-        system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)
-        messages = [{"role": "user", "content": system}]
+        # LLM inference — tokenize, run, decode
+        #system = _SYSTEMB_PROMPTB.replace("{{INPUT_JSON}}", prompt)        
+        messages = [
+                {"role": "system", "content": self._system_prompt},
+                {"role": "user", "content": prompt}
+        ]
 
         client = OpenAI(base_url="http://localhost:8080/v1", api_key="none")
 

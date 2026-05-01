@@ -6,7 +6,8 @@ from ._clip_buffer import ClipBufferStage
 from ._preprocess import (
     ImagePreprocessConfig,
     ImagePreprocessor,
-    PreprocessorStage,
+    PreprocessorStageFrame,
+    PreprocessorStageVideo,
     ProcessedFrame,
 )
 from ._yolo import YOLOStage
@@ -15,7 +16,8 @@ __all__ = [
     "ClipBufferStage",
     "ImagePreprocessConfig",
     "ImagePreprocessor",
-    "PreprocessorStage",
+    "PreprocessorStageFrame",
+    "PreprocessorStageVideo",
     "ProcessedFrame",
     "YOLOStage",
 ]

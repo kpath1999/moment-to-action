@@ -55,7 +55,7 @@ class QCS6490LiteRTBackend(LiteRTBackend):
         if self._unit == ComputeUnit.NPU:
             try:
                 qnn_delegate = _load_delegate(
-                    "libQnnTFLiteDelegate.so", options={"backend_type": "htp"}
+                    "libQnnTFLiteDelegate.so", options={"backend_type": "gpu"}
                 )
             except Exception as e:
                 msg = f"NPU delegate unavailable: {e}"

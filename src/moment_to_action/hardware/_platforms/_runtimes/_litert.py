@@ -76,6 +76,15 @@ class LiteRTBackend(InferenceBackend):
         logger.info("Loaded %s on %s", path, self._unit.name)
         return interp
 
+    def load_model_fresh(self, path: str | os.PathLike[str]) -> object:
+        """Load a new interpreter instance, bypassing the cache.
+        Used when multiple independent interpreters are needed (e.g. thread pool).
+        """
+        path = os.fspath(path)
+        interp = self._load_interpreter(path)
+        logger.info("Loaded fresh interpreter for %s on %s", path, self._unit.name)
+        return interp
+
     def run(self, handle: object, inputs: ModelInput) -> list[np.ndarray]:
         """Run inference and return all output tensors.
 
@@ -142,6 +151,7 @@ class LiteRTBackend(InferenceBackend):
         """
         delegates = self._get_delegates()
         try:
+            #interp = _Interpreter(model_path=model_path, experimental_delegates=delegates, num_threads=4)
             interp = _Interpreter(model_path=model_path, experimental_delegates=delegates)
         except RuntimeError as e:  # pragma: no cover
             if delegates:

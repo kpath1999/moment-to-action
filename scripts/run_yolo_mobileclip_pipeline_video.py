@@ -25,11 +25,11 @@ from moment_to_action.messages import ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager, ModelID
 from moment_to_action.sensors import FileImageSensor as FileSensor
-from moment_to_action.stages import Pipeline, ImageSourceStage, AudioSourceStage
+from moment_to_action.stages import Pipeline, ImageSourceStage, VideoSourceStage, AudioSourceStage
 from moment_to_action.stages import PromptFormatterStage
 from moment_to_action.stages.llm import LLMStage
 from moment_to_action.stages.vlm import MobileCLIPStage
-from moment_to_action.stages.video import PreprocessorStage, YOLOStage
+from moment_to_action.stages.video import PreprocessorStageFrame, PreprocessorStageVideo, YOLOStage
 from moment_to_action.stages import TriggerStage
 
 logging.basicConfig(
@@ -52,18 +52,21 @@ PROMPTS = [
     #"a photo of a person sitting in front of the laptop not interacting",
     #"a photo of a person not working on a laptop",
     #"a photo of a laptop",
-    #"a photo of an old man slepping",
-    #"a photo of an old man fallen down"
-    "a photo of a person falling down",
-    "a photo of a person standing",
-    "a photo of a person sleeping",
-    "a photo of a person bending down",
+    #"a photo of a person falling down",
+    #"a photo of a person standing",
+    #"a photo of a person sleeping",
+    #"a photo of a person bending down",
+    "a photo of a person punching another person",
+    "people fighting and grabbing each other",
+    "people standing calmly and having a conversation",
+    "a photo of people having a conversation",
     #"a photo of a person walking normally",
 ]
 
 parser = argparse.ArgumentParser()
-#parser.add_argument("--image", required=True)
+parser.add_argument("--image", required=True)
 parser.add_argument("--video", required=True)
+parser.add_argument("--every_n", type=int, default=3, required=True)
 parser.add_argument("--device", choices=["cpu", "npu"], default="cpu")
 parser.add_argument("--conf", type=float, default=0.5, help="Confidence threshold")
 args = parser.parse_args()
@@ -86,16 +89,16 @@ manager = ModelManager()
 pipeline = Pipeline(
     stages=[
         ImageSourceStage(source_path=args.image),
-        PreprocessorStage(target_size=(640, 640), letterbox=True),
+        PreprocessorStageFrame(target_size=(640, 640), letterbox=True),
         YOLOStage(
-            backend=compute_backend,
-            #backend=ComputeBackend(preferred_unit=ComputeUnit.NPU),
+            #backend=compute_backend,
+            backend=ComputeBackend(preferred_unit=ComputeUnit.NPU),
             manager=manager,
             confidence_threshold=args.conf,
         ),
         TriggerStage(),
-        VideoSourceStage(source_path=args.video, every_n = 1),
-        PreprocessorStage(
+        VideoSourceStage(source_path=args.video, every_n = args.every_n),
+        PreprocessorStageVideo(
             target_size=(256,256),
             mean=(0.0,0.0,0.0),
             std=(1.0,1.0,1.0),

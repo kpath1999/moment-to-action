@@ -10,12 +10,14 @@ Consumers import from the submodules directly::
 from __future__ import annotations
 
 from moment_to_action.pipeline import Pipeline
+from .sources import ImageSourceStage, VideoSourceStage, AudioSourceStage
 
 from . import audio, llm, video, vlm
 from ._base import Stage
 from ._formatter import PromptFormatterStage
 from ._trigger import TriggerStage
 from .sources import AudioSourceStage, ImageSourceStage
+from ._fusion import FusionStage
 
 __all__ = [
     "AudioSourceStage",

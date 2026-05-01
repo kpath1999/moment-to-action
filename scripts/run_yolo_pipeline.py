@@ -14,6 +14,7 @@ import datetime
 import json
 import logging
 import time
+import cv2
 from pathlib import Path
 
 import rich
@@ -21,14 +22,14 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import ReasoningMessage
+from moment_to_action.messages import DetectionMessage, ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager, ModelID
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline, ImageSourceStage
 from moment_to_action.stages import PromptFormatterStage
 from moment_to_action.stages.llm import LLMStage
-from moment_to_action.stages.video import PreprocessorStage, YOLOStage
+from moment_to_action.stages.video import PreprocessorStageFrame, YOLOStage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,12 +61,22 @@ metrics = MetricsCollector(
 manager = ModelManager()
 
 
+def draw_detections(image: np.ndarray, detections: DetectionMessage) -> np.ndarray:
+    out = image.copy()
+    for box in detections.boxes:
+        color = (0, 255, 0) if box.class_id == 0 else (0, 0, 255)
+        cv2.rectangle(out, (int(box.x1), int(box.y1)), (int(box.x2), int(box.y2)), color, 2)
+        text = f"{box.label} {box.confidence:.2f}"
+        cv2.putText(out, text, (int(box.x1), int(box.y1) - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+    return out
+
 # ── build pipeline ─────────────────────────────────────────────────
 # Stages resolve their own model paths via ModelManager.
 pipeline = Pipeline(
     stages=[
         ImageSourceStage(source_path=args.image),
-        PreprocessorStage(target_size=(640, 640), letterbox=True),
+        PreprocessorStageFrame(target_size=(640, 640), letterbox=True, channels_first=False),
         YOLOStage(
             backend=compute_backend,
             manager=manager,
@@ -93,6 +104,12 @@ with metrics.start_trace():
 #    result = pipeline.run(msg, metrics=metrics)
     result = pipeline.run(metrics=metrics)
 total_ms = (time.perf_counter() - t_total) * 1000
+
+if result and isinstance(result, DetectionMessage):
+    frame = cv2.imread(args.image)
+    annotated = draw_detections(frame, result)
+    cv2.imwrite("result.jpg", annotated)
+    print(f"Saved result.jpg with {len(result.boxes)} detection(s)")
 
 # ── print results ──────────────────────────────────────────────────
 logger.info("\nTotal latency: %.1fms", total_ms)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from moment_to_action.messages import Message, TriggerMessage
+from moment_to_action.messages import Message, TriggerMessage, AudioClassificationMessage
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
@@ -13,6 +13,10 @@ if TYPE_CHECKING:
 
 class TriggerStage(Stage):
     """Dummy trigger stage that always fires and accumulates outputs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.last_audio: AudioClassificationMessage | None = None
 
     def _process(
         self,
@@ -25,6 +29,9 @@ class TriggerStage(Stage):
         else:
             payload = msg
             accumulated = [payload]
+
+        if isinstance(msg, AudioClassificationMessage):
+            self.last_audio = msg
 
         return TriggerMessage(
             payload=payload,

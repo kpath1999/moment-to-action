@@ -116,14 +116,28 @@ class YAMNetStage(Stage):
             labels.extend(row["display_name"] for row in reader)
         return tuple(labels)
 
+    #def _extract_score_matrix(self, outputs: list[np.ndarray]) -> np.ndarray:
+    #    for output in outputs:
+    #        array = np.asarray(output, dtype=np.float32)
+    #        if array.ndim == _EXPECTED_RANK_TWO:
+    #            return array
+    #        if array.ndim == _EXPECTED_RANK_THREE and array.shape[0] == 1:
+    #            return array[0]
+    #    return np.empty((0, 0), dtype=np.float32)
+
     def _extract_score_matrix(self, outputs: list[np.ndarray]) -> np.ndarray:
-        for output in outputs:
-            array = np.asarray(output, dtype=np.float32)
-            if array.ndim == _EXPECTED_RANK_TWO:
-                return array
-            if array.ndim == _EXPECTED_RANK_THREE and array.shape[0] == 1:
-                return array[0]
-        return np.empty((0, 0), dtype=np.float32)
+        array = np.asarray(outputs[0], dtype=np.float32)
+    
+        # handle [1, 521] → [1, 521] (already 2D, treat as single frame)
+        if array.ndim == _EXPECTED_RANK_THREE and array.shape[0] == 1:
+            array = array[0]
+
+        # apply softmax to convert logits to probabilities
+        array = array - array.max(axis=-1, keepdims=True)   # numerical stability
+        exp = np.exp(array)
+        array = exp / exp.sum(axis=-1, keepdims=True)
+
+        return array
 
     def _aggregate_scores(self, frame_scores: np.ndarray) -> np.ndarray:
         if self._aggregation == "max":

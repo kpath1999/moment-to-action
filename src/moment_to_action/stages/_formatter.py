@@ -107,6 +107,35 @@ def _handle_classification(
         "classifications": classifications,
     }
 
+NEUTRAL_PROMPT = "people standing or walking calmly"
+
+VIOLENCE_VISUAL_PROMPTS = [
+    "a person punching another person",
+    "two people fighting and grabbing each other",
+    "a person shoving another person aggressively",
+    "a person being knocked to the ground",
+]
+
+def handle_classification_list(msg: list, min_confidence: float, top_k: int) -> dict:
+    selected = msg[:top_k]
+
+    frame_summaries = [
+        {
+            "frame": int(item.timestamp),
+            "label": item.label,
+            "is_violent": item.label != NEUTRAL_PROMPT,
+        }
+        for item in selected
+    ]
+
+    violent_frame_count = sum(1 for f in frame_summaries if f["is_violent"])
+
+    return {
+        "source": "violence_detection",
+        "frames": frame_summaries,
+        "violent_frames": violent_frame_count,
+        "total_frames": len(frame_summaries),
+    }
 
 def _handle_audio_classification(
     msg: AudioClassificationMessage,
@@ -156,7 +185,61 @@ def _handle_audio_transcription(
         "segments": segments,
     }
 
+VIOLENCE_AUDIO_CLASSES = [
+    "Screaming", "Shout", "Crowd", "Thump, thud",
+    "Smash, crash", "Glass", "Gunshot, gunfire",
+    "Explosion", "Whack, thwack", "Slap, smack",
+]
 
+def handle_fused_violence(msg, min_confidence: float, top_k: int) -> dict:
+    video_msgs, audio_msg = msg    # ← unpack the tuple first
+
+    # --- video frames ---
+    selected = video_msgs[:top_k]
+    frame_summaries = [
+        {
+            "frame": int(item.timestamp),
+            "label": item.label,
+            "is_violent": item.label != NEUTRAL_PROMPT,
+        }
+        for item in selected
+    ]
+    violent_frame_count = sum(1 for f in frame_summaries if f["is_violent"])
+
+    # --- audio top 5 with scores ---
+    top_audio = sorted(
+        audio_msg.top_predictions.items(),   # ← use audio_msg not msg
+        key=lambda x: x[1],
+        reverse=True
+    )[:5]
+
+    audio_summary = [
+        {
+            "label": label,
+            "score": round(score, 2),
+            "violence_relevant": label in VIOLENCE_AUDIO_CLASSES,
+        }
+        for label, score in top_audio
+        if score >= min_confidence
+    ]
+
+    max_violence_audio = max(
+        (score for label, score in top_audio if label in VIOLENCE_AUDIO_CLASSES),
+        default=0.0,
+    )
+
+    return {
+        "source": "violence_detection",
+        "video": {
+            "frames": frame_summaries,
+            "violent_frames": violent_frame_count,
+            "total_frames": len(frame_summaries),
+        },
+        "audio": {
+            "predictions": audio_summary,
+            "max_violence_relevant_score": round(max_violence_audio, 2),
+        },
+    }
 # ---------------------------------------------------------------------------
 # Template protocol + built-in templates
 # ---------------------------------------------------------------------------
@@ -170,7 +253,8 @@ class PromptTemplate(Protocol):
 
 def json_template(context: dict) -> str:
     """Render context as compact JSON — matches the existing system prompts."""
-    return json.dumps(context, separators=(", ", ": "))
+    #return json.dumps(context, separators=(", ", ": "))
+    return json.dumps(context, indent=2)
 
 
 def natural_language_template(context: dict) -> str:
@@ -313,8 +397,10 @@ class PromptFormatterStage(Stage):
         self._registry: dict[type, FormatHandler] = {
             DetectionMessage: cast("FormatHandler", _handle_detection),
             ClassificationMessage: cast("FormatHandler", _handle_classification),
+            list: cast("FormatHandler", handle_classification_list),
             AudioClassificationMessage: cast("FormatHandler", _handle_audio_classification),
             AudioTranscriptionMessage: cast("FormatHandler", _handle_audio_transcription),
+            tuple: cast("FormatHandler", handle_fused_violence),
         }
         if extra_handlers:
             self._registry.update(extra_handlers)
@@ -359,6 +445,57 @@ class PromptFormatterStage(Stage):
 
         # Build the structured context dict via the handler
         context = handler(msg, self._min_confidence, self._top_k)
+        """
+        context = {
+            "source": "violence_detection",
+            "video": {
+                "frames": [
+                    {"frame": 0,   "label": "people standing or walking calmly", "is_violent": False},
+                    {"frame": 40,  "label": "people standing or walking calmly", "is_violent": False},
+                    {"frame": 80,  "label": "a person punching another person",  "is_violent": True},
+                    {"frame": 120, "label": "people standing or walking calmly", "is_violent": False},
+                    {"frame": 160, "label": "people standing or walking calmly", "is_violent": False},
+                ],
+                "violent_frames": 1,
+                "total_frames": 5,
+            },
+            "audio": {
+                "predictions": [
+                    {"label": "Speech", "score": 0.37, "violence_relevant": False},
+                    {"label": "Screaming", "score": 0.02, "violence_relevant": True},
+                ],
+                "max_violence_relevant_score": 0.02,
+            },
+        }
+        context = {
+            "source": "violence_detection",
+            "frames": [
+                {"frame": i * 40, "label": "people standing or walking calmly", "is_violent": False}
+                for i in range(10)
+            ],
+            "violent_frames": 0,
+            "total_frames": 5,
+        }
+        
+        context = {
+            "source": "violence_detection",
+            "frames": [
+                {"frame": 0,   "label": "people standing or walking calmly", "is_violent": False},
+                {"frame": 5,  "label": "people standing or walking calmly", "is_violent": False},
+                {"frame": 10,  "label": "a person punching another person",  "is_violent": True},
+                {"frame": 15, "label": "people standing or walking calmly", "is_violent": False},
+                {"frame": 20, "label": "people standing or walking calmly", "is_violent": False},
+                {"frame": 25, "label": "people standing or walking calmly", "is_violent": False},
+                {"frame": 30, "label": "people standing or walking calmly", "is_violent": False},
+                {"frame": 35, "label": "people standing or walking calmly", "is_violent": False},
+                {"frame": 40, "label": "people standing or walking calmly", "is_violent": False},
+                {"frame": 45, "label": "people standing or walking calmly", "is_violent": False},
+            ],
+            "violent_frames": 1,
+            "non-violent_frames": 9,
+            "total_frames": 10,
+        }
+        """
 
         # Render to a prompt string via the template
         prompt = self._template(context)
@@ -376,9 +513,17 @@ class PromptFormatterStage(Stage):
             prompt[:120],
         )
 
+        if isinstance(msg, list):
+            timestamp = msg[-1].timestamp if msg else 0.0
+        elif isinstance(msg, tuple):
+            video_msgs, _ = msg
+            timestamp = video_msgs[-1].timestamp if video_msgs else 0.0
+        else:
+            timestamp = msg.timestamp
+
         return PromptMessage(
             prompt=prompt,
             source_stage=type(msg).__name__,
             raw_context=context,
-            timestamp=msg.timestamp,
+            timestamp=timestamp,
         )
