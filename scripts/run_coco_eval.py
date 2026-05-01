@@ -88,6 +88,7 @@ def _run_yolo_eval(
     unit: ComputeUnit,
     conf_threshold: float,
 ) -> dict[str, float | None]:
+    logger.info("YOLO eval config: unit=%s conf_threshold=%.6f", unit.value, conf_threshold)
     backend = ComputeBackend(preferred_unit=unit)
     # Resolve the correct YOLOv12 model path for the compute unit
     model_path = get_yolov12_model_for_unit(unit=unit)

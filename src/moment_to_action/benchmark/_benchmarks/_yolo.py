@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from moment_to_action.benchmark._benchmarks._base import ModelBenchmark
 from moment_to_action.benchmark._detection_metrics import compute_detection_map
@@ -13,8 +15,6 @@ from moment_to_action.models import ModelID
 from moment_to_action.stages.video._yolo import YOLOStage
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from moment_to_action.benchmark._datasets._coco_dataset import CocoDataset
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.models import ModelManager
@@ -35,6 +35,78 @@ _YOLO_FEATURE_DIM = 84
 _GPU_DEBUG_LOG_IMAGES = 3
 _NMS_DIM_2 = 2
 _NMS_DIM_3 = 3
+_BOX_INSPECTION_IMAGES = 5
+_MAX_DEBUG_LIST_ITEMS = 10
+_TOPK_LABELS = 5
+_DEBUG_OUTPUT_DIR = Path("logs/yolo_debug")
+_PROB_MIN = -1e-4
+_PROB_MAX = 1.0001
+_EMPTY_MASK_DEBUG_TOPK = 10
+_GT_COLOR = (0, 200, 0)
+_PRED_COLOR = (220, 20, 60)
+_HIGH_PASS_RATIO = 0.95
+
+
+def _box_iou(box_a: OracleBox, box_b: OracleBox) -> float:
+    """Compute IoU between two OracleBox instances in pixel coordinates."""
+    inter_x1 = max(box_a.x1, box_b.x1)
+    inter_y1 = max(box_a.y1, box_b.y1)
+    inter_x2 = min(box_a.x2, box_b.x2)
+    inter_y2 = min(box_a.y2, box_b.y2)
+
+    inter_w = max(0.0, inter_x2 - inter_x1)
+    inter_h = max(0.0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+    if inter_area <= 0.0:
+        return 0.0
+
+    area_a = max(0.0, box_a.x2 - box_a.x1) * max(0.0, box_a.y2 - box_a.y1)
+    area_b = max(0.0, box_b.x2 - box_b.x1) * max(0.0, box_b.y2 - box_b.y1)
+    denom = area_a + area_b - inter_area
+    if denom <= 0.0:
+        return 0.0
+    return inter_area / denom
+
+
+def _label_key(label: str) -> str:
+    """Normalize labels for easier GT-vs-pred mismatch inspection."""
+    return " ".join(label.strip().lower().split())
+
+
+def _looks_like_probability(arr: np.ndarray) -> bool:
+    """Return True when values are already in [0, 1] (allowing small numeric slack)."""
+    return float(arr.min()) >= _PROB_MIN and float(arr.max()) <= _PROB_MAX
+
+
+def _count_pre_nms_candidates(raw_outputs: object) -> int | None:
+    """Return number of raw candidate boxes before NMS, or None if not determinable."""
+    if not (
+        isinstance(raw_outputs, (list, tuple))
+        and len(raw_outputs) > 0
+        and isinstance(raw_outputs[0], np.ndarray)
+    ):
+        return None
+    arr: np.ndarray = raw_outputs[0]
+    if arr.ndim == _NMS_DIM_3 and arr.shape[0] == 1:
+        arr = arr[0]
+    if arr.ndim != _NMS_DIM_2:
+        return None
+    # Combined output can be [84, N] or [N, 84]. Count the candidate axis.
+    if _YOLO_FEATURE_DIM in arr.shape and arr.shape[0] != arr.shape[1]:
+        return arr.shape[1] if arr.shape[0] == _YOLO_FEATURE_DIM else arr.shape[0]
+    return int(arr.shape[0])
+
+
+def _find_best_iou_match(gt: OracleBox, pred_boxes: list[OracleBox]) -> tuple[int, float]:
+    """Return (index, iou) of the pred box with the highest IoU against *gt*."""
+    best_idx = -1
+    best_iou = -1.0
+    for i, pred in enumerate(pred_boxes):
+        cur_iou = _box_iou(gt, pred)
+        if cur_iou > best_iou:
+            best_iou = cur_iou
+            best_idx = i
+    return best_idx, best_iou
 
 
 class YOLOBenchmark(ModelBenchmark):
@@ -46,12 +118,21 @@ class YOLOBenchmark(ModelBenchmark):
         backend: ComputeBackend,
     ) -> OracleDetection:
         """Run prediction and post-processing for a single image."""
+        debug_idx = self._debug_image_counter
+        self._debug_image_counter += 1
+
         img_tensor = _load_yolo_tensor(
             img_path,
             self._input_shape,
             getattr(self, "_input_quant", None),
         )
+        if debug_idx < _GPU_DEBUG_LOG_IMAGES:
+            self._log_tensor_stats("input", img_tensor)
+
         raw_outputs = backend.run(handle, img_tensor)
+        if debug_idx < _GPU_DEBUG_LOG_IMAGES:
+            self._log_backend_output_shapes(raw_outputs)
+
         # Dequantize outputs if needed (NPU quantized model)
         output_quant = getattr(self, "_output_quant", None)
         if output_quant is not None and isinstance(raw_outputs, (list, tuple)):
@@ -89,17 +170,7 @@ class YOLOBenchmark(ModelBenchmark):
                 raw_outputs.shape,
             )
         # Pre-thresholding: count number of raw candidate boxes (if possible)
-        pre_nms_count = None
-        if (
-            isinstance(raw_outputs, (list, tuple))
-            and len(raw_outputs) > 0
-            and isinstance(raw_outputs[0], np.ndarray)
-        ):
-            arr = raw_outputs[0]
-            if arr.ndim == _NMS_DIM_3 and arr.shape[0] == 1:
-                arr = arr[0]
-            if arr.ndim == _NMS_DIM_2:
-                pre_nms_count = arr.shape[0]
+        pre_nms_count = _count_pre_nms_candidates(raw_outputs)
         yolo_boxes = _parse_yolo_boxes(
             raw_outputs,
             self._input_shape,
@@ -107,16 +178,9 @@ class YOLOBenchmark(ModelBenchmark):
             class_labels=YOLOStage.COCO_LABELS,
         )
         post_nms_count = len(yolo_boxes)
-        # Ensure idx is int for _log_gpu_debug
-        idx = 0
-        if hasattr(gt_det, "image_name"):
-            try:
-                idx = int(gt_det.image_name.split(".")[0])
-            except (ValueError, AttributeError, TypeError):
-                idx = 0
 
         self._log_gpu_debug(
-            idx,
+            debug_idx,
             raw_outputs,
             gt_det,
             yolo_boxes,
@@ -125,7 +189,61 @@ class YOLOBenchmark(ModelBenchmark):
             img_path=img_path,
         )
         scaled_boxes = self._scale_predicted_boxes(yolo_boxes, img_path)
+        self._log_gt_pred_alignment(
+            debug_idx=debug_idx,
+            image_name=gt_det.image_name,
+            gt_boxes=gt_det.boxes,
+            pred_boxes=scaled_boxes,
+            img_path=img_path,
+        )
         return OracleDetection(image_name=gt_det.image_name, boxes=scaled_boxes)
+
+    def _log_tensor_stats(self, name: str, arr: np.ndarray) -> None:
+        """Log compact distribution stats to detect quantization/layout issues quickly."""
+        flat = arr.astype(np.float32).reshape(-1)
+        logger.info(
+            "[YOLO DEBUG] Tensor %s: shape=%s dtype=%s min=%.6f max=%.6f mean=%.6f "
+            "std=%.6f p01=%.6f p99=%.6f",
+            name,
+            arr.shape,
+            arr.dtype,
+            float(flat.min()),
+            float(flat.max()),
+            float(flat.mean()),
+            float(flat.std()),
+            float(np.percentile(flat, 1)),
+            float(np.percentile(flat, 99)),
+        )
+
+    def _log_backend_output_shapes(self, raw_outputs: object) -> None:
+        """Log every output tensor shape/dtype to inspect backend-specific output contracts."""
+        if isinstance(raw_outputs, dict):
+            logger.info(
+                "[YOLO DEBUG] Backend output container: dict with %d item(s)",
+                len(raw_outputs),
+            )
+            for name, out in raw_outputs.items():
+                if isinstance(out, np.ndarray):
+                    self._log_tensor_stats(f"output[{name}]", out)
+            return
+
+        if isinstance(raw_outputs, (list, tuple)):
+            logger.info(
+                "[YOLO DEBUG] Backend output container: %s with %d tensor(s)",
+                type(raw_outputs).__name__,
+                len(raw_outputs),
+            )
+            for i, out in enumerate(raw_outputs):
+                if isinstance(out, np.ndarray):
+                    self._log_tensor_stats(f"output[{i}]", out)
+            return
+
+        if isinstance(raw_outputs, np.ndarray):
+            logger.info("[YOLO DEBUG] Backend output container: ndarray")
+            self._log_tensor_stats("output", raw_outputs)
+            return
+
+        logger.warning("[YOLO DEBUG] Unexpected backend output type: %s", type(raw_outputs))
 
     def _get_output_quant(self, model_path: str) -> dict | None:
         """Read output quantization info from TFLite model if quantized."""
@@ -190,6 +308,7 @@ class YOLOBenchmark(ModelBenchmark):
         post_nms_count: int,
     ) -> None:
         logger.info("[GPU DEBUG] Image: %s", gt_det.image_name)
+        logger.info("[GPU DEBUG] GT boxes: %d", len(gt_det.boxes))
         logger.info("[GPU DEBUG] Pre-NMS candidate boxes: %s", pre_nms_count)
         logger.info("[GPU DEBUG] Post-NMS boxes: %s", post_nms_count)
 
@@ -243,6 +362,123 @@ class YOLOBenchmark(ModelBenchmark):
                 b.y2,
                 b.label,
             )
+
+    def _log_gt_pred_alignment(
+        self,
+        *,
+        debug_idx: int,
+        image_name: str,
+        gt_boxes: list[OracleBox],
+        pred_boxes: list[OracleBox],
+        img_path: Path,
+    ) -> None:
+        """Log IoU/label agreement diagnostics and optionally write an overlay image."""
+        if debug_idx >= _BOX_INSPECTION_IMAGES:
+            return
+
+        logger.info(
+            "[YOLO ALIGN] image=%s gt_count=%d pred_count=%d",
+            image_name,
+            len(gt_boxes),
+            len(pred_boxes),
+        )
+
+        gt_label_counts = Counter(_label_key(b.label) for b in gt_boxes)
+        pred_label_counts = Counter(_label_key(b.label) for b in pred_boxes)
+        logger.info(
+            "[YOLO ALIGN] GT label histogram (top %d): %s",
+            _TOPK_LABELS,
+            gt_label_counts.most_common(_TOPK_LABELS),
+        )
+        logger.info(
+            "[YOLO ALIGN] Pred label histogram (top %d): %s",
+            _TOPK_LABELS,
+            pred_label_counts.most_common(_TOPK_LABELS),
+        )
+
+        if not gt_boxes or not pred_boxes:
+            logger.info("[YOLO ALIGN] Skipping IoU match stats (one side has no boxes).")
+            self._write_debug_overlay(img_path, image_name, gt_boxes, pred_boxes)
+            return
+
+        label_match_count = 0
+        iou_match_count = 0
+        joint_match_count = 0
+        logged_pairs = 0
+
+        for gt in gt_boxes:
+            best_idx, best_iou = _find_best_iou_match(gt, pred_boxes)
+
+            if best_idx < 0:
+                continue
+
+            pred = pred_boxes[best_idx]
+            label_match = _label_key(pred.label) == _label_key(gt.label)
+            if label_match:
+                label_match_count += 1
+            if best_iou >= _IOU_RECALL_THRESHOLD:
+                iou_match_count += 1
+            if label_match and best_iou >= _IOU_RECALL_THRESHOLD:
+                joint_match_count += 1
+
+            if logged_pairs < _MAX_DEBUG_LIST_ITEMS:
+                logger.info(
+                    "[YOLO ALIGN] GT[%d] label=%s best_pred[%d] label=%s iou=%.3f "
+                    "pred_conf=%.3f label_match=%s",
+                    logged_pairs,
+                    gt.label,
+                    best_idx,
+                    pred.label,
+                    best_iou,
+                    pred.confidence,
+                    label_match,
+                )
+                logged_pairs += 1
+
+        logger.info(
+            "[YOLO ALIGN] match summary: gt=%d label_match=%d iou@%.2f=%d joint(label+iou)=%d",
+            len(gt_boxes),
+            label_match_count,
+            _IOU_RECALL_THRESHOLD,
+            iou_match_count,
+            joint_match_count,
+        )
+
+        self._write_debug_overlay(img_path, image_name, gt_boxes, pred_boxes)
+
+    def _write_debug_overlay(
+        self,
+        img_path: Path,
+        image_name: str,
+        gt_boxes: list[OracleBox],
+        pred_boxes: list[OracleBox],
+    ) -> None:
+        """Write a side-by-side style overlay image with GT and predicted boxes."""
+        _DEBUG_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = _DEBUG_OUTPUT_DIR / f"{Path(image_name).stem}_gt_pred_overlay.png"
+
+        try:
+            with Image.open(img_path).convert("RGB") as src_img:
+                canvas = src_img.copy()
+
+            draw = ImageDraw.Draw(canvas)
+            for gt in gt_boxes[:_MAX_DEBUG_LIST_ITEMS]:
+                draw.rectangle([gt.x1, gt.y1, gt.x2, gt.y2], outline=_GT_COLOR, width=2)
+                draw.text((gt.x1, max(0.0, gt.y1 - 12)), f"GT:{gt.label}", fill=_GT_COLOR)
+
+            for pred in pred_boxes[:_MAX_DEBUG_LIST_ITEMS]:
+                draw.rectangle([pred.x1, pred.y1, pred.x2, pred.y2], outline=_PRED_COLOR, width=2)
+                draw.text(
+                    (pred.x1, pred.y1 + 2),
+                    f"PR:{pred.label} {pred.confidence:.2f}",
+                    fill=_PRED_COLOR,
+                )
+
+            draw.text((8, 8), "Green=GT, Red=Pred", fill=(255, 255, 255))
+            canvas.save(output_path)
+            logger.info("[YOLO ALIGN] Wrote overlay: %s", output_path)
+        except OSError as exc:
+            logger.warning("[YOLO ALIGN] Failed to write overlay for %s: %r", image_name, exc)
 
     def _scale_predicted_boxes(
         self,
@@ -311,6 +547,7 @@ class YOLOBenchmark(ModelBenchmark):
         self._is_tflite = model_path is not None and str(model_path).endswith(".tflite")
         # Default input shape; will be set in _load_model
         self._input_shape: tuple[int, ...] = (1, 3, 640, 640)
+        self._debug_image_counter = 0
 
     @property
     def model_id(self) -> ModelID:
@@ -435,22 +672,24 @@ def _load_yolo_tensor(
     """Load a PIL image and convert to a tensor matching input_shape and quantization."""
     is_nhwc = len(input_shape) == _INPUT_NDIM and input_shape[_NHWC_CHANNEL_AXIS] == _RGB_CHANNELS
     is_nchw = len(input_shape) == _INPUT_NDIM and input_shape[_CHANNEL_AXIS] == _RGB_CHANNELS
+    with Image.open(img_path).convert("RGB") as image:
+        img_rgb = np.asarray(image, dtype=np.uint8)
+    img_bgr = img_rgb[:, :, ::-1]
+
     if is_nchw:
         _, _, height, width = input_shape
-        image = Image.open(img_path).convert("RGB")
-        image = image.resize((width, height), Image.Resampling.BILINEAR)
-        arr = np.asarray(image, dtype=np.float32) / 255.0
-        arr = arr.transpose(2, 0, 1)
-        arr = arr[np.newaxis]
+        arr = _preprocess_nchw(img_bgr, height, width)
     elif is_nhwc:
         _, height, width, _ = input_shape
-        image = Image.open(img_path).convert("RGB")
-        image = image.resize((width, height), Image.Resampling.BILINEAR)
-        arr = np.asarray(image, dtype=np.float32) / 255.0
-        arr = arr[np.newaxis]
+        arr = _preprocess_nhwc(img_bgr, height, width)
     else:
         msg = f"Unsupported input shape for YOLO tensor: {input_shape}"
         raise ValueError(msg)
+    logger.info(
+        "[YOLO PREPROCESS] Letterbox preprocess applied: shape=%s dtype=%s",
+        arr.shape,
+        arr.dtype,
+    )
     # Quantize if quantization info is provided
     if input_quant is not None:
         scale = input_quant.get("scale", 1.0)
@@ -621,6 +860,9 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912, PLR0915
 
     if arr.ndim == _OUTPUT_NDIM and arr.shape[0] == 1:
         arr = arr[0]
+    if arr.ndim != _MATRIX_NDIM:
+        logger.warning("[YOLO PARSE] Unexpected output ndim for combined format: %s", arr.ndim)
+        return []
     if arr.shape[0] == _YOLO_FEATURE_DIM and arr.shape[1] != _YOLO_FEATURE_DIM:
         arr = arr.T
         logger.info("[YOLO PARSE] Transposed output to (N, 84): %s", arr.shape)
@@ -634,23 +876,142 @@ def _parse_yolo_boxes(  # noqa: C901, PLR0911, PLR0912, PLR0915
         logger.info("[YOLO PARSE] No candidate boxes after shape check.")
         return []
 
+    logger.info(
+        "[YOLO PARSE] Combined raw stats overall: min=%.6f max=%.6f mean=%.6f p99=%.6f",
+        float(arr.min()),
+        float(arr.max()),
+        float(arr.mean()),
+        float(np.percentile(arr, 99)),
+    )
+
     boxes_xywh = arr[:, :_BBOX_COORDS]
-    class_scores = arr[:, _BBOX_COORDS:]
-    # Apply sigmoid activation to class scores for TFLite/ONNX outputs
-    class_scores = 1 / (1 + np.exp(-class_scores))
-    confidences = class_scores.max(axis=1)
+    logger.info(
+        "[YOLO PARSE] Combined raw box stats [:4]: min=%.6f max=%.6f mean=%.6f p99=%.6f",
+        float(boxes_xywh.min()),
+        float(boxes_xywh.max()),
+        float(boxes_xywh.mean()),
+        float(np.percentile(boxes_xywh, 99)),
+    )
+
+    # Two common head layouts:
+    #   85 channels: [cx, cy, w, h, obj, cls0..cls79]
+    #   84 channels: [cx, cy, w, h, cls0..cls79] (objectness fused)
+    if arr.shape[1] == _YOLO_FEATURE_DIM + 1:
+        conf_raw = arr[:, _BBOX_COORDS]
+        class_scores_raw = arr[:, _BBOX_COORDS + 1 :]
+        logger.info(
+            "[YOLO PARSE] Raw ch4 (obj/conf) stats: min=%.6f max=%.6f mean=%.6f p99=%.6f",
+            float(conf_raw.min()),
+            float(conf_raw.max()),
+            float(conf_raw.mean()),
+            float(np.percentile(conf_raw, 99)),
+        )
+        logger.info(
+            "[YOLO PARSE] Raw class stats [5:]: min=%.6f max=%.6f mean=%.6f p99=%.6f",
+            float(class_scores_raw.min()),
+            float(class_scores_raw.max()),
+            float(class_scores_raw.mean()),
+            float(np.percentile(class_scores_raw, 99)),
+        )
+
+        obj = (
+            np.clip(conf_raw, 0.0, 1.0)
+            if _looks_like_probability(conf_raw)
+            else 1 / (1 + np.exp(-conf_raw))
+        )
+        class_scores = (
+            np.clip(class_scores_raw, 0.0, 1.0)
+            if _looks_like_probability(class_scores_raw)
+            else 1 / (1 + np.exp(-class_scores_raw))
+        )
+        if _looks_like_probability(conf_raw) and _looks_like_probability(class_scores_raw):
+            logger.info("[YOLO PARSE] 85-ch decode: using raw probabilities (no extra sigmoid).")
+        else:
+            logger.info("[YOLO PARSE] 85-ch decode: applied sigmoid to logit channels.")
+
+        class_max = class_scores.max(axis=1)
+        confidences = obj * class_max
+        class_ids_raw = class_scores.argmax(axis=1)
+    else:
+        class_scores_raw = arr[:, _BBOX_COORDS:]
+        logger.info(
+            "[YOLO PARSE] Raw class stats [4:]: min=%.6f max=%.6f mean=%.6f p99=%.6f",
+            float(class_scores_raw.min()),
+            float(class_scores_raw.max()),
+            float(class_scores_raw.mean()),
+            float(np.percentile(class_scores_raw, 99)),
+        )
+
+        if _looks_like_probability(class_scores_raw):
+            class_scores = np.clip(class_scores_raw, 0.0, 1.0)
+            logger.info(
+                "[YOLO PARSE] 84-ch decode: class slice appears already activated; "
+                "using raw probabilities.",
+            )
+        else:
+            class_scores = 1 / (1 + np.exp(-class_scores_raw))
+            logger.info("[YOLO PARSE] 84-ch decode: applied sigmoid to class logits.")
+
+        confidences = class_scores.max(axis=1)
+        class_ids_raw = class_scores.argmax(axis=1)
+
+    logger.info(
+        "[YOLO PARSE] Combined class-prob stats: min=%.6f max=%.6f mean=%.6f p99=%.6f",
+        float(class_scores.min()),
+        float(class_scores.max()),
+        float(class_scores.mean()),
+        float(np.percentile(class_scores, 99)),
+    )
+    logger.info(
+        "[YOLO PARSE] Combined confidence stats: min=%.6f max=%.6f mean=%.6f p99=%.6f",
+        float(confidences.min()),
+        float(confidences.max()),
+        float(confidences.mean()),
+        float(np.percentile(confidences, 99)),
+    )
+    logger.info("[YOLO PARSE] Effective conf_threshold=%.6f", conf_threshold)
 
     mask = confidences >= conf_threshold
+    mask_count = int(np.count_nonzero(mask))
+    mask_ratio = mask_count / max(1, arr.shape[0])
     logger.info(
         "[YOLO PARSE] Combined: candidate boxes before mask: %d, after mask: %d",
         arr.shape[0],
-        np.count_nonzero(mask),
+        mask_count,
     )
+    if mask_ratio > _HIGH_PASS_RATIO:
+        logger.warning(
+            "[YOLO PARSE] %.2f%% of candidates pass conf_threshold=%.3f. "
+            "This often indicates score calibration mismatch (e.g., applying sigmoid twice).",
+            100 * mask_ratio,
+            conf_threshold,
+        )
     boxes_xywh = boxes_xywh[mask]
     confidences = confidences[mask]
-    class_ids_raw: np.ndarray = class_scores[mask].argmax(axis=1)
+    class_ids_raw = class_ids_raw[mask]
 
     if len(boxes_xywh) == 0:
+        topk = min(_EMPTY_MASK_DEBUG_TOPK, len(confidences))
+        if topk > 0:
+            # Summarize best candidates when thresholding eliminates all boxes.
+            top_idx = np.argsort(confidences)[-topk:][::-1]
+            for rank, idx in enumerate(top_idx, start=1):
+                class_id = int(class_ids_raw[idx])
+                label = str(class_id)
+                if class_labels is not None and class_id < len(class_labels):
+                    label = class_labels[class_id]
+                logger.info(
+                    "[YOLO PARSE] Empty-mask top%02d cand idx=%d conf=%.6f class_id=%d label=%s",
+                    rank,
+                    int(idx),
+                    float(confidences[idx]),
+                    class_id,
+                    label,
+                )
+            logger.info(
+                "[YOLO PARSE] Suggest trying --conf-threshold below %.6f for diagnostic runs.",
+                float(confidences[top_idx[-1]]),
+            )
         logger.info("[YOLO PARSE] No boxes after confidence threshold.")
         return []
 
