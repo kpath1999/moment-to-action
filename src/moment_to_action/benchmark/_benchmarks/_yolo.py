@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
 from pathlib import Path
@@ -198,7 +199,48 @@ def _find_best_iou_match(gt: OracleBox, pred_boxes: list[OracleBox]) -> tuple[in
     return best_idx, best_iou
 
 
+def _summarize_raw_tensor(arr: np.ndarray) -> dict[str, object]:
+    """Return summary stats for a raw YOLO output tensor."""
+    meta: dict[str, object] = {
+        "shape": list(arr.shape),
+        "dtype": str(arr.dtype),
+        "min": float(arr.min()),
+        "max": float(arr.max()),
+        "mean": float(arr.mean()),
+        "p99": float(np.percentile(arr, 99)),
+    }
+
+    data = arr
+    if arr.ndim == _OUTPUT_NDIM and arr.shape[0] == 1:
+        data = arr[0]
+    if data.ndim == _MATRIX_NDIM and _YOLO_FEATURE_DIM in data.shape:
+        if data.shape[0] == _YOLO_FEATURE_DIM:
+            data = data.T
+        if data.shape[1] >= _BBOX_COORDS:
+            boxes = data[:, :_BBOX_COORDS]
+            classes = data[:, _BBOX_COORDS:]
+            meta["box_stats"] = {
+                "min": float(boxes.min()),
+                "max": float(boxes.max()),
+                "mean": float(boxes.mean()),
+                "p99": float(np.percentile(boxes, 99)),
+            }
+            if classes.size:
+                meta["class_stats"] = {
+                    "min": float(classes.min()),
+                    "max": float(classes.max()),
+                    "mean": float(classes.mean()),
+                    "p99": float(np.percentile(classes, 99)),
+                }
+    return meta
+
+
 class YOLOBenchmark(ModelBenchmark):
+    _raw_dump_dir: Path | None
+    _raw_dump_max_images: int
+    _raw_dump_count: int
+    _log_debug: bool
+
     def _predict_image(
         self,
         img_path: Path,
@@ -221,6 +263,12 @@ class YOLOBenchmark(ModelBenchmark):
         raw_outputs = backend.run(handle, img_tensor)
         if debug_idx < _GPU_DEBUG_LOG_IMAGES:
             self._log_backend_output_shapes(raw_outputs)
+
+        self._maybe_dump_raw_outputs(
+            raw_outputs,
+            image_name=gt_det.image_name,
+            backend=backend,
+        )
 
         # Dequantize outputs if needed (NPU quantized model)
         output_quant = getattr(self, "_output_quant", None)
@@ -273,23 +321,25 @@ class YOLOBenchmark(ModelBenchmark):
         )
         post_nms_count = len(yolo_boxes)
 
-        self._log_gpu_debug(
-            debug_idx,
-            raw_outputs,
-            gt_det,
-            yolo_boxes,
-            pre_nms_count,
-            post_nms_count,
-            img_path=img_path,
-        )
+        if self._log_debug:
+            self._log_gpu_debug(
+                debug_idx,
+                raw_outputs,
+                gt_det,
+                yolo_boxes,
+                pre_nms_count,
+                post_nms_count,
+                img_path=img_path,
+            )
         scaled_boxes = self._scale_predicted_boxes(yolo_boxes, img_path)
-        self._log_gt_pred_alignment(
-            debug_idx=debug_idx,
-            image_name=gt_det.image_name,
-            gt_boxes=gt_det.boxes,
-            pred_boxes=scaled_boxes,
-            img_path=img_path,
-        )
+        if self._log_debug:
+            self._log_gt_pred_alignment(
+                debug_idx=debug_idx,
+                image_name=gt_det.image_name,
+                gt_boxes=gt_det.boxes,
+                pred_boxes=scaled_boxes,
+                img_path=img_path,
+            )
         return OracleDetection(image_name=gt_det.image_name, boxes=scaled_boxes)
 
     def _log_tensor_stats(self, name: str, arr: np.ndarray) -> None:
@@ -338,6 +388,45 @@ class YOLOBenchmark(ModelBenchmark):
             return
 
         logger.warning("[YOLO DEBUG] Unexpected backend output type: %s", type(raw_outputs))
+
+    def _maybe_dump_raw_outputs(
+        self,
+        raw_outputs: object,
+        *,
+        image_name: str,
+        backend: ComputeBackend,
+    ) -> None:
+        if self._raw_dump_dir is None or self._raw_dump_max_images <= 0:
+            return
+        if self._raw_dump_count >= self._raw_dump_max_images:
+            return
+
+        if isinstance(raw_outputs, (list, tuple)):
+            arr = raw_outputs[0]
+        elif isinstance(raw_outputs, dict):
+            arr = next(iter(raw_outputs.values()))
+        else:
+            arr = raw_outputs
+
+        if not isinstance(arr, np.ndarray):
+            return
+
+        unit_name = "unknown"
+        if hasattr(backend, "active_unit"):
+            unit_name = getattr(backend.active_unit, "value", unit_name)
+
+        self._raw_dump_dir.mkdir(parents=True, exist_ok=True)
+        stem = f"{Path(image_name).stem}_{unit_name}_{self._raw_dump_count:03d}"
+        npy_path = self._raw_dump_dir / f"{stem}.npy"
+        meta_path = self._raw_dump_dir / f"{stem}.json"
+
+        np.save(npy_path, arr)
+
+        meta = _summarize_raw_tensor(arr)
+        meta["image"] = image_name
+        meta["unit"] = unit_name
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        self._raw_dump_count += 1
 
     def _get_output_quant(self, model_path: str) -> dict | None:
         """Read output quantization info from TFLite model if quantized."""
@@ -630,6 +719,9 @@ class YOLOBenchmark(ModelBenchmark):
         conf_threshold: float = 0.25,
         model_path: str | None = None,
         per_unit_conf_thresholds: dict[str, float] | None = None,
+        raw_dump_dir: Path | None = None,
+        raw_dump_max_images: int = 0,
+        log_debug: bool = False,
     ) -> None:
         super().__init__()
         self._coco_dataset = coco_dataset
@@ -643,6 +735,10 @@ class YOLOBenchmark(ModelBenchmark):
         # unset by default ensures CPU and GPU evaluations use the same decode
         # threshold unless a diagnostic run explicitly requests otherwise.
         self._per_unit_conf_thresholds = per_unit_conf_thresholds
+        self._raw_dump_dir = raw_dump_dir
+        self._raw_dump_max_images = raw_dump_max_images
+        self._raw_dump_count = 0
+        self._log_debug = log_debug
 
     @property
     def model_id(self) -> ModelID:

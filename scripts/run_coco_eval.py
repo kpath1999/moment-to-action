@@ -77,6 +77,23 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--dump-raw-dir",
+        type=Path,
+        default=None,
+        help="Optional directory to write raw output tensors (.npy + .json metadata).",
+    )
+    parser.add_argument(
+        "--dump-raw-max-images",
+        type=int,
+        default=0,
+        help="Max images to dump raw tensors for when --dump-raw-dir is set.",
+    )
+    parser.add_argument(
+        "--yolo-debug-logs",
+        action="store_true",
+        help="Enable verbose YOLO parsing and alignment logs.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -97,6 +114,10 @@ def _run_yolo_eval(
     unit: ComputeUnit,
     conf_threshold: float,
     gpu_conf_threshold_override: float | None,
+    dump_raw_dir: Path | None,
+    dump_raw_max_images: int,
+    *,
+    yolo_debug_logs: bool,
 ) -> dict[str, float | None]:
     gpu_override_str = (
         f"{gpu_conf_threshold_override:.6f}"
@@ -120,6 +141,9 @@ def _run_yolo_eval(
         conf_threshold=conf_threshold,
         model_path=str(model_path),
         per_unit_conf_thresholds=per_unit_conf_thresholds,
+        raw_dump_dir=dump_raw_dir,
+        raw_dump_max_images=dump_raw_max_images,
+        log_debug=yolo_debug_logs,
     )
     profile = benchmark.profile(
         backend=backend,
@@ -226,12 +250,19 @@ def main() -> None:
 
     if args.model in {"yolo_v12_n", "all"}:
         logger.info("Running YOLOv12-n COCO detection evaluation...")
+        if not args.yolo_debug_logs:
+            logging.getLogger("moment_to_action.benchmark._benchmarks._yolo").setLevel(
+                logging.WARNING
+            )
         results["yolo_v12_n"] = _run_yolo_eval(
             dataset=dataset,
             manager=manager,
             unit=_UNIT_MAP[args.edge_unit],
             conf_threshold=args.conf_threshold,
             gpu_conf_threshold_override=args.gpu_conf_threshold_override,
+            dump_raw_dir=args.dump_raw_dir,
+            dump_raw_max_images=args.dump_raw_max_images,
+            yolo_debug_logs=args.yolo_debug_logs,
         )
 
     if args.model in {"ssd_mobilenetv2", "all"}:

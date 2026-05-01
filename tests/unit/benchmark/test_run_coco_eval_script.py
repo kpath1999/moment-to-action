@@ -32,6 +32,9 @@ def test_parser_defaults() -> None:
     assert args.edge_unit == "npu"
     assert args.conf_threshold == pytest.approx(0.25)
     assert args.gpu_conf_threshold_override is None
+    assert args.dump_raw_dir is None
+    assert args.dump_raw_max_images == 0
+    assert args.yolo_debug_logs is False
     assert "rf_detr_n" in parser._option_string_actions["--model"].choices
     assert "ssd_mobilenetv2" in parser._option_string_actions["--model"].choices
     assert "tinyclip_8m" in parser._option_string_actions["--model"].choices
@@ -57,15 +60,15 @@ def test_main_all_models_output(
 
     monkeypatch.setattr(module, "CocoDataset", _FakeDataset)
     monkeypatch.setattr(module, "ModelManager", object)
-    monkeypatch.setattr(
-        module,
-        "_run_yolo_eval",
-        lambda dataset, manager, unit, conf_threshold, gpu_conf_threshold_override: {  # noqa: ARG005
+
+    def _fake_run_yolo_eval(*_args: object, **_kwargs: object) -> dict[str, float]:
+        return {
             "map_50": 0.5,
             "map_75": 0.4,
             "inference_mean_ms": 11.0,
-        },
-    )
+        }
+
+    monkeypatch.setattr(module, "_run_yolo_eval", _fake_run_yolo_eval)
     monkeypatch.setattr(
         module,
         "_run_mobileclip_eval",
