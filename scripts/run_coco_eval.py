@@ -85,8 +85,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dump-raw-max-images",
         type=int,
-        default=0,
-        help="Max images to dump raw tensors for when --dump-raw-dir is set.",
+        default=None,
+        help="Max images to dump raw tensors for when --dump-raw-dir is set (default: all images).",
     )
     parser.add_argument(
         "--yolo-debug-logs",
@@ -115,7 +115,7 @@ def _run_yolo_eval(
     conf_threshold: float,
     gpu_conf_threshold_override: float | None,
     dump_raw_dir: Path | None,
-    dump_raw_max_images: int,
+    dump_raw_max_images: int | None,
     *,
     yolo_debug_logs: bool,
 ) -> dict[str, float | None]:

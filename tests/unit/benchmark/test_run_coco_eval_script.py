@@ -33,7 +33,7 @@ def test_parser_defaults() -> None:
     assert args.conf_threshold == pytest.approx(0.25)
     assert args.gpu_conf_threshold_override is None
     assert args.dump_raw_dir is None
-    assert args.dump_raw_max_images == 0
+    assert args.dump_raw_max_images is None
     assert args.yolo_debug_logs is False
     assert "rf_detr_n" in parser._option_string_actions["--model"].choices
     assert "ssd_mobilenetv2" in parser._option_string_actions["--model"].choices

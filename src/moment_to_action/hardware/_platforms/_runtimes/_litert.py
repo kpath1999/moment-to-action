@@ -196,7 +196,7 @@ class LiteRTBackend(InferenceBackend):
                     )
             except (AttributeError, Exception):  # noqa: BLE001
                 # _get_execution_plan may not exist in all TFLite versions
-                logger.info(
+                logger.debug(
                     "[load_interpreter] _get_execution_plan unavailable for %s; "
                     "delegate partition stats not available",
                     model_path,

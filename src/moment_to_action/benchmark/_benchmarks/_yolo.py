@@ -237,7 +237,7 @@ def _summarize_raw_tensor(arr: np.ndarray) -> dict[str, object]:
 
 class YOLOBenchmark(ModelBenchmark):
     _raw_dump_dir: Path | None
-    _raw_dump_max_images: int
+    _raw_dump_max_images: int | None
     _raw_dump_count: int
     _log_debug: bool
 
@@ -396,9 +396,10 @@ class YOLOBenchmark(ModelBenchmark):
         image_name: str,
         backend: ComputeBackend,
     ) -> None:
-        if self._raw_dump_dir is None or self._raw_dump_max_images <= 0:
+        if self._raw_dump_dir is None:
             return
-        if self._raw_dump_count >= self._raw_dump_max_images:
+        limit = self._raw_dump_max_images
+        if limit is not None and self._raw_dump_count >= limit:
             return
 
         if isinstance(raw_outputs, (list, tuple)):
@@ -720,7 +721,7 @@ class YOLOBenchmark(ModelBenchmark):
         model_path: str | None = None,
         per_unit_conf_thresholds: dict[str, float] | None = None,
         raw_dump_dir: Path | None = None,
-        raw_dump_max_images: int = 0,
+        raw_dump_max_images: int | None = None,
         log_debug: bool = False,
     ) -> None:
         super().__init__()
