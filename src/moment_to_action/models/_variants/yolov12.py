@@ -21,7 +21,6 @@ from onnxruntime.quantization import (
 )
 
 # First-party
-from moment_to_action.benchmark import CocoDataset
 from moment_to_action.models import ModelID, ModelManager
 
 N_CALIB = 128
@@ -58,6 +57,8 @@ class _CocoCalibReader(CalibrationDataReader):
         input_hw: tuple[int, int] = YOLO_INPUT_HW,
     ) -> None:
         import cv2
+
+        from moment_to_action.benchmark._datasets import CocoDataset
 
         self._input_name = input_name
         dataset = CocoDataset(n_images=n_samples)
