@@ -16,13 +16,14 @@ import numpy as np
 
 from moment_to_action.messages.video import BoundingBox, DetectionMessage, FrameTensorMessage
 from moment_to_action.metrics._types import SpanType
-from moment_to_action.models import ModelID, ModelManager
+from moment_to_action.models._variants.yolov12 import get_yolov12_model_for_unit
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
     from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
+    from moment_to_action.models import ModelManager
 
 logger = logging.getLogger(__name__)
 
@@ -146,11 +147,10 @@ class YOLOStage(Stage):
         self._backend = backend
         self._confidence_threshold = confidence_threshold
 
-        # On NPU, prefer the INT8 TFLite variant for QNN/HTP compatibility.
-        # On other accelerated units, prefer the float32 TFLite variant so
-        # inference routes through the LiteRT/QNN delegate. Fall back to
-        # ONNX/CPU when no suitable TFLite artifact is available.
-        model_path = manager.get_path(ModelID.YOLO_V12_N)
+        del manager
+
+        # Resolve the per-unit YOLO artifact (TFLite or QNN .so).
+        model_path = get_yolov12_model_for_unit(unit=backend.preferred_unit)
 
         self._handle = self._backend.load_model(model_path)
 

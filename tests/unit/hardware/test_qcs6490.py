@@ -23,6 +23,7 @@ from moment_to_action.hardware._platforms.qcs6490._litert import (
     _probe_delegate_load,
 )
 from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
+from moment_to_action.hardware._platforms.qcs6490._qnn_net_run import QCS6490QNNNetRunBackend
 from moment_to_action.hardware._platforms.qcs6490._resources import QCS6490ResourceMonitor
 from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
@@ -196,6 +197,35 @@ class TestQCS6490Backend:
             assert isinstance(handle, _ModelHandle)
             mock_onnx.load_model.assert_called_once_with("/tmp/model.onnx")
             assert handle.backend == mock_onnx
+
+    def test_qcs6490_load_so_routes_to_qnn_net_run(self) -> None:
+        """Test QCS6490Backend.load_model routes .so to qnn-net-run backend."""
+        mock_litert_cpu = MagicMock()
+        mock_litert_cpu.get_supported_unit.return_value = ComputeUnit.CPU
+        mock_onnx = MagicMock()
+        mock_qnn = MagicMock()
+        mock_qnn.load_model.return_value = "qnn_handle"
+
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490LiteRTBackend",
+                return_value=mock_litert_cpu,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490ONNXBackend",
+                return_value=mock_onnx,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490QNNNetRunBackend",
+                return_value=mock_qnn,
+            ),
+        ):
+            backend = QCS6490Backend(preferred_unit=ComputeUnit.GPU)
+            handle = backend.load_model("/tmp/model.so")
+
+            assert isinstance(handle, _ModelHandle)
+            mock_qnn.load_model.assert_called_once_with("/tmp/model.so")
+            assert handle.backend == mock_qnn
 
     def test_try_make_onnx_accel_backend_cpu_unit_returns_none(self) -> None:
         """Test _try_make_onnx_accel_backend returns None for CPU unit."""
@@ -431,6 +461,33 @@ class TestQCS6490Backend:
             unit = backend.get_supported_unit()
 
             assert unit == ComputeUnit.CPU
+
+    @pytest.mark.unit
+    class TestQCS6490QNNNetRunBackend:
+        """Tests for the qnn-net-run subprocess backend."""
+
+        def test_qnn_net_run_backend_run_reads_outputs(self) -> None:
+            """run() loads raw outputs and reshapes YOLO-style tensors."""
+            backend = QCS6490QNNNetRunBackend(compute_unit=ComputeUnit.GPU)
+            handle = backend.load_model("/tmp/model.so")
+            input_tensor = np.zeros((1, 640, 640, 3), dtype=np.float32)
+
+            def _fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                output_dir = Path(cmd[cmd.index("--output_dir") + 1])
+                result_dir = output_dir / "Result_1"
+                result_dir.mkdir(parents=True, exist_ok=True)
+                data = np.arange(84 * 2, dtype=np.float32)
+                (result_dir / "0.raw").write_bytes(data.tobytes())
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+
+            with patch(
+                "moment_to_action.hardware._platforms.qcs6490._qnn_net_run.subprocess.run",
+                side_effect=_fake_run,
+            ):
+                outputs = backend.run(handle, input_tensor)
+
+            assert len(outputs) == 1
+            assert outputs[0].shape == (1, 84, 2)
 
 
 @pytest.mark.unit

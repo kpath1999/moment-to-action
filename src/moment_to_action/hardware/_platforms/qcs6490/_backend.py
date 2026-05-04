@@ -32,6 +32,7 @@ from moment_to_action.hardware._platforms._runtimes._torch_policy import (
 )
 from moment_to_action.hardware._platforms.qcs6490._litert import QCS6490LiteRTBackend
 from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBackend
+from moment_to_action.hardware._platforms.qcs6490._qnn_net_run import QCS6490QNNNetRunBackend
 from moment_to_action.hardware._types import ComputeUnit
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ logger = logging.getLogger(__name__)
 # Supported model file suffixes.
 _TFLITE_SUFFIX = ".tflite"
 _ONNX_SUFFIX = ".onnx"
+_SO_SUFFIX = ".so"
 
 
 # ---------------------------------------------------------------------------
@@ -73,8 +75,9 @@ class QCS6490Backend(InferenceBackend):
 
     - ``.tflite`` → ``_accel_backend`` (NPU/GPU, optional) with automatic
       fallback to ``_cpu_backend`` (always present).
-    - ``.onnx``   → ``_onnx_accel_backend`` (QNN ONNX EP, optional) with
-      automatic fallback to ``_onnx_cpu_backend`` (always present).
+        - ``.onnx``   → ``_onnx_accel_backend`` (QNN ONNX EP, optional) with
+            automatic fallback to ``_onnx_cpu_backend`` (always present).
+        - ``.so``     → ``_qnn_net_run_backend`` (qnn-net-run subprocess).
 
     Args:
         preferred_unit: The compute unit to attempt first for TFLite models.
@@ -108,6 +111,9 @@ class QCS6490Backend(InferenceBackend):
         self._onnx_accel_backend: QCS6490ONNXBackend | None = self._try_make_onnx_accel_backend(
             preferred_unit
         )
+
+        # QNN net-run backend for compiled model libraries (.so).
+        self._qnn_net_run_backend = QCS6490QNNNetRunBackend(compute_unit=preferred_unit)
 
         if (
             self._litert_accel_backend is not None
@@ -191,9 +197,12 @@ class QCS6490Backend(InferenceBackend):
             return self._load_tflite(path)
         if path.endswith(_ONNX_SUFFIX):
             return self._load_onnx(path)
+        if path.endswith(_SO_SUFFIX):
+            return self._load_qnn_net_run(path)
 
         msg = (
-            f"Unsupported model format: {path!r}. Expected {_TFLITE_SUFFIX!r} or {_ONNX_SUFFIX!r}."
+            f"Unsupported model format: {path!r}. Expected {_TFLITE_SUFFIX!r}, {_ONNX_SUFFIX!r},"
+            f" or {_SO_SUFFIX!r}."
         )
         raise ValueError(msg)
 
@@ -279,3 +288,8 @@ class QCS6490Backend(InferenceBackend):
 
         raw = self._onnx_cpu_backend.load_model(path)
         return _ModelHandle(raw=raw, backend=self._onnx_cpu_backend)
+
+    def _load_qnn_net_run(self, path: str) -> _ModelHandle:
+        """Load a compiled QNN model library (.so) via qnn-net-run."""
+        raw = self._qnn_net_run_backend.load_model(path)
+        return _ModelHandle(raw=raw, backend=self._qnn_net_run_backend)
