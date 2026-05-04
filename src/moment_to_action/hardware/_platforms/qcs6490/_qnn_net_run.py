@@ -141,11 +141,14 @@ class QCS6490QNNNetRunBackend(InferenceBackend):
                 )
                 raise RuntimeError(msg)
 
-            output_root = output_dir / "Result_1"
-            if not output_root.exists():
-                output_root = output_dir
-
-            outputs = _load_raw_outputs(output_root, h.output_dtype)
+            try:
+                outputs = _load_raw_outputs(output_dir, h.output_dtype)
+            except RuntimeError as exc:
+                msg = (
+                    f"{exc} | qnn-net-run stdout={_trim_cli_output(result.stdout)!r} "
+                    f"stderr={_trim_cli_output(result.stderr)!r}"
+                )
+                raise RuntimeError(msg) from exc
             if h.output_mode == "raw":
                 return outputs
             return _reshape_outputs(outputs)
@@ -238,10 +241,32 @@ def _load_raw_outputs(output_root: Path, dtype: np.dtype) -> list[np.ndarray]:
 
     raw_files = sorted(output_root.glob("*.raw"))
     if not raw_files:
-        msg = f"No .raw outputs found in {output_root}"
+        result_dirs = sorted(
+            p for p in output_root.iterdir() if p.is_dir() and p.name.startswith("Result_")
+        )
+        for result_dir in result_dirs:
+            result_raws = sorted(result_dir.glob("*.raw"))
+            if result_raws:
+                raw_files = result_raws
+                break
+
+    # Some QNN versions/layouts nest results deeper under --output_dir.
+    if not raw_files:
+        raw_files = sorted(output_root.rglob("*.raw"))
+
+    if not raw_files:
+        entries = sorted(p.name for p in output_root.iterdir())
+        msg = f"No .raw outputs found in {output_root} (entries={entries})"
         raise RuntimeError(msg)
 
     return [np.fromfile(raw, dtype=dtype) for raw in raw_files]
+
+
+def _trim_cli_output(raw: str, limit: int = 400) -> str:
+    text = raw.strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}..."
 
 
 def _reshape_outputs(outputs: list[np.ndarray]) -> list[np.ndarray]:

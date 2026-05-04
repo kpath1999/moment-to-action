@@ -489,6 +489,53 @@ class TestQCS6490Backend:
             assert len(outputs) == 1
             assert outputs[0].shape == (1, 84, 2)
 
+        def test_qnn_net_run_backend_reads_result_zero_outputs(self) -> None:
+            """run() should read outputs from Result_0 when present."""
+            backend = QCS6490QNNNetRunBackend(compute_unit=ComputeUnit.GPU)
+            handle = backend.load_model("/tmp/model.so")
+            input_tensor = np.zeros((1, 640, 640, 3), dtype=np.float32)
+
+            def _fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                output_dir = Path(cmd[cmd.index("--output_dir") + 1])
+                result_dir = output_dir / "Result_0"
+                result_dir.mkdir(parents=True, exist_ok=True)
+                data = np.arange(84 * 2, dtype=np.float32)
+                (result_dir / "875.raw").write_bytes(data.tobytes())
+                return subprocess.CompletedProcess(cmd, 0, "ok", "")
+
+            with patch(
+                "moment_to_action.hardware._platforms.qcs6490._qnn_net_run.subprocess.run",
+                side_effect=_fake_run,
+            ):
+                outputs = backend.run(handle, input_tensor)
+
+            assert len(outputs) == 1
+            assert outputs[0].shape == (1, 84, 2)
+
+        def test_qnn_net_run_backend_error_includes_dir_entries(self) -> None:
+            """run() error should include output directory contents for debugging."""
+            backend = QCS6490QNNNetRunBackend(compute_unit=ComputeUnit.GPU)
+            handle = backend.load_model("/tmp/model.so")
+            input_tensor = np.zeros((1, 640, 640, 3), dtype=np.float32)
+
+            def _fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                output_dir = Path(cmd[cmd.index("--output_dir") + 1])
+                output_dir.mkdir(parents=True, exist_ok=True)
+                (output_dir / "Result_0").mkdir(parents=True, exist_ok=True)
+                (output_dir / "note.txt").write_text("no outputs", encoding="utf-8")
+                return subprocess.CompletedProcess(cmd, 0, "stdout text", "stderr text")
+
+            with (
+                patch(
+                    "moment_to_action.hardware._platforms.qcs6490._qnn_net_run.subprocess.run",
+                    side_effect=_fake_run,
+                ),
+                pytest.raises(RuntimeError, match="entries=") as excinfo,
+            ):
+                backend.run(handle, input_tensor)
+
+            assert "stdout" in str(excinfo.value)
+
 
 @pytest.mark.unit
 class TestQCS6490LiteRTBackend:
