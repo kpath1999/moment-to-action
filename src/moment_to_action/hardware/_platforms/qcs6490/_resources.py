@@ -12,7 +12,7 @@ Utilization is read via:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import ClassVar
 
@@ -79,7 +79,7 @@ class QCS6490ResourceMonitor(ResourceMonitor):
         try:
             power_uw = int(Path(f"{self.SYSFS_POWER_PATH}/battery/power_now").read_text().strip())
             return ComputeUnitUsageSample(
-                timestamp=datetime.now(tz=UTC),
+                timestamp=datetime.now(tz=timezone.utc),
                 device=unit,
                 usage_pct=self._read_utilization(unit),
                 frequency_mhz=self._read_frequency_mhz(unit),
@@ -92,7 +92,7 @@ class QCS6490ResourceMonitor(ResourceMonitor):
 
     def _estimate(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         return ComputeUnitUsageSample(
-            timestamp=datetime.now(tz=UTC),
+            timestamp=datetime.now(tz=timezone.utc),
             device=unit,
             usage_pct=self._read_utilization(unit),
             frequency_mhz=self._read_frequency_mhz(unit),

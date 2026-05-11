@@ -3,12 +3,13 @@
 import typing as t
 
 import rich_click as click
+from typing_extensions import override
 
 
 class BasedIntParamType(click.ParamType):
     name = "integer"
 
-    @t.override
+    @override
     def convert(
         self,
         value: t.Any,

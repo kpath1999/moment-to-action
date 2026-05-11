@@ -11,6 +11,8 @@ checks and ``isinstance`` guards across the full message hierarchy.
 
 from __future__ import annotations
 
+from typing import TypeAlias
+
 from .audio import AudioTensorMessage
 from .llm import ReasoningMessage
 from .sensor import RawFrameMessage
@@ -19,7 +21,7 @@ from .vlm import ClassificationMessage
 
 # Union of every concrete message type in the pipeline.
 # Use this alias for ``isinstance`` checks or exhaustive ``match`` statements.
-type Message = (
+Message: TypeAlias = (
     RawFrameMessage
     | AudioTensorMessage
     | FrameTensorMessage

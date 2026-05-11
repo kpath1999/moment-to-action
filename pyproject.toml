@@ -6,29 +6,42 @@ readme = "README.md"
 authors = [
     { name = "Nikola Vuk Maruszewski", email = "nikola@gatech.edu" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.10,<3.11"
 dependencies = [
-    "ai-edge-litert>=2.1.3",
-    "numpy>=2.4.3",
-    "onnxruntime>=1.24.3",
-    "open-clip-torch>=3.3.0",
-    "torch>=2.0",
-    "opencv-python-headless>=4.13.0.92",
-    "pydantic>=2.0",
-    "psutil>=6.0",
-    "tensorflow>=2.21.0",
-    "transformers>=4.49.0",
+    # Pinned to match qairt-dev==0.6.0 — update together when upgrading qairt-dev.
+    "qairt-dev==0.6.0",
+    "numpy==1.26.4",
+    "onnxruntime==1.23.2",
+    "protobuf==6.31.0",
+    "rich==13.9.4",
+    "torch==2.4.1",
+    "transformers==4.57.1",
+    "pydantic>=2.8.2,<2.9.0",
+    # Other deps
+    "ai-edge-litert>=1.0.0",
     "attrs>=25.4.0",
-    "click>=8.3.1",
-    "rich>=14.3.3",
-    "rich-click>=1.9.7",
-    "platformdirs>=4.0.0",
+    "click>=8.3.1,<9.0.0",
     "huggingface_hub>=0.18.0",
     "num2words>=0.5.14",
+    "open-clip-torch>=3.3.0",
+    "opencv-python-headless>=4.8.0",
+    "platformdirs>=4.0.0",
+    "psutil>=6.0",
+    "rich-click>=1.9.7",
+    "tensorflow==2.20.0",  # pinned: 3.10 max, gencode 5.x vs protobuf 6.x suppressed in pytest
+    "typing-extensions>=4.15.0",
 ]
 
 [project.scripts]
 m2a = "moment_to_action._cli:cli"
+
+[project.optional-dependencies]
+host = [
+    "qairt-dev[onnx,torch]>=0.6.0",
+]
+# Ensure we install all extras
+# https://github.com/astral-sh/uv/issues/8607#issuecomment-2540156984
+full = ["moment-to-action[host]"]
 
 [build-system]
 requires = ["uv_build>=0.10.8,<0.12.0"]
@@ -40,6 +53,10 @@ module-name = "moment_to_action"
 
 [dependency-groups]
 dev = [
+    # Ensure we install all extras
+    # https://github.com/astral-sh/uv/issues/8607#issuecomment-2540156984
+    "moment-to-action[full]",
+    # actual dev deps
     "jupyter>=1.1.1",
     "mypy>=1.19.1",
     "pylsp-mypy>=0.7.1",
@@ -123,6 +140,10 @@ markers = [
     "slow: slow tests (disabled by default)",
 ]
 addopts = ["-m", "not slow", "-rs"]
+filterwarnings = [
+    # qairt-dev pins protobuf==6.31.0 but TF on Python 3.10 was compiled against 5.x
+    "ignore:Protobuf gencode version.*is exactly one major version older:UserWarning",
+]
 
 [tool.coverage.run]
 source = ["src"]

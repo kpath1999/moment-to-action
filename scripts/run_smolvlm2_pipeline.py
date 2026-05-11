@@ -33,7 +33,7 @@ import logging
 import pathlib
 import signal
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import cv2
 import rich
@@ -73,7 +73,7 @@ def _parse_device(value: str) -> int | str:
 
 def _default_run_id() -> str:
     """Return a timestamped run identifier for output artifacts."""
-    return datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+    return datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
 def _append_text_line(path: pathlib.Path, line: str) -> None:

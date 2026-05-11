@@ -12,7 +12,7 @@ break macOS.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import ClassVar
 
 import psutil
@@ -47,7 +47,7 @@ class MacOSARM64ResourceMonitor(ResourceMonitor):
         """
         if unit != ComputeUnit.CPU:
             return ComputeUnitUsageSample(
-                timestamp=datetime.now(tz=UTC),
+                timestamp=datetime.now(tz=timezone.utc),
                 device=unit,
                 usage_pct=0.0,
                 frequency_mhz=0.0,
@@ -75,7 +75,7 @@ class MacOSARM64ResourceMonitor(ResourceMonitor):
         load_power = freq_ghz * cpu_util * 0.6
 
         return ComputeUnitUsageSample(
-            timestamp=datetime.now(tz=UTC),
+            timestamp=datetime.now(tz=timezone.utc),
             device=ComputeUnit.CPU,
             usage_pct=cpu_util,
             frequency_mhz=frequency_mhz,

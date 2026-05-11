@@ -18,7 +18,7 @@ based on CPU frequency and utilization.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import ClassVar
 
@@ -73,7 +73,7 @@ class X86_64ResourceMonitor(ResourceMonitor):  # noqa: N801
         if unit != ComputeUnit.CPU:
             # x86_64 is CPU-only; other units return zero.
             return ComputeUnitUsageSample(
-                timestamp=datetime.now(tz=UTC),
+                timestamp=datetime.now(tz=timezone.utc),
                 device=unit,
                 usage_pct=0.0,
                 frequency_mhz=0.0,
@@ -120,7 +120,7 @@ class X86_64ResourceMonitor(ResourceMonitor):  # noqa: N801
                 frequency_mhz = 2000.0
 
             return ComputeUnitUsageSample(
-                timestamp=datetime.now(tz=UTC),
+                timestamp=datetime.now(tz=timezone.utc),
                 device=ComputeUnit.CPU,
                 usage_pct=psutil.cpu_percent(interval=None),
                 frequency_mhz=frequency_mhz,
@@ -151,7 +151,7 @@ class X86_64ResourceMonitor(ResourceMonitor):  # noqa: N801
         load_power = freq_ghz * cpu_util * 0.6  # 0.6 mW per GHz per 1% utilization
 
         return ComputeUnitUsageSample(
-            timestamp=datetime.now(tz=UTC),
+            timestamp=datetime.now(tz=timezone.utc),
             device=ComputeUnit.CPU,
             usage_pct=cpu_util,
             frequency_mhz=frequency_mhz,
