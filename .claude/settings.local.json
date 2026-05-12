@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(just test *)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(just lint *)"
     ]
   }
 }
