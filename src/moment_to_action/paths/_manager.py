@@ -12,8 +12,17 @@ class PathManager:
     """Manages paths for the Moment to Action project."""
 
     def __init__(self, app_name: str = "MomentToAction", author: str = "GeorgiaTech") -> None:
+        """Create a new PathManager instance.
+
+        Args:
+            app_name: The name of the application.
+            author: The name of the author or organization.
+        """
         self._dirs = PlatformDirs(
-            appname=app_name, appauthor=author, version=VERSION, ensure_exists=True
+            appname=app_name,
+            appauthor=author,
+            version=VERSION,
+            ensure_exists=True,
         )
 
         # Create managers
