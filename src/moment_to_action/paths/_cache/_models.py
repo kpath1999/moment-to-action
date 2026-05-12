@@ -41,55 +41,25 @@ class ModelCacheManager:
     def get_model_dir(self, model_id: str) -> Path:
         """Return the directory for a specific model.
 
-        Note that this will NOT create the directory. The only way to do
-        that is through get_variant_dir with create=True.
-
         Args:
             model_id: The ID of the model.
 
         Returns:
             The path to the directory for the specified model.
-
-        Raises:
-            FileNotFoundError: If the directory does not exist.
         """
-        path = self._model_path(model_id)
+        return self._model_path(model_id)
 
-        if not path.exists():
-            msg = f"Model directory {path} does not exist."
-            raise FileNotFoundError(msg)
-
-        return path
-
-    def get_variant_dir(self, model_id: str, variant: str, *, create: bool = False) -> Path:
+    def get_variant_dir(self, model_id: str, variant: str) -> Path:
         """Return the directory for a specific model variant.
 
         Args:
             model_id: The ID of the model.
             variant: The variant of the model.
-            create: If True, create the directory if it does not exist.
 
         Returns:
             The path to the directory for the specified model variant.
-
-        Raises:
-            FileNotFoundError: If the directory does not exist and create is False.
         """
-        path = self._model_path(model_id, variant)
-
-        # Check if we should create the directory
-        if create:
-            path.mkdir(parents=True, exist_ok=True)
-        elif not path.exists():
-            # Directory does not exist and we're not creating it — raise an error
-            if not self._model_path(model_id).exists():
-                msg = f"Model directory {self._model_path(model_id)} does not exist."
-            else:
-                msg = f"Model variant directory {path} does not exist."
-
-            raise FileNotFoundError(msg)
-
-        return path
+        return self._model_path(model_id, variant)
 
     @overload
     def is_cached(self, model_id: str) -> bool: ...
