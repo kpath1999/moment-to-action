@@ -56,15 +56,15 @@ class TestGetModelDir:
     def test_create_true_makes_variant_dir(self, tmp_path: Path) -> None:
         """create=True creates the variant directory."""
         mgr = ModelCacheManager(tmp_path / "models")
-        path = mgr.get_model_dir("yolo", "fp32", create=True)
+        path = mgr.get_variant_dir("yolo", "fp32", create=True)
         assert path == tmp_path / "models" / "yolo" / "fp32"
         assert path.is_dir()
 
     def test_create_true_is_idempotent(self, tmp_path: Path) -> None:
         """create=True is a no-op when the directory already exists."""
         mgr = ModelCacheManager(tmp_path / "models")
-        first = mgr.get_model_dir("yolo", "fp32", create=True)
-        second = mgr.get_model_dir("yolo", "fp32", create=True)
+        first = mgr.get_variant_dir("yolo", "fp32", create=True)
+        second = mgr.get_variant_dir("yolo", "fp32", create=True)
         assert first == second
         assert first.is_dir()
 
@@ -72,21 +72,21 @@ class TestGetModelDir:
         """When neither the model nor the variant exists, the error mentions the model dir."""
         mgr = ModelCacheManager(tmp_path / "models")
         with pytest.raises(FileNotFoundError, match=r"Model directory .* does not exist"):
-            mgr.get_model_dir("yolo", "fp32")
+            mgr.get_variant_dir("yolo", "fp32")
 
     def test_missing_raises_with_variant_message(self, tmp_path: Path) -> None:
         """When the model exists but the variant does not, the error mentions the variant dir."""
         mgr = ModelCacheManager(tmp_path / "models")
         (tmp_path / "models" / "yolo").mkdir()
         with pytest.raises(FileNotFoundError, match=r"Model variant directory .* does not exist"):
-            mgr.get_model_dir("yolo", "fp32")
+            mgr.get_variant_dir("yolo", "fp32")
 
     def test_returns_existing_dir_without_creating(self, tmp_path: Path) -> None:
         """create=False returns the path when the variant already exists."""
         mgr = ModelCacheManager(tmp_path / "models")
         expected = tmp_path / "models" / "yolo" / "fp32"
         expected.mkdir(parents=True)
-        result = mgr.get_model_dir("yolo", "fp32")
+        result = mgr.get_variant_dir("yolo", "fp32")
         assert result == expected
 
 

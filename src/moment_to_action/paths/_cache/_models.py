@@ -38,7 +38,30 @@ class ModelCacheManager:
             return self._dir / model_id / variant
         return self._dir / model_id
 
-    def get_model_dir(self, model_id: str, variant: str, *, create: bool = False) -> Path:
+    def get_model_dir(self, model_id: str) -> Path:
+        """Return the directory for a specific model.
+
+        Note that this will NOT create the directory. The only way to do
+        that is through get_variant_dir with create=True.
+
+        Args:
+            model_id: The ID of the model.
+
+        Returns:
+            The path to the directory for the specified model.
+
+        Raises:
+            FileNotFoundError: If the directory does not exist.
+        """
+        path = self._model_path(model_id)
+
+        if not path.exists():
+            msg = f"Model directory {path} does not exist."
+            raise FileNotFoundError(msg)
+
+        return path
+
+    def get_variant_dir(self, model_id: str, variant: str, *, create: bool = False) -> Path:
         """Return the directory for a specific model variant.
 
         Args:
@@ -69,10 +92,10 @@ class ModelCacheManager:
         return path
 
     @overload
-    def is_cached(self, model_id: str, variant: str) -> bool: ...
+    def is_cached(self, model_id: str) -> bool: ...
 
     @overload
-    def is_cached(self, model_id: str) -> bool: ...
+    def is_cached(self, model_id: str, variant: str) -> bool: ...
 
     def is_cached(self, model_id: str, variant: str | None = None) -> bool:
         """Check if a specific model variant or any variant of a model is cached.
