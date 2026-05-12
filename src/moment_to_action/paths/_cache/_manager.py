@@ -18,8 +18,10 @@ class CacheManager:
             cache_dir: The directory where cache files will be stored.
         """
         self._cache_dir = cache_dir
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
 
-        self._model_manager = ModelCacheManager(cache_dir / "models")
+        # Create submanagers
+        self._model_manager = ModelCacheManager(self._cache_dir / "models")
 
     @property
     def cache_dir(self) -> Path:

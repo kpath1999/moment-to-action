@@ -17,6 +17,7 @@ class ModelCacheManager:
             model_cache_dir: The directory where cached models will be stored.
         """
         self._dir = model_cache_dir
+        self._dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def models_dir(self) -> Path:
