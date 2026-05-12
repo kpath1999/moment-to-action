@@ -3,33 +3,31 @@ name = "moment-to-action"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-authors = [
-    { name = "Nikola Vuk Maruszewski", email = "nikola@gatech.edu" }
-]
+authors = [{ name = "Nikola Vuk Maruszewski", email = "nikola@gatech.edu" }]
 requires-python = ">=3.10,<3.11"
 dependencies = [
     # Pinned to match qairt SDK — update together when upgrading qairt-dev or qairt-visualizer.
     "qairt-dev==0.6.0",
-    "numpy==1.26.4",           # qairt-dev
-    "onnxruntime==1.23.2",     # qairt-dev (qairt-dev[onnx])
-    "protobuf==6.31.0",        # qairt-dev (TF gencode mismatch suppressed in pytest)
-    "rich==13.9.4",            # qairt-dev
-    "torch==2.4.1",            # qairt-dev (qairt-dev[torch])
-    "transformers==4.57.1",    # qairt-dev
-    "pydantic==2.8.2",         # qairt-dev
+    "numpy==1.26.4",        # qairt-dev
+    "onnxruntime==1.23.2",  # qairt-dev (qairt-dev[onnx])
+    "protobuf==6.31.0",     # qairt-dev (TF gencode mismatch suppressed in pytest)
+    "rich==13.9.4",         # qairt-dev
+    "torch==2.4.1",         # qairt-dev (qairt-dev[torch])
+    "transformers==4.57.1", # qairt-dev
+    "pydantic==2.8.2",      # qairt-dev
     # Other project deps
     "ai-edge-litert>=1.0.0",
-    "attrs==23.2.0",           # qairt SDK (qairt-visualizer)
+    "attrs==23.2.0",                 # qairt SDK (qairt-visualizer)
     "click>=8.3.1,<9.0.0",
     "huggingface_hub>=0.18.0",
     "num2words>=0.5.14",
     "open-clip-torch>=3.3.0",
     "opencv-python-headless>=4.8.0",
     "platformdirs>=4.0.0",
-    "psutil==6.1.1",           # qairt SDK (qairt-visualizer)
+    "psutil==6.1.1",                 # qairt SDK (qairt-visualizer)
     "rich-click>=1.9.7",
-    "tensorflow==2.20.0",      # pinned: Python 3.10 max; TF gencode 5.x vs protobuf 6.x suppressed in pytest
-    "typing-extensions==4.14.0",  # qairt SDK (qairt-visualizer)
+    "tensorflow==2.20.0",            # pinned: Python 3.10 max; TF gencode 5.x vs protobuf 6.x suppressed in pytest
+    "typing-extensions==4.14.0",     # qairt SDK (qairt-visualizer)
 ]
 
 [project.scripts]
@@ -118,6 +116,9 @@ ignore = [
 
     # __init__ docstrings are redundant when classes have docstrings
     "D107",
+
+    # TODOs exist for a reason
+    "FIX002",
 ]
 
 [tool.ruff.lint.per-file-ignores]
