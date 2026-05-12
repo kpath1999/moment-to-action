@@ -21,6 +21,7 @@ from rich.logging import RichHandler
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import DetectionMessage
 from moment_to_action.models import ModelManager
+from moment_to_action.paths import PathManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages._base import Stage
@@ -64,7 +65,7 @@ class CaptureStage(Stage):
 
 
 capture = CaptureStage()
-manager = ModelManager()
+manager = ModelManager(PathManager())
 
 pipeline = Pipeline(
     [

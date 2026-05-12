@@ -43,6 +43,7 @@ from moment_to_action.messages import ClassificationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager
+from moment_to_action.paths import PathManager
 from moment_to_action.sensors import CameraStreamSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages.video import ClipBufferStage
@@ -294,7 +295,7 @@ def main() -> int:  # noqa: C901, PLR0915
     logger.info("Markdown report: %s", report_path)
     logger.info("Metrics JSON: %s", metrics_path)
 
-    manager = ModelManager()
+    manager = ModelManager(PathManager())
     backend = ComputeBackend()
     metrics = MetricsCollector(compute_backend=backend, session_id=run_id)
 

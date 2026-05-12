@@ -23,6 +23,7 @@ from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import ClassificationMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager
+from moment_to_action.paths import PathManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages.video import PreprocessorStage
@@ -55,7 +56,7 @@ PROMPTS = [
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
 compute_backend = ComputeBackend(preferred_unit=device)
 metrics = MetricsCollector(compute_backend=compute_backend)
-manager = ModelManager()
+manager = ModelManager(PathManager())
 
 pipeline = Pipeline(
     stages=[
