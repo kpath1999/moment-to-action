@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -117,12 +117,12 @@ class TestStartTrace:
         """Test that trace has start and end times."""
         with collector.start_trace() as trace:
             assert isinstance(trace.start, datetime)
-            assert trace.start.tzinfo is UTC
+            assert trace.start.tzinfo is timezone.utc
             # end is set to epoch initially
-            assert trace.end == datetime(1970, 1, 1, tzinfo=UTC)
+            assert trace.end == datetime(1970, 1, 1, tzinfo=timezone.utc)
 
         # After context exit, end should be updated
-        assert trace.end != datetime(1970, 1, 1, tzinfo=UTC)
+        assert trace.end != datetime(1970, 1, 1, tzinfo=timezone.utc)
         assert trace.end >= trace.start
 
     def test_span_stack_empty_at_trace_end(self, collector: MetricsCollector) -> None:
@@ -741,10 +741,10 @@ class TestSpanProperties:
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "test") as span:
                 assert isinstance(span.start, datetime)
-                assert span.start.tzinfo is UTC
+                assert span.start.tzinfo is timezone.utc
 
         assert isinstance(span.end, datetime)
-        assert span.end.tzinfo is UTC
+        assert span.end.tzinfo is timezone.utc
         assert span.end > span.start
 
 
@@ -762,8 +762,8 @@ class TestEdgeCases:
             parent_id=None,
             type_=SpanType.STAGE,
             name="test",
-            start=datetime.now(tz=UTC),
-            end=datetime(1970, 1, 1, tzinfo=UTC),
+            start=datetime.now(tz=timezone.utc),
+            end=datetime(1970, 1, 1, tzinfo=timezone.utc),
         )
 
         # Manually unfreeze it so it's not frozen

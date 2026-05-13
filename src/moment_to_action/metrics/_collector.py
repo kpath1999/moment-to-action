@@ -28,9 +28,9 @@ import copy
 import logging
 import time
 import typing as t
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Event, Lock, Thread
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import psutil
 
@@ -50,9 +50,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_T = TypeVar("_T", "Span", "Trace")
+
 
 @contextlib.contextmanager
-def _unfreeze[T: Span | Trace](obj: T) -> t.Generator[T, None, None]:
+def _unfreeze(obj: _T) -> t.Generator[_T, None, None]:
     """Context manager to temporarily unfreeze an attrs object for modification."""
     was_frozen = getattr(obj, "_frozen", None)
     if not was_frozen:
@@ -137,7 +139,7 @@ class MetricsCollector:
         pwr_mon = self._compute_backend.resource_monitor
 
         sample = ResourceUsageSample(
-            timestamp=datetime.now(tz=UTC),
+            timestamp=datetime.now(tz=timezone.utc),
             running_span_id=self._span_stack[-1].id_ if self._span_stack else None,
             cpu_usage=pwr_mon.sample(ComputeUnit.CPU),
             gpu_usage=pwr_mon.sample(ComputeUnit.GPU),
@@ -193,8 +195,8 @@ class MetricsCollector:
             # Create trace with unique ID and start time
             trace = Trace(
                 id_=self._next_id(),
-                start=datetime.now(tz=UTC),
-                end=datetime(1970, 1, 1, tzinfo=UTC),
+                start=datetime.now(tz=timezone.utc),
+                end=datetime(1970, 1, 1, tzinfo=timezone.utc),
             )
 
             # Save the trace
@@ -226,7 +228,7 @@ class MetricsCollector:
 
                 # Trace is over and we have execution back, end it and clear current
                 with _unfreeze(trace):
-                    trace.end = datetime.now(tz=UTC)
+                    trace.end = datetime.now(tz=timezone.utc)
                     trace.latency_ns = end_ns - start_ns
 
                 self._current_trace = None
@@ -247,8 +249,8 @@ class MetricsCollector:
                 parent_id=self._span_stack[-1].id_ if self._span_stack else None,
                 type_=type_,
                 name=name,
-                start=datetime.now(tz=UTC),
-                end=datetime(1970, 1, 1, tzinfo=UTC),
+                start=datetime.now(tz=timezone.utc),
+                end=datetime(1970, 1, 1, tzinfo=timezone.utc),
                 metadata=metadata or {},
             )
 
@@ -276,7 +278,7 @@ class MetricsCollector:
 
                 # Span is over, end it and pop from stack
                 with _unfreeze(span):
-                    span.end = datetime.now(tz=UTC)
+                    span.end = datetime.now(tz=timezone.utc)
                     span.latency_ns = end_ns - start_ns
 
                 self._span_stack.pop()
@@ -337,7 +339,9 @@ class MetricsCollector:
                 raise AssertionError(msg)
 
             # Ensure the span has not ended (invariants should guarantee this)
-            if self._span_stack[-1].end != datetime(1970, 1, 1, tzinfo=UTC):  # pragma: no cover
+            if self._span_stack[-1].end != datetime(
+                1970, 1, 1, tzinfo=timezone.utc
+            ):  # pragma: no cover
                 msg = "Invariant violation: current_span has already ended"
                 raise AssertionError(msg)
 
@@ -397,7 +401,7 @@ class NullMetricsCollector(MetricsCollector):
     @contextlib.contextmanager
     def start_trace(self) -> t.Generator[Trace, None, None]:
         """No-op trace context manager."""
-        yield Trace(id_=0, start=datetime.now(tz=UTC), end=datetime.now(tz=UTC))
+        yield Trace(id_=0, start=datetime.now(tz=timezone.utc), end=datetime.now(tz=timezone.utc))
 
     @contextlib.contextmanager
     def start_span(
@@ -409,8 +413,8 @@ class NullMetricsCollector(MetricsCollector):
             parent_id=None,
             type_=type_,
             name=name,
-            start=datetime.now(tz=UTC),
-            end=datetime.now(tz=UTC),
+            start=datetime.now(tz=timezone.utc),
+            end=datetime.now(tz=timezone.utc),
             metadata=metadata or {},
         )
 
@@ -421,14 +425,14 @@ class NullMetricsCollector(MetricsCollector):
             parent_id=None,
             type_=SpanType.STAGE,
             name="null",
-            start=datetime.now(tz=UTC),
-            end=datetime.now(tz=UTC),
+            start=datetime.now(tz=timezone.utc),
+            end=datetime.now(tz=timezone.utc),
             metadata={},
         )
 
     def get_trace(self, trace_id: int) -> Trace:  # noqa: ARG002
         """Get a trace - returns dummy trace for null collector."""
-        return Trace(id_=0, start=datetime.now(tz=UTC), end=datetime.now(tz=UTC))
+        return Trace(id_=0, start=datetime.now(tz=timezone.utc), end=datetime.now(tz=timezone.utc))
 
     def report(self) -> MetricsReport:
         """Generate an empty report."""

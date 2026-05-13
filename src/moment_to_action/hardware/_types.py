@@ -7,7 +7,7 @@ import ``ComputeUnit`` from here, not from the backend module.
 from __future__ import annotations
 
 import typing as t
-from enum import StrEnum
+from enum import Enum
 from typing import TYPE_CHECKING
 
 import attrs
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     import torch
 
 
-class ComputeUnit(StrEnum):
+class ComputeUnit(str, Enum):
     """Available compute units on a hardware accelerator platform."""
 
     CPU = "CPU"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -12,7 +12,7 @@ from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 def _make_sample(**kwargs: object) -> ComputeUnitUsageSample:
     """Helper to build a ComputeUnitUsageSample with sensible defaults."""
     defaults: dict[str, object] = {
-        "timestamp": datetime.now(tz=UTC),
+        "timestamp": datetime.now(tz=timezone.utc),
         "device": ComputeUnit.CPU,
         "usage_pct": 0.0,
         "frequency_mhz": 0.0,
@@ -62,7 +62,7 @@ class TestComputeUnitUsageSample:
 
     def test_sample_construction_basic(self) -> None:
         """Test basic construction with valid values."""
-        ts = datetime.now(tz=UTC)
+        ts = datetime.now(tz=timezone.utc)
         sample = ComputeUnitUsageSample(
             timestamp=ts,
             device=ComputeUnit.CPU,
@@ -126,7 +126,7 @@ class TestComputeUnitUsageSample:
 
     def test_sample_json(self) -> None:
         """Test that json() returns a serializable dict with all fields."""
-        ts = datetime.now(tz=UTC)
+        ts = datetime.now(tz=timezone.utc)
         sample = _make_sample(
             timestamp=ts,
             device=ComputeUnit.GPU,

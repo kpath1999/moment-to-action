@@ -48,7 +48,7 @@ class TestToPilRgb:
         """All-zero BGR frame produces an all-black RGB image."""
         bgr = np.zeros((5, 5, 3), dtype=np.uint8)
         img = to_pil_rgb(bgr)
-        pixels = list(img.get_flattened_data())
+        pixels = list(img.getdata())
         assert all(p == (0, 0, 0) for p in pixels)
 
     def test_larger_frame(self) -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import attrs
 import pytest
@@ -20,13 +20,13 @@ from moment_to_action.metrics._types import (
 
 @pytest.fixture
 def utc_now() -> datetime:
-    """Return the current UTC datetime."""
-    return datetime.now(tz=UTC)
+    """Return the current timezone.utc datetime."""
+    return datetime.now(tz=timezone.utc)
 
 
 @pytest.fixture
 def utc_past(utc_now: datetime) -> datetime:
-    """Return a UTC datetime 100ms in the past."""
+    """Return a timezone.utc datetime 100ms in the past."""
     return utc_now - timedelta(milliseconds=100)
 
 
@@ -831,7 +831,7 @@ class TestMetricsReport:
 
 def _make_compute_sample(device: ComputeUnit = ComputeUnit.CPU) -> ComputeUnitUsageSample:
     return ComputeUnitUsageSample(
-        timestamp=datetime.now(tz=UTC),
+        timestamp=datetime.now(tz=timezone.utc),
         device=device,
         usage_pct=10.0,
         frequency_mhz=1000.0,
@@ -877,7 +877,7 @@ class TestResourceUsageSampleJson:
 
     def test_json_returns_all_fields(self) -> None:
         """ResourceUsageSample.json returns nested json for sub-objects."""
-        ts = datetime.now(tz=UTC)
+        ts = datetime.now(tz=timezone.utc)
         sample = ResourceUsageSample(
             timestamp=ts,
             running_span_id=42,

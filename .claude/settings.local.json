@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(just test *)",
+      "Bash(grep -v \"^$\")"
+    ]
+  }
+}
