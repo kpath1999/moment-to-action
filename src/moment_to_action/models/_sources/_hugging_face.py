@@ -55,7 +55,7 @@ def resolve_hugging_face_source(
             return None
 
         # Run downloads
-        # TODO(nikola): This could easily be parallelized if there are multiple files
+        # TODO(#102): This could easily be parallelized if there are multiple files
         for filename in missing_files:
             # Get the URL for the file in the HuggingFace repo
             url = hf_hub_url(

@@ -52,12 +52,16 @@ class CacheInfo:
             "Subcache",
             "Size",
             "Items",
-            title=f"Cache ({format_size(self.total_size_bytes)})",
+            title=f"Cache ({format_size(self.total_size_bytes, binary=True)})",
         )
 
         # Subcaches
         def add_subcache(name: str, subcache: _SubcacheInfo) -> None:
-            table.add_row(name, format_size(subcache.total_size_bytes), str(subcache.item_count))
+            table.add_row(
+                name,
+                format_size(subcache.total_size_bytes, binary=True),
+                str(subcache.item_count),
+            )
 
         add_subcache("models", self.models_info)
 

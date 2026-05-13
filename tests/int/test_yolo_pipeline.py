@@ -13,6 +13,7 @@ import pytest
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import DetectionMessage, FrameTensorMessage, ReasoningMessage
 from moment_to_action.models import ModelManager
+from moment_to_action.paths import PathManager
 from moment_to_action.pipeline import Pipeline
 from moment_to_action.sensors import FileImageSensor
 from moment_to_action.stages.llm import ReasoningStage
@@ -50,7 +51,7 @@ def test_yolo_pipeline_full(test_image_path: Path) -> None:
     sensor.close()
 
     backend = ComputeBackend()
-    manager = ModelManager()
+    manager = ModelManager(PathManager())
     # Stages resolve their own model paths via ModelManager.
     pipeline = Pipeline(
         [
@@ -88,7 +89,7 @@ def test_yolo_detections(test_image_path: Path) -> None:
     sensor.close()
 
     backend = ComputeBackend()
-    manager = ModelManager()
+    manager = ModelManager(PathManager())
     pipeline = Pipeline(
         [
             _preprocess_stage(),

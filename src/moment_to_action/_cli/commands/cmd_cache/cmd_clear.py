@@ -40,7 +40,6 @@ def clear(ctx: click.Context, *, json_output: bool, force: bool) -> None:
             if confirmed.lower() not in ("y", "yes"):
                 console.print("[cyan]Cache clear cancelled.[/cyan]")
                 ctx.exit(0)
-                return
         except EOFError:
             pass
 

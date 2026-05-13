@@ -5,8 +5,42 @@ Provides fixtures for common test utilities.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
+
+from moment_to_action.paths import PathManager
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+@dataclass
+class _FakeDirs:
+    """Minimal stand-in for platformdirs.PlatformDirs."""
+
+    user_cache_path: Path
+    user_data_path: Path
+    user_log_path: Path
+    user_config_path: Path
+
+
+@pytest.fixture
+def path_manager(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PathManager:
+    """Return a PathManager rooted in `tmp_path`, bypassing platformdirs."""
+    fake = _FakeDirs(
+        user_cache_path=tmp_path / "cache",
+        user_data_path=tmp_path / "data",
+        user_log_path=tmp_path / "logs",
+        user_config_path=tmp_path / "config",
+    )
+    monkeypatch.setattr(
+        "moment_to_action.paths._manager.PlatformDirs",
+        lambda **_kwargs: fake,
+    )
+    return PathManager()
 
 
 @pytest.fixture

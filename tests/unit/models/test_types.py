@@ -1,4 +1,4 @@
-"""Unit tests for models._types module."""
+"""Unit tests for model info / source / status data classes and the registry."""
 
 from __future__ import annotations
 
@@ -6,393 +6,289 @@ from pathlib import Path
 
 import pytest
 
-from moment_to_action.models._registry import MODEL_REGISTRY
-from moment_to_action.models._types import (
+from moment_to_action.models import (
     DownloadSource,
+    HuggingFaceSource,
+    ModelFormat,
     ModelID,
     ModelInfo,
-    ModelStatus,
-    TransformersSource,
+    VariantStatus,
     VendoredSource,
 )
+from moment_to_action.models._model_info import ModelStatus
+from moment_to_action.models._registry import DEFAULT_KEY, MODEL_REGISTRY
+
+# ---------------------------------------------------------------------------
+# ModelID
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestModelID:
     """Tests for ModelID enum."""
 
-    def test_model_id_has_yolo_v8(self) -> None:
-        """Test that ModelID enum has YOLO_V8."""
-        assert hasattr(ModelID, "YOLO_V8")
-        assert ModelID.YOLO_V8.value == "yolo_v8"
-
-    def test_model_id_has_mobileclip_s2(self) -> None:
-        """Test that ModelID enum has MOBILECLIP_S2."""
-        assert hasattr(ModelID, "MOBILECLIP_S2")
-        assert ModelID.MOBILECLIP_S2.value == "mobileclip_s2"
-
-    def test_model_id_enum_count(self) -> None:
-        """Test that ModelID has exactly three members."""
-        assert len(list(ModelID)) == 3
-
     @pytest.mark.parametrize(
-        "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
+        ("member", "value"),
+        [
+            (ModelID.YOLO_V8, "yolo_v8"),
+            (ModelID.MOBILECLIP_S2, "mobileclip_s2"),
+            (ModelID.SMOLVLM2_2_2B, "smolvlm2_2_2b"),
+        ],
     )
-    def test_model_id_has_value(self, model_id: ModelID) -> None:
-        """Test that each ModelID has a value."""
-        assert isinstance(model_id.value, str)
-        assert len(model_id.value) > 0
+    def test_members_have_expected_values(self, member: ModelID, value: str) -> None:
+        """Each ModelID has the expected snake_case value."""
+        assert member.value == value
 
-    def test_model_id_has_smolvlm2_2_2b(self) -> None:
-        """Test that ModelID enum has SMOLVLM2_2_2B."""
-        assert hasattr(ModelID, "SMOLVLM2_2_2B")
-        assert ModelID.SMOLVLM2_2_2B.value == "smolvlm2_2_2b"
+
+# ---------------------------------------------------------------------------
+# ModelFormat
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestModelFormat:
+    """Tests for ModelFormat enum."""
+
+    def test_has_onnx_and_dlc(self) -> None:
+        """ModelFormat has at least ONNX and DLC members."""
+        assert ModelFormat.ONNX is not None
+        assert ModelFormat.DLC is not None
+
+
+# ---------------------------------------------------------------------------
+# VendoredSource
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestVendoredSource:
-    """Tests for VendoredSource attrs."""
+    """Tests for VendoredSource."""
 
-    def test_vendored_source_subdir_required(self) -> None:
-        """Test that VendoredSource requires subdir field."""
+    def test_requires_format_and_path(self) -> None:
+        """Both `format` and `path` are required."""
         with pytest.raises(TypeError):
             VendoredSource()  # type: ignore[call-arg]
 
-    def test_vendored_source_subdir_stored(self) -> None:
-        """Test that VendoredSource stores subdir correctly."""
-        source = VendoredSource(subdir="test_subdir")
-        assert source.subdir == "test_subdir"
+    def test_stores_fields(self) -> None:
+        """Constructor stores `format` and `path`."""
+        s = VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx"))
+        assert s.format is ModelFormat.ONNX
+        assert s.path == Path("yolo/model.onnx")
 
-    def test_vendored_source_is_frozen(self) -> None:
-        """Test that VendoredSource is frozen (immutable)."""
-        source = VendoredSource(subdir="test")
+    def test_is_frozen(self) -> None:
+        """VendoredSource is frozen."""
+        s = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
         with pytest.raises(AttributeError):
-            source.subdir = "modified"  # type: ignore[misc]
+            s.path = Path("b")  # type: ignore[misc]
 
-    def test_vendored_source_equality(self) -> None:
-        """Test VendoredSource equality comparison."""
-        source1 = VendoredSource(subdir="yolo")
-        source2 = VendoredSource(subdir="yolo")
-        source3 = VendoredSource(subdir="other")
-        assert source1 == source2
-        assert source1 != source3
+    def test_equality(self) -> None:
+        """Equal-fields VendoredSources compare equal."""
+        a = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
+        b = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
+        c = VendoredSource(format=ModelFormat.DLC, path=Path("a"))
+        assert a == b
+        assert a != c
+
+
+# ---------------------------------------------------------------------------
+# DownloadSource
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestDownloadSource:
-    """Tests for DownloadSource attrs."""
+    """Tests for DownloadSource."""
 
-    def test_download_source_hf_repo_id_required(self) -> None:
-        """Test that DownloadSource requires hf_repo_id field."""
-        with pytest.raises(TypeError):
-            DownloadSource(hf_filename="file.tflite")  # type: ignore[call-arg]
-
-    def test_download_source_hf_filename_required(self) -> None:
-        """Test that DownloadSource requires hf_filename field."""
-        with pytest.raises(TypeError):
-            DownloadSource(hf_repo_id="user/repo")  # type: ignore[call-arg]
-
-    def test_download_source_both_fields_required(self) -> None:
-        """Test that DownloadSource requires both fields."""
+    def test_requires_all_fields(self) -> None:
+        """`format`, `url`, and `filename` are all required."""
         with pytest.raises(TypeError):
             DownloadSource()  # type: ignore[call-arg]
 
-    def test_download_source_stores_both_fields(self) -> None:
-        """Test that DownloadSource stores both fields correctly."""
-        source = DownloadSource(
-            hf_repo_id="user/repo",
-            hf_filename="model.tflite",
+    def test_stores_fields(self) -> None:
+        """Constructor stores all three fields."""
+        s = DownloadSource(
+            format=ModelFormat.ONNX,
+            url="https://example.com/m.onnx",
+            filename="m.onnx",
         )
-        assert source.hf_repo_id == "user/repo"
-        assert source.hf_filename == "model.tflite"
+        assert s.format is ModelFormat.ONNX
+        assert s.url == "https://example.com/m.onnx"
+        assert s.filename == "m.onnx"
 
-    def test_download_source_is_frozen(self) -> None:
-        """Test that DownloadSource is frozen (immutable)."""
-        source = DownloadSource(
-            hf_repo_id="user/repo",
-            hf_filename="model.tflite",
-        )
+    def test_is_frozen(self) -> None:
+        """DownloadSource is frozen."""
+        s = DownloadSource(format=ModelFormat.ONNX, url="u", filename="f")
         with pytest.raises(AttributeError):
-            source.hf_repo_id = "modified"  # type: ignore[misc]
+            s.url = "other"  # type: ignore[misc]
 
-    def test_download_source_equality(self) -> None:
-        """Test DownloadSource equality comparison."""
-        source1 = DownloadSource(
-            hf_repo_id="user/repo",
-            hf_filename="model.tflite",
+
+# ---------------------------------------------------------------------------
+# HuggingFaceSource
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestHuggingFaceSource:
+    """Tests for HuggingFaceSource."""
+
+    def test_requires_all_fields(self) -> None:
+        """`format`, `hf_repo_id`, `files`, and `revision` are all required."""
+        with pytest.raises(TypeError):
+            HuggingFaceSource()  # type: ignore[call-arg]
+
+    def test_stores_fields(self) -> None:
+        """Constructor stores all fields."""
+        s = HuggingFaceSource(
+            format=ModelFormat.ONNX,
+            hf_repo_id="org/repo",
+            files=["a", "b"],
+            revision="abc123",
         )
-        source2 = DownloadSource(
-            hf_repo_id="user/repo",
-            hf_filename="model.tflite",
-        )
-        source3 = DownloadSource(
-            hf_repo_id="other/repo",
-            hf_filename="model.tflite",
-        )
-        assert source1 == source2
-        assert source1 != source3
+        assert s.hf_repo_id == "org/repo"
+        assert s.files == ["a", "b"]
+        assert s.revision == "abc123"
+
+
+# ---------------------------------------------------------------------------
+# ModelInfo
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestModelInfo:
-    """Tests for ModelInfo attrs."""
+    """Tests for ModelInfo."""
 
-    def test_model_info_id_required(self) -> None:
-        """Test that ModelInfo requires id field."""
+    def test_requires_fields(self) -> None:
+        """`id` and `variants` are required."""
         with pytest.raises(TypeError):
-            ModelInfo(  # type: ignore[call-arg]
-                filename="model.onnx",
-                source=VendoredSource(subdir="yolo"),
-            )
+            ModelInfo(id=ModelID.YOLO_V8)  # type: ignore[call-arg]
 
-    def test_model_info_filename_required(self) -> None:
-        """Test that ModelInfo requires filename field."""
-        with pytest.raises(TypeError):
-            ModelInfo(  # type: ignore[call-arg]
-                id=ModelID.YOLO_V8,
-                source=VendoredSource(subdir="yolo"),
-            )
+    def test_stores_variant_map(self) -> None:
+        """`variants` is stored verbatim."""
+        v = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
+        info = ModelInfo(id=ModelID.YOLO_V8, variants={DEFAULT_KEY: v})
+        assert info.id is ModelID.YOLO_V8
+        assert info.variants == {DEFAULT_KEY: v}
 
-    def test_model_info_source_required(self) -> None:
-        """Test that ModelInfo requires source field."""
-        with pytest.raises(TypeError):
-            ModelInfo(  # type: ignore[call-arg]
-                id=ModelID.YOLO_V8,
-                filename="model.onnx",
-            )
 
-    def test_model_info_stores_all_fields(self) -> None:
-        """Test that ModelInfo stores all fields correctly."""
-        source = VendoredSource(subdir="yolo")
-        info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=source,
-        )
-        assert info.id == ModelID.YOLO_V8
-        assert info.filename == "model.onnx"
-        assert info.source is source
-
-    def test_model_info_is_frozen(self) -> None:
-        """Test that ModelInfo is frozen (immutable)."""
-        info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=VendoredSource(subdir="yolo"),
-        )
-        with pytest.raises(AttributeError):
-            info.id = ModelID.MOBILECLIP_S2  # type: ignore[misc]
-
-    def test_model_info_with_vendored_source(self) -> None:
-        """Test ModelInfo with VendoredSource."""
-        source = VendoredSource(subdir="yolo")
-        info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=source,
-        )
-        assert isinstance(info.source, VendoredSource)
-
-    def test_model_info_with_download_source(self) -> None:
-        """Test ModelInfo with DownloadSource."""
-        source = DownloadSource(
-            hf_repo_id="user/repo",
-            hf_filename="model.tflite",
-        )
-        info = ModelInfo(
-            id=ModelID.MOBILECLIP_S2,
-            filename="model.tflite",
-            source=source,
-        )
-        assert isinstance(info.source, DownloadSource)
-
-    def test_model_info_with_transformers_source(self) -> None:
-        """Test ModelInfo with TransformersSource."""
-        source = TransformersSource(hf_repo_id="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
-        info = ModelInfo(
-            id=ModelID.SMOLVLM2_2_2B,
-            filename="",
-            source=source,
-        )
-        assert isinstance(info.source, TransformersSource)
+# ---------------------------------------------------------------------------
+# VariantStatus
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestTransformersSource:
-    """Tests for TransformersSource attrs."""
+class TestVariantStatus:
+    """Tests for VariantStatus."""
 
-    def test_transformers_source_hf_repo_id_required(self) -> None:
-        """Test that TransformersSource requires hf_repo_id field."""
-        with pytest.raises(TypeError):
-            TransformersSource()  # type: ignore[call-arg]
+    def test_stores_fields(self) -> None:
+        """Constructor stores all fields."""
+        v = VariantStatus(
+            model_id=ModelID.YOLO_V8,
+            variant=DEFAULT_KEY,
+            available=True,
+            path=Path("/x"),
+            size_bytes=10,
+        )
+        assert v.model_id is ModelID.YOLO_V8
+        assert v.variant == DEFAULT_KEY
+        assert v.available is True
+        assert v.path == Path("/x")
+        assert v.size_bytes == 10
 
-    def test_transformers_source_stores_hf_repo_id(self) -> None:
-        """Test that TransformersSource stores hf_repo_id correctly."""
-        source = TransformersSource(hf_repo_id="org/repo")
-        assert source.hf_repo_id == "org/repo"
 
-    def test_transformers_source_is_frozen(self) -> None:
-        """Test that TransformersSource is frozen (immutable)."""
-        source = TransformersSource(hf_repo_id="org/repo")
-        with pytest.raises(AttributeError):
-            source.hf_repo_id = "modified"  # type: ignore[misc]
+# ---------------------------------------------------------------------------
+# ModelStatus
+# ---------------------------------------------------------------------------
+
+
+def _make_variant(
+    model_id: ModelID,
+    variant: str,
+    *,
+    available: bool,
+    size: int | None,
+) -> VariantStatus:
+    """Build a VariantStatus for testing."""
+    return VariantStatus(
+        model_id=model_id,
+        variant=variant,
+        available=available,
+        path=Path("/x") if available else None,
+        size_bytes=size,
+    )
 
 
 @pytest.mark.unit
 class TestModelStatus:
-    """Tests for ModelStatus attrs."""
+    """Tests for ModelStatus."""
 
-    def test_model_status_stores_all_fields(self) -> None:
-        """Test that ModelStatus stores all fields correctly."""
-        info = ModelInfo(
+    def _info(self) -> ModelInfo:
+        return ModelInfo(
             id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=VendoredSource(subdir="yolo"),
+            variants={
+                DEFAULT_KEY: VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx"))
+            },
         )
-        path = Path("/path/to/model.onnx")
-        status = ModelStatus(
-            info=info,
-            available=True,
-            path=path,
-            size_bytes=1000,
-        )
-        assert status.info is info
-        assert status.available is True
-        assert status.path == path
-        assert status.size_bytes == 1000
 
-    def test_model_status_not_available(self) -> None:
-        """Test ModelStatus with unavailable model."""
-        info = ModelInfo(
-            id=ModelID.MOBILECLIP_S2,
-            filename="model.tflite",
-            source=DownloadSource(
-                hf_repo_id="user/repo",
-                hf_filename="model.tflite",
-            ),
-        )
+    def test_available_true_when_any_variant_available(self) -> None:
+        """`available` is True if at least one variant is available."""
         status = ModelStatus(
-            info=info,
-            available=False,
+            info=self._info(),
+            variants=[
+                _make_variant(ModelID.YOLO_V8, DEFAULT_KEY, available=False, size=None),
+                _make_variant(ModelID.YOLO_V8, "alt", available=True, size=10),
+            ],
+            path=Path("/cache/yolo"),
+        )
+        assert status.available is True
+
+    def test_available_false_when_no_variant_available(self) -> None:
+        """`available` is False when no variants are available."""
+        status = ModelStatus(
+            info=self._info(),
+            variants=[
+                _make_variant(ModelID.YOLO_V8, DEFAULT_KEY, available=False, size=None),
+            ],
             path=None,
-            size_bytes=None,
         )
         assert status.available is False
-        assert status.path is None
-        assert status.size_bytes is None
 
-    def test_model_status_is_frozen(self) -> None:
-        """Test that ModelStatus is frozen (immutable)."""
-        info = ModelInfo(
-            id=ModelID.YOLO_V8,
-            filename="model.onnx",
-            source=VendoredSource(subdir="yolo"),
-        )
+    def test_size_bytes_sums_available_variants(self) -> None:
+        """`size_bytes` sums variant sizes (treating None as 0)."""
         status = ModelStatus(
-            info=info,
-            available=True,
-            path=Path("/path"),
-            size_bytes=1000,
+            info=self._info(),
+            variants=[
+                _make_variant(ModelID.YOLO_V8, "a", available=True, size=10),
+                _make_variant(ModelID.YOLO_V8, "b", available=True, size=25),
+                _make_variant(ModelID.YOLO_V8, "c", available=False, size=None),
+            ],
+            path=Path("/cache/yolo"),
         )
-        with pytest.raises(AttributeError):
-            status.available = False  # type: ignore[misc]
+        assert status.size_bytes == 35
+
+    def test_available_variants_returns_only_available(self) -> None:
+        """`available_variants` returns only those with `available=True`."""
+        a = _make_variant(ModelID.YOLO_V8, "a", available=True, size=10)
+        b = _make_variant(ModelID.YOLO_V8, "b", available=False, size=None)
+        status = ModelStatus(info=self._info(), variants=[a, b], path=None)
+        assert status.available_variants == [a]
+
+
+# ---------------------------------------------------------------------------
+# MODEL_REGISTRY
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestModelRegistry:
     """Tests for MODEL_REGISTRY."""
 
-    def test_registry_contains_yolo_v8(self) -> None:
-        """Test that MODEL_REGISTRY contains YOLO_V8."""
+    def test_yolo_v8_registered(self) -> None:
+        """YOLO_V8 is in the registry with a VendoredSource default variant."""
         assert ModelID.YOLO_V8 in MODEL_REGISTRY
         info = MODEL_REGISTRY[ModelID.YOLO_V8]
-        assert info.id == ModelID.YOLO_V8
-
-    def test_registry_contains_mobileclip_s2(self) -> None:
-        """Test that MODEL_REGISTRY contains MOBILECLIP_S2."""
-        assert ModelID.MOBILECLIP_S2 in MODEL_REGISTRY
-        info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
-        assert info.id == ModelID.MOBILECLIP_S2
-
-    def test_registry_contains_smolvlm2_2_2b(self) -> None:
-        """Test that MODEL_REGISTRY contains SMOLVLM2_2_2B."""
-        assert ModelID.SMOLVLM2_2_2B in MODEL_REGISTRY
-        info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
-        assert info.id == ModelID.SMOLVLM2_2_2B
-
-    def test_registry_has_exactly_two_entries(self) -> None:
-        """Test that MODEL_REGISTRY has exactly three entries."""
-        assert len(MODEL_REGISTRY) == 3
-
-    def test_yolo_v8_is_vendored(self) -> None:
-        """Test that YOLO_V8 has VendoredSource."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8]
-        assert isinstance(info.source, VendoredSource)
-
-    def test_yolo_v8_has_correct_subdir(self) -> None:
-        """Test that YOLO_V8 has correct subdir."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8]
-        assert isinstance(info.source, VendoredSource)
-        assert info.source.subdir == "yolo"
-
-    def test_yolo_v8_has_correct_filename(self) -> None:
-        """Test that YOLO_V8 has correct filename."""
-        info = MODEL_REGISTRY[ModelID.YOLO_V8]
-        assert info.filename == "model.onnx"
-
-    def test_mobileclip_s2_is_downloadable(self) -> None:
-        """Test that MOBILECLIP_S2 has DownloadSource."""
-        info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
-        assert isinstance(info.source, DownloadSource)
-
-    def test_mobileclip_s2_has_correct_hf_repo(self) -> None:
-        """Test that MOBILECLIP_S2 has correct HF repo."""
-        info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
-        assert isinstance(info.source, DownloadSource)
-        assert info.source.hf_repo_id == "anton96vice/mobileclip2_tflite"
-
-    def test_mobileclip_s2_has_correct_hf_filename(self) -> None:
-        """Test that MOBILECLIP_S2 has correct HF filename."""
-        info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
-        assert isinstance(info.source, DownloadSource)
-        assert info.source.hf_filename == "mobileclip_s2_datacompdr_last.tflite"
-
-    def test_mobileclip_s2_has_correct_filename(self) -> None:
-        """Test that MOBILECLIP_S2 has correct filename."""
-        info = MODEL_REGISTRY[ModelID.MOBILECLIP_S2]
-        assert info.filename == "mobileclip_s2_datacompdr_last.tflite"
-
-    def test_smolvlm2_2_2b_is_transformers_source(self) -> None:
-        """Test that SMOLVLM2_2_2B has TransformersSource."""
-        info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
-        assert isinstance(info.source, TransformersSource)
-
-    def test_smolvlm2_2_2b_has_correct_hf_repo(self) -> None:
-        """Test that SMOLVLM2_2_2B has correct HF repo."""
-        info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
-        assert isinstance(info.source, TransformersSource)
-        assert info.source.hf_repo_id == "HuggingFaceTB/SmolVLM2-2.2B-Instruct"
-
-    def test_smolvlm2_2_2b_has_unused_filename_sentinel(self) -> None:
-        """Test that SMOLVLM2_2_2B has '__UNUSED__' filename (directory-based source)."""
-        info = MODEL_REGISTRY[ModelID.SMOLVLM2_2_2B]
-        assert info.filename == "__UNUSED__"
-
-    @pytest.mark.parametrize(
-        "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
-    )
-    def test_registry_entries_are_model_info(self, model_id: ModelID) -> None:
-        """Test that all registry entries are ModelInfo instances."""
-        info = MODEL_REGISTRY[model_id]
-        assert isinstance(info, ModelInfo)
-
-    @pytest.mark.parametrize(
-        "model_id",
-        [ModelID.YOLO_V8, ModelID.MOBILECLIP_S2, ModelID.SMOLVLM2_2_2B],
-    )
-    def test_registry_entry_id_matches_key(self, model_id: ModelID) -> None:
-        """Test that registry entry ID matches its key."""
-        info = MODEL_REGISTRY[model_id]
-        assert info.id == model_id
+        assert info.id is ModelID.YOLO_V8
+        default = info.variants[DEFAULT_KEY]
+        assert isinstance(default, VendoredSource)
+        assert default.path == Path("yolo/model.onnx")
+        assert default.format is ModelFormat.ONNX

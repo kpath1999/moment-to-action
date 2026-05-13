@@ -47,7 +47,7 @@ class CachedModelInfo:
         dirty_count = len(self.other)
         return [
             self.model_id,
-            format_size(self.size_bytes),
+            format_size(self.size_bytes, binary=True),
             ", ".join(self.variants),
             f"[red]{dirty_count}[/red]" if dirty_count else "[green]0[/green]",
         ]
@@ -86,7 +86,7 @@ class ModelCacheContents:
             "Size",
             "Variants",
             "Dirty Files",
-            title=f"Model Cache ({format_size(self.total_size_bytes)})",
+            title=f"Model Cache ({format_size(self.total_size_bytes, binary=True)})",
         )
 
         # Add models

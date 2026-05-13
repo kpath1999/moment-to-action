@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 from moment_to_action.paths import PathManager
+from moment_to_action.paths._cache._models import ModelCacheContents
 from moment_to_action.utils.files import disk_size
 
 from ._model_info import ModelID, ModelInfo, ModelStatus, VariantStatus
@@ -98,7 +99,7 @@ class ModelManager:
         assert path is not None  # noqa: S101 # For type checker, path should be non-None if available
 
         # Done!
-        log.info(f"Model {model} (variant '{variant}') is available at: {path}")
+        log.info("Model %s (variant '%s') is available at: %s", model, variant, path)
         return path
 
     def is_available(self, model: ModelID, variant: str = DEFAULT_KEY) -> bool:
@@ -115,7 +116,7 @@ class ModelManager:
         path = self._resolve_model(model, variant, download=False)
         available = self._available(path)
 
-        log.debug(f"Model {model} (variant '{variant}') availability: {available} at {path}")
+        log.debug("Model %s (variant '%s') availability: %s at %s", model, variant, available, path)
         return available
 
     def list_models(self) -> list[ModelStatus]:
@@ -166,10 +167,10 @@ class ModelManager:
 
         return statuses
 
-    def clear_cache(self) -> int:
+    def clear_cache(self) -> ModelCacheContents:
         """Clear all downloaded model files from the cache.
 
         Returns:
-            The total size of cleared files in bytes.
+            Information about the cleared model cache contents.
         """
         return self._path_manager.cache.models.clear_cache()

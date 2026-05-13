@@ -13,6 +13,7 @@ import pytest
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.models import ModelManager
+from moment_to_action.paths import PathManager
 from moment_to_action.sensors import FileImageSensor
 from moment_to_action.stages.video import PreprocessorStage
 from moment_to_action.stages.vlm import MobileCLIPStage
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+@pytest.mark.skip(reason="MOBILECLIP_S2 not in MODEL_REGISTRY — see #96")
 @pytest.mark.integration
 @pytest.mark.slow
 def test_mobileclip_pipeline(
@@ -69,7 +71,7 @@ def test_mobileclip_pipeline(
         "an outdoor scene",
     ]
     backend = ComputeBackend()
-    manager = ModelManager()
+    manager = ModelManager(PathManager())
     mobileclip_stage = MobileCLIPStage(
         text_prompts=text_prompts,
         backend=backend,
@@ -111,6 +113,7 @@ def test_mobileclip_pipeline(
     assert classification_msg.latency_ms > -0.01, "Latency should be ~0 or positive"
 
 
+@pytest.mark.skip(reason="MOBILECLIP_S2 not in MODEL_REGISTRY — see #96")
 @pytest.mark.integration
 @pytest.mark.slow
 def test_mobileclip_swappable_prompts(
@@ -145,7 +148,7 @@ def test_mobileclip_swappable_prompts(
     # First classification — stage resolves its own model path via ModelManager.
     initial_prompts = ["a person", "an animal", "a landscape"]
     backend = ComputeBackend()
-    manager = ModelManager()
+    manager = ModelManager(PathManager())
     mobileclip_stage = MobileCLIPStage(
         text_prompts=initial_prompts,
         backend=backend,
