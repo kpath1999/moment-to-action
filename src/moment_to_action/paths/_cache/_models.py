@@ -1,10 +1,108 @@
-import logging
-from pathlib import Path
-from typing import overload
+from __future__ import annotations
 
-from moment_to_action.utils.files import clear_directory
+import logging
+from typing import TYPE_CHECKING, overload
+
+import attrs
+import rich
+import rich.table
+from humanfriendly import format_size
+
+from moment_to_action.utils.files import clear_directory, disk_size
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+
+@attrs.frozen
+class CachedModelInfo:
+    """Information about a cached model in the cache."""
+
+    model_id: str
+    """The ID of the cached model."""
+
+    size_bytes: int
+    """The total size of the cached model in bytes."""
+
+    variants: list[str]
+    """List of variants that are cached for this model."""
+
+    other: list[Path]
+    """Other unexpected files found while inspecting the model."""
+
+    def to_json(self) -> dict[str, object]:
+        """Return a JSON-serializable representation of the cached model info."""
+        return {
+            **attrs.asdict(self),
+            "other": [str(p) for p in self.other],  # paths are not json serializable
+        }
+
+    def to_rich_table_row(self) -> list[object]:
+        """Return a list of values representing this model info for display in a rich table.
+
+        Columns: [model_id, size, variants, dirty Y/N]
+        """
+        dirty_count = len(self.other)
+        return [
+            self.model_id,
+            format_size(self.size_bytes),
+            ", ".join(self.variants),
+            f"[red]{dirty_count}[/red]" if dirty_count else "[green]0[/green]",
+        ]
+
+
+@attrs.frozen
+class ModelCacheContents:
+    """List information about the model cache contents."""
+
+    total_size_bytes: int
+    """Total size of the models cache."""
+
+    models: dict[str, CachedModelInfo]
+    """Map from model ID to information about the model."""
+
+    other: list[Path]
+    """Other (unexpected) files found."""
+
+    @property
+    def item_count(self) -> int:
+        """Return the number fo items in this cache."""
+        return len(self.models)
+
+    def to_json(self) -> dict[str, object]:
+        """Return a JSON-serializable representation of the cache contents."""
+        return {
+            "total_size_bytes": self.total_size_bytes,
+            "models": {k: v.to_json() for k, v in self.models.items()},
+            "other": [str(p) for p in self.other],
+        }
+
+    def models_to_rich_table(self) -> rich.table.Table:
+        """Return a Rich table populated with all cached model info."""
+        table = rich.table.Table(
+            "Model ID",
+            "Size",
+            "Variants",
+            "Dirty Files",
+            title=f"Model Cache ({format_size(self.total_size_bytes)})",
+        )
+
+        # Add models
+        for model in self.models.values():
+            table.add_row(*[str(c) for c in model.to_rich_table_row()])
+
+        # Footer row with other fiels
+        if self.other:
+            table.add_section()
+            table.add_row(
+                "[dim]other[/dim]",
+                "",
+                ", ".join(str(p) for p in self.other),
+                "",
+            )
+        return table
 
 
 class ModelCacheManager:
@@ -82,15 +180,9 @@ class ModelCacheManager:
             return self._model_path(model_id, variant).exists()
         return self._model_path(model_id).exists()
 
-    def list_cached_models(self) -> list[str]:
-        """List all cached model IDs.
-
-        Returns:
-            A list of cached model IDs.
-        """
-        if not self._dir.exists():
-            return []
-        return [p.name for p in self._dir.iterdir() if p.is_dir()]
+    def _cached_model_paths(self) -> list[Path]:
+        """Get the paths to all cached models."""
+        return [p for p in self._dir.iterdir() if p.is_dir()]
 
     def list_cached_variants(self, model_id: str) -> list[str]:
         """List all cached variants for a specific model.
@@ -106,20 +198,48 @@ class ModelCacheManager:
             return []
         return [p.name for p in model_path.iterdir() if p.is_dir()]
 
-    def list_cache_contents(self) -> dict[str, list[str]]:
+    def list_cached_models(self) -> dict[str, CachedModelInfo]:
         """List all cached models and their variants.
 
         Returns:
-            A dictionary mapping model IDs to lists of their cached variants.
+            A dictionary mapping model IDs to information about them.
         """
         if not self._dir.exists():
             return {}
 
-        contents: dict[str, list[str]] = {}
-        for model_id in self.list_cached_models():
-            contents[model_id] = self.list_cached_variants(model_id)
+        def build_info(p: Path) -> CachedModelInfo:
+            """Build info for a model at this path."""
+            variants = self.list_cached_variants(p.name)
+            variants_set = frozenset(variants)
 
-        return contents
+            return CachedModelInfo(
+                model_id=p.name,
+                size_bytes=disk_size(p),
+                variants=variants,
+                other=[f for f in p.iterdir() if f not in variants_set],
+            )
+
+        return {p.name: build_info(p) for p in self._cached_model_paths()}
+
+    def list_cache_contents(self) -> ModelCacheContents:
+        """List conents of the models cache.
+
+        Included models and other (unexpected) files found.
+
+        Returns:
+            Information about the contents of the model cache.
+        """
+        # Get models
+        models = self.list_cached_models()
+
+        # Look at other files
+        files = [p for p in self._dir.iterdir() if p.name not in models]
+
+        # Get total size
+        total_size = sum(disk_size(p) for p in files) + sum(m.size_bytes for m in models.values())
+
+        # Done!
+        return ModelCacheContents(total_size_bytes=total_size, models=models, other=files)
 
     def remove_variant(self, model_id: str, variant: str) -> int:
         """Remove a specific model variant from the cache.
@@ -138,14 +258,14 @@ class ModelCacheManager:
 
         return clear_directory(variant_dir)
 
-    def remove_model(self, model_id: str) -> int:
+    def remove_model(self, model_id: str) -> CachedModelInfo:
         """Remove all variants of a model from the cache.
 
         Args:
             model_id: The ID of the model to remove.
 
         Returns:
-            The total size of the removed files in bytes.
+            Information about the removed model, including total size and variants.
         """
         model_dir = self._model_path(model_id)
         if not model_dir.exists():
@@ -153,9 +273,13 @@ class ModelCacheManager:
             raise FileNotFoundError(msg)
 
         total_size = 0
+        variants: list[str] = []
+        other_files: list[Path] = []
+
         for variant_dir in model_dir.iterdir():
             if variant_dir.is_dir():
                 total_size += self.remove_variant(model_id, variant_dir.name)
+                variants.append(variant_dir.name)
             else:
                 log.warning(
                     "Found unexpected file %s in model directory %s during removal.",
@@ -165,21 +289,49 @@ class ModelCacheManager:
                 total_size += variant_dir.stat().st_size
                 variant_dir.unlink()
 
-        model_dir.rmdir()  # Remove the now-empty model directory
-        return total_size
+                other_files.append(variant_dir)
 
-    def clear_cache(self) -> int:
+        model_dir.rmdir()  # Remove the now-empty model directory
+        return CachedModelInfo(
+            model_id=model_id, size_bytes=total_size, variants=variants, other=other_files
+        )
+
+    def clear_cache(self) -> ModelCacheContents:
         """Clear the entire cache by removing all cached models and variants.
 
+        Also removes any other files that may have unexpectedly shown up.
+
         Returns:
-            The total size of the removed files in bytes.
+            Information about the model cache contents.
         """
         total_size = 0
 
         # Clean models
-        for model_id in self.list_cached_models():
-            total_size += self.remove_model(model_id)
+        models_info: dict[str, CachedModelInfo] = {}
+
+        for model_path in self._cached_model_paths():
+            model_id = model_path.name
+
+            info = self.remove_model(model_id=model_id)
+            total_size += info.size_bytes
+
+            models_info[model_id] = info
+
+        # Ensure there's nothing left in the model cache directory
+        other_files: list[Path] = []
+
+        for item in self._dir.iterdir():
+            log.warning("Found unexpected item %s in model cache directory during clearing.", item)
+            other_files.append(item)
+
+            if item.is_file():
+                total_size += item.stat().st_size
+                item.unlink()
+            elif item.is_dir():
+                total_size += clear_directory(item)
 
         self._dir.rmdir()  # Remove the now-empty model directory
 
-        return total_size
+        return ModelCacheContents(
+            total_size_bytes=total_size, models=models_info, other=other_files
+        )
