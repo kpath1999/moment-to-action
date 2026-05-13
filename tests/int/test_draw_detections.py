@@ -13,6 +13,7 @@ import pytest
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.messages import DetectionMessage
 from moment_to_action.models import ModelManager
+from moment_to_action.paths import PathManager
 from moment_to_action.pipeline import Pipeline
 from moment_to_action.sensors import FileImageSensor
 from moment_to_action.stages.video import PreprocessorStage, YOLOStage
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 def _detection_pipeline() -> Pipeline:
     """Return a preprocess → YOLO pipeline ready to produce DetectionMessages."""
     backend = ComputeBackend()
-    manager = ModelManager()
+    manager = ModelManager(PathManager())
     return Pipeline(
         [
             PreprocessorStage(target_size=(640, 640), letterbox=True, channels_first=True),

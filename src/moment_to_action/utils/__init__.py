@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .buffer import BufferPool, BufferSpec
-from .cli import GlobalData, ctx_get_seed, ctx_set_seed, format_size
+from .cli import GlobalData, ctx_get_seed, ctx_set_seed
 from .compute import ComputeDispatcher
 from .ml import cosine_similarity, softmax
 from .video import sample_frames, to_pil_rgb
@@ -16,7 +16,6 @@ __all__ = [
     "cosine_similarity",
     "ctx_get_seed",
     "ctx_set_seed",
-    "format_size",
     "sample_frames",
     "softmax",
     "to_pil_rgb",

@@ -24,6 +24,7 @@ from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.messages import ReasoningMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager
+from moment_to_action.paths import PathManager
 from moment_to_action.sensors import FileImageSensor as FileSensor
 from moment_to_action.stages import Pipeline
 from moment_to_action.stages.llm import ReasoningStage
@@ -54,7 +55,7 @@ metrics = MetricsCollector(
         seconds=0.01
     ),  # YOLO too fast, need to sample more frequently
 )
-manager = ModelManager()
+manager = ModelManager(PathManager())
 
 
 # ── build pipeline ─────────────────────────────────────────────────

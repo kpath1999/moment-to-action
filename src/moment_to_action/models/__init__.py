@@ -1,48 +1,36 @@
-"""Model management — discovery, caching, and resolution.
+"""Model management and downloading."""
 
-The ModelManager provides a unified interface for working with ML models,
-supporting both vendored models (shipped with the package) and downloaded
-models cached in the user's cache directory via HuggingFace Hub.
-
-Example::
-
-    from moment_to_action.models import ModelManager, ModelID
-
-    manager = ModelManager()
-    yolo_path = manager.get_path(ModelID.YOLO_V8)
-
-    # Check availability
-    if manager.is_available(ModelID.MOBILECLIP_S2):
-        clip_path = manager.get_path(ModelID.MOBILECLIP_S2)
-
-    # List all models
-    for status in manager.list_models():
-        print(f"{status.info.id}: {status.available}")
-
-    # Clear cache
-    bytes_freed, removed = manager.clear_cache()
-"""
-
-from __future__ import annotations
-
+from ._formats import ModelFormat
 from ._manager import ModelManager
-from ._types import (
+from ._model_info import ModelID, ModelInfo, VariantStatus
+from ._registry import DEFAULT_KEY as DEFAULT_VARIANT_KEY
+from ._registry import MODEL_REGISTRY
+from ._sources import (
     DownloadSource,
-    ModelID,
-    ModelInfo,
+    HuggingFaceSource,
     ModelSource,
-    ModelStatus,
-    TransformersSource,
     VendoredSource,
+    resolve_download_source,
+    resolve_hugging_face_source,
+    resolve_model_source,
+    resolve_vendored_source,
 )
 
 __all__ = [
+    "DEFAULT_VARIANT_KEY",
+    "MODEL_REGISTRY",
     "DownloadSource",
+    "HuggingFaceSource",
+    "ModelFormat",
     "ModelID",
+    "ModelInfo",
     "ModelInfo",
     "ModelManager",
     "ModelSource",
-    "ModelStatus",
-    "TransformersSource",
+    "VariantStatus",
     "VendoredSource",
+    "resolve_download_source",
+    "resolve_hugging_face_source",
+    "resolve_model_source",
+    "resolve_vendored_source",
 ]

@@ -13,26 +13,6 @@ if TYPE_CHECKING:
     import rich_click as click
 
 _SEED_KEY = "moment_to_action.seed"
-_BYTES_PER_UNIT = 1024
-
-
-def format_size(size_bytes: int) -> str:
-    """Format bytes as a human-readable size.
-
-    Args:
-        size_bytes: Number of bytes.
-
-    Returns:
-        Formatted size string (e.g., "13.0 MB", "1.5 GB").
-    """
-    value = float(size_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if value < _BYTES_PER_UNIT:
-            if unit == "B":
-                return f"{int(value):.0f} {unit}"
-            return f"{value:.1f} {unit}"
-        value /= _BYTES_PER_UNIT
-    return f"{value:.1f} TB"
 
 
 @attrs.define
