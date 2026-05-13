@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-05-09T22:25:44.885449069Z"
+exclude-newer = "2026-05-11T14:55:15.871659999Z"
 exclude-newer-span = "P2D"
 
 [[package]]
@@ -1985,6 +1985,7 @@ dev = [
     { name = "python-lsp-ruff" },
     { name = "python-lsp-server", extra = ["all"] },
     { name = "ruff" },
+    { name = "types-humanfriendly" },
 ]
 
 [package.metadata]
@@ -2056,6 +2057,7 @@ dev = [
     { name = "python-lsp-ruff", specifier = ">=2.3.0" },
     { name = "python-lsp-server", extras = ["all"], specifier = ">=1.14.0" },
     { name = "ruff", specifier = ">=0.15.4" },
+    { name = "types-humanfriendly", specifier = ">=10.0.1.20250319" },
 ]
 
 [[package]]
@@ -4116,6 +4118,15 @@ dependencies = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/45/27/14cc3101409b9b4b9241d2ba7deaa93535a217a211c86c4cc7151fb12181/triton-3.0.0-1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e1efef76935b2febc365bfadf74bcb65a6f959a9872e5bddf44cc9e0adce1e1a", size = 209376304, upload-time = "2024-07-19T20:56:41.483Z" },
+]
+
+[[package]]
+name = "types-humanfriendly"
+version = "10.0.1.20250319"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8a/26/9d3bd17958e3288f3eff4a7e5f2f8d88f7b2b95c1a2307fffe2c4f587727/types_humanfriendly-10.0.1.20250319.tar.gz", hash = "sha256:452aa1abbfff88a44cd9985eb459555bb1eae0cdd7bc084269146bfdbf1ff31d", size = 13361, upload-time = "2025-03-19T02:52:19.149Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/9f/694f2a833cda25f633c0c53e1d9e65a8a46b887ed4dd30f20de22e7100ee/types_humanfriendly-10.0.1.20250319-py3-none-any.whl", hash = "sha256:0fec93cc793b91309481ed4bb9bed178ffde0076026fb3ac1cc3299ad7ecbc46", size = 14835, upload-time = "2025-03-19T02:52:17.906Z" },
 ]
 
 [[package]]

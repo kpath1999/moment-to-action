@@ -7,8 +7,7 @@ import json
 import rich_click as click
 from rich.console import Console
 
-from moment_to_action.models import ModelManager
-from moment_to_action.utils.cli import format_size
+from moment_to_action.paths import PathManager
 
 
 @click.command()
@@ -20,61 +19,41 @@ from moment_to_action.utils.cli import format_size
 )
 @click.pass_context
 def clear(ctx: click.Context, *, json_output: bool, force: bool) -> None:
-    """Clear all downloaded models from the cache.
+    """Clear the application cache.
 
-    This command removes all cached (non-vendored) models from the local cache
-    directory. Vendored models that ship with the package are not affected.
+    Removes everything in the cache directory (cached models and any other
+    cache contents).
 
     By default, a confirmation prompt is shown before clearing. Use --force to
     skip the confirmation.
 
     Use --json to get machine-readable output in JSON format.
     """
-    manager = ModelManager()
+    path_manager = PathManager()
 
-    # Confirmation prompt (skip if --json or --force)
     if not json_output and not force:
         console = Console()
         try:
             confirmed = console.input(
-                "[yellow]This will remove all downloaded models. Continue? \\[y/N][/yellow] "
+                "[yellow]This will remove all cached files. Continue? \\[y/N][/yellow] "
             )
             if confirmed.lower() not in ("y", "yes"):
                 console.print("[cyan]Cache clear cancelled.[/cyan]")
                 ctx.exit(0)
+                return
         except EOFError:
-            # Non-interactive mode, skip confirmation
             pass
 
-    # Clear cache
-    total_bytes, removed_ids = manager.clear_cache()
-
-    # Get cache directory
-    cache_dir = manager.cache_dir
+    info = path_manager.cache.clear_cache()
 
     if json_output:
-        output = {
-            "status": "success",
-            "total_bytes_freed": total_bytes,
-            "models_removed": [model_id.value for model_id in removed_ids],
-            "cache_dir": str(cache_dir),
-        }
-        click.echo(json.dumps(output))
-    else:
-        # Rich formatted output
-        console = Console()
+        click.echo(json.dumps(info.to_json(), indent=2))
+        return
 
-        if not removed_ids:
-            console.print("[cyan]Cache is already empty.[/cyan]")
-            return
+    console = Console()
+    if info.total_size_bytes == 0:
+        console.print("[cyan]Cache is already empty.[/cyan]")
+        return
 
-        console.print("[green]✓ Cache cleared successfully[/green]")
-        console.print(f"Removed [bold]{len(removed_ids)}[/bold] model(s):")
-
-        # Display each removed model with its freed size
-        for model_id in removed_ids:
-            size_str = format_size(total_bytes // len(removed_ids))
-            console.print(f"  - {model_id.value}: freed {size_str}")
-
-        console.print()
-        console.print(f"Total freed: [bold]{format_size(total_bytes)}[/bold]")
+    console.print("[green]✓ Cache cleared successfully[/green]")
+    console.print(info.to_rich_table())
