@@ -185,8 +185,6 @@ omit = [
     "*/tests/*",
     "*/__pycache__/*",
     "*/site-packages/*",
-    "*/__init__.py",
-    "*/edgeperceive/*",
 ]
 relative_files = true
 

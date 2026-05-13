@@ -26,8 +26,12 @@ class TestCliUtils:
 
     def test_get_global_data_found(self) -> None:
         """Returns GlobalData when ctx.obj is a GlobalData instance."""
+        from unittest.mock import MagicMock
+
+        from moment_to_action.config import AppConfig
+
         ctx = _make_ctx()
-        gd = GlobalData(log=logging.getLogger("test"))
+        gd = GlobalData(log=logging.getLogger("test"), path_manager=MagicMock(), config=AppConfig())
         ctx.obj = gd
         assert get_global_data(ctx) is gd
 

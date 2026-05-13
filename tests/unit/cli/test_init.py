@@ -24,6 +24,10 @@ class TestMainModule:
 class TestCliCommand:
     """Tests for the top-level cli Click group."""
 
+    @pytest.fixture(autouse=True)
+    def _patch_platform_dirs(self, path_manager: object) -> None:
+        """Activate path_manager fixture so PathManager() uses tmp_path."""
+
     def _mock_backend(self) -> MagicMock:
         sample = MagicMock()
         sample.power_mw = 100
@@ -42,8 +46,8 @@ class TestCliCommand:
         assert result.exit_code == 0
         assert "read-power" in result.output or "rdpwr" in result.output
 
-    def test_cli_verbose_flag_calls_init_logging_with_true(self) -> None:
-        """--verbose causes init_logging(verbose=True)."""
+    def test_cli_verbose_flag_calls_init_logging_with_debug(self) -> None:
+        """--verbose overrides config and calls init_logging with log_level='DEBUG'."""
         from moment_to_action._cli import cli
 
         with patch("moment_to_action._cli.init_logging") as mock_init:
@@ -53,10 +57,10 @@ class TestCliCommand:
             ):
                 result = CliRunner().invoke(cli, ["--verbose", "read-power", "CPU"])
         assert result.exit_code == 0
-        mock_init.assert_called_once_with(verbose=True)
+        mock_init.assert_called_once_with(log_level="DEBUG")
 
-    def test_cli_default_verbose_false(self) -> None:
-        """Without --verbose, init_logging is called with verbose=False."""
+    def test_cli_default_uses_config_log_level(self) -> None:
+        """Without --verbose, init_logging is called with config log_level."""
         from moment_to_action._cli import cli
 
         with patch("moment_to_action._cli.init_logging") as mock_init:
@@ -66,7 +70,7 @@ class TestCliCommand:
             ):
                 result = CliRunner().invoke(cli, ["read-power", "CPU"])
         assert result.exit_code == 0
-        mock_init.assert_called_once_with(verbose=False)
+        mock_init.assert_called_once_with(log_level="INFO")
 
     def test_cli_seed_option_accepted(self) -> None:
         """--seed with a hex value is accepted without error."""

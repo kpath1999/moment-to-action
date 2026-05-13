@@ -8,15 +8,15 @@ from rich.logging import RichHandler
 _stderr_console = Console(stderr=True)
 
 
-def init_logging(*, verbose: bool) -> None:
+def init_logging(*, log_level: str) -> None:
     """Initialize logging.
 
     Args:
-        verbose:
-            Should verbose messages be printed?
+        log_level:
+            Logging level name (e.g. ``"DEBUG"``, ``"INFO"``).
     """
     logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
+        level=getattr(logging, log_level),
         format="%(message)s",
         datefmt="[%X]",
         handlers=[

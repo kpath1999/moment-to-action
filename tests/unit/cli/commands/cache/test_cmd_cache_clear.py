@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from moment_to_action._cli.commands.cmd_cache.cmd_clear import clear
+from moment_to_action.config import AppConfig
 from moment_to_action.paths._cache._manager import CacheInfo
 from moment_to_action.paths._cache._models import ModelCacheContents
 
@@ -48,10 +48,11 @@ class TestCacheClearCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
+                "moment_to_action._cli.PathManager",
                 return_value=_patched_path_manager(_make_cache_info(0)),
             ):
-                result = CliRunner().invoke(cli, ["cache", "clear", "--force"])
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear", "--force"])
 
         assert result.exit_code == 0
 
@@ -61,10 +62,11 @@ class TestCacheClearCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
+                "moment_to_action._cli.PathManager",
                 return_value=_patched_path_manager(_make_cache_info(0)),
             ):
-                result = CliRunner().invoke(cli, ["cache", "clear", "--force"])
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear", "--force"])
 
         assert result.exit_code == 0
         assert "empty" in result.output.lower()
@@ -75,10 +77,11 @@ class TestCacheClearCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
+                "moment_to_action._cli.PathManager",
                 return_value=_patched_path_manager(_make_cache_info(100_000_000)),
             ):
-                result = CliRunner().invoke(cli, ["cache", "clear", "--force"])
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear", "--force"])
 
         assert result.exit_code == 0
         assert "cleared" in result.output.lower()
@@ -89,10 +92,11 @@ class TestCacheClearCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
+                "moment_to_action._cli.PathManager",
                 return_value=_patched_path_manager(_make_cache_info(100_000_000)),
             ):
-                result = CliRunner().invoke(cli, ["cache", "clear", "--force", "--json"])
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear", "--force", "--json"])
 
         assert result.exit_code == 0
         output_json = json.loads(result.output)
@@ -105,10 +109,11 @@ class TestCacheClearCommand:
         freed = 100_000_000
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
+                "moment_to_action._cli.PathManager",
                 return_value=_patched_path_manager(_make_cache_info(freed)),
             ):
-                result = CliRunner().invoke(cli, ["cache", "clear", "--force", "--json"])
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear", "--force", "--json"])
 
         assert result.exit_code == 0
         output_json = json.loads(result.output)
@@ -122,11 +127,9 @@ class TestCacheClearCommand:
 
         mock_path_man = _patched_path_manager(_make_cache_info(0))
         with patch("moment_to_action._cli.init_logging"):
-            with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
-                return_value=mock_path_man,
-            ):
-                result = CliRunner().invoke(cli, ["cache", "clear"], input="n\n")
+            with patch("moment_to_action._cli.PathManager", return_value=mock_path_man):
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear"], input="n\n")
 
         assert result.exit_code == 0
         assert "cancelled" in result.output.lower()
@@ -138,11 +141,9 @@ class TestCacheClearCommand:
 
         mock_path_man = _patched_path_manager(_make_cache_info(100_000_000))
         with patch("moment_to_action._cli.init_logging"):
-            with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
-                return_value=mock_path_man,
-            ):
-                result = CliRunner().invoke(cli, ["cache", "clear"], input="y\n")
+            with patch("moment_to_action._cli.PathManager", return_value=mock_path_man):
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear"], input="y\n")
 
         assert result.exit_code == 0
         mock_path_man.cache.clear_cache.assert_called_once()
@@ -153,11 +154,9 @@ class TestCacheClearCommand:
 
         mock_path_man = _patched_path_manager(_make_cache_info(0))
         with patch("moment_to_action._cli.init_logging"):
-            with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
-                return_value=mock_path_man,
-            ):
-                result = CliRunner().invoke(cli, ["cache", "clear", "--json"])
+            with patch("moment_to_action._cli.PathManager", return_value=mock_path_man):
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear", "--json"])
 
         assert result.exit_code == 0
         output_json = json.loads(result.output)
@@ -166,13 +165,13 @@ class TestCacheClearCommand:
 
     def test_eoferror_in_non_interactive_proceeds_without_confirmation(self) -> None:
         """Clear handles EOFError in non-interactive mode by proceeding."""
+        from moment_to_action._cli import cli
+
         mock_path_man = _patched_path_manager(_make_cache_info(0))
-        with patch(
-            "moment_to_action._cli.commands.cmd_cache.cmd_clear.PathManager",
-            return_value=mock_path_man,
-        ):
-            with patch("moment_to_action._cli.init_logging"):
-                result = CliRunner().invoke(clear, [], input="")
+        with patch("moment_to_action._cli.init_logging"):
+            with patch("moment_to_action._cli.PathManager", return_value=mock_path_man):
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "clear"], input="")
 
         assert result.exit_code == 0
         mock_path_man.cache.clear_cache.assert_called_once()

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable  # noqa: TC003
-from typing import ParamSpec, TypeVar
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 from moment_to_action.hardware import ComputeUnit
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 

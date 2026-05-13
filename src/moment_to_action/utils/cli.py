@@ -6,11 +6,13 @@ import secrets
 from typing import TYPE_CHECKING
 
 import attrs
+import rich_click as click
 
 if TYPE_CHECKING:
     import logging
 
-    import rich_click as click
+    from moment_to_action.config import AppConfig
+    from moment_to_action.paths import PathManager
 
 _SEED_KEY = "moment_to_action.seed"
 
@@ -21,6 +23,16 @@ class GlobalData:
 
     log: logging.Logger
     """CLI logger."""
+
+    path_manager: PathManager
+    """Application path manager."""
+
+    config: AppConfig
+    """Application configuration."""
+
+
+pass_global_data = click.make_pass_decorator(GlobalData)
+"""Decorator that passes the GlobalData instance from the click context."""
 
 
 def get_global_data(ctx: click.Context) -> GlobalData:
