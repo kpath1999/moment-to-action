@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable  # noqa: TC003
 from typing import TYPE_CHECKING, Generic, ParamSpec, TypeVar
 
 from moment_to_action.hardware import ComputeUnit
@@ -39,6 +38,8 @@ from moment_to_action.metrics._types import SpanType
 from moment_to_action.utils import BufferPool, ComputeDispatcher
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from moment_to_action.metrics._collector import MetricsCollector
 
 logger = logging.getLogger(__name__)

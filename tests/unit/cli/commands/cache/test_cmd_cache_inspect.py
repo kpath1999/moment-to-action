@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
+from moment_to_action.config import AppConfig
 from moment_to_action.paths._cache._manager import CacheInfo
 from moment_to_action.paths._cache._models import CachedModelInfo, ModelCacheContents
 
@@ -61,12 +62,11 @@ class TestCacheInspectCommand:
                 ),
             },
         )
+        mock_pm = _patched_path_manager(info)
         with patch("moment_to_action._cli.init_logging"):
-            with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_inspect.PathManager",
-                return_value=_patched_path_manager(info),
-            ):
-                result = CliRunner().invoke(cli, ["cache", "inspect"])
+            with patch("moment_to_action._cli.PathManager", return_value=mock_pm):
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "inspect"])
 
         assert result.exit_code == 0
         assert "Cache" in result.output
@@ -78,12 +78,11 @@ class TestCacheInspectCommand:
         from moment_to_action._cli import cli
 
         info = _make_cache_info(0)
+        mock_pm = _patched_path_manager(info)
         with patch("moment_to_action._cli.init_logging"):
-            with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_inspect.PathManager",
-                return_value=_patched_path_manager(info),
-            ):
-                result = CliRunner().invoke(cli, ["cache", "inspect", "--json"])
+            with patch("moment_to_action._cli.PathManager", return_value=mock_pm):
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "inspect", "--json"])
 
         assert result.exit_code == 0
         output_json = json.loads(result.output)
@@ -104,12 +103,11 @@ class TestCacheInspectCommand:
                 ),
             },
         )
+        mock_pm = _patched_path_manager(info)
         with patch("moment_to_action._cli.init_logging"):
-            with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_inspect.PathManager",
-                return_value=_patched_path_manager(info),
-            ):
-                result = CliRunner().invoke(cli, ["cache", "inspect", "--json"])
+            with patch("moment_to_action._cli.PathManager", return_value=mock_pm):
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    result = CliRunner().invoke(cli, ["cache", "inspect", "--json"])
 
         assert result.exit_code == 0
         output_json = json.loads(result.output)
@@ -123,12 +121,13 @@ class TestCacheInspectCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_cache.cmd_inspect.PathManager",
+                "moment_to_action._cli.PathManager",
                 return_value=_patched_path_manager(_make_cache_info(0)),
             ):
-                runner = CliRunner()
-                result_default = runner.invoke(cli, ["cache", "inspect"])
-                result_json = runner.invoke(cli, ["cache", "inspect", "--json"])
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    runner = CliRunner()
+                    result_default = runner.invoke(cli, ["cache", "inspect"])
+                    result_json = runner.invoke(cli, ["cache", "inspect", "--json"])
 
         assert result_default.exit_code == 0
         assert result_json.exit_code == 0
