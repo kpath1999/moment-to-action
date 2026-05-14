@@ -143,6 +143,8 @@ ignore = [
     "S108",
     # undocumented public packages (D104)
     "D104",
+    # local imports inside test methods are intentional (isolation, deferred heavy deps)
+    "PLC0415",
 ]
 
 [tool.ruff.lint.pydocstyle]

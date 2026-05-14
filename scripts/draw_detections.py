@@ -10,6 +10,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import colorsys
 import logging
 import sys
 from typing import TYPE_CHECKING
@@ -102,8 +103,6 @@ det: DetectionMessage = capture.detections
 def label_color(label: str) -> tuple[int, int, int]:
     """Return a deterministic BGR color for a label."""
     h = abs(hash(label)) % 179
-    import colorsys
-
     r, g, b = colorsys.hsv_to_rgb(h / 179.0, 0.85, 0.95)
     return (int(b * 255), int(g * 255), int(r * 255))  # BGR
 
