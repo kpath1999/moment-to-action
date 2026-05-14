@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Literal
+from pathlib import Path  # noqa: TC003
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-if TYPE_CHECKING:
-    from pathlib import Path
 
-
-class AppConfig(BaseModel):
+class AppConfig(BaseModel, frozen=True):
     """Application configuration."""
 
     max_workers: int = Field(default_factory=lambda: os.cpu_count() or 1, ge=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    qairt_sdk_version: str = "2.45.0"
+    qairt_sdk_path: Path | None = None
 
 
 def load_config(path: Path) -> AppConfig:

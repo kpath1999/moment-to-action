@@ -9,6 +9,7 @@ from rich.table import Table
 
 from moment_to_action.config import AppConfig, save_config
 from moment_to_action.utils.cli import GlobalData, pass_global_data
+from moment_to_action.utils.schemas import update_frozen
 
 
 @click.command()
@@ -51,7 +52,7 @@ def config(data: GlobalData, key: str | None, value: str | None, *, json_output:
         return
 
     try:
-        updated = AppConfig.model_validate({**cfg.model_dump(), key: value})
+        updated = update_frozen(cfg, **{key: value})
     except ValidationError as e:
         raise click.BadParameter(str(e)) from e
 

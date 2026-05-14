@@ -81,6 +81,7 @@ Entry point `m2a` (`pyproject.toml` `[project.scripts]`) → `moment_to_action._
 ### Style
 - `from __future__ import annotations` at the top of every file.
 - Line length 100. Google-style docstrings (`[tool.ruff.lint.pydocstyle].convention = "google"`).
+- **Every function and method must have a docstring** describing its purpose, arguments, return value, and exceptions. Include `__init__` docstrings with all parameters. Use Google style: `Args:`, `Returns:`, `Raises:` sections.
 - Use `object` instead of `Any` except where a runtime handle is genuinely opaque (`_ModelHandle.raw` is the one sanctioned `Any`).
 - Type-checker-only imports go under `if TYPE_CHECKING:`.
 
@@ -110,5 +111,5 @@ In-repo design docs live in `docs/`. Consult before touching the relevant subsys
 1. Branch off `main` as `<your_name>/<feature>` (e.g. `nikola/add-logging`).
 2. Write code **and tests**; keep coverage at 100%.
 3. `just lint && just test` clean locally.
-4. Open PR to `main` using `.github/pull_request_template.md`; GitHub Actions runs lint + tests.
+4. Open PR to `main` using `.github/pull_request_template.md` **EXACTLY**; GitHub Actions runs lint + tests.
 5. Merge as a **squash commit**.
