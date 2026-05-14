@@ -224,6 +224,36 @@ class TestQairtSDKManagerInstall:
 
 
 @pytest.mark.unit
+class TestQairtSDKManagerFindSdkPath:
+    """Tests for QairtSDKManager._find_sdk_path."""
+
+    def test_find_sdk_path_returns_none_when_qairt_dir_missing(self, tmp_path: Path) -> None:
+        """_find_sdk_path returns None when qairt directory does not exist."""
+        mgr = _make_mgr(install_dir=tmp_path)
+        path = mgr._find_sdk_path()
+        assert path is None
+
+    def test_find_sdk_path_returns_none_when_no_version_match(self, tmp_path: Path) -> None:
+        """_find_sdk_path returns None when no versions match the pattern."""
+        base = tmp_path / "qairt"
+        base.mkdir()
+        (base / "2.44.0.24").mkdir()
+        mgr = _make_mgr(sdk_version="2.45.0", install_dir=tmp_path)
+        path = mgr._find_sdk_path()
+        assert path is None
+
+    def test_find_sdk_path_returns_first_match(self, tmp_path: Path) -> None:
+        """_find_sdk_path returns the first matching version directory."""
+        base = tmp_path / "qairt"
+        base.mkdir()
+        (base / "2.45.0.20").mkdir()
+        (base / "2.45.0.24").mkdir()
+        mgr = _make_mgr(sdk_version="2.45.0", install_dir=tmp_path)
+        path = mgr._find_sdk_path()
+        assert path == base / "2.45.0.20"
+
+
+@pytest.mark.unit
 class TestQairtSDKManagerVerify:
     """Tests for QairtSDKManager.verify."""
 

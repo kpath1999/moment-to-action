@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -12,6 +13,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from moment_to_action.config import AppConfig
     from moment_to_action.paths import PathManager
+
+_log = logging.getLogger(__name__)
 
 _QAIRT_VM = Path(sys.executable).parent / "qairt-vm"
 
@@ -28,6 +31,10 @@ class QairtSDKManager:
         self._sdk_path = sdk_path
         self._sdk_version = sdk_version
         self._install_dir = install_dir
+        _log.debug(
+            f"Initialized QairtSDKManager: version={sdk_version}, "
+            f"install_dir={install_dir}, sdk_path={sdk_path}"
+        )
 
     @classmethod
     def from_app_config(cls, config: AppConfig, path_manager: PathManager) -> QairtSDKManager:
@@ -75,7 +82,9 @@ class QairtSDKManager:
             RuntimeError: If SDK path is not configured.
         """
         if self._sdk_path is None:
+            _log.error("Cannot configure environment: SDK path not set")
             raise RuntimeError(_ERR_NOT_INSTALLED)
+        _log.info(f"Setting QAIRT_SDK_ROOT={self._sdk_path}")
         os.environ["QAIRT_SDK_ROOT"] = str(self._sdk_path)
 
     # --- Operations ---
@@ -84,7 +93,12 @@ class QairtSDKManager:
         """Return list of missing system package names for the current distro."""
         from moment_to_action.qairt._deps import check_system_deps
 
-        return check_system_deps()
+        missing = check_system_deps()
+        if missing:
+            _log.warning(f"Missing system dependencies: {', '.join(missing)}")
+        else:
+            _log.debug("All system dependencies present")
+        return missing
 
     def install(self, *, stream: bool = True) -> Path:
         """Fetch the SDK and return the extracted path.
@@ -98,7 +112,12 @@ class QairtSDKManager:
         """
         if self.is_available:
             msg = _ERR_ALREADY_INSTALLED.format(version=self.installed_version, path=self._sdk_path)
+            _log.error(msg)
             raise RuntimeError(msg)
+        _log.info(
+            f"Starting QAIRT SDK install: version={self._sdk_version}, "
+            f"install_dir={self._install_dir}"
+        )
         result = subprocess.run(  # noqa: S603
             [_QAIRT_VM, "fetch", "--version", self._sdk_version, "--dir", str(self._install_dir)],
             capture_output=not stream,
@@ -106,11 +125,15 @@ class QairtSDKManager:
         )
         if result.returncode != 0:
             msg = f"qairt-vm fetch failed (exit {result.returncode})"
+            _log.error(msg)
             raise RuntimeError(msg)
+        _log.debug("qairt-vm fetch succeeded, locating SDK path")
         path = self._find_sdk_path()
         if path is None:
+            _log.error(_ERR_FETCH_PATH)
             raise RuntimeError(_ERR_FETCH_PATH)
         self._sdk_path = path
+        _log.info(f"Successfully installed QAIRT SDK {self._sdk_version} at {path}")
         return path
 
     def verify(self, *, stream: bool = True) -> list[str]:
@@ -130,12 +153,20 @@ class QairtSDKManager:
             RuntimeError: If SDK path is not configured.
         """
         if self._sdk_path is None:
+            _log.error("Cannot verify: SDK path not set")
             raise RuntimeError(_ERR_NOT_INSTALLED)
+        _log.info(f"Starting QAIRT SDK verification at {self._sdk_path}")
         issues: list[str] = []
         if not self._sdk_path.exists():
-            issues.append(f"SDK path does not exist: {self._sdk_path}")
-        issues.extend(f"Missing system package: {pkg}" for pkg in self.check_system_deps())
+            issue = f"SDK path does not exist: {self._sdk_path}"
+            issues.append(issue)
+            _log.error(issue)
+        else:
+            _log.debug(f"SDK path exists: {self._sdk_path}")
+        missing_deps = self.check_system_deps()
+        issues.extend(f"Missing system package: {pkg}" for pkg in missing_deps)
         if shutil.which("dpkg"):
+            _log.debug("Running qairt-vm --inspect on Ubuntu")
             env = {**os.environ, "QAIRT_SDK_ROOT": str(self._sdk_path)}
             result = subprocess.run(  # noqa: S603
                 [_QAIRT_VM, "--inspect"],
@@ -145,12 +176,22 @@ class QairtSDKManager:
                 check=False,
             )
             if result.returncode != 0:
-                issues.append(f"qairt-vm --inspect failed (exit {result.returncode})")
+                issue = f"qairt-vm --inspect failed (exit {result.returncode})"
+                issues.append(issue)
+                _log.warning(issue)
+            else:
+                _log.debug("qairt-vm --inspect passed")
         else:
-            issues.append(
+            issue = (
                 "QAIRT SDK is officially supported on Ubuntu only; "
                 "--inspect skipped on this system."
             )
+            issues.append(issue)
+            _log.warning(issue)
+        if issues:
+            _log.warning(f"Verification found {len(issues)} issue(s)")
+        else:
+            _log.info("Verification passed: no issues found")
         return issues
 
     def clean(self) -> Path:
@@ -163,9 +204,12 @@ class QairtSDKManager:
             RuntimeError: If SDK path is not configured.
         """
         if self._sdk_path is None:
+            _log.error("Cannot clean: SDK path not configured")
             raise RuntimeError(_ERR_NOT_INSTALLED_M2A)
         path = self._sdk_path
+        _log.info(f"Removing QAIRT SDK at {path}")
         shutil.rmtree(path, ignore_errors=True)
+        _log.debug(f"SDK directory removed: {path}")
         self._sdk_path = None
         return path
 
@@ -175,6 +219,12 @@ class QairtSDKManager:
         """Glob install_dir/qairt/<version>.* and return the first match."""
         base = self._install_dir / "qairt"
         if not base.exists():
+            _log.debug(f"QAIRT base directory does not exist: {base}")
             return None
         matches = sorted(base.glob(f"{self._sdk_version}.*"))
-        return matches[0] if matches else None
+        if matches:
+            path = matches[0]
+            _log.debug(f"Found SDK path: {path}")
+            return path
+        _log.warning(f"No SDK path found matching version {self._sdk_version} in {base}")
+        return None
