@@ -214,6 +214,14 @@ class TestQairtSDKManagerInstall:
 
         assert mock_run.call_args.kwargs.get("capture_output") is False
 
+    def test_install_raises_when_already_installed(self, tmp_path: Path) -> None:
+        """Install raises RuntimeError when SDK is already available."""
+        sdk = tmp_path / "2.45.0.24"
+        sdk.mkdir(parents=True)
+        mgr = _make_mgr(sdk_path=sdk, install_dir=tmp_path)
+        with pytest.raises(RuntimeError, match="already installed"):
+            mgr.install(stream=False)
+
 
 @pytest.mark.unit
 class TestQairtSDKManagerVerify:

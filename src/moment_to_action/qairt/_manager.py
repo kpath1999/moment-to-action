@@ -18,6 +18,7 @@ _QAIRT_VM = Path(sys.executable).parent / "qairt-vm"
 _ERR_NOT_INSTALLED = "SDK not installed; run 'm2a qairt install' first"
 _ERR_NOT_INSTALLED_M2A = "SDK not installed via m2a"
 _ERR_FETCH_PATH = "fetch succeeded but SDK path not found under install dir"
+_ERR_ALREADY_INSTALLED = "QAIRT SDK {version} already installed at {path}"
 
 
 class QairtSDKManager:
@@ -93,8 +94,11 @@ class QairtSDKManager:
                 capture output (useful for --json mode).
 
         Raises:
-            RuntimeError: If the fetch fails or the extracted path cannot be found.
+            RuntimeError: If already installed, fetch fails, or extracted path cannot be found.
         """
+        if self.is_available:
+            msg = _ERR_ALREADY_INSTALLED.format(version=self.installed_version, path=self._sdk_path)
+            raise RuntimeError(msg)
         result = subprocess.run(  # noqa: S603
             [_QAIRT_VM, "fetch", "--version", self._sdk_version, "--dir", str(self._install_dir)],
             capture_output=not stream,

@@ -22,7 +22,9 @@ def _patched_pm(tmp_path: Path) -> MagicMock:
     return mock_pm
 
 
-def _invoke(args: list[str], tmp_path: Path, mgr: MagicMock) -> Result:
+def _invoke(
+    args: list[str], tmp_path: Path, mgr: MagicMock, input_text: str | None = None
+) -> Result:
     from moment_to_action._cli import cli
 
     with patch("moment_to_action._cli.init_logging"):
@@ -32,7 +34,8 @@ def _invoke(args: list[str], tmp_path: Path, mgr: MagicMock) -> Result:
                     "moment_to_action._cli.commands.cmd_qairt.cmd_install.QairtSDKManager.from_app_config",
                     return_value=mgr,
                 ):
-                    return CliRunner().invoke(cli, ["qairt", "install", *args])
+                    runner = CliRunner()
+                    return runner.invoke(cli, ["qairt", "install", *args], input=input_text)
 
 
 @pytest.mark.unit
@@ -97,3 +100,33 @@ class TestQairtInstallCommand:
         assert "path" in data
         assert "version" in data
         assert data["version"] == "2.45.0.24"
+
+    def test_already_installed_user_confirms_reinstall(self, tmp_path: Path) -> None:
+        """When already installed and user confirms, clean then reinstall."""
+        sdk_path = tmp_path / "qairt" / "2.45.0.24"
+        sdk_path.mkdir(parents=True)
+        mgr = MagicMock()
+        mgr.check_system_deps.return_value = []
+        error_msg = f"QAIRT SDK 2.45.0.24 already installed at {sdk_path}"
+        mgr.install.side_effect = [
+            RuntimeError(error_msg),
+            sdk_path,  # second call succeeds
+        ]
+        mgr.installed_version = "2.45.0.24"
+        mgr.verify.return_value = []
+        result = _invoke([], tmp_path, mgr, input_text="y\n")
+        assert result.exit_code == 0
+        mgr.clean.assert_called_once()
+        assert mgr.install.call_count == 2
+
+    def test_already_installed_user_declines_reinstall(self, tmp_path: Path) -> None:
+        """When already installed and user declines, abort without reinstalling."""
+        sdk_path = tmp_path / "qairt" / "2.45.0.24"
+        sdk_path.mkdir(parents=True)
+        mgr = MagicMock()
+        mgr.check_system_deps.return_value = []
+        error_msg = f"QAIRT SDK 2.45.0.24 already installed at {sdk_path}"
+        mgr.install.side_effect = RuntimeError(error_msg)
+        result = _invoke([], tmp_path, mgr, input_text="n\n")
+        assert result.exit_code != 0
+        mgr.clean.assert_not_called()

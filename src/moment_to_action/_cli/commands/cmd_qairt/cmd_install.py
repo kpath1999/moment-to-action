@@ -39,7 +39,14 @@ def install(data: GlobalData, *, json_output: bool) -> None:
     try:
         sdk_path = mgr.install(stream=not json_output)
     except RuntimeError as e:
-        raise click.ClickException(str(e)) from e
+        error_msg = str(e)
+        if "already installed" in error_msg:
+            if not click.confirm(f"{error_msg}\n\nReinstall?"):
+                raise click.Abort from e
+            mgr.clean()
+            sdk_path = mgr.install(stream=not json_output)
+        else:
+            raise click.ClickException(error_msg) from e
 
     updated = update_frozen(data.config, qairt_sdk_path=sdk_path)
     save_config(updated, data.path_manager.app_config_file)
