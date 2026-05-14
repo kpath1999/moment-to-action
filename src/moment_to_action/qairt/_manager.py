@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from moment_to_action.qairt._deps import check_system_deps as _check_system_deps
+
 if TYPE_CHECKING:
     from moment_to_action.config import AppConfig
     from moment_to_action.paths import PathManager
@@ -99,9 +101,7 @@ class QairtSDKManager:
 
     def check_system_deps(self) -> list[str]:
         """Return list of missing system package names for the current distro."""
-        from moment_to_action.qairt._deps import check_system_deps
-
-        missing = check_system_deps()
+        missing = _check_system_deps()
         if missing:
             _log.warning(f"Missing system dependencies: {', '.join(missing)}")
         else:
