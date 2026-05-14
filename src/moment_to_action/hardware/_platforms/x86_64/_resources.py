@@ -18,6 +18,7 @@ based on CPU frequency and utilization.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import ClassVar
@@ -94,8 +95,6 @@ class X86_64ResourceMonitor(ResourceMonitor):  # noqa: N801
         Returns:
             A ComputeUnitUsageSample with RAPL-based power reading.
         """
-        import time  # only needed for RAPL delta timing
-
         try:
             energy_uj = int(_RAPL_ENERGY_PATH.read_text().strip())
             now = time.time()

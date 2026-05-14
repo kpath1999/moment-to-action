@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import torch
+
 from moment_to_action.hardware._types import TorchExecutionPolicy
 
 
@@ -14,8 +16,6 @@ def resolve_torch_execution_policy(requested: str = "auto") -> TorchExecutionPol
     Returns:
         A resolved :class:`TorchExecutionPolicy`.
     """
-    import torch
-
     if requested != "auto":
         device = torch.device(requested)
     elif torch.cuda.is_available():

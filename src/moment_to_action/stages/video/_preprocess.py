@@ -22,6 +22,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import attrs
+import cv2
 import numpy as np
 
 from moment_to_action.hardware import ComputeUnit
@@ -163,12 +164,7 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         """Convert BGR (OpenCV default) to RGB."""
         if image.frame is None:
             return image
-        try:
-            import cv2
-
-            rgb = cv2.cvtColor(image.frame, cv2.COLOR_BGR2RGB)
-        except ImportError:
-            rgb = image.frame[..., ::-1].copy()
+        rgb = cv2.cvtColor(image.frame, cv2.COLOR_BGR2RGB)
         return RawFrameMessage(
             frame=rgb, timestamp=image.timestamp, width=image.width, height=image.height
         )
@@ -206,15 +202,10 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         if image.frame is None:
             msg = "Cannot resize a RawFrameMessage with frame=None"
             raise ValueError(msg)
-        try:
-            import cv2
-
-            if letterbox:
-                frame = self._letterbox_cv2(image.frame, target_size)
-            else:
-                frame = cv2.resize(image.frame, (target_size[1], target_size[0]))
-        except ImportError:
-            frame = self._resize_numpy(image.frame, target_size)
+        if letterbox:
+            frame = self._letterbox_cv2(image.frame, target_size)
+        else:
+            frame = cv2.resize(image.frame, (target_size[1], target_size[0]))
 
         # Use a dedicated resize buffer (not the final output buffer which may be crop_size)
         resize_buf = self._buffers.get_or_register(
@@ -247,8 +238,6 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
 
     def _letterbox_cv2(self, image: np.ndarray, target_size: tuple) -> np.ndarray:
         """Resize preserving aspect ratio, pad remainder. Used by YOLO."""
-        import cv2
-
         h, w = image.shape[:2]
         th, tw = target_size
         scale = min(tw / w, th / h)
@@ -259,14 +248,6 @@ class ImagePreprocessor(BasePreprocessor[RawFrameMessage, ProcessedFrame]):
         pad_left = (tw - new_w) // 2
         padded[pad_top : pad_top + new_h, pad_left : pad_left + new_w] = resized
         return padded
-
-    def _resize_numpy(self, image: np.ndarray, target_size: tuple) -> np.ndarray:
-        """Numpy-only nearest-neighbor fallback."""
-        th, tw = target_size
-        h, w = image.shape[:2]
-        row_idx = (np.arange(th) * h / th).astype(int)
-        col_idx = (np.arange(tw) * w / tw).astype(int)
-        return image[row_idx][:, col_idx]
 
     def reconfigure(self, config: ImagePreprocessConfig) -> None:
         """Swap config and re-allocate buffers if sizes changed."""
