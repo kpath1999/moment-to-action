@@ -224,6 +224,35 @@ class TestQairtSDKManagerInstall:
 
 
 @pytest.mark.unit
+class TestQairtSDKManagerCleanupZips:
+    """Tests for QairtSDKManager._cleanup_zip_files."""
+
+    def test_cleanup_removes_zip_files(self, tmp_path: Path) -> None:
+        """_cleanup_zip_files removes .zip files from install directory."""
+        (tmp_path / "2.45.0.260326.zip").touch()
+        (tmp_path / "other.zip").touch()
+        mgr = _make_mgr(install_dir=tmp_path)
+        mgr._cleanup_zip_files()
+        assert not (tmp_path / "2.45.0.260326.zip").exists()
+        assert not (tmp_path / "other.zip").exists()
+
+    def test_cleanup_ignores_non_zip_files(self, tmp_path: Path) -> None:
+        """_cleanup_zip_files only removes .zip files."""
+        (tmp_path / "file.txt").touch()
+        (tmp_path / "archive.tar.gz").touch()
+        mgr = _make_mgr(install_dir=tmp_path)
+        mgr._cleanup_zip_files()
+        assert (tmp_path / "file.txt").exists()
+        assert (tmp_path / "archive.tar.gz").exists()
+
+    def test_cleanup_handles_missing_files(self, tmp_path: Path) -> None:
+        """_cleanup_zip_files handles missing files gracefully."""
+        mgr = _make_mgr(install_dir=tmp_path)
+        mgr._cleanup_zip_files()
+        assert True
+
+
+@pytest.mark.unit
 class TestQairtSDKManagerFindSdkPath:
     """Tests for QairtSDKManager._find_sdk_path."""
 

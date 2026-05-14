@@ -28,9 +28,17 @@ class QairtSDKManager:
     """Manages the QAIRT SDK installation for this application."""
 
     def __init__(self, sdk_path: Path | None, sdk_version: str, install_dir: Path) -> None:
+        """Initialize the QAIRT SDK manager.
+
+        Args:
+            sdk_path: Path to the installed SDK, or None if not yet installed.
+            sdk_version: Version string to fetch (e.g. "2.45.0").
+            install_dir: Directory where SDK will be installed.
+        """
         self._sdk_path = sdk_path
         self._sdk_version = sdk_version
         self._install_dir = install_dir
+
         _log.debug(
             f"Initialized QairtSDKManager: version={sdk_version}, "
             f"install_dir={install_dir}, sdk_path={sdk_path}"
@@ -133,6 +141,7 @@ class QairtSDKManager:
             _log.error(_ERR_FETCH_PATH)
             raise RuntimeError(_ERR_FETCH_PATH)
         self._sdk_path = path
+        self._cleanup_zip_files()
         _log.info(f"Successfully installed QAIRT SDK {self._sdk_version} at {path}")
         return path
 
@@ -214,6 +223,15 @@ class QairtSDKManager:
         return path
 
     # --- Internal ---
+
+    def _cleanup_zip_files(self) -> None:
+        """Remove any .zip files from the install directory after extraction."""
+        for zip_file in self._install_dir.glob("*.zip"):
+            try:
+                _log.debug(f"Removing zip file: {zip_file}")
+                zip_file.unlink()
+            except OSError as e:  # noqa: PERF203
+                _log.warning(f"Failed to remove zip file {zip_file}: {e}")
 
     def _find_sdk_path(self) -> Path | None:
         """Glob install_dir/qairt/<version>.* and return the first match."""
