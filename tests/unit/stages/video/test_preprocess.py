@@ -6,9 +6,7 @@ PreprocessorStage (end-to-end pipeline).
 
 from __future__ import annotations
 
-import sys
 import time
-from unittest import mock
 
 import numpy as np
 import pytest
@@ -381,8 +379,6 @@ class TestPreprocessorStageE2E:
 
     def test_preprocessor_stage_invalid_input_type(self) -> None:
         """Test PreprocessorStage rejects non-RawFrameMessage."""
-        from moment_to_action.messages.video import FrameTensorMessage
-
         rng = np.random.default_rng()
 
         tensor = rng.standard_normal((1, 3, 256, 256)).astype(np.float32)
@@ -580,24 +576,6 @@ class TestToRGBEdgeCases:
         assert result.width == msg.width
         assert result.height == msg.height
 
-    def test_to_rgb_cv2_import_error_numpy_fallback(self) -> None:
-        """Test _to_rgb uses numpy fallback when cv2 import fails."""
-        img_array = np.array([[[1, 2, 3], [4, 5, 6]]], dtype=np.uint8)
-        msg = RawFrameMessage(
-            frame=img_array,
-            timestamp=time.time(),
-            width=2,
-            height=1,
-        )
-        preprocessor = ImagePreprocessor()
-
-        with mock.patch.dict(sys.modules, {"cv2": None}):
-            result = preprocessor._to_rgb(msg)
-
-        assert result.frame is not None
-        assert result.frame.shape == img_array.shape
-        np.testing.assert_array_equal(result.frame, img_array[..., ::-1])
-
     def test_to_rgb_normal_operation(self) -> None:
         """Test _to_rgb correctly converts BGR to RGB."""
         img_array = np.array([[[1, 2, 3], [4, 5, 6]]], dtype=np.uint8)
@@ -629,78 +607,6 @@ class TestResizeEdgeCases:
         preprocessor = ImagePreprocessor()
         with pytest.raises(ValueError, match="Cannot resize a RawFrameMessage with frame=None"):
             preprocessor._resize(msg, (256, 256), letterbox=False)
-
-    def test_resize_cv2_import_error_calls_numpy_fallback(self) -> None:
-        """Test _resize falls back to _resize_numpy when cv2 import fails."""
-        img_array = np.full((480, 640, 3), 128, dtype=np.uint8)
-        msg = RawFrameMessage(
-            frame=img_array,
-            timestamp=time.time(),
-            width=640,
-            height=480,
-        )
-        preprocessor = ImagePreprocessor()
-
-        with mock.patch.dict(sys.modules, {"cv2": None}):
-            result = preprocessor._resize(msg, (256, 256), letterbox=False)
-
-        assert isinstance(result, ProcessedFrame)
-        assert result.data.shape == (256, 256, 3)
-        assert result.data.dtype == np.float32
-
-
-@pytest.mark.unit
-class TestResizeNumpy:
-    """Test _resize_numpy directly."""
-
-    def test_resize_numpy_small_array(self) -> None:
-        """Test _resize_numpy with a small synthetic array."""
-        img_array = np.array(
-            [
-                [[1, 1, 1], [2, 2, 2]],
-                [[3, 3, 3], [4, 4, 4]],
-            ],
-            dtype=np.uint8,
-        )
-        preprocessor = ImagePreprocessor()
-        result = preprocessor._resize_numpy(img_array, (4, 4))
-
-        assert result.shape == (4, 4, 3)
-        assert result.dtype == np.uint8
-
-    def test_resize_numpy_nearest_neighbor(self) -> None:
-        """Test _resize_numpy uses nearest-neighbor resampling."""
-        img_array = np.array(
-            [[[100, 100, 100], [200, 200, 200]]],
-            dtype=np.uint8,
-        )
-        preprocessor = ImagePreprocessor()
-        result = preprocessor._resize_numpy(img_array, (2, 4))
-
-        assert result.shape == (2, 4, 3)
-        assert np.all(result[0, 0] == [100, 100, 100])
-        assert np.all(result[0, -1] == [200, 200, 200])
-
-    def test_resize_numpy_scaling_up(self) -> None:
-        """Test _resize_numpy scaling up."""
-        img_array = np.array(
-            [[[50, 50, 50], [100, 100, 100]]],
-            dtype=np.uint8,
-        )
-        preprocessor = ImagePreprocessor()
-        result = preprocessor._resize_numpy(img_array, (3, 6))
-
-        assert result.shape == (3, 6, 3)
-        assert result.dtype == np.uint8
-
-    def test_resize_numpy_scaling_down(self) -> None:
-        """Test _resize_numpy scaling down."""
-        img_array = np.full((100, 100, 3), 128, dtype=np.uint8)
-        preprocessor = ImagePreprocessor()
-        result = preprocessor._resize_numpy(img_array, (10, 10))
-
-        assert result.shape == (10, 10, 3)
-        assert result.dtype == np.uint8
 
 
 @pytest.mark.unit

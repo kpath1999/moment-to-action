@@ -109,9 +109,6 @@ ignore = [
     # Formatter-incompatible
     "COM812",
 
-    # Lazy/conditional imports are intentional for optional deps (cv2, tf, onnxruntime)
-    "PLC0415",
-
     # Any is appropriate for opaque runtime handles (TFLite interpreters, ONNX sessions)
     "ANN401",
 
