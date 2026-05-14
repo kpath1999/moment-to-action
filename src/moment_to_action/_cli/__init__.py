@@ -1,3 +1,4 @@
+import contextlib
 import logging
 from pathlib import Path
 
@@ -6,6 +7,7 @@ import rich_click as click
 from moment_to_action._logging import init_logging
 from moment_to_action.config import load_config
 from moment_to_action.paths import PathManager
+from moment_to_action.qairt import QairtSDKManager
 from moment_to_action.utils.cli import GlobalData, ctx_get_seed, ctx_set_seed
 
 from ._auto_group import auto_group
@@ -41,6 +43,11 @@ def cli(ctx: click.Context, *, verbose: bool, seed: int | None) -> None:
 
     # Build global data object
     ctx.obj = GlobalData(log=log, path_manager=path_manager, config=config)
+
+    # Set QAIRT_SDK_ROOT in this process if SDK is configured
+    if config.qairt_sdk_path is not None:
+        with contextlib.suppress(RuntimeError):
+            QairtSDKManager.from_app_config(config, path_manager).configure_env()
 
     # Set seed
     ctx_set_seed(ctx, seed)

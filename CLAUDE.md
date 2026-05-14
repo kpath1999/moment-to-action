@@ -110,5 +110,5 @@ In-repo design docs live in `docs/`. Consult before touching the relevant subsys
 1. Branch off `main` as `<your_name>/<feature>` (e.g. `nikola/add-logging`).
 2. Write code **and tests**; keep coverage at 100%.
 3. `just lint && just test` clean locally.
-4. Open PR to `main` using `.github/pull_request_template.md`; GitHub Actions runs lint + tests.
+4. Open PR to `main` using `.github/pull_request_template.md` **EXACTLY**; GitHub Actions runs lint + tests.
 5. Merge as a **squash commit**.

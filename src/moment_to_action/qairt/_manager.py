@@ -1,0 +1,176 @@
+"""QAIRT SDK manager."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from moment_to_action.config import AppConfig
+    from moment_to_action.paths import PathManager
+
+_QAIRT_VM = Path(sys.executable).parent / "qairt-vm"
+
+_ERR_NOT_INSTALLED = "SDK not installed; run 'm2a qairt install' first"
+_ERR_NOT_INSTALLED_M2A = "SDK not installed via m2a"
+_ERR_FETCH_PATH = "fetch succeeded but SDK path not found under install dir"
+
+
+class QairtSDKManager:
+    """Manages the QAIRT SDK installation for this application."""
+
+    def __init__(self, sdk_path: Path | None, sdk_version: str, install_dir: Path) -> None:
+        self._sdk_path = sdk_path
+        self._sdk_version = sdk_version
+        self._install_dir = install_dir
+
+    @classmethod
+    def from_app_config(cls, config: AppConfig, path_manager: PathManager) -> QairtSDKManager:
+        """Construct from application config and path manager."""
+        return cls(
+            sdk_path=config.qairt_sdk_path,
+            sdk_version=config.qairt_sdk_version,
+            install_dir=path_manager.data.data_dir,
+        )
+
+    # --- Properties (pure state, no subprocess) ---
+
+    @property
+    def is_available(self) -> bool:
+        """True if SDK path is configured and the directory exists on disk."""
+        return self._sdk_path is not None and self._sdk_path.exists()
+
+    @property
+    def path(self) -> Path | None:
+        """Configured SDK path, or None if not installed."""
+        return self._sdk_path
+
+    @property
+    def configured_version(self) -> str:
+        """Version string that will be fetched on install."""
+        return self._sdk_version
+
+    @property
+    def installed_version(self) -> str | None:
+        """Full version string (e.g. '2.45.0.24') from the installed directory name.
+
+        Returns None if SDK is not available.
+        """
+        if not self.is_available:
+            return None
+        assert self._sdk_path is not None  # noqa: S101
+        return self._sdk_path.name
+
+    # --- Environment ---
+
+    def configure_env(self) -> None:
+        """Set QAIRT_SDK_ROOT in os.environ so ``import qairt`` resolves correctly.
+
+        Raises:
+            RuntimeError: If SDK path is not configured.
+        """
+        if self._sdk_path is None:
+            raise RuntimeError(_ERR_NOT_INSTALLED)
+        os.environ["QAIRT_SDK_ROOT"] = str(self._sdk_path)
+
+    # --- Operations ---
+
+    def check_system_deps(self) -> list[str]:
+        """Return list of missing system package names for the current distro."""
+        from moment_to_action.qairt._deps import check_system_deps
+
+        return check_system_deps()
+
+    def install(self, *, stream: bool = True) -> Path:
+        """Fetch the SDK and return the extracted path.
+
+        Args:
+            stream: If True, let qairt-vm output flow to the terminal. If False,
+                capture output (useful for --json mode).
+
+        Raises:
+            RuntimeError: If the fetch fails or the extracted path cannot be found.
+        """
+        result = subprocess.run(  # noqa: S603
+            [_QAIRT_VM, "fetch", "--version", self._sdk_version, "--dir", str(self._install_dir)],
+            capture_output=not stream,
+            check=False,
+        )
+        if result.returncode != 0:
+            msg = f"qairt-vm fetch failed (exit {result.returncode})"
+            raise RuntimeError(msg)
+        path = self._find_sdk_path()
+        if path is None:
+            raise RuntimeError(_ERR_FETCH_PATH)
+        self._sdk_path = path
+        return path
+
+    def verify(self, *, stream: bool = True) -> list[str]:
+        """Check SDK installation and return any warnings.
+
+        On Ubuntu (dpkg available) runs ``qairt-vm --inspect`` for full
+        verification. On other systems logs a support warning and checks path
+        and system deps only.
+
+        Args:
+            stream: If True, let qairt-vm output flow to the terminal (Ubuntu only).
+
+        Returns:
+            List of warning strings for any issues found. Empty means all good.
+
+        Raises:
+            RuntimeError: If SDK path is not configured.
+        """
+        if self._sdk_path is None:
+            raise RuntimeError(_ERR_NOT_INSTALLED)
+        issues: list[str] = []
+        if not self._sdk_path.exists():
+            issues.append(f"SDK path does not exist: {self._sdk_path}")
+        issues.extend(f"Missing system package: {pkg}" for pkg in self.check_system_deps())
+        if shutil.which("dpkg"):
+            env = {**os.environ, "QAIRT_SDK_ROOT": str(self._sdk_path)}
+            result = subprocess.run(  # noqa: S603
+                [_QAIRT_VM, "--inspect"],
+                capture_output=not stream,
+                text=True,
+                env=env,
+                check=False,
+            )
+            if result.returncode != 0:
+                issues.append(f"qairt-vm --inspect failed (exit {result.returncode})")
+        else:
+            issues.append(
+                "QAIRT SDK is officially supported on Ubuntu only; "
+                "--inspect skipped on this system."
+            )
+        return issues
+
+    def clean(self) -> Path:
+        """Remove the SDK directory.
+
+        Returns:
+            The path that was removed.
+
+        Raises:
+            RuntimeError: If SDK path is not configured.
+        """
+        if self._sdk_path is None:
+            raise RuntimeError(_ERR_NOT_INSTALLED_M2A)
+        path = self._sdk_path
+        shutil.rmtree(path, ignore_errors=True)
+        self._sdk_path = None
+        return path
+
+    # --- Internal ---
+
+    def _find_sdk_path(self) -> Path | None:
+        """Glob install_dir/qairt/<version>.* and return the first match."""
+        base = self._install_dir / "qairt"
+        if not base.exists():
+            return None
+        matches = sorted(base.glob(f"{self._sdk_version}.*"))
+        return matches[0] if matches else None
