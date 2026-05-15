@@ -138,7 +138,7 @@ class TestQairtSDKManagerCheckDeps:
     def test_returns_empty_when_all_deps_present(self) -> None:
         """Returns empty list when check_system_deps reports no missing packages."""
         mgr = _make_mgr()
-        with patch("moment_to_action.qairt._deps.check_system_deps", return_value=[]):
+        with patch("moment_to_action.qairt._manager._check_system_deps", return_value=[]):
             result = mgr.check_system_deps()
         assert result == []
 
@@ -251,6 +251,15 @@ class TestQairtSDKManagerCleanupZips:
         mgr._cleanup_zip_files()
         assert True
 
+    def test_cleanup_logs_warning_on_oserror(self, tmp_path: Path) -> None:
+        """_cleanup_zip_files logs a warning when unlink raises OSError."""
+        zip_file = tmp_path / "broken.zip"
+        zip_file.touch()
+        mgr = _make_mgr(install_dir=tmp_path)
+        with patch.object(type(zip_file), "unlink", side_effect=OSError("permission denied")):
+            mgr._cleanup_zip_files()
+        assert zip_file.exists()
+
 
 @pytest.mark.unit
 class TestQairtSDKManagerFindSdkPath:
@@ -299,7 +308,7 @@ class TestQairtSDKManagerVerify:
         mgr = _make_mgr(sdk_path=sdk)
         mock_result = MagicMock()
         mock_result.returncode = 0
-        with patch("moment_to_action.qairt._deps.check_system_deps", return_value=[]):
+        with patch("moment_to_action.qairt._manager._check_system_deps", return_value=[]):
             with patch(
                 "moment_to_action.qairt._manager.shutil.which", return_value="/usr/bin/dpkg"
             ):
@@ -316,7 +325,7 @@ class TestQairtSDKManagerVerify:
         mgr = _make_mgr(sdk_path=sdk)
         mock_result = MagicMock()
         mock_result.returncode = 0
-        with patch("moment_to_action.qairt._deps.check_system_deps", return_value=[]):
+        with patch("moment_to_action.qairt._manager._check_system_deps", return_value=[]):
             with patch(
                 "moment_to_action.qairt._manager.shutil.which", return_value="/usr/bin/dpkg"
             ):
@@ -336,7 +345,7 @@ class TestQairtSDKManagerVerify:
         mgr = _make_mgr(sdk_path=sdk)
         mock_result = MagicMock()
         mock_result.returncode = 2
-        with patch("moment_to_action.qairt._deps.check_system_deps", return_value=[]):
+        with patch("moment_to_action.qairt._manager._check_system_deps", return_value=[]):
             with patch(
                 "moment_to_action.qairt._manager.shutil.which", return_value="/usr/bin/dpkg"
             ):
@@ -351,7 +360,7 @@ class TestQairtSDKManagerVerify:
         sdk = tmp_path / "2.45.0.24"
         sdk.mkdir()
         mgr = _make_mgr(sdk_path=sdk)
-        with patch("moment_to_action.qairt._deps.check_system_deps", return_value=[]):
+        with patch("moment_to_action.qairt._manager._check_system_deps", return_value=[]):
             with patch("moment_to_action.qairt._manager.shutil.which", return_value=None):
                 result = mgr.verify(stream=False)
         assert any("officially supported on Ubuntu" in w for w in result)
@@ -360,7 +369,7 @@ class TestQairtSDKManagerVerify:
         """Verify includes warning when configured SDK path does not exist on disk."""
         sdk = tmp_path / "2.45.0.24"
         mgr = _make_mgr(sdk_path=sdk)
-        with patch("moment_to_action.qairt._deps.check_system_deps", return_value=[]):
+        with patch("moment_to_action.qairt._manager._check_system_deps", return_value=[]):
             with patch("moment_to_action.qairt._manager.shutil.which", return_value=None):
                 result = mgr.verify(stream=False)
         assert any("does not exist" in w for w in result)
@@ -371,7 +380,7 @@ class TestQairtSDKManagerVerify:
         sdk.mkdir()
         mgr = _make_mgr(sdk_path=sdk)
         with patch(
-            "moment_to_action.qairt._deps.check_system_deps", return_value=["clang", "curl"]
+            "moment_to_action.qairt._manager._check_system_deps", return_value=["clang", "curl"]
         ):
             with patch("moment_to_action.qairt._manager.shutil.which", return_value=None):
                 result = mgr.verify(stream=False)
