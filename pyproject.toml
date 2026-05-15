@@ -52,7 +52,7 @@ host = [
     "opencv-python==4.8.1.78",
     "optuna==3.3.0",
     "packaging==24.0",
-    "pandas==2.0.1",
+    "pandas==2.3.3",
     "paramiko==3.5.1",
     "pathlib2==2.3.6",
     "pillow==10.2.0",
