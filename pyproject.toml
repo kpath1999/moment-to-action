@@ -50,7 +50,7 @@ host = [
     "matplotlib==3.6.0",
     "mock==3.0.5",
     "opencv-python==4.8.1.78",
-    "optuna==3.3.0",
+    "optuna==4.8.0",
     "packaging==24.0",
     "pandas==2.0.1",
     "paramiko==3.5.1",

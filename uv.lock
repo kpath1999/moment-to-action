@@ -7,10 +7,6 @@ resolution-markers = [
     "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 
-[options]
-exclude-newer = "2026-05-11T14:55:15.871659999Z"
-exclude-newer-span = "P2D"
-
 [[package]]
 name = "absl-py"
 version = "2.1.0"
@@ -539,18 +535,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/bb/63/f9e1ea081ce35720d8b92acde70daaedace594dc93b693c869e0d5910718/click-8.3.3.tar.gz", hash = "sha256:398329ad4837b2ff7cbe1dd166a4c0f8900c3ca3a218de04466f38f6497f18a2", size = 328061, upload-time = "2026-04-22T15:11:27.506Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ae/44/c1221527f6a71a01ec6fbad7fa78f1d50dfa02217385cf0fa3eec7087d59/click-8.3.3-py3-none-any.whl", hash = "sha256:a2bf429bb3033c89fa4936ffb35d5cb471e3719e1f3c8a7c3fff0b8314305613", size = 110502, upload-time = "2026-04-22T15:11:25.044Z" },
-]
-
-[[package]]
-name = "cmaes"
-version = "0.13.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3d/9f/ae4edb7dec820e84fef7a90b753ae5c72c66a05ffa69a7894771024386a7/cmaes-0.13.0.tar.gz", hash = "sha256:69a252b0291d08100351e37c2918c7c6d929b02ab7dcd9dd14fc02c7c98cc1b9", size = 61265, upload-time = "2026-03-28T07:41:55.249Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7e/98/be3f668f77838b2756ccc78a45e0c62f43d3134003f3f4bad814d37df1b3/cmaes-0.13.0-py3-none-any.whl", hash = "sha256:ccf61c73d5792cf44b50672b63f28c590082d1c1f5ab5155e2dd6e5305427cad", size = 73027, upload-time = "2026-03-28T07:41:53.956Z" },
 ]
 
 [[package]]
@@ -2012,7 +1996,7 @@ requires-dist = [
     { name = "open-clip-torch", specifier = ">=3.3.0" },
     { name = "opencv-python", marker = "extra == 'host'", specifier = "==4.8.1.78" },
     { name = "opencv-python-headless", specifier = ">=4.8.0" },
-    { name = "optuna", marker = "extra == 'host'", specifier = "==3.3.0" },
+    { name = "optuna", marker = "extra == 'host'", specifier = "==4.8.0" },
     { name = "packaging", marker = "extra == 'host'", specifier = "==24.0" },
     { name = "pandas", marker = "extra == 'host'", specifier = "==2.0.1" },
     { name = "paramiko", marker = "extra == 'host'", specifier = "==3.5.1" },
@@ -2600,11 +2584,10 @@ wheels = [
 
 [[package]]
 name = "optuna"
-version = "3.3.0"
+version = "4.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
-    { name = "cmaes" },
     { name = "colorlog" },
     { name = "numpy" },
     { name = "packaging" },
@@ -2612,9 +2595,9 @@ dependencies = [
     { name = "sqlalchemy" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7f/36/e22bfc0e0ade526569cd0c6beadd3567902d80d7acdcbf787ddda3d1d451/optuna-3.3.0.tar.gz", hash = "sha256:76126c6e52354892488e75fc7743eaddcd397c5aba8fa1f964a1c5b5f942eaf6", size = 315074, upload-time = "2023-08-07T07:14:39.649Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/9b/62f120fb2ecbc4338bee70c5a3671c8e561714f3aa1a046b897ff142050e/optuna-4.8.0.tar.gz", hash = "sha256:6f7043e9f8ecb5e607af86a7eb00fb5ec2be26c3b08c201209a73d36aff37a38", size = 482603, upload-time = "2026-03-16T04:59:58.659Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/69/60/87a06ef66b34cbe2f2eb0ab66f003664404a7f40c21403a69fad7e28a82b/optuna-3.3.0-py3-none-any.whl", hash = "sha256:3eefaed56a5fabf442036d51ef2001dbabfbe1a8ce33bc0c6b61ff5d15b30c82", size = 404174, upload-time = "2023-08-07T07:14:37.553Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/24/7c731839566d30dc70556d9824ef17692d896c15e3df627bce8c16f753e1/optuna-4.8.0-py3-none-any.whl", hash = "sha256:c57a7682679c36bfc9bca0da430698179e513874074b71bebedb0334964ab930", size = 419456, upload-time = "2026-03-16T04:59:56.977Z" },
 ]
 
 [[package]]
