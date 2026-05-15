@@ -40,7 +40,7 @@ host = [
     "qairt-visualizer==0.8.0",
     "absl-py==2.1.0",
     "aenum==3.1.15",
-    "dash==2.12.1",
+    "dash==4.1.0",
     "decorator==4.4.2",
     "invoke==1.7.3",
     "joblib==1.4.0",
