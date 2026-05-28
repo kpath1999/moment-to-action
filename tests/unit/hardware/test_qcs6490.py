@@ -669,18 +669,30 @@ class TestQCS6490DLCMethods:
 
     def test_load_model_dlc_calls_qairt_load_and_initialize(self) -> None:
         """load_model_dlc() calls qairt.load(str(path)) then raw.initialize(backend='HTP')."""
+        import sys
         from pathlib import Path
 
         mock_raw = MagicMock()
-        with patch("moment_to_action.hardware._platforms.qcs6490._backend.qairt") as mock_qairt:
-            mock_qairt.load.return_value = mock_raw
-            backend, _, _ = self._make_cpu_backend()
-            path = Path("/fake/model.dlc")
+        mock_qairt = MagicMock()
+        mock_qairt.load.return_value = mock_raw
+        backend, _, _ = self._make_cpu_backend()
+        path = Path("/fake/model.dlc")
+        with patch.dict(sys.modules, {"qairt": mock_qairt}):
             handle = backend.load_model_dlc(path)
 
         mock_qairt.load.assert_called_once_with(str(path))
         mock_raw.initialize.assert_called_once_with(backend="HTP")
         assert handle is mock_raw
+
+    def test_load_model_dlc_raises_if_qairt_unavailable(self) -> None:
+        """load_model_dlc() raises RuntimeError when the QAIRT SDK cannot be imported."""
+        import sys
+        from pathlib import Path
+
+        backend, _, _ = self._make_cpu_backend()
+        with patch.dict(sys.modules, {"qairt": None}):  # type: ignore[dict-item]
+            with pytest.raises(RuntimeError, match="QAIRT SDK is not available"):
+                backend.load_model_dlc(Path("/fake/model.dlc"))
 
     def test_infer_dlc_calls_handle_and_returns_output(self) -> None:
         """infer_dlc() calls handle(inputs=...) and returns result['output']."""

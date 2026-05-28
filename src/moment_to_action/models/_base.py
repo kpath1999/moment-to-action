@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import warnings
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -105,8 +106,20 @@ class BaseModel(ABC):
         self.unload()
 
     def __del__(self) -> None:
-        """Unload the model if still loaded when garbage-collected."""
+        """Warn and unload if still loaded when garbage-collected.
+
+        A loaded model being GC-collected indicates a missing :meth:`unload`
+        call or :meth:`loaded` context manager.  A :exc:`ResourceWarning` is
+        emitted (same convention as file handles and sockets) and unload is
+        attempted as a best-effort cleanup.
+        """
         if not self.is_loaded:
             return
+        warnings.warn(
+            f"{type(self).__name__} garbage-collected while still loaded; "
+            "call unload() explicitly or use the loaded() context manager",
+            ResourceWarning,
+            stacklevel=2,
+        )
         with contextlib.suppress(Exception):
             self.unload()

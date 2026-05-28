@@ -12,9 +12,10 @@ import sys
 
 import pytest
 
-# Pre-mock qairt at module level so it is in sys.modules before any sub-conftest
-# or test module imports the project packages (which transitively import qairt).
-# On real QCS6490 hardware the import succeeds and the mock is never installed.
+# qairt-dev installs Python bindings but requires the QAIRT SDK at
+# /opt/qcom/aistack/qairt/<version>/. Dev machines have the full SDK so the
+# import succeeds. CI/test machines do not, so we mock the module to allow the
+# suite to run without hardware.
 if "qairt" not in sys.modules:
     try:
         import qairt  # noqa: F401

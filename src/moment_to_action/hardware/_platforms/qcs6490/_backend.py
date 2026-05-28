@@ -22,7 +22,6 @@ import os
 from typing import TYPE_CHECKING, Any, cast
 
 import attrs
-import qairt
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
 from moment_to_action.hardware._platforms._runtimes._torch_policy import (
@@ -251,7 +250,15 @@ class QCS6490Backend(InferenceBackend):
 
         Returns:
             An opaque QAIRT model handle — pass it back to :meth:`infer_dlc`.
+
+        Raises:
+            RuntimeError: If the QAIRT SDK is not available on this machine.
         """
+        try:
+            import qairt  # noqa: PLC0415
+        except Exception as exc:
+            msg = "QAIRT SDK is not available; load_model_dlc requires a QCS6490 device"
+            raise RuntimeError(msg) from exc
         raw = qairt.load(str(path))
         raw.initialize(backend="HTP")
         return raw

@@ -144,18 +144,18 @@ class TestBaseModelEnterExit:
 class TestBaseModelDel:
     """Tests for __del__ GC safety net."""
 
-    def test_del_unloads_loaded_model(self) -> None:
-        """__del__ calls unload() if model is loaded."""
+    def test_del_warns_and_unloads_loaded_model(self) -> None:
+        """__del__ emits ResourceWarning and unloads if model is loaded."""
         model = _ConcreteModel("default", Path("/x"))
         model.load(MagicMock())
-        assert model.is_loaded is True
-        model.__del__()
+        with pytest.warns(ResourceWarning, match="garbage-collected while still loaded"):
+            model.__del__()
         assert model.is_loaded is False
 
     def test_del_noop_when_not_loaded(self) -> None:
         """__del__ does nothing if model is not loaded."""
         model = _ConcreteModel("default", Path("/x"))
-        model.__del__()  # Should not raise
+        model.__del__()  # Should not raise or warn
         assert model.is_loaded is False
 
     def test_del_suppresses_unload_exceptions(self) -> None:
@@ -172,4 +172,5 @@ class TestBaseModelDel:
 
         model = _FailingModel("default", Path("/x"))
         model.load(MagicMock())
-        model.__del__()  # Should not raise
+        with pytest.warns(ResourceWarning):
+            model.__del__()  # Should not raise despite unload() failing
