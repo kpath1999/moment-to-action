@@ -24,6 +24,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     import os
+    from pathlib import Path
 
     from moment_to_action.hardware._platforms._base import (
         InferenceBackend,
@@ -210,6 +211,56 @@ class ComputeBackend:
             model_handle: Handle returned by :meth:`load_model`.
         """
         return self._backend.get_output_details(model_handle)
+
+    def load_model_dlc(self, path: Path) -> object:
+        """Load a DLC model via the platform backend (QCS6490 only).
+
+        Args:
+            path: Path to the ``.dlc`` model file.
+
+        Returns:
+            An opaque DLC model handle — pass it back to :meth:`infer_dlc`.
+
+        Raises:
+            NotImplementedError: On platforms that do not support DLC.
+        """
+        return self._backend.load_model_dlc(path)
+
+    def infer_dlc(self, handle: object, inputs: np.ndarray) -> np.ndarray:
+        """Run inference on a loaded DLC model (delegates to platform backend).
+
+        Args:
+            handle: Handle returned by :meth:`load_model_dlc`.
+            inputs: Input tensor for inference.
+
+        Returns:
+            Output tensor from the model.
+
+        Raises:
+            NotImplementedError: On platforms that do not support DLC.
+        """
+        return self._backend.infer_dlc(handle, inputs)
+
+    def unload_dlc(self, handle: object) -> None:
+        """Release DLC model resources (delegates to platform backend).
+
+        Args:
+            handle: Handle returned by :meth:`load_model_dlc`.
+
+        Raises:
+            NotImplementedError: On platforms that do not support DLC.
+        """
+        self._backend.unload_dlc(handle)
+
+    def unload_model(self, handle: object) -> None:
+        """Release resources for a model loaded via :meth:`load_model`.
+
+        Default is a no-op for ONNX/LiteRT (GC handles them).
+
+        Args:
+            handle: Handle returned by :meth:`load_model`.
+        """
+        self._backend.unload_model(handle)
 
     def resolve_torch_policy(self, requested: str = "auto") -> TorchExecutionPolicy:
         """Resolve torch device/dtype policy via the active platform backend.

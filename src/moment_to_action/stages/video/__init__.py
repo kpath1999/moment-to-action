@@ -1,4 +1,4 @@
-"""Video pipeline stages — preprocessing, object detection, and clip buffering."""
+"""Video pipeline stages — preprocessing and clip buffering."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from ._preprocess import (
     PreprocessorStage,
     ProcessedFrame,
 )
-from ._yolo import YOLOStage
 
 __all__ = [
     "ClipBufferStage",
@@ -17,5 +16,4 @@ __all__ = [
     "ImagePreprocessor",
     "PreprocessorStage",
     "ProcessedFrame",
-    "YOLOStage",
 ]

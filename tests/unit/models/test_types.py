@@ -14,6 +14,7 @@ from moment_to_action.models import (
     ModelInfo,
     VariantStatus,
     VendoredSource,
+    YOLOModel,
 )
 from moment_to_action.models._model_info import ModelStatus
 from moment_to_action.models._registry import DEFAULT_KEY, MODEL_REGISTRY
@@ -159,16 +160,22 @@ class TestModelInfo:
     """Tests for ModelInfo."""
 
     def test_requires_fields(self) -> None:
-        """`id` and `variants` are required."""
+        """`id`, `variants`, and `model_class` are all required."""
         with pytest.raises(TypeError):
-            ModelInfo(id=ModelID.YOLO_V8)  # type: ignore[call-arg]
+            ModelInfo(id=ModelID.YOLO_V8, variants={})  # type: ignore[call-arg]
 
     def test_stores_variant_map(self) -> None:
         """`variants` is stored verbatim."""
         v = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
-        info = ModelInfo(id=ModelID.YOLO_V8, variants={DEFAULT_KEY: v})
+        info = ModelInfo(id=ModelID.YOLO_V8, variants={DEFAULT_KEY: v}, model_class=YOLOModel)
         assert info.id is ModelID.YOLO_V8
         assert info.variants == {DEFAULT_KEY: v}
+
+    def test_stores_model_class(self) -> None:
+        """`model_class` is stored verbatim."""
+        v = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
+        info = ModelInfo(id=ModelID.YOLO_V8, variants={DEFAULT_KEY: v}, model_class=YOLOModel)
+        assert info.model_class is YOLOModel
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +232,7 @@ class TestModelStatus:
     def _info(self) -> ModelInfo:
         return ModelInfo(
             id=ModelID.YOLO_V8,
+            model_class=YOLOModel,
             variants={
                 DEFAULT_KEY: VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx"))
             },
@@ -292,3 +300,16 @@ class TestModelRegistry:
         assert isinstance(default, VendoredSource)
         assert default.path == Path("yolo/model.onnx")
         assert default.format is ModelFormat.ONNX
+
+    def test_yolo_v8_has_model_class(self) -> None:
+        """YOLO_V8 registry entry has YOLOModel as its model_class."""
+        info = MODEL_REGISTRY[ModelID.YOLO_V8]
+        assert info.model_class is YOLOModel
+
+    def test_yolo_v8_has_qcs6490_variant(self) -> None:
+        """YOLO_V8 registry has a qcs6490 DLC variant."""
+        info = MODEL_REGISTRY[ModelID.YOLO_V8]
+        assert "qcs6490" in info.variants
+        qcs = info.variants["qcs6490"]
+        assert isinstance(qcs, HuggingFaceSource)
+        assert qcs.format is ModelFormat.DLC

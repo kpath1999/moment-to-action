@@ -1,0 +1,367 @@
+"""Unit tests for YOLOModel.
+
+Covers prepare, run, post_proc/decode, load/unload (ONNX and DLC branches),
+NMS, confidence filtering, coordinate scaling, and COCO label mapping.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import numpy as np
+import pytest
+
+from moment_to_action.models._formats import ModelFormat
+from moment_to_action.models.image.detection._types import BoundingBox, Detection
+from moment_to_action.models.image.detection.yolo._model import YOLOModel
+
+
+@pytest.fixture
+def onnx_model() -> YOLOModel:
+    """Return an unloaded YOLOModel in ONNX format."""
+    return YOLOModel("default", Path("/fake/model.onnx"), ModelFormat.ONNX)
+
+
+@pytest.fixture
+def dlc_model() -> YOLOModel:
+    """Return an unloaded YOLOModel in DLC format."""
+    return YOLOModel("qcs6490", Path("/fake/model.dlc"), ModelFormat.DLC)
+
+
+@pytest.fixture
+def mock_backend() -> MagicMock:
+    """Return a mock ComputeBackend."""
+    backend = MagicMock()
+    backend.load_model.return_value = MagicMock()
+    backend.load_model_dlc.return_value = MagicMock()
+    return backend
+
+
+def _make_outputs(
+    boxes: list[list[float]],
+    scores: list[float],
+    class_ids: list[int],
+) -> list[np.ndarray]:
+    """Build synthetic 3-tensor YOLO output."""
+    boxes_arr = np.array([boxes], dtype=np.float32)  # [1, N, 4]
+    scores_arr = np.array([scores], dtype=np.float32)  # [1, N]
+    ids_arr = np.array([class_ids], dtype=np.uint8)  # [1, N]
+    return [boxes_arr, scores_arr, ids_arr]
+
+
+@pytest.mark.unit
+class TestYOLOModelPrepare:
+    """Tests for YOLOModel.prepare()."""
+
+    def test_output_shape(self, onnx_model: YOLOModel, sample_image_array: np.ndarray) -> None:
+        """prepare() returns (1, 3, 640, 640) tensor."""
+        result = onnx_model.prepare(sample_image_array)
+        assert result.shape == (1, 3, 640, 640)
+
+    def test_output_dtype_float32(
+        self, onnx_model: YOLOModel, sample_image_array: np.ndarray
+    ) -> None:
+        """prepare() returns float32."""
+        result = onnx_model.prepare(sample_image_array)
+        assert result.dtype == np.float32
+
+    def test_values_in_unit_range(
+        self, onnx_model: YOLOModel, sample_image_array: np.ndarray
+    ) -> None:
+        """prepare() normalizes pixel values to [0, 1]."""
+        result = onnx_model.prepare(sample_image_array)
+        assert float(result.min()) >= 0.0
+        assert float(result.max()) <= 1.0
+
+
+@pytest.mark.unit
+class TestYOLOModelRun:
+    """Tests for YOLOModel.run()."""
+
+    def test_onnx_calls_backend_run(self, onnx_model: YOLOModel, mock_backend: MagicMock) -> None:
+        """ONNX run() delegates to backend.run()."""
+        onnx_model.load(mock_backend)
+        prepared = np.zeros((1, 3, 640, 640), dtype=np.float32)
+        onnx_model.run(prepared)
+        mock_backend.run.assert_called_once_with(mock_backend.load_model.return_value, prepared)
+
+    def test_dlc_calls_backend_infer_dlc(
+        self, dlc_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """DLC run() delegates to backend.infer_dlc()."""
+        dlc_model.load(mock_backend)
+        prepared = np.zeros((1, 3, 640, 640), dtype=np.float32)
+        dlc_model.run(prepared)
+        mock_backend.infer_dlc.assert_called_once_with(
+            mock_backend.load_model_dlc.return_value, prepared
+        )
+
+    def test_raises_if_not_loaded(self, onnx_model: YOLOModel) -> None:
+        """run() raises RuntimeError if load() was not called."""
+        prepared = np.zeros((1, 3, 640, 640), dtype=np.float32)
+        with pytest.raises(RuntimeError, match="load\\(\\)"):
+            onnx_model.run(prepared)
+
+
+@pytest.mark.unit
+class TestYOLOModelLoadUnload:
+    """Tests for load() and unload()."""
+
+    def test_load_onnx_calls_load_model(
+        self, onnx_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """ONNX load() calls backend.load_model with the model path."""
+        onnx_model.load(mock_backend)
+        mock_backend.load_model.assert_called_once_with(Path("/fake/model.onnx"))
+
+    def test_load_dlc_calls_load_model_dlc(
+        self, dlc_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """DLC load() calls backend.load_model_dlc with the model path."""
+        dlc_model.load(mock_backend)
+        mock_backend.load_model_dlc.assert_called_once_with(Path("/fake/model.dlc"))
+
+    def test_load_sets_backend(self, onnx_model: YOLOModel, mock_backend: MagicMock) -> None:
+        """load() stores the backend on _backend."""
+        onnx_model.load(mock_backend)
+        assert onnx_model._backend is mock_backend
+
+    def test_unload_onnx_calls_unload_model(
+        self, onnx_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """ONNX unload() calls backend.unload_model(handle)."""
+        onnx_model.load(mock_backend)
+        handle = mock_backend.load_model.return_value
+        onnx_model.unload()
+        mock_backend.unload_model.assert_called_once_with(handle)
+
+    def test_unload_dlc_calls_unload_dlc(
+        self, dlc_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """DLC unload() calls backend.unload_dlc(handle)."""
+        dlc_model.load(mock_backend)
+        handle = mock_backend.load_model_dlc.return_value
+        dlc_model.unload()
+        mock_backend.unload_dlc.assert_called_once_with(handle)
+
+    def test_unload_clears_backend_and_handle(
+        self, onnx_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """unload() clears _backend and _handle."""
+        onnx_model.load(mock_backend)
+        onnx_model.unload()
+        assert onnx_model._backend is None
+        assert onnx_model._handle is None
+
+    def test_unload_without_load_is_safe(self, onnx_model: YOLOModel) -> None:
+        """unload() when _backend is None does not raise."""
+        onnx_model.unload()  # Should not raise
+
+    def test_double_load_raises(self, onnx_model: YOLOModel, mock_backend: MagicMock) -> None:
+        """load() raises RuntimeError if model is already loaded."""
+        onnx_model.load(mock_backend)
+        with pytest.raises(RuntimeError, match="already loaded"):
+            onnx_model.load(mock_backend)
+
+    def test_backend_not_set_before_handle_loaded(
+        self, onnx_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """_backend is only set after the handle is successfully loaded."""
+        load_calls: list[bool] = []
+
+        def _slow_load(_path: object) -> MagicMock:
+            load_calls.append(onnx_model._backend is None)
+            return MagicMock()
+
+        mock_backend.load_model.side_effect = _slow_load
+        onnx_model.load(mock_backend)
+        assert load_calls == [True]  # _backend was None during handle load
+
+    def test_load_failure_leaves_model_unloaded(
+        self, onnx_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """If backend.load_model raises, is_loaded remains False."""
+        mock_backend.load_model.side_effect = RuntimeError("backend error")
+        with pytest.raises(RuntimeError, match="backend error"):
+            onnx_model.load(mock_backend)
+        assert onnx_model.is_loaded is False
+
+
+@pytest.mark.unit
+class TestYOLOModelDecode:
+    """Tests for YOLOModel.decode() and post_proc()."""
+
+    def test_decode_basic(self, onnx_model: YOLOModel) -> None:
+        """decode() returns correct Detection objects from known output."""
+        outputs = _make_outputs(
+            boxes=[[100, 100, 200, 200], [300, 300, 400, 400]],
+            scores=[0.9, 0.7],
+            class_ids=[0, 1],
+        )
+        result = onnx_model.decode(outputs, original_size=(480, 640))
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert all(isinstance(d, Detection) for d in result)
+
+    def test_decode_confidence_values(self, onnx_model: YOLOModel) -> None:
+        """decode() preserves confidence scores."""
+        outputs = _make_outputs([[100, 100, 200, 200]], [0.95], [0])
+        result = onnx_model.decode(outputs, original_size=(480, 640))
+        assert result[0].confidence == pytest.approx(0.95)
+
+    def test_decode_label_from_coco(self, onnx_model: YOLOModel) -> None:
+        """decode() maps class IDs to COCO labels."""
+        outputs = _make_outputs(
+            [[100, 100, 200, 200], [300, 300, 400, 400], [500, 500, 600, 600]],
+            [0.9, 0.85, 0.8],
+            [0, 16, 17],  # person, dog, horse
+        )
+        result = onnx_model.decode(outputs, original_size=(480, 640))
+        assert result[0].label == "person"
+        assert result[1].label == "dog"
+        assert result[2].label == "horse"
+
+    def test_decode_invalid_class_id_fallback(self, onnx_model: YOLOModel) -> None:
+        """Out-of-range class IDs fall back to str(class_id)."""
+        outputs = _make_outputs([[100, 100, 200, 200]], [0.9], [99])
+        result = onnx_model.decode(outputs, original_size=(480, 640))
+        assert result[0].label == "99"
+
+    def test_decode_coordinate_scaling(self, onnx_model: YOLOModel) -> None:
+        """Coordinates are scaled from 640x640 to original_size."""
+        outputs = _make_outputs([[320, 240, 480, 480]], [0.9], [0])
+        result = onnx_model.decode(outputs, original_size=(480, 640))
+        # x scale = 640/640 = 1.0, y scale = 480/640 = 0.75
+        assert result[0].bbox.x1 == pytest.approx(320.0)  # 320 * 1.0
+        assert result[0].bbox.y1 == pytest.approx(180.0)  # 240 * 0.75
+        assert result[0].bbox.x2 == pytest.approx(480.0)  # 480 * 1.0
+        assert result[0].bbox.y2 == pytest.approx(360.0)  # 480 * 0.75
+
+    def test_decode_confidence_filtering(self) -> None:
+        """Detections below confidence_threshold are discarded."""
+        model = YOLOModel("default", Path("/x"), ModelFormat.ONNX, confidence_threshold=0.8)
+        outputs = _make_outputs(
+            [[100, 100, 200, 200], [300, 300, 400, 400]],
+            [0.9, 0.5],
+            [0, 1],
+        )
+        result = model.decode(outputs, original_size=(480, 640))
+        assert len(result) == 1
+        assert result[0].confidence == pytest.approx(0.9)
+
+    def test_decode_empty_outputs(self, onnx_model: YOLOModel) -> None:
+        """Empty outputs return empty list."""
+        outputs = _make_outputs([], [], [])
+        result = onnx_model.decode(outputs, original_size=(480, 640))
+        assert result == []
+
+    def test_decode_insufficient_outputs(self, onnx_model: YOLOModel) -> None:
+        """Fewer than 3 output tensors returns empty list."""
+        result = onnx_model.decode([np.zeros((1, 1, 4))], original_size=(480, 640))
+        assert result == []
+
+    def test_post_proc_returns_detections(self, onnx_model: YOLOModel) -> None:
+        """post_proc() returns list[Detection] without coordinate scaling."""
+        outputs = _make_outputs([[100, 100, 200, 200]], [0.9], [0])
+        result = onnx_model.post_proc(outputs)
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], Detection)
+        assert isinstance(result[0].bbox, BoundingBox)
+
+    def test_decode_bounding_box_fields(self, onnx_model: YOLOModel) -> None:
+        """decode() sets bbox fields correctly."""
+        outputs = _make_outputs([[100, 150, 300, 350]], [0.95], [0])
+        result = onnx_model.decode(outputs, original_size=(480, 640))
+        box = result[0].bbox
+        # x scale = 640/640 = 1.0, y scale = 480/640 = 0.75
+        assert box.x1 == pytest.approx(100.0)
+        assert box.y1 == pytest.approx(112.5)  # 150 * 0.75
+        assert box.x2 == pytest.approx(300.0)
+        assert box.y2 == pytest.approx(262.5)  # 350 * 0.75
+
+
+@pytest.mark.unit
+class TestYOLOModelNMS:
+    """Tests for YOLOModel._nms() (pure NumPy NMS)."""
+
+    def test_removes_overlapping_boxes(self, onnx_model: YOLOModel) -> None:
+        """NMS removes boxes with high IoU overlap."""
+        boxes = np.array([[100, 100, 200, 200], [110, 110, 210, 210]], dtype=np.float32)
+        scores = np.array([0.9, 0.7], dtype=np.float32)
+        keep = onnx_model._nms(boxes, scores, iou_threshold=0.45)
+        assert len(keep) == 1
+        assert keep[0] == 0
+
+    def test_keeps_non_overlapping_boxes(self, onnx_model: YOLOModel) -> None:
+        """NMS keeps all non-overlapping boxes."""
+        boxes = np.array([[0, 0, 100, 100], [200, 200, 300, 300]], dtype=np.float32)
+        scores = np.array([0.9, 0.8], dtype=np.float32)
+        keep = onnx_model._nms(boxes, scores, iou_threshold=0.45)
+        assert len(keep) == 2
+
+    def test_empty_input(self, onnx_model: YOLOModel) -> None:
+        """NMS with empty input returns empty list."""
+        boxes = np.zeros((0, 4), dtype=np.float32)
+        scores = np.zeros(0, dtype=np.float32)
+        keep = onnx_model._nms(boxes, scores, iou_threshold=0.45)
+        assert keep == []
+
+    def test_single_box(self, onnx_model: YOLOModel) -> None:
+        """NMS with a single box keeps it."""
+        boxes = np.array([[100, 100, 200, 200]], dtype=np.float32)
+        scores = np.array([0.9], dtype=np.float32)
+        keep = onnx_model._nms(boxes, scores, iou_threshold=0.45)
+        assert keep == [0]
+
+    def test_score_ordering(self, onnx_model: YOLOModel) -> None:
+        """NMS processes boxes in descending score order."""
+        boxes = np.array(
+            [[100, 100, 200, 200], [105, 105, 205, 205], [110, 110, 210, 210]],
+            dtype=np.float32,
+        )
+        scores = np.array([0.9, 0.8, 0.7], dtype=np.float32)
+        keep = onnx_model._nms(boxes, scores, iou_threshold=0.45)
+        assert keep[0] == 0
+
+
+# ---------------------------------------------------------------------------
+# COCO labels
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestYOLOModelLabels:
+    """Tests for COCO label mapping."""
+
+    def test_coco_labels_count(self, onnx_model: YOLOModel) -> None:
+        """80 COCO labels."""
+        assert len(onnx_model.COCO_LABELS) == 80
+
+    def test_person_is_class_0(self, onnx_model: YOLOModel) -> None:
+        """Class 0 is 'person'."""
+        assert onnx_model.COCO_LABELS[0] == "person"
+
+    def test_dog_is_class_16(self, onnx_model: YOLOModel) -> None:
+        """Class 16 is 'dog'."""
+        assert onnx_model.COCO_LABELS[16] == "dog"
+
+
+# ---------------------------------------------------------------------------
+# confidence_threshold property
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestYOLOModelProperties:
+    """Tests for YOLOModel properties."""
+
+    def test_confidence_threshold_default(self, onnx_model: YOLOModel) -> None:
+        """Default confidence_threshold is 0.5."""
+        assert onnx_model.confidence_threshold == pytest.approx(0.5)
+
+    def test_confidence_threshold_custom(self) -> None:
+        """Custom confidence_threshold is stored."""
+        model = YOLOModel("v", Path("/x"), ModelFormat.ONNX, confidence_threshold=0.75)
+        assert model.confidence_threshold == pytest.approx(0.75)

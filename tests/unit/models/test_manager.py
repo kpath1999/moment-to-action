@@ -15,6 +15,7 @@ from moment_to_action.models import (
     ModelID,
     ModelInfo,
     ModelManager,
+    YOLOModel,
 )
 
 if TYPE_CHECKING:
@@ -30,6 +31,7 @@ def _download_info() -> ModelInfo:
     """Build a single-variant DownloadSource ModelInfo for MOBILECLIP_S2."""
     return ModelInfo(
         id=ModelID.MOBILECLIP_S2,
+        model_class=YOLOModel,
         variants={
             DEFAULT_VARIANT_KEY: DownloadSource(
                 format=ModelFormat.ONNX,
@@ -341,6 +343,42 @@ class TestClearCache:
         # ModelManager.clear_cache returns ModelCacheContents (the inner result).
         assert contents.total_size_bytes == 50
         assert not (path_manager.cache.models.models_dir).exists()
+
+
+@pytest.mark.unit
+class TestGetModel:
+    """Tests for get_model()."""
+
+    def test_returns_yolo_model_instance(self, path_manager: PathManager) -> None:
+        """get_model() returns a YOLOModel for YOLO_V8."""
+        mgr = ModelManager(path_manager)
+        model = mgr.get_model(ModelID.YOLO_V8)
+        assert isinstance(model, YOLOModel)
+
+    def test_model_not_loaded(self, path_manager: PathManager) -> None:
+        """Returned model is unloaded (_backend is None)."""
+        mgr = ModelManager(path_manager)
+        model = mgr.get_model(ModelID.YOLO_V8)
+        assert model._backend is None
+
+    def test_model_variant_is_default(self, path_manager: PathManager) -> None:
+        """get_model() sets _variant to the requested variant key."""
+        mgr = ModelManager(path_manager)
+        model = mgr.get_model(ModelID.YOLO_V8)
+        assert model._variant == DEFAULT_VARIANT_KEY
+
+    def test_model_format_matches_source(self, path_manager: PathManager) -> None:
+        """get_model() passes source.format to the model constructor."""
+        mgr = ModelManager(path_manager)
+        model = mgr.get_model(ModelID.YOLO_V8)
+        assert isinstance(model, YOLOModel)
+        assert model._format == ModelFormat.ONNX
+
+    def test_model_path_exists(self, path_manager: PathManager) -> None:
+        """get_model() resolves path to an existing file."""
+        mgr = ModelManager(path_manager)
+        model = mgr.get_model(ModelID.YOLO_V8)
+        assert model._path.exists()
 
 
 @pytest.mark.unit

@@ -13,10 +13,13 @@ from __future__ import annotations
 
 from typing import TypeAlias
 
+from moment_to_action.models.image.detection._types import BoundingBox, Detection
+
 from .audio import AudioTensorMessage
+from .detection import DetectionMessage
 from .llm import ReasoningMessage
 from .sensor import RawFrameMessage
-from .video import BoundingBox, DetectionMessage, FrameTensorMessage, VideoClipMessage
+from .video import FrameTensorMessage, VideoClipMessage
 from .vlm import ClassificationMessage
 
 # Union of every concrete message type in the pipeline.
@@ -35,6 +38,7 @@ __all__ = [
     "AudioTensorMessage",
     "BoundingBox",
     "ClassificationMessage",
+    "Detection",
     "DetectionMessage",
     "FrameTensorMessage",
     "Message",

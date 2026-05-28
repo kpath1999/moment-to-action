@@ -6,17 +6,25 @@ from pathlib import Path
 
 from ._formats import ModelFormat
 from ._model_info import ModelID, ModelInfo
-from ._sources import VendoredSource
+from ._sources import HuggingFaceSource, VendoredSource
+from .image.detection.yolo._model import YOLOModel
 
 DEFAULT_KEY = "default"
 
 MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
     ModelID.YOLO_V8: ModelInfo(
         id=ModelID.YOLO_V8,
+        model_class=YOLOModel,
         variants={
             DEFAULT_KEY: VendoredSource(
                 format=ModelFormat.ONNX,
                 path=Path("yolo/model.onnx"),
+            ),
+            "qcs6490": HuggingFaceSource(
+                format=ModelFormat.DLC,
+                hf_repo_id="TODO",
+                files=["yolo_v8_qcs6490.dlc"],
+                revision="TODO",
             ),
         },
     ),

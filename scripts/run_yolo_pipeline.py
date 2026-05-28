@@ -10,25 +10,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import datetime
-import json
 import logging
-import time
-from pathlib import Path
 
-import rich
 from rich.console import Console
 from rich.logging import RichHandler
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
-from moment_to_action.messages import ReasoningMessage
-from moment_to_action.metrics import MetricsCollector
-from moment_to_action.models import ModelManager
+from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.paths import PathManager
-from moment_to_action.sensors import FileImageSensor as FileSensor
-from moment_to_action.stages import Pipeline
-from moment_to_action.stages.llm import ReasoningStage
-from moment_to_action.stages.video import PreprocessorStage, YOLOStage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +28,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
-logging.getLogger("httpx").setLevel(logging.WARNING)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--image", required=True)
@@ -49,57 +37,11 @@ args = parser.parse_args()
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
 compute_backend = ComputeBackend(preferred_unit=device)
-metrics = MetricsCollector(
-    compute_backend=compute_backend,
-    resource_sample_interval=datetime.timedelta(
-        seconds=0.01
-    ),  # YOLO too fast, need to sample more frequently
-)
 manager = ModelManager(PathManager())
 
+# ── load model ─────────────────────────────────────────────────────────────
+model = manager.get_model(ModelID.YOLO_V8)
+model.load(compute_backend)
 
-# ── build pipeline ─────────────────────────────────────────────────
-# Stages resolve their own model paths via ModelManager.
-pipeline = Pipeline(
-    stages=[
-        PreprocessorStage(target_size=(640, 640), letterbox=True),
-        YOLOStage(
-            backend=compute_backend,
-            manager=manager,
-            confidence_threshold=args.conf,
-        ),
-        ReasoningStage(),
-    ],
-)
-
-# ── load frame via FileSensor, then run pipeline ───────────────────
-with FileSensor(args.image) as sensor:
-    msg = sensor.read()
-
-t_total = time.perf_counter()
-with metrics.start_trace():
-    result = pipeline.run(msg, metrics=metrics)
-total_ms = (time.perf_counter() - t_total) * 1000
-
-# ── print results ──────────────────────────────────────────────────
-logger.info("\nTotal latency: %.1fms", total_ms)
-
-if result is None:
-    logger.info("Pipeline stopped — no detections above threshold.")
-elif isinstance(result, ReasoningMessage):
-    logger.info("\nYOLO detections:")
-    logger.info("-" * 50)
-    for line in result.prompt.split("\n"):
-        if line.strip().startswith("-"):
-            logger.info("%s", line)
-    logger.info("-" * 50)
-    logger.info("\nLLM response:")
-    logger.info("%s", result.response)
-
-# Log metrics summary
-metrics_report = metrics.report()
-rich.print("============== Metrics report ==============")
-rich.print(metrics_report.summary_full_rich())
-
-with Path("metrics_report.json").open("w") as f:
-    json.dump(metrics_report.json(), f, indent=4)
+logger.info("Model loaded. Pipeline wiring (ImageDetectionStage) is deferred to PR 2.")
+model.unload()

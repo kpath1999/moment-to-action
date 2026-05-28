@@ -1,13 +1,21 @@
-import logging
-from pathlib import Path
+from __future__ import annotations
 
-from moment_to_action.paths import PathManager
-from moment_to_action.paths._cache._models import ModelCacheContents
+import logging
+from typing import TYPE_CHECKING
+
 from moment_to_action.utils.files import disk_size
 
 from ._model_info import ModelID, ModelInfo, ModelStatus, VariantStatus
 from ._registry import DEFAULT_KEY, MODEL_REGISTRY
 from ._sources import ModelSource, resolve_model_source
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from moment_to_action.paths import PathManager
+    from moment_to_action.paths._cache._models import ModelCacheContents
+
+    from ._base import BaseModel
 
 log = logging.getLogger(__name__)
 
@@ -166,6 +174,30 @@ class ModelManager:
             statuses.append(model_status)
 
         return statuses
+
+    def get_model(
+        self,
+        model_id: ModelID,
+        *,
+        variant: str = DEFAULT_KEY,
+    ) -> BaseModel:
+        """Construct an unloaded model instance for the given model and variant.
+
+        The model path is resolved (downloading if necessary) before the
+        instance is created.  The caller is responsible for calling
+        ``model.load(backend)`` before running inference.
+
+        Args:
+            model_id: Identifier of the desired model.
+            variant: Variant name to load.  Defaults to :data:`DEFAULT_KEY`.
+
+        Returns:
+            An unloaded :class:`~moment_to_action.models._base.BaseModel` subclass instance.
+        """
+        info = self._get_model_info(model_id)
+        source = self._get_source(info, variant)
+        path = self.get_path(model_id, variant)
+        return info.model_class(variant, path, source.format)  # type: ignore[call-arg]
 
     def clear_cache(self) -> ModelCacheContents:
         """Clear all downloaded model files from the cache.
