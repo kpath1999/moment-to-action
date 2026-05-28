@@ -126,7 +126,7 @@ class BasePreprocessor(ABC, Generic[InputT, OutputT]):
         self._validate(data)
 
         # Time the processing and report to metrics
-        with metrics.start_span(SpanType.PREPROCESS, self.__class__.__name__) as span:
+        with metrics.start_span(SpanType.MODEL_PREPROCESS, self.__class__.__name__) as span:
             span_id = span.id_  # save so we can report after processing
 
             # Run the actual preprocessing logic implemented by the subclass

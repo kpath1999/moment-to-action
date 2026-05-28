@@ -380,6 +380,15 @@ class TestGetModel:
         model = mgr.get_model(ModelID.YOLO_V8)
         assert model._path.exists()
 
+    def test_model_kwargs_forwarded_to_constructor(self, path_manager: PathManager) -> None:
+        """model_kwargs are forwarded verbatim to the model constructor."""
+        import pytest
+
+        mgr = ModelManager(path_manager)
+        model = mgr.get_model(ModelID.YOLO_V8, confidence_threshold=0.3)
+        assert isinstance(model, YOLOModel)
+        assert model.confidence_threshold == pytest.approx(0.3)
+
 
 @pytest.mark.unit
 class TestVendoredFlow:
