@@ -424,3 +424,99 @@ class TestQairtSDKManagerClean:
         with patch("moment_to_action.qairt._manager.shutil.rmtree"):
             mgr.clean()
         assert mgr.path is None
+
+
+@pytest.mark.unit
+class TestQairtSDKManagerConvert:
+    """Tests for QairtSDKManager.convert."""
+
+    def _make_sdk_mgr(self, tmp_path: Path) -> QairtSDKManager:
+        """Return a manager with an available SDK path."""
+        sdk = tmp_path / "qairt" / "2.45.0.24"
+        sdk.mkdir(parents=True)
+        return _make_mgr(sdk_path=sdk)
+
+    def test_happy_path_calls_qairt_convert(self, tmp_path: Path) -> None:
+        """Convert calls qairt.convert with the right input path."""
+        import numpy as np
+
+        mgr = self._make_sdk_mgr(tmp_path)
+        input_path = tmp_path / "model.onnx"
+        input_path.write_bytes(b"fake")
+        output_path = tmp_path / "model.dlc"
+        calib = np.zeros((2, 3, 640, 640), dtype=np.float32)
+
+        mock_qairt = MagicMock()
+        mock_dlc = MagicMock()
+        mock_qairt.convert.return_value = mock_dlc
+
+        with patch.dict("sys.modules", {"qairt": mock_qairt}):
+            result = mgr.convert(input_path, output_path, calib)
+
+        mock_qairt.convert.assert_called_once()
+        call_args = mock_qairt.convert.call_args
+        assert call_args[0][0] == str(input_path)
+        assert result == output_path.resolve()
+
+    def test_happy_path_saves_dlc(self, tmp_path: Path) -> None:
+        """Convert calls dlc.save with the output path."""
+        import numpy as np
+
+        mgr = self._make_sdk_mgr(tmp_path)
+        input_path = tmp_path / "model.onnx"
+        input_path.write_bytes(b"fake")
+        output_path = tmp_path / "model.dlc"
+        calib = np.zeros((1, 3, 640, 640), dtype=np.float32)
+
+        mock_qairt = MagicMock()
+        mock_dlc = MagicMock()
+        mock_qairt.convert.return_value = mock_dlc
+
+        with patch.dict("sys.modules", {"qairt": mock_qairt}):
+            mgr.convert(input_path, output_path, calib)
+
+        mock_dlc.save.assert_called_once_with(str(output_path))
+
+    def test_happy_path_uses_calibration_config(self, tmp_path: Path) -> None:
+        """Convert wraps calibration data in CalibrationConfig."""
+        import numpy as np
+
+        mgr = self._make_sdk_mgr(tmp_path)
+        input_path = tmp_path / "model.onnx"
+        input_path.write_bytes(b"fake")
+        output_path = tmp_path / "model.dlc"
+        calib = np.zeros((3, 3, 640, 640), dtype=np.float32)
+
+        mock_qairt = MagicMock()
+        mock_qairt.convert.return_value = MagicMock()
+
+        with patch.dict("sys.modules", {"qairt": mock_qairt}):
+            mgr.convert(input_path, output_path, calib)
+
+        mock_qairt.CalibrationConfig.assert_called_once()
+        np.testing.assert_array_equal(mock_qairt.CalibrationConfig.call_args[1]["dataset"], calib)
+
+    def test_sdk_not_available_raises(self, tmp_path: Path) -> None:
+        """RuntimeError raised when SDK is not installed."""
+        import numpy as np
+
+        mgr = _make_mgr(sdk_path=None)
+        calib = np.zeros((1, 3, 640, 640), dtype=np.float32)
+        with pytest.raises(RuntimeError, match="not installed"):
+            mgr.convert(tmp_path / "in.onnx", tmp_path / "out.dlc", calib)
+
+    def test_qairt_exception_wrapped_as_runtime_error(self, tmp_path: Path) -> None:
+        """Qairt errors are caught and re-raised as RuntimeError."""
+        import numpy as np
+
+        mgr = self._make_sdk_mgr(tmp_path)
+        input_path = tmp_path / "model.onnx"
+        input_path.write_bytes(b"fake")
+        calib = np.zeros((1, 3, 640, 640), dtype=np.float32)
+
+        mock_qairt = MagicMock()
+        mock_qairt.convert.side_effect = ValueError("conversion boom")
+
+        with patch.dict("sys.modules", {"qairt": mock_qairt}):
+            with pytest.raises(RuntimeError, match="QAIRT conversion failed"):
+                mgr.convert(input_path, tmp_path / "out.dlc", calib)
