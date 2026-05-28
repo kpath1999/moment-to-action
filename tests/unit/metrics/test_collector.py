@@ -191,7 +191,7 @@ class TestStartSpan:
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "span1"):
                 pass
-            with collector.start_span(SpanType.PREPROCESS, "span2"):
+            with collector.start_span(SpanType.MODEL_PREPROCESS, "span2"):
                 pass
 
         assert len(collector.spans) == 2
@@ -271,7 +271,7 @@ class TestSpanNesting:
         """Test single level of nested spans (parent → child)."""
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "parent") as parent_span:
-                with collector.start_span(SpanType.PREPROCESS, "child") as child_span:
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "child") as child_span:
                     assert child_span.parent_id == parent_span.id_
 
         assert len(collector.spans) == 2
@@ -280,7 +280,7 @@ class TestSpanNesting:
         """Test multiple levels of span nesting (parent → child → grandchild)."""
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "parent") as parent:
-                with collector.start_span(SpanType.PREPROCESS, "child") as child:
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "child") as child:
                     with collector.start_span(SpanType.MODEL_INFERENCE, "grandchild") as grandchild:
                         assert child.parent_id == parent.id_
                         assert grandchild.parent_id == child.id_
@@ -292,9 +292,9 @@ class TestSpanNesting:
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "parent") as parent:
                 parent_id = parent.id_
-                with collector.start_span(SpanType.PREPROCESS, "child1") as child1:
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "child1") as child1:
                     assert child1.parent_id == parent_id
-                with collector.start_span(SpanType.PREPROCESS, "child2") as child2:
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "child2") as child2:
                     assert child2.parent_id == parent_id
 
         # Verify both children have same parent_id
@@ -306,10 +306,10 @@ class TestSpanNesting:
         """Test that all nested spans are stored in collector.spans."""
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "parent"):
-                with collector.start_span(SpanType.PREPROCESS, "child1"):
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "child1"):
                     with collector.start_span(SpanType.MODEL_INFERENCE, "grandchild1"):
                         pass
-                with collector.start_span(SpanType.PREPROCESS, "child2"):
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "child2"):
                     pass
 
         assert len(collector.spans) == 4
@@ -320,7 +320,7 @@ class TestSpanNesting:
             with collector.start_span(SpanType.STAGE, "parent"):
                 # Parent should be current
                 assert collector.current_span.name == "parent"
-                with collector.start_span(SpanType.PREPROCESS, "child"):
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "child"):
                     # Child should be current
                     assert collector.current_span.name == "child"
                 # Parent should be current again
@@ -330,7 +330,7 @@ class TestSpanNesting:
         """Test that spans must be ended in LIFO order (reverse of start order)."""
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "parent"):
-                with collector.start_span(SpanType.PREPROCESS, "child"):
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "child"):
                     pass
 
                 # Trying to manually mess with span stack would be caught
@@ -518,7 +518,7 @@ class TestNullMetricsCollector:
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "span1"):
                 pass
-            with collector.start_span(SpanType.PREPROCESS, "span2"):
+            with collector.start_span(SpanType.MODEL_PREPROCESS, "span2"):
                 pass
 
         with collector.start_trace():
@@ -549,7 +549,7 @@ class TestErrorHandling:
             with collector.start_trace():
                 try:
                     with collector.start_span(SpanType.STAGE, "span1"):
-                        with collector.start_span(SpanType.PREPROCESS, "span2"):
+                        with collector.start_span(SpanType.MODEL_PREPROCESS, "span2"):
                             # Manually try to mess with the span stack
                             collector._span_stack.pop()  # Remove span2
                 except RuntimeError:  # noqa: TRY203
@@ -569,7 +569,7 @@ class TestErrorHandling:
         """Test that multiple nested spans are properly cleaned up."""
         with collector.start_trace():
             with collector.start_span(SpanType.STAGE, "s1"):
-                with collector.start_span(SpanType.PREPROCESS, "s2"):
+                with collector.start_span(SpanType.MODEL_PREPROCESS, "s2"):
                     with collector.start_span(SpanType.MODEL_INFERENCE, "s3"):
                         pass
 
@@ -594,11 +594,11 @@ class TestSpanTypes:
             with collector.start_span(SpanType.STAGE, "stage") as span:
                 assert span.type_ == SpanType.STAGE
 
-    def test_span_with_preprocess_type(self, collector: MetricsCollector) -> None:
-        """Test creating span with PREPROCESS type."""
+    def test_span_with_model_preprocess_type(self, collector: MetricsCollector) -> None:
+        """Test creating span with MODEL_PREPROCESS type."""
         with collector.start_trace():
-            with collector.start_span(SpanType.PREPROCESS, "preprocess") as span:
-                assert span.type_ == SpanType.PREPROCESS
+            with collector.start_span(SpanType.MODEL_PREPROCESS, "preprocess") as span:
+                assert span.type_ == SpanType.MODEL_PREPROCESS
 
     def test_span_with_model_inference_type(self, collector: MetricsCollector) -> None:
         """Test creating span with MODEL_INFERENCE type."""
@@ -606,13 +606,20 @@ class TestSpanTypes:
             with collector.start_span(SpanType.MODEL_INFERENCE, "inference") as span:
                 assert span.type_ == SpanType.MODEL_INFERENCE
 
+    def test_span_with_model_post_process_type(self, collector: MetricsCollector) -> None:
+        """Test creating span with MODEL_POST_PROCESS type."""
+        with collector.start_trace():
+            with collector.start_span(SpanType.MODEL_POST_PROCESS, "post_process") as span:
+                assert span.type_ == SpanType.MODEL_POST_PROCESS
+
     def test_all_span_types_work_in_trace(self, collector: MetricsCollector) -> None:
         """Test that all SpanType values work within a trace."""
         span_types = [
             SpanType.PIPELINE,
             SpanType.STAGE,
-            SpanType.PREPROCESS,
+            SpanType.MODEL_PREPROCESS,
             SpanType.MODEL_INFERENCE,
+            SpanType.MODEL_POST_PROCESS,
         ]
 
         with collector.start_trace():

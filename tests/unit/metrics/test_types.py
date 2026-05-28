@@ -44,24 +44,30 @@ class TestSpanType:
         assert hasattr(SpanType, "STAGE")
         assert isinstance(SpanType.STAGE, SpanType)
 
-    def test_spantype_preprocess_member(self) -> None:
-        """Test SpanType.PREPROCESS member."""
-        assert hasattr(SpanType, "PREPROCESS")
-        assert isinstance(SpanType.PREPROCESS, SpanType)
+    def test_spantype_model_preprocess_member(self) -> None:
+        """Test SpanType.MODEL_PREPROCESS member."""
+        assert hasattr(SpanType, "MODEL_PREPROCESS")
+        assert isinstance(SpanType.MODEL_PREPROCESS, SpanType)
 
     def test_spantype_model_inference_member(self) -> None:
         """Test SpanType.MODEL_INFERENCE member."""
         assert hasattr(SpanType, "MODEL_INFERENCE")
         assert isinstance(SpanType.MODEL_INFERENCE, SpanType)
 
+    def test_spantype_model_post_process_member(self) -> None:
+        """Test SpanType.MODEL_POST_PROCESS member."""
+        assert hasattr(SpanType, "MODEL_POST_PROCESS")
+        assert isinstance(SpanType.MODEL_POST_PROCESS, SpanType)
+
     def test_spantype_all_members(self) -> None:
         """Test that all expected SpanType members exist."""
         members = [member.name for member in SpanType]
         assert "PIPELINE" in members
         assert "STAGE" in members
-        assert "PREPROCESS" in members
+        assert "MODEL_PREPROCESS" in members
         assert "MODEL_INFERENCE" in members
-        assert len(members) == 4
+        assert "MODEL_POST_PROCESS" in members
+        assert len(members) == 5
 
 
 @pytest.mark.unit
@@ -111,7 +117,7 @@ class TestSpan:
         span = Span(
             id_=3,
             parent_id=None,
-            type_=SpanType.PREPROCESS,
+            type_=SpanType.MODEL_PREPROCESS,
             name="Preprocessing",
             start=utc_past,
             end=utc_now,

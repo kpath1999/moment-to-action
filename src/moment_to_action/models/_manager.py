@@ -180,6 +180,7 @@ class ModelManager:
         model_id: ModelID,
         *,
         variant: str = DEFAULT_KEY,
+        **model_kwargs: object,
     ) -> BaseModel:
         """Construct an unloaded model instance for the given model and variant.
 
@@ -190,6 +191,9 @@ class ModelManager:
         Args:
             model_id: Identifier of the desired model.
             variant: Variant name to load.  Defaults to :data:`DEFAULT_KEY`.
+            **model_kwargs: Additional keyword arguments forwarded verbatim to
+                the model constructor.  Use for model-specific parameters such
+                as ``confidence_threshold`` on detection models.
 
         Returns:
             An unloaded :class:`~moment_to_action.models._base.BaseModel` subclass instance.
@@ -197,7 +201,7 @@ class ModelManager:
         info = self._get_model_info(model_id)
         source = self._get_source(info, variant)
         path = self.get_path(model_id, variant)
-        return info.model_class(variant, path, source.format)  # type: ignore[call-arg]
+        return info.model_class(variant, path, source.format, **model_kwargs)  # type: ignore[call-arg]
 
     def clear_cache(self) -> ModelCacheContents:
         """Clear all downloaded model files from the cache.

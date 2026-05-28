@@ -44,11 +44,14 @@ class SpanType(Enum):
     STAGE = auto()
     """Individual stage execution span (e.g. trigger, vision, LLM)."""
 
-    PREPROCESS = auto()
+    MODEL_PREPROCESS = auto()
     """Time taken for preprocessing steps before a model inference (e.g. resampling audio)."""
 
     MODEL_INFERENCE = auto()
     """Time taken for a model inference (e.g. vision, LLM)."""
+
+    MODEL_POST_PROCESS = auto()
+    """Time taken for post-processing steps after a model inference (e.g. NMS, decoding)."""
 
 
 @attrs.frozen
