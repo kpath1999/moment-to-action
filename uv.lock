@@ -8,8 +8,8 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-05-11T14:55:15.871659999Z"
-exclude-newer-span = "P2D"
+exclude-newer = "2026-05-21T02:13:43.790451639Z"
+exclude-newer-span = "P7D"
 
 [[package]]
 name = "absl-py"

@@ -76,11 +76,20 @@ class ReasoningStage(Stage):
         )
 
     def _build_prompt(self, msg: DetectionMessage) -> str:
+        """Format detection results into an LLM prompt.
+
+        Args:
+            msg: Detection message containing object detections.
+
+        Returns:
+            Formatted prompt string for LLM inference.
+        """
+        top5 = sorted(msg.detections, key=lambda d: d.confidence, reverse=True)[:5]
         lines = [self._system_prompt, "", "Detections:"]
         lines.extend(
-            f"  - {box.label} (confidence: {box.confidence:.2f}, "
-            f"position: [{box.x1:.0f},{box.y1:.0f},{box.x2:.0f},{box.y2:.0f}])"
-            for box in msg.top(5)
+            f"  - {d.label} (confidence: {d.confidence:.2f}, "
+            f"position: [{d.bbox.x1:.0f},{d.bbox.y1:.0f},{d.bbox.x2:.0f},{d.bbox.y2:.0f}])"
+            for d in top5
         )
         lines.append("\nWhat is happening in this scene?")
         return "\n".join(lines)

@@ -182,7 +182,7 @@ class TestComputeBackendConstruction:
 
 @pytest.mark.unit
 class TestInferenceBackendDefaultTorchPolicy:
-    """Tests for InferenceBackend.resolve_torch_policy default."""
+    """Tests for InferenceBackend default method implementations."""
 
     def test_resolve_torch_policy_raises_not_implemented(self) -> None:
         """Default resolve_torch_policy raises NotImplementedError."""
@@ -192,6 +192,35 @@ class TestInferenceBackendDefaultTorchPolicy:
         backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
         with pytest.raises(NotImplementedError, match="does not implement torch policy"):
             backend.resolve_torch_policy("auto")
+
+    def test_load_model_dlc_raises_not_implemented(self) -> None:
+        """Default load_model_dlc raises NotImplementedError on non-DLC backends."""
+        from pathlib import Path
+
+        from moment_to_action.hardware._platforms._runtimes._litert import LiteRTBackend
+        from moment_to_action.hardware._types import ComputeUnit
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        with pytest.raises(NotImplementedError, match="does not support DLC models"):
+            backend.load_model_dlc(Path("/fake/model.dlc"))
+
+    def test_infer_dlc_raises_not_implemented(self) -> None:
+        """Default infer_dlc raises NotImplementedError on non-DLC backends."""
+        from moment_to_action.hardware._platforms._runtimes._litert import LiteRTBackend
+        from moment_to_action.hardware._types import ComputeUnit
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        with pytest.raises(NotImplementedError, match="does not support DLC inference"):
+            backend.infer_dlc("handle", np.zeros((1, 3, 640, 640), dtype=np.float32))
+
+    def test_unload_dlc_raises_not_implemented(self) -> None:
+        """Default unload_dlc raises NotImplementedError on non-DLC backends."""
+        from moment_to_action.hardware._platforms._runtimes._litert import LiteRTBackend
+        from moment_to_action.hardware._types import ComputeUnit
+
+        backend = LiteRTBackend(compute_unit=ComputeUnit.CPU)
+        with pytest.raises(NotImplementedError, match="does not support DLC unloading"):
+            backend.unload_dlc("handle")
 
 
 @pytest.mark.unit
@@ -288,6 +317,91 @@ class TestComputeBackendDelegation:
                     mock_backend.resolve_torch_policy.assert_called_once_with("auto")
                     assert policy.device == "cpu"
                     assert policy.dtype == "float32"
+
+
+@pytest.mark.unit
+class TestComputeBackendDLCDelegation:
+    """Test ComputeBackend DLC-specific delegation to platform backend."""
+
+    def _patched_backend(self) -> tuple[ComputeBackend, MagicMock]:
+        """Return a ComputeBackend wired to a MagicMock platform backend."""
+        with patch("moment_to_action.hardware._backend.detect_platform"):
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
+                with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
+                    mock_pm.return_value = MagicMock()
+                    inner = MagicMock()
+                    mock_be.return_value = inner
+                    inner.get_supported_unit.return_value = ComputeUnit.CPU
+                    return ComputeBackend(), inner
+
+    def test_load_model_dlc_delegates(self) -> None:
+        """load_model_dlc() delegates to platform backend."""
+        from pathlib import Path
+
+        with patch("moment_to_action.hardware._backend.detect_platform"):
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
+                with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
+                    mock_pm.return_value = MagicMock()
+                    inner = MagicMock()
+                    mock_be.return_value = inner
+                    inner.get_supported_unit.return_value = ComputeUnit.CPU
+                    inner.load_model_dlc.return_value = "dlc_handle"
+
+                    backend = ComputeBackend()
+                    path = Path("/fake/model.dlc")
+                    handle = backend.load_model_dlc(path)
+
+                    inner.load_model_dlc.assert_called_once_with(path)
+                    assert handle == "dlc_handle"
+
+    def test_infer_dlc_delegates(self) -> None:
+        """infer_dlc() delegates to platform backend."""
+        with patch("moment_to_action.hardware._backend.detect_platform"):
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
+                with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
+                    mock_pm.return_value = MagicMock()
+                    inner = MagicMock()
+                    mock_be.return_value = inner
+                    inner.get_supported_unit.return_value = ComputeUnit.CPU
+                    expected = np.zeros((1, 10), dtype=np.float32)
+                    inner.infer_dlc.return_value = expected
+
+                    backend = ComputeBackend()
+                    inputs = np.zeros((1, 3, 640, 640), dtype=np.float32)
+                    result = backend.infer_dlc("dlc_handle", inputs)
+
+                    inner.infer_dlc.assert_called_once_with("dlc_handle", inputs)
+                    assert result is expected
+
+    def test_unload_dlc_delegates(self) -> None:
+        """unload_dlc() delegates to platform backend."""
+        with patch("moment_to_action.hardware._backend.detect_platform"):
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
+                with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
+                    mock_pm.return_value = MagicMock()
+                    inner = MagicMock()
+                    mock_be.return_value = inner
+                    inner.get_supported_unit.return_value = ComputeUnit.CPU
+
+                    backend = ComputeBackend()
+                    backend.unload_dlc("dlc_handle")
+
+                    inner.unload_dlc.assert_called_once_with("dlc_handle")
+
+    def test_unload_model_delegates(self) -> None:
+        """unload_model() delegates to platform backend."""
+        with patch("moment_to_action.hardware._backend.detect_platform"):
+            with patch("moment_to_action.hardware._backend._make_resource_monitor") as mock_pm:
+                with patch("moment_to_action.hardware._backend._make_backend") as mock_be:
+                    mock_pm.return_value = MagicMock()
+                    inner = MagicMock()
+                    mock_be.return_value = inner
+                    inner.get_supported_unit.return_value = ComputeUnit.CPU
+
+                    backend = ComputeBackend()
+                    backend.unload_model("onnx_handle")
+
+                    inner.unload_model.assert_called_once_with("onnx_handle")
 
 
 @pytest.mark.unit

@@ -22,9 +22,7 @@ import os
 from typing import TYPE_CHECKING, Any, cast
 
 import attrs
-
-if TYPE_CHECKING:
-    import numpy as np
+import qairt
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
 from moment_to_action.hardware._platforms._runtimes._torch_policy import (
@@ -35,6 +33,10 @@ from moment_to_action.hardware._platforms.qcs6490._onnx import QCS6490ONNXBacken
 from moment_to_action.hardware._types import ComputeUnit
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    import numpy as np
+
     from moment_to_action.hardware._types import TorchExecutionPolicy
 
 logger = logging.getLogger(__name__)
@@ -236,3 +238,41 @@ class QCS6490Backend(InferenceBackend):
         """Load an .onnx model via the ONNX sub-backend."""
         raw = self._onnx_backend.load_model(path)
         return _ModelHandle(raw=raw, backend=self._onnx_backend)
+
+    # ------------------------------------------------------------------
+    # DLC (QAIRT / HTP) interface
+    # ------------------------------------------------------------------
+
+    def load_model_dlc(self, path: Path) -> object:
+        """Load a DLC model and initialize the HTP backend via QAIRT.
+
+        Args:
+            path: Path to the ``.dlc`` model file.
+
+        Returns:
+            An opaque QAIRT model handle — pass it back to :meth:`infer_dlc`.
+        """
+        raw = qairt.load(str(path))
+        raw.initialize(backend="HTP")
+        return raw
+
+    def infer_dlc(self, handle: object, inputs: np.ndarray) -> np.ndarray:
+        """Run inference on a loaded DLC model via QAIRT.
+
+        Args:
+            handle: Handle returned by :meth:`load_model_dlc`.
+            inputs: Input tensor for inference.
+
+        Returns:
+            Output tensor from the model.
+        """
+        result = handle(inputs=inputs)  # type: ignore[operator]
+        return result["output"]  # type: ignore[index]
+
+    def unload_dlc(self, handle: object) -> None:
+        """Release DLC backend resources.
+
+        Args:
+            handle: Handle returned by :meth:`load_model_dlc`.
+        """
+        handle.destroy()  # type: ignore[attr-defined]

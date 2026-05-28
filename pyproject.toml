@@ -145,6 +145,9 @@ ignore = [
     "D104",
     # local imports inside test methods are intentional (isolation, deferred heavy deps)
     "PLC0415",
+    # inline exception messages in test raises are fine
+    "EM101",
+    "TRY003",
 ]
 
 [tool.ruff.lint.pydocstyle]

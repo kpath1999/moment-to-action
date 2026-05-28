@@ -15,6 +15,7 @@ import psutil
 
 if TYPE_CHECKING:
     import os
+    from pathlib import Path
 
     from moment_to_action.hardware import ComputeUnit, ComputeUnitUsageSample, TorchExecutionPolicy
 
@@ -126,3 +127,62 @@ class InferenceBackend(ABC):
         """
         msg = f"{type(self).__name__} does not implement torch policy resolution"
         raise NotImplementedError(msg)
+
+    def load_model_dlc(self, path: Path) -> object:
+        """Load a DLC model and initialize the HTP backend via QAIRT.
+
+        Override in platform backends that support DLC (e.g. QCS6490).
+
+        Args:
+            path: Path to the ``.dlc`` model file.
+
+        Returns:
+            An opaque DLC model handle.
+
+        Raises:
+            NotImplementedError: On platforms that do not support DLC.
+        """
+        msg = f"{type(self).__name__} does not support DLC models"
+        raise NotImplementedError(msg)
+
+    def infer_dlc(self, handle: object, inputs: np.ndarray) -> np.ndarray:
+        """Run inference on a loaded DLC model.
+
+        Override in platform backends that support DLC (e.g. QCS6490).
+
+        Args:
+            handle: Handle returned by :meth:`load_model_dlc`.
+            inputs: Input tensor for inference.
+
+        Returns:
+            Output tensor from the model.
+
+        Raises:
+            NotImplementedError: On platforms that do not support DLC.
+        """
+        msg = f"{type(self).__name__} does not support DLC inference"
+        raise NotImplementedError(msg)
+
+    def unload_dlc(self, handle: object) -> None:
+        """Release DLC backend resources.
+
+        Override in platform backends that support DLC (e.g. QCS6490).
+
+        Args:
+            handle: Handle returned by :meth:`load_model_dlc`.
+
+        Raises:
+            NotImplementedError: On platforms that do not support DLC.
+        """
+        msg = f"{type(self).__name__} does not support DLC unloading"
+        raise NotImplementedError(msg)
+
+    def unload_model(self, handle: object) -> None:  # noqa: B027
+        """Release resources for a model loaded via :meth:`load_model`.
+
+        The default implementation is a no-op: ONNX and LiteRT backends
+        rely on garbage collection.  Override if explicit cleanup is needed.
+
+        Args:
+            handle: Handle returned by :meth:`load_model`.
+        """

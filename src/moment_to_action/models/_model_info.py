@@ -3,6 +3,7 @@ from pathlib import Path
 
 import attrs
 
+from ._base import BaseModel
 from ._sources import ModelSource
 
 
@@ -23,6 +24,10 @@ class ModelInfo:
 
     variants: dict[str, ModelSource]
     """Dictionary mapping variant names to their respective sources."""
+
+    model_class: type[BaseModel]
+    """Concrete model class to instantiate when
+    :meth:`~moment_to_action.models.ModelManager.get_model` is called."""
 
 
 @attrs.frozen

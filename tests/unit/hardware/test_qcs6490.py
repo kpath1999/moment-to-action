@@ -644,3 +644,61 @@ class TestQCS6490ResourceMonitor:
             mock_litert_accel.load_model.assert_called_once_with("/tmp/model.tflite")
             # CPU backend should NOT be called — accel succeeded.
             mock_litert_cpu.load_model.assert_not_called()
+
+
+@pytest.mark.unit
+class TestQCS6490DLCMethods:
+    """Tests for QCS6490Backend DLC methods using QAIRT."""
+
+    def _make_cpu_backend(self) -> tuple[QCS6490Backend, MagicMock, MagicMock]:
+        """Return (backend, mock_litert_cpu, mock_onnx) without entering context."""
+        mock_litert_cpu = MagicMock()
+        mock_litert_cpu.get_supported_unit.return_value = ComputeUnit.CPU
+        mock_onnx = MagicMock()
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490LiteRTBackend",
+                return_value=mock_litert_cpu,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490ONNXBackend",
+                return_value=mock_onnx,
+            ),
+        ):
+            return QCS6490Backend(preferred_unit=ComputeUnit.CPU), mock_litert_cpu, mock_onnx
+
+    def test_load_model_dlc_calls_qairt_load_and_initialize(self) -> None:
+        """load_model_dlc() calls qairt.load(str(path)) then raw.initialize(backend='HTP')."""
+        from pathlib import Path
+
+        mock_raw = MagicMock()
+        with patch("moment_to_action.hardware._platforms.qcs6490._backend.qairt") as mock_qairt:
+            mock_qairt.load.return_value = mock_raw
+            backend, _, _ = self._make_cpu_backend()
+            path = Path("/fake/model.dlc")
+            handle = backend.load_model_dlc(path)
+
+        mock_qairt.load.assert_called_once_with(str(path))
+        mock_raw.initialize.assert_called_once_with(backend="HTP")
+        assert handle is mock_raw
+
+    def test_infer_dlc_calls_handle_and_returns_output(self) -> None:
+        """infer_dlc() calls handle(inputs=...) and returns result['output']."""
+        expected = np.zeros((1, 80), dtype=np.float32)
+        mock_handle = MagicMock()
+        mock_handle.return_value = {"output": expected}
+        backend, _, _ = self._make_cpu_backend()
+
+        result = backend.infer_dlc(mock_handle, np.zeros((1, 3, 640, 640), dtype=np.float32))
+
+        mock_handle.assert_called_once()
+        assert result is expected
+
+    def test_unload_dlc_calls_handle_destroy(self) -> None:
+        """unload_dlc() calls handle.destroy()."""
+        mock_handle = MagicMock()
+        backend, _, _ = self._make_cpu_backend()
+
+        backend.unload_dlc(mock_handle)
+
+        mock_handle.destroy.assert_called_once_with()

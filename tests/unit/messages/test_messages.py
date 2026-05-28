@@ -7,15 +7,25 @@ import time
 import numpy as np
 import pytest
 
+from moment_to_action.messages import DetectionMessage
 from moment_to_action.messages.llm import ReasoningMessage
 from moment_to_action.messages.sensor import RawFrameMessage
-from moment_to_action.messages.video import (
-    BoundingBox,
-    DetectionMessage,
-    FrameTensorMessage,
-    VideoClipMessage,
-)
+from moment_to_action.messages.video import FrameTensorMessage, VideoClipMessage
 from moment_to_action.messages.vlm import ClassificationMessage
+from moment_to_action.models.image.detection._types import BoundingBox, Detection
+
+
+def _make_detection(
+    label: str = "person",
+    confidence: float = 0.9,
+    x1: float = 0.0,
+    y1: float = 0.0,
+    x2: float = 100.0,
+    y2: float = 100.0,
+) -> Detection:
+    """Build a Detection with given fields."""
+    bbox = BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
+    return Detection(label=label, confidence=confidence, bbox=bbox)
 
 
 @pytest.mark.unit
@@ -126,213 +136,49 @@ class TestFrameTensorMessage:
 
 
 @pytest.mark.unit
-class TestBoundingBox:
-    """Tests for BoundingBox model."""
-
-    def test_boundingbox_construction(self) -> None:
-        """Test BoundingBox construction with valid values."""
-        box = BoundingBox(
-            x1=100.0,
-            y1=150.0,
-            x2=500.0,
-            y2=600.0,
-            confidence=0.95,
-            class_id=0,
-            label="person",
-        )
-        assert box.x1 == 100.0
-        assert box.y1 == 150.0
-        assert box.x2 == 500.0
-        assert box.y2 == 600.0
-        assert box.confidence == 0.95
-        assert box.class_id == 0
-        assert box.label == "person"
-
-    def test_boundingbox_field_types(self) -> None:
-        """Test BoundingBox field types."""
-        box = BoundingBox(
-            x1=50.5,
-            y1=75.25,
-            x2=450.75,
-            y2=550.5,
-            confidence=0.87,
-            class_id=5,
-            label="dog",
-        )
-        assert isinstance(box.x1, float)
-        assert isinstance(box.y1, float)
-        assert isinstance(box.x2, float)
-        assert isinstance(box.y2, float)
-        assert isinstance(box.confidence, float)
-        assert isinstance(box.class_id, int)
-        assert isinstance(box.label, str)
-
-    def test_boundingbox_with_zero_confidence(self) -> None:
-        """Test BoundingBox with zero confidence."""
-        box = BoundingBox(
-            x1=0.0,
-            y1=0.0,
-            x2=100.0,
-            y2=100.0,
-            confidence=0.0,
-            class_id=0,
-            label="unknown",
-        )
-        assert box.confidence == 0.0
-
-    def test_boundingbox_with_full_confidence(self) -> None:
-        """Test BoundingBox with full confidence."""
-        box = BoundingBox(
-            x1=0.0,
-            y1=0.0,
-            x2=100.0,
-            y2=100.0,
-            confidence=1.0,
-            class_id=1,
-            label="car",
-        )
-        assert box.confidence == 1.0
-
-
-@pytest.mark.unit
 class TestDetectionMessage:
     """Tests for DetectionMessage."""
 
-    def test_detection_construction_with_boxes(self) -> None:
-        """Test DetectionMessage construction with bounding boxes."""
-        timestamp = time.time()
-        boxes = [
-            BoundingBox(
-                x1=100.0,
-                y1=150.0,
-                x2=500.0,
-                y2=600.0,
-                confidence=0.95,
-                class_id=0,
-                label="person",
-            ),
-            BoundingBox(
-                x1=550.0,
-                y1=200.0,
-                x2=750.0,
-                y2=650.0,
-                confidence=0.88,
-                class_id=2,
-                label="car",
-            ),
-        ]
-        msg = DetectionMessage(timestamp=timestamp, boxes=boxes)
-        assert msg.timestamp == timestamp
-        assert len(msg.boxes) == 2
-        assert msg.boxes[0].label == "person"
-        assert msg.boxes[1].label == "car"
+    def test_construction_with_detections(self) -> None:
+        """DetectionMessage stores a list of Detection objects."""
+        detections = [_make_detection("person", 0.9), _make_detection("car", 0.8)]
+        msg = DetectionMessage(timestamp=time.time(), detections=detections)
+        assert len(msg.detections) == 2
+        assert msg.detections[0].label == "person"
+        assert msg.detections[1].label == "car"
 
-    def test_detection_construction_empty_boxes(self) -> None:
-        """Test DetectionMessage construction with empty box list."""
-        timestamp = time.time()
-        msg = DetectionMessage(timestamp=timestamp, boxes=[])
-        assert msg.timestamp == timestamp
-        assert len(msg.boxes) == 0
-        assert msg.boxes == []
+    def test_construction_empty_detections(self) -> None:
+        """DetectionMessage with empty list is valid."""
+        msg = DetectionMessage(timestamp=time.time(), detections=[])
+        assert msg.detections == []
 
-    def test_detection_has_detections_true(self) -> None:
-        """Test has_detections property returns True when boxes exist."""
-        timestamp = time.time()
-        boxes = [
-            BoundingBox(
-                x1=0.0,
-                y1=0.0,
-                x2=100.0,
-                y2=100.0,
-                confidence=0.9,
-                class_id=0,
-                label="object",
-            )
-        ]
-        msg = DetectionMessage(timestamp=timestamp, boxes=boxes)
-        assert msg.has_detections is True
+    def test_detection_confidence_preserved(self) -> None:
+        """DetectionMessage preserves detection confidence values."""
+        d = _make_detection("dog", 0.77)
+        msg = DetectionMessage(timestamp=time.time(), detections=[d])
+        assert msg.detections[0].confidence == pytest.approx(0.77)
 
-    def test_detection_has_detections_false(self) -> None:
-        """Test has_detections property returns False when no boxes."""
-        timestamp = time.time()
-        msg = DetectionMessage(timestamp=timestamp, boxes=[])
-        assert msg.has_detections is False
+    def test_detection_bbox_preserved(self) -> None:
+        """DetectionMessage preserves bounding box coordinates."""
+        d = _make_detection(x1=10.0, y1=20.0, x2=100.0, y2=200.0)
+        msg = DetectionMessage(timestamp=time.time(), detections=[d])
+        box = msg.detections[0].bbox
+        assert box.x1 == pytest.approx(10.0)
+        assert box.y1 == pytest.approx(20.0)
+        assert box.x2 == pytest.approx(100.0)
+        assert box.y2 == pytest.approx(200.0)
 
-    def test_detection_top_method(self) -> None:
-        """Test top() method returns highest confidence boxes."""
-        timestamp = time.time()
-        boxes = [
-            BoundingBox(
-                x1=0.0,
-                y1=0.0,
-                x2=100.0,
-                y2=100.0,
-                confidence=0.7,
-                class_id=0,
-                label="low",
-            ),
-            BoundingBox(
-                x1=100.0,
-                y1=100.0,
-                x2=200.0,
-                y2=200.0,
-                confidence=0.95,
-                class_id=1,
-                label="high",
-            ),
-            BoundingBox(
-                x1=200.0,
-                y1=200.0,
-                x2=300.0,
-                y2=300.0,
-                confidence=0.85,
-                class_id=2,
-                label="medium",
-            ),
-        ]
-        msg = DetectionMessage(timestamp=timestamp, boxes=boxes)
-        top_1 = msg.top(1)
-        assert len(top_1) == 1
-        assert top_1[0].label == "high"
-        assert top_1[0].confidence == 0.95
+    def test_isinstance_message(self) -> None:
+        """DetectionMessage is a member of the Message union."""
+        from moment_to_action.messages import Message
 
-    def test_detection_top_method_multiple(self) -> None:
-        """Test top() method with multiple boxes."""
-        timestamp = time.time()
-        boxes = [
-            BoundingBox(
-                x1=0.0,
-                y1=0.0,
-                x2=100.0,
-                y2=100.0,
-                confidence=0.5,
-                class_id=0,
-                label="low",
-            ),
-            BoundingBox(
-                x1=100.0,
-                y1=100.0,
-                x2=200.0,
-                y2=200.0,
-                confidence=0.99,
-                class_id=1,
-                label="highest",
-            ),
-            BoundingBox(
-                x1=200.0,
-                y1=200.0,
-                x2=300.0,
-                y2=300.0,
-                confidence=0.9,
-                class_id=2,
-                label="high",
-            ),
-        ]
-        msg = DetectionMessage(timestamp=timestamp, boxes=boxes)
-        top_2 = msg.top(2)
-        assert len(top_2) == 2
-        assert top_2[0].confidence == 0.99
-        assert top_2[1].confidence == 0.9
+        msg = DetectionMessage(timestamp=time.time(), detections=[])
+        assert isinstance(msg, Message.__args__)  # type: ignore[attr-defined]
+
+    def test_has_latency_ms(self) -> None:
+        """DetectionMessage inherits latency_ms from BaseMessage."""
+        msg = DetectionMessage(timestamp=time.time(), detections=[])
+        assert msg.latency_ms == 0.0
 
 
 @pytest.mark.unit
@@ -465,21 +311,11 @@ class TestMessageModelCopy:
     def test_detection_message_model_copy(self) -> None:
         """Test model_copy on DetectionMessage."""
         timestamp = time.time()
-        boxes = [
-            BoundingBox(
-                x1=0.0,
-                y1=0.0,
-                x2=100.0,
-                y2=100.0,
-                confidence=0.9,
-                class_id=0,
-                label="test",
-            )
-        ]
-        msg = DetectionMessage(timestamp=timestamp, boxes=boxes)
+        detections = [_make_detection("cat", 0.9)]
+        msg = DetectionMessage(timestamp=timestamp, detections=detections)
         updated_msg = msg.model_copy(update={"latency_ms": 25.0})
         assert updated_msg.latency_ms == 25.0
-        assert len(updated_msg.boxes) == 1
+        assert len(updated_msg.detections) == 1
 
     def test_reasoning_message_model_copy(self) -> None:
         """Test model_copy on ReasoningMessage."""

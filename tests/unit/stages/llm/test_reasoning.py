@@ -10,9 +10,24 @@ import time
 import numpy as np
 import pytest
 
+from moment_to_action.messages import DetectionMessage
 from moment_to_action.messages.llm import ReasoningMessage
-from moment_to_action.messages.video import BoundingBox, DetectionMessage
+from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.stages.llm._reasoning import ReasoningStage
+
+
+def _det(
+    label: str,
+    confidence: float,
+    x1: float = 0.0,
+    y1: float = 0.0,
+    x2: float = 100.0,
+    y2: float = 100.0,
+) -> Detection:
+    """Build a Detection with the given fields."""
+    return Detection(
+        label=label, confidence=confidence, bbox=BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
+    )
 
 
 @pytest.mark.unit
@@ -21,67 +36,16 @@ class TestReasoningStage:
 
     @pytest.fixture
     def sample_detection_message(self) -> DetectionMessage:
-        """Create a sample detection message with multiple boxes."""
-        boxes = [
-            BoundingBox(
-                x1=100.0,
-                y1=150.0,
-                x2=500.0,
-                y2=600.0,
-                confidence=0.95,
-                class_id=0,
-                label="person",
-            ),
-            BoundingBox(
-                x1=50.0,
-                y1=200.0,
-                x2=150.0,
-                y2=400.0,
-                confidence=0.87,
-                class_id=1,
-                label="hand",
-            ),
-            BoundingBox(
-                x1=300.0,
-                y1=250.0,
-                x2=400.0,
-                y2=350.0,
-                confidence=0.72,
-                class_id=2,
-                label="face",
-            ),
-            BoundingBox(
-                x1=200.0,
-                y1=100.0,
-                x2=350.0,
-                y2=500.0,
-                confidence=0.65,
-                class_id=0,
-                label="person",
-            ),
-            BoundingBox(
-                x1=450.0,
-                y1=300.0,
-                x2=550.0,
-                y2=450.0,
-                confidence=0.58,
-                class_id=1,
-                label="hand",
-            ),
-            BoundingBox(
-                x1=600.0,
-                y1=500.0,
-                x2=700.0,
-                y2=600.0,
-                confidence=0.42,
-                class_id=3,
-                label="phone",
-            ),
+        """Create a sample detection message with multiple detections."""
+        detections = [
+            _det("person", 0.95, x1=100.0, y1=150.0, x2=500.0, y2=600.0),
+            _det("hand", 0.87, x1=50.0, y1=200.0, x2=150.0, y2=400.0),
+            _det("face", 0.72, x1=300.0, y1=250.0, x2=400.0, y2=350.0),
+            _det("person", 0.65, x1=200.0, y1=100.0, x2=350.0, y2=500.0),
+            _det("hand", 0.58, x1=450.0, y1=300.0, x2=550.0, y2=450.0),
+            _det("phone", 0.42, x1=600.0, y1=500.0, x2=700.0, y2=600.0),
         ]
-        return DetectionMessage(
-            boxes=boxes,
-            timestamp=time.time(),
-        )
+        return DetectionMessage(detections=detections, timestamp=time.time())
 
     def test_reasoning_stage_stub_mode_initialization(self) -> None:
         """Test ReasoningStage initialization in stub mode (no model)."""
@@ -94,21 +58,12 @@ class TestReasoningStage:
     def test_reasoning_stage_stub_mode_full(
         self, sample_detection_message: DetectionMessage
     ) -> None:
-        """Test ReasoningStage in stub mode: initialization and processing.
-
-        Covers initialization without model_path, verifying backend is None,
-        handle is None, and stub response is generated correctly.
-        """
-        # Test 1: Initialize without error
+        """Test ReasoningStage in stub mode: initialization and processing."""
         stage = ReasoningStage()
 
-        # Test 2: Verify _backend is None
         assert stage._backend is None
-
-        # Test 3: Verify _handle is None
         assert stage._handle is None
 
-        # Test 4: Running in stub mode returns ReasoningMessage with stub response
         result = stage.process(sample_detection_message)
 
         assert isinstance(result, ReasoningMessage)
@@ -161,8 +116,7 @@ class TestReasoningStage:
 
         prompt = stage._build_prompt(sample_detection_message)
 
-        # Check for confidence values (formatted to 2 decimals)
-        assert "0.95" in prompt or "0.95" in prompt
+        assert "0.95" in prompt
         assert "confidence:" in prompt.lower()
 
     def test_build_prompt_includes_bounding_box_coordinates(
@@ -173,7 +127,6 @@ class TestReasoningStage:
 
         prompt = stage._build_prompt(sample_detection_message)
 
-        # Check for coordinate information in format [x1, y1, x2, y2]
         assert "position:" in prompt.lower()
         assert "[" in prompt
         assert "]" in prompt
@@ -186,11 +139,9 @@ class TestReasoningStage:
 
         prompt = stage._build_prompt(sample_detection_message)
 
-        # Count detection entries (lines starting with "  - ")
         detection_lines = [line for line in prompt.split("\n") if line.strip().startswith("-")]
 
-        # Should have exactly 5 detections (or fewer if less than 5 available)
-        assert len(detection_lines) == min(5, len(sample_detection_message.boxes))
+        assert len(detection_lines) == min(5, len(sample_detection_message.detections))
 
     def test_build_prompt_detections_ordered_by_confidence(
         self, sample_detection_message: DetectionMessage
@@ -200,19 +151,16 @@ class TestReasoningStage:
 
         prompt = stage._build_prompt(sample_detection_message)
 
-        # Extract confidence scores from prompt
         lines = prompt.split("\n")
         confidences = []
         for line in lines:
             if "confidence:" in line.lower():
-                # Extract confidence value (e.g., "0.95")
                 try:
                     score_str = line.split("confidence:")[-1].split(",")[0].strip()
                     confidences.append(float(score_str))
                 except (ValueError, IndexError):
                     pass
 
-        # Verify confidences are in descending order
         if len(confidences) > 1:
             for i in range(len(confidences) - 1):
                 assert confidences[i] >= confidences[i + 1]
@@ -247,14 +195,10 @@ class TestReasoningStage:
 
         result = stage.process(sample_detection_message)
 
-        # Extract char count from response
         assert result is not None
         assert isinstance(result, ReasoningMessage)
-        response_text = result.response
-        assert "[LLM stub]" in response_text
-
-        # The response should mention the prompt length
-        assert str(len(result.prompt)) in response_text
+        assert "[LLM stub]" in result.response
+        assert str(len(result.prompt)) in result.response
 
     def test_process_returns_reasoning_message(
         self, sample_detection_message: DetectionMessage
@@ -282,7 +226,6 @@ class TestReasoningStage:
         assert isinstance(result, ReasoningMessage)
         assert result.prompt is not None
         assert len(result.prompt) > 0
-        # Prompt should contain system prompt and detections
         assert stage._system_prompt in result.prompt
 
     def test_reasoning_message_preserves_timestamp(
@@ -314,38 +257,23 @@ class TestReasoningStage:
             stage.process(wrong_msg)
 
     def test_reasoning_stage_with_empty_detections(self) -> None:
-        """Test ReasoningStage with DetectionMessage containing no boxes."""
+        """Test ReasoningStage with DetectionMessage containing no detections."""
         stage = ReasoningStage()
 
-        msg = DetectionMessage(
-            boxes=[],
-            timestamp=time.time(),
-        )
+        msg = DetectionMessage(detections=[], timestamp=time.time())
 
         result = stage.process(msg)
 
         assert isinstance(result, ReasoningMessage)
         assert "Detections:" in result.prompt
-        # Should still generate response even with no detections
         assert len(result.response) > 0
 
     def test_reasoning_stage_with_single_detection(self) -> None:
-        """Test ReasoningStage with DetectionMessage containing single box."""
+        """Test ReasoningStage with DetectionMessage containing single detection."""
         stage = ReasoningStage()
 
-        boxes = [
-            BoundingBox(
-                x1=100.0,
-                y1=150.0,
-                x2=500.0,
-                y2=600.0,
-                confidence=0.95,
-                class_id=0,
-                label="person",
-            )
-        ]
         msg = DetectionMessage(
-            boxes=boxes,
+            detections=[_det("person", 0.95, x1=100.0, y1=150.0, x2=500.0, y2=600.0)],
             timestamp=time.time(),
         )
 
@@ -369,14 +297,12 @@ class TestReasoningStage:
 
         stage = ReasoningStage()
 
-        # Use a real metrics collector to get accurate timing
         metrics = MetricsCollector(session_id="test_reasoning_latency")
         with metrics.start_trace():
             result = stage.process(sample_detection_message, metrics=metrics)
 
         assert result is not None
         assert isinstance(result, ReasoningMessage)
-        # With a real metrics collector, latency should be measurable
         assert result.latency_ms >= 0.0
 
     def test_system_prompt_consistency_across_calls(
@@ -400,19 +326,8 @@ class TestReasoningStage:
         """Test _build_prompt with detections having low confidence scores."""
         stage = ReasoningStage()
 
-        boxes = [
-            BoundingBox(
-                x1=100.0,
-                y1=150.0,
-                x2=500.0,
-                y2=600.0,
-                confidence=0.1,
-                class_id=0,
-                label="person",
-            )
-        ]
         msg = DetectionMessage(
-            boxes=boxes,
+            detections=[_det("person", 0.1, x1=100.0, y1=150.0, x2=500.0, y2=600.0)],
             timestamp=time.time(),
         )
 
@@ -429,10 +344,7 @@ class TestReasoningStage:
 
         lines = prompt.split("\n")
 
-        # Should have multiple lines
         assert len(lines) > 1
-
-        # Should have proper structure: system prompt, blank line, detections section, etc.
         assert any("Detections:" in line for line in lines)
         assert any("What is happening" in line for line in lines)
 
@@ -457,12 +369,7 @@ class TestReasoningStage:
             ReasoningStage(model_id=ModelID.YOLO_V8, manager=None)
 
     def test_reasoning_stage_with_model_id_mocked(self) -> None:
-        """Test ReasoningStage initialisation with a model_id (mocked backend + manager).
-
-        Covers the if-model_id branch that constructs a ComputeBackend and
-        loads the model.  Both ComputeBackend and ModelManager are mocked so
-        no real model file is needed.
-        """
+        """Test ReasoningStage initialisation with a model_id (mocked backend + manager)."""
         from pathlib import Path
         from unittest.mock import MagicMock, patch
 
@@ -482,7 +389,6 @@ class TestReasoningStage:
         ):
             stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
 
-        # Backend and handle should be set (not stub mode).
         assert stage._backend is mock_backend
         assert stage._handle is mock_handle
         mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8)

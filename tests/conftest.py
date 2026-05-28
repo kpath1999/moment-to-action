@@ -8,7 +8,20 @@ Custom markers:
 
 from __future__ import annotations
 
+import sys
+
 import pytest
+
+# Pre-mock qairt at module level so it is in sys.modules before any sub-conftest
+# or test module imports the project packages (which transitively import qairt).
+# On real QCS6490 hardware the import succeeds and the mock is never installed.
+if "qairt" not in sys.modules:
+    try:
+        import qairt  # noqa: F401
+    except Exception:  # noqa: BLE001
+        from unittest.mock import MagicMock
+
+        sys.modules["qairt"] = MagicMock()
 
 
 def pytest_configure(config: pytest.Config) -> None:
