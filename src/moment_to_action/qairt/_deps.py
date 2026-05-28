@@ -36,6 +36,10 @@ _DNF_DEPS: list[str] = [
     "clang",
     "libcxx-devel",
     "libcxxabi-devel",
+    # QAIRT's libPyNetRun.so was built against libunwind.so.1; on Fedora that
+    # SONAME is provided by llvm-libunwind, not the nongnu libunwind package
+    # (which ships libunwind.so.8 on Fedora 35+).
+    "llvm-libunwind",
     "flatbuffers",
     "flatbuffers-devel",
     "prename",

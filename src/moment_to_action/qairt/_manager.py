@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -86,7 +88,15 @@ class QairtSDKManager:
     # --- Environment ---
 
     def configure_env(self) -> None:
-        """Set QAIRT_SDK_ROOT in os.environ so ``import qairt`` resolves correctly.
+        """Set QAIRT_SDK_ROOT and pre-load libpython so ``import qairt`` resolves correctly.
+
+        QAIRT's native pybind extension (libPyNetRun) lists libpython3.10.so.1.0 as a
+        NEEDED dependency. When Python is managed by uv its interpreter is a static
+        build, so libpython is not already loaded in the process. The dynamic linker
+        also won't find it via LD_LIBRARY_PATH changes made after process start. We
+        therefore pre-load libpython via its absolute sysconfig path with RTLD_GLOBAL;
+        this registers it in the loaded-libs table under its SONAME, satisfying
+        libPyNetRun's dependency check without any filesystem search.
 
         Raises:
             RuntimeError: If SDK path is not configured.
@@ -96,6 +106,13 @@ class QairtSDKManager:
             raise RuntimeError(_ERR_NOT_INSTALLED)
         _log.info(f"Setting QAIRT_SDK_ROOT={self._sdk_path}")
         os.environ["QAIRT_SDK_ROOT"] = str(self._sdk_path)
+        lib_dir = sysconfig.get_config_var("LIBDIR")
+        lib_name = sysconfig.get_config_var("INSTSONAME")
+        if lib_dir and lib_name:
+            lib_path = Path(lib_dir) / lib_name
+            if lib_path.exists():
+                _log.debug(f"Pre-loading {lib_path} with RTLD_GLOBAL for QAIRT native extensions")
+                ctypes.CDLL(str(lib_path), mode=ctypes.RTLD_GLOBAL)
 
     # --- Operations ---
 
