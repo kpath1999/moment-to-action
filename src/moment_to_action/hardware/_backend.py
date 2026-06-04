@@ -226,7 +226,7 @@ class ComputeBackend:
         """
         return self._backend.load_model_dlc(path)
 
-    def infer_dlc(self, handle: object, inputs: np.ndarray) -> np.ndarray:
+    def infer_dlc(self, handle: object, inputs: np.ndarray) -> dict[str, np.ndarray]:
         """Run inference on a loaded DLC model (delegates to platform backend).
 
         Args:
@@ -234,7 +234,7 @@ class ComputeBackend:
             inputs: Input tensor for inference.
 
         Returns:
-            Output tensor from the model.
+            Mapping of output tensor names to arrays.
 
         Raises:
             NotImplementedError: On platforms that do not support DLC.

@@ -695,16 +695,21 @@ class TestQCS6490DLCMethods:
                 backend.load_model_dlc(Path("/fake/model.dlc"))
 
     def test_infer_dlc_calls_handle_and_returns_output(self) -> None:
-        """infer_dlc() calls handle(inputs=...) and returns result['output']."""
-        expected = np.zeros((1, 80), dtype=np.float32)
+        """infer_dlc() calls handle(inputs=...) and returns the full output dict."""
+        boxes = np.zeros((1, 8400, 4), dtype=np.float32)
+        scores = np.zeros((1, 8400), dtype=np.float32)
+        class_idx = np.zeros((1, 8400), dtype=np.float32)
+        fake_output = {"boxes": boxes, "scores": scores, "class_idx": class_idx}
         mock_handle = MagicMock()
-        mock_handle.return_value = {"output": expected}
+        mock_handle.return_value = fake_output
         backend, _, _ = self._make_cpu_backend()
 
         result = backend.infer_dlc(mock_handle, np.zeros((1, 3, 640, 640), dtype=np.float32))
 
         mock_handle.assert_called_once()
-        assert result is expected
+        assert result.keys() == fake_output.keys()
+        for k, v in fake_output.items():
+            np.testing.assert_array_equal(result[k], v)
 
     def test_unload_dlc_calls_handle_destroy(self) -> None:
         """unload_dlc() calls handle.destroy()."""

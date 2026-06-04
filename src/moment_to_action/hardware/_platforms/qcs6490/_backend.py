@@ -263,7 +263,7 @@ class QCS6490Backend(InferenceBackend):
         raw.initialize(backend="HTP")
         return raw
 
-    def infer_dlc(self, handle: object, inputs: np.ndarray) -> np.ndarray:
+    def infer_dlc(self, handle: object, inputs: np.ndarray) -> dict[str, np.ndarray]:
         """Run inference on a loaded DLC model via QAIRT.
 
         Args:
@@ -271,10 +271,10 @@ class QCS6490Backend(InferenceBackend):
             inputs: Input tensor for inference.
 
         Returns:
-            Output tensor from the model.
+            Mapping of output tensor names to arrays.
         """
         result = handle(inputs=inputs)  # type: ignore[operator]
-        return result["output"]  # type: ignore[index]
+        return {k: result[k] for k in result}  # type: ignore[index]
 
     def unload_dlc(self, handle: object) -> None:
         """Release DLC backend resources.
