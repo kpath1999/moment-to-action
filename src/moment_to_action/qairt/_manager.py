@@ -12,6 +12,7 @@ import sysconfig
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from moment_to_action.hardware._platforms._detection import Platform, detect_platform
 from moment_to_action.qairt._deps import check_system_deps as _check_system_deps
 
 if TYPE_CHECKING:
@@ -28,6 +29,20 @@ _ERR_NOT_INSTALLED = "SDK not installed; run 'm2a qairt install' first"
 _ERR_NOT_INSTALLED_M2A = "SDK not installed via m2a"
 _ERR_FETCH_PATH = "fetch succeeded but SDK path not found under install dir"
 _ERR_ALREADY_INSTALLED = "QAIRT SDK {version} already installed at {path}"
+
+# Maps each Qualcomm platform to the Hexagon DSP version it uses.
+_HEXAGON_VERSION: dict[Platform, str] = {
+    Platform.QCS6490: "hexagon-v68",
+}
+
+# Required DSP search paths per platform that must always be present in ADSP_LIBRARY_PATH.
+# ADSP_LIBRARY_PATH uses ';' as the path separator (not ':').
+# If any required path is missing the DSP runtime may fail to load skel libraries.
+# Automotive embedded Linux (e.g. QCS6490 Ubuntu): /usr/lib/rfsa/adsp and /dsp.
+# Android/standard embedded Linux: /system/lib/rfsa/adsp, /system/vendor/lib/rfsa/adsp, /dsp.
+_REQUIRED_DSP_PATHS: dict[Platform, list[str]] = {
+    Platform.QCS6490: ["/usr/lib/rfsa/adsp", "/dsp"],
+}
 
 
 class QairtSDKManager:
@@ -100,11 +115,15 @@ class QairtSDKManager:
         this registers it in the loaded-libs table under its SONAME, satisfying
         libPyNetRun's dependency check without any filesystem search.
 
-        ADSP_LIBRARY_PATH is prepended with the SDK's ``lib/hexagon-v*/unsigned``
-        directories so that the DSP skel libraries bundled with this SDK version are
-        found before any system-installed skels. A version mismatch between the HTP
-        stub (in the SDK) and the skel (on the device) causes the FastRPC transport
-        CRC check to fail; keeping them in sync prevents that.
+        ADSP_LIBRARY_PATH is built as ``{sdk_skel_dir};{required_paths...}`` for the
+        detected platform (see ``_HEXAGON_VERSION`` and ``_REQUIRED_DSP_PATHS``).
+        ADSP_LIBRARY_PATH uses ``;`` as its path separator (not ``:``). The SDK skel
+        directory is placed first so the bundled skel shadows any system-installed skel,
+        keeping stub/skel versions in sync and preventing the FastRPC CRC32 handshake
+        failure. The required system paths (e.g. ``/usr/lib/rfsa/adsp``, ``/dsp``) are
+        always appended — if any are missing the DSP runtime may fail to load.
+        Platforms not present in ``_HEXAGON_VERSION`` (e.g. x86_64, macOS) skip
+        this step.
 
         Raises:
             RuntimeError: If SDK path is not configured.
@@ -115,14 +134,23 @@ class QairtSDKManager:
         _log.info(f"Setting QAIRT_SDK_ROOT={self._sdk_path}")
         os.environ["QAIRT_SDK_ROOT"] = str(self._sdk_path)
 
-        # Prepend versioned hexagon skel dirs so they shadow any system-installed skels
-        hexagon_dirs = sorted((self._sdk_path / "lib").glob("hexagon-v*/unsigned"))
-        if hexagon_dirs:
-            adsp_paths = ":".join(str(p) for p in hexagon_dirs)
-            existing = os.environ.get("ADSP_LIBRARY_PATH", "")
-            os.environ["ADSP_LIBRARY_PATH"] = f"{adsp_paths}:{existing}" if existing else adsp_paths
-            _log.info(f"Setting ADSP_LIBRARY_PATH={os.environ['ADSP_LIBRARY_PATH']}")
-
+        # Build ADSP_LIBRARY_PATH: SDK skel dir first (to shadow system skels), then
+        # required system paths. ADSP_LIBRARY_PATH uses ';' as separator, not ':'.
+        try:
+            cur_platform = detect_platform()
+            hexagon_ver = _HEXAGON_VERSION.get(cur_platform)
+            required_paths = _REQUIRED_DSP_PATHS.get(cur_platform, [])
+        except RuntimeError:
+            hexagon_ver = None
+            required_paths = []
+        if hexagon_ver is not None:
+            skel_dir = self._sdk_path / "lib" / hexagon_ver / "unsigned"
+            if skel_dir.exists():
+                adsp = ";".join([str(skel_dir), *required_paths])
+                os.environ["ADSP_LIBRARY_PATH"] = adsp
+                _log.info(f"Setting ADSP_LIBRARY_PATH={adsp}")
+            else:
+                _log.warning(f"Hexagon skel dir not found in SDK: {skel_dir}")
         lib_dir = sysconfig.get_config_var("LIBDIR")
         lib_name = sysconfig.get_config_var("INSTSONAME")
         if lib_dir and lib_name:

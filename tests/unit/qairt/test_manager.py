@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from moment_to_action.config import AppConfig
+from moment_to_action.hardware._platforms._detection import Platform
 from moment_to_action.qairt._manager import QairtSDKManager
 
 
@@ -121,20 +122,25 @@ class TestQairtSDKManagerConfigureEnv:
                 os.environ["QAIRT_SDK_ROOT"] = old
 
     def test_configure_env_sets_adsp_library_path(self, tmp_path: Path) -> None:
-        """configure_env prepends hexagon-v*/unsigned dirs to ADSP_LIBRARY_PATH."""
+        """configure_env builds ADSP_LIBRARY_PATH with SDK skel dir then required paths."""
         sdk = tmp_path / "2.45.0.24"
         v68 = sdk / "lib" / "hexagon-v68" / "unsigned"
-        v73 = sdk / "lib" / "hexagon-v73" / "unsigned"
         v68.mkdir(parents=True)
-        v73.mkdir(parents=True)
         mgr = _make_mgr(sdk_path=sdk)
         old_sdk = os.environ.pop("QAIRT_SDK_ROOT", None)
         old_adsp = os.environ.pop("ADSP_LIBRARY_PATH", None)
         try:
-            mgr.configure_env()
+            with patch(
+                "moment_to_action.qairt._manager.detect_platform",
+                return_value=Platform.QCS6490,
+            ):
+                mgr.configure_env()
             adsp = os.environ.get("ADSP_LIBRARY_PATH", "")
-            assert str(v68) in adsp
-            assert str(v73) in adsp
+            # SDK skel dir is first; required system paths follow, separated by ';'
+            assert adsp.startswith(str(v68))
+            assert "/usr/lib/rfsa/adsp" in adsp
+            assert "/dsp" in adsp
+            assert ":" not in adsp
         finally:
             for key, val in [("QAIRT_SDK_ROOT", old_sdk), ("ADSP_LIBRARY_PATH", old_adsp)]:
                 if val is None:
@@ -142,21 +148,21 @@ class TestQairtSDKManagerConfigureEnv:
                 else:
                     os.environ[key] = val
 
-    def test_configure_env_prepends_to_existing_adsp_path(self, tmp_path: Path) -> None:
-        """configure_env prepends SDK paths before any pre-existing ADSP_LIBRARY_PATH."""
+    def test_configure_env_skips_adsp_for_non_qualcomm_platform(self, tmp_path: Path) -> None:
+        """configure_env does not set ADSP_LIBRARY_PATH on platforms without a hexagon version."""
         sdk = tmp_path / "2.45.0.24"
         v68 = sdk / "lib" / "hexagon-v68" / "unsigned"
         v68.mkdir(parents=True)
         mgr = _make_mgr(sdk_path=sdk)
         old_sdk = os.environ.pop("QAIRT_SDK_ROOT", None)
         old_adsp = os.environ.pop("ADSP_LIBRARY_PATH", None)
-        os.environ["ADSP_LIBRARY_PATH"] = "/system/skel"
         try:
-            mgr.configure_env()
-            adsp = os.environ["ADSP_LIBRARY_PATH"]
-            assert adsp.startswith(str(v68))
-            assert "/system/skel" in adsp
-            assert adsp.index(str(v68)) < adsp.index("/system/skel")
+            with patch(
+                "moment_to_action.qairt._manager.detect_platform",
+                return_value=Platform.X86_64,
+            ):
+                mgr.configure_env()
+            assert "ADSP_LIBRARY_PATH" not in os.environ
         finally:
             for key, val in [("QAIRT_SDK_ROOT", old_sdk), ("ADSP_LIBRARY_PATH", old_adsp)]:
                 if val is None:
@@ -164,16 +170,43 @@ class TestQairtSDKManagerConfigureEnv:
                 else:
                     os.environ[key] = val
 
-    def test_configure_env_no_hexagon_dirs_skips_adsp(self, tmp_path: Path) -> None:
-        """configure_env does not set ADSP_LIBRARY_PATH when no hexagon dirs exist."""
+    def test_configure_env_skips_adsp_when_skel_dir_missing(self, tmp_path: Path) -> None:
+        """configure_env skips ADSP_LIBRARY_PATH if the hexagon dir isn't in the SDK."""
         sdk = tmp_path / "2.45.0.24"
         sdk.mkdir()
         (sdk / "lib").mkdir()
+        # No hexagon-v68/unsigned dir created
         mgr = _make_mgr(sdk_path=sdk)
         old_sdk = os.environ.pop("QAIRT_SDK_ROOT", None)
         old_adsp = os.environ.pop("ADSP_LIBRARY_PATH", None)
         try:
-            mgr.configure_env()
+            with patch(
+                "moment_to_action.qairt._manager.detect_platform",
+                return_value=Platform.QCS6490,
+            ):
+                mgr.configure_env()
+            assert "ADSP_LIBRARY_PATH" not in os.environ
+        finally:
+            for key, val in [("QAIRT_SDK_ROOT", old_sdk), ("ADSP_LIBRARY_PATH", old_adsp)]:
+                if val is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = val
+
+    def test_configure_env_skips_adsp_when_detect_platform_fails(self, tmp_path: Path) -> None:
+        """configure_env skips ADSP_LIBRARY_PATH if platform detection raises."""
+        sdk = tmp_path / "2.45.0.24"
+        v68 = sdk / "lib" / "hexagon-v68" / "unsigned"
+        v68.mkdir(parents=True)
+        mgr = _make_mgr(sdk_path=sdk)
+        old_sdk = os.environ.pop("QAIRT_SDK_ROOT", None)
+        old_adsp = os.environ.pop("ADSP_LIBRARY_PATH", None)
+        try:
+            with patch(
+                "moment_to_action.qairt._manager.detect_platform",
+                side_effect=RuntimeError("unknown platform"),
+            ):
+                mgr.configure_env()
             assert "ADSP_LIBRARY_PATH" not in os.environ
         finally:
             for key, val in [("QAIRT_SDK_ROOT", old_sdk), ("ADSP_LIBRARY_PATH", old_adsp)]:
