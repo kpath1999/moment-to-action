@@ -148,6 +148,8 @@ ignore = [
     # inline exception messages in test raises are fine
     "EM101",
     "TRY003",
+    # stub/fixture methods often have unused args to match the required signature
+    "ARG002",
 ]
 
 [tool.ruff.lint.pydocstyle]

@@ -60,8 +60,10 @@ def _make_model_mgr(tmp_path: Path) -> MagicMock:
     model_file = tmp_path / "model.onnx"
     model_file.write_bytes(b"onnx")
     mgr = MagicMock()
-    mgr.get_path.return_value = model_file
-    mock_model = MagicMock()
+    from moment_to_action.models.image.detection._base import ImageDetectionModel
+
+    mock_model = MagicMock(spec=ImageDetectionModel)
+    mock_model.path = model_file
     mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
     mock_model.run.return_value = [np.zeros((1, 10, 4)), np.zeros((1, 10)), np.zeros((1, 10))]
     mgr.get_model.return_value = mock_model
@@ -202,5 +204,31 @@ class TestModelConvertCommand:
         )
         assert qairt_mgr.convert.called
         call_kwargs = qairt_mgr.convert.call_args
+        # arg[0] = model.path, arg[1] = dlc output path
         dlc_path = call_kwargs[0][1]
         assert str(dlc_path).endswith("model.dlc")
+
+    def test_non_image_model_errors(self, tmp_path: Path) -> None:
+        """Exits non-zero when model is not an ImageModel."""
+        calib_dir = tmp_path / "calib"
+        calib_dir.mkdir()
+        output_dir = tmp_path / "out"
+        qairt_mgr = _make_qairt_mgr(available=True)
+        # Plain MagicMock is not an ImageModel
+        non_image_mgr = MagicMock()
+        non_image_mgr.get_model.return_value = MagicMock()
+
+        result = _invoke(
+            [
+                "yolo_v8",
+                "-o",
+                str(output_dir),
+                "--calibration-dir",
+                str(calib_dir),
+            ],
+            tmp_path,
+            non_image_mgr,
+            qairt_mgr,
+        )
+        assert result.exit_code != 0
+        assert "image detection model" in result.output

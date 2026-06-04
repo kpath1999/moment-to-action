@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
 def _remove_all(
     model_mgr: ModelManager,
-    path_manager: object,
     model_registry: dict[ModelID, ModelInfo],
     *,
     skip_confirm: bool,
@@ -24,8 +23,7 @@ def _remove_all(
     """Remove all non-vendored cached model variants.
 
     Args:
-        model_mgr: ModelManager instance for availability checks.
-        path_manager: PathManager instance used for cache removal.
+        model_mgr: ModelManager instance for availability checks and removal.
         model_registry: Registry mapping ModelID to ModelInfo.
         skip_confirm: If False, prompt the user for confirmation before removing.
     """
@@ -38,7 +36,7 @@ def _remove_all(
                 continue
             if not model_mgr.is_available(mid, vkey):
                 continue
-            freed = path_manager.cache.models.remove_variant(mid.value, vkey)  # type: ignore[attr-defined]
+            freed = model_mgr.remove_variant(mid, vkey)
             total_freed += freed
             click.echo(f"Removed {mid.value}/{vkey} ({freed:,} B)")
     click.echo(f"Total freed: {total_freed:,} B")
@@ -82,7 +80,7 @@ def remove(
     mgr = ModelManager(data.path_manager)
 
     if remove_all:
-        _remove_all(mgr, data.path_manager, MODEL_REGISTRY, skip_confirm=skip_confirm)
+        _remove_all(mgr, MODEL_REGISTRY, skip_confirm=skip_confirm)
         return
 
     if model_id is None:
@@ -101,5 +99,5 @@ def remove(
     if not skip_confirm:
         click.confirm(f"Remove cached model {model_id}/{variant}?", abort=True)
 
-    freed = data.path_manager.cache.models.remove_variant(mid.value, variant)
+    freed = mgr.remove_variant(mid, variant)
     click.echo(f"Removed {model_id}/{variant} ({freed:,} B)")

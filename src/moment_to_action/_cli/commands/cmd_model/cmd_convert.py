@@ -10,6 +10,7 @@ import rich_click as click
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.models import DEFAULT_VARIANT_KEY, ModelID, ModelManager
+from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.qairt import QairtSDKManager
 from moment_to_action.utils.cli import GlobalData, pass_global_data
 
@@ -95,12 +96,14 @@ def convert(
         raise click.ClickException(msg)
 
     model_mgr = ModelManager(data.path_manager)
-    input_path = model_mgr.get_path(ModelID(model_id), variant)
     model = model_mgr.get_model(ModelID(model_id), variant=variant)
+    if not isinstance(model, ImageDetectionModel):
+        msg = f"'{model_id}' is not an image detection model."
+        raise click.ClickException(msg)
 
     # Preprocess calibration images (pure numpy — no backend needed)
     raw_images = _load_calibration_images(calibration_dir)
-    prepared_list = [model.prepare(img) for img in raw_images]  # type: ignore[attr-defined]
+    prepared_list = [model.prepare(img) for img in raw_images]
     calibration_data = np.vstack(prepared_list).astype(np.float32)
 
     # Run ONNX model on each calibration image to capture reference outputs
@@ -108,7 +111,7 @@ def convert(
     model.load(backend)
     all_raw: list[list[np.ndarray]] = []
     for i in range(len(calibration_data)):
-        raw = model.run(calibration_data[i : i + 1])  # type: ignore[attr-defined]
+        raw = model.run(calibration_data[i : i + 1])
         all_raw.append(raw)
     model.unload()
 
@@ -124,6 +127,6 @@ def convert(
 
     # Convert to DLC
     dlc_path = output_dir / "model.dlc"
-    qairt_mgr.convert(input_path, dlc_path, calibration_data)
+    qairt_mgr.convert(model.path, dlc_path, calibration_data)
 
     click.echo(f"Converted: {output_dir}")

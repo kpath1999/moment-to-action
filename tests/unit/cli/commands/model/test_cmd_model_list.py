@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -122,3 +123,33 @@ class TestModelListCommand:
         mgr = _make_mgr([status])
         result = _invoke([], tmp_path, mgr)
         assert "yolo_v8" in result.output
+
+    def test_json_flag_exits_zero(self, tmp_path: Path) -> None:
+        """--json exits 0."""
+        mgr = _make_mgr([])
+        result = _invoke(["--json"], tmp_path, mgr)
+        assert result.exit_code == 0
+
+    def test_json_flag_outputs_valid_json(self, tmp_path: Path) -> None:
+        """--json outputs a valid JSON list."""
+        mgr = _make_mgr([])
+        result = _invoke(["--json"], tmp_path, mgr)
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+
+    def test_json_includes_model_fields(self, tmp_path: Path) -> None:
+        """--json rows contain expected keys."""
+        mid = ModelID.YOLO_V8
+        vs = _make_variant_status(mid, "qcs6490", available=True, path=tmp_path, size_bytes=512)
+        info = MODEL_REGISTRY[mid]
+        status = ModelStatus(info=info, variants=[vs], path=tmp_path)
+        mgr = _make_mgr([status])
+        result = _invoke(["--json"], tmp_path, mgr)
+        rows = json.loads(result.output)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["model_id"] == "yolo_v8"
+        assert row["variant"] == "qcs6490"
+        assert "format" in row
+        assert row["status"] == "cached"
+        assert row["size_bytes"] == 512

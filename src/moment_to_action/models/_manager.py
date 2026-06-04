@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.paths import PathManager
-    from moment_to_action.paths._cache._models import ModelCacheContents
+    from moment_to_action.paths._cache._models import CachedModelInfo, ModelCacheContents
 
     from ._base import BaseModel
 
@@ -202,6 +202,36 @@ class ModelManager:
         source = self._get_source(info, variant)
         path = self.get_path(model_id, variant)
         return info.model_class(variant, path, source.format, **model_kwargs)  # type: ignore[call-arg]
+
+    def remove_variant(self, model_id: ModelID, variant: str) -> int:
+        """Remove a specific cached model variant.
+
+        Args:
+            model_id: The ModelID of the model to remove.
+            variant: Variant key to remove.
+
+        Returns:
+            Number of bytes freed.
+
+        Raises:
+            FileNotFoundError: If the variant directory does not exist.
+        """
+        return self._path_manager.cache.models.remove_variant(model_id.value, variant)  # type: ignore[no-any-return]
+
+    def remove_model(self, model_id: ModelID) -> CachedModelInfo:
+        """Remove all cached variants of a model.
+
+        Args:
+            model_id: The ModelID of the model to remove.
+
+        Returns:
+            :class:`~moment_to_action.paths._cache._models.CachedModelInfo`
+            describing the removed model and bytes freed.
+
+        Raises:
+            FileNotFoundError: If the model directory does not exist.
+        """
+        return self._path_manager.cache.models.remove_model(model_id.value)  # type: ignore[no-any-return]
 
     def clear_cache(self) -> ModelCacheContents:
         """Clear all downloaded model files from the cache.

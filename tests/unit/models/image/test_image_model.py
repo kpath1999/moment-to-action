@@ -22,18 +22,45 @@ class TestImageModel:
     def test_abstract_methods_enforced(self) -> None:
         """Subclasses that skip abstract methods cannot be instantiated."""
 
-        class _Incomplete(ImageModel):
+        class _Incomplete(ImageModel[object, object]):
             def load(self, backend: object) -> None:
                 """Load."""
 
             def unload(self) -> None:
                 """Unload."""
 
-            def prepare(self, frame: np.ndarray) -> np.ndarray:
+            def prepare(self, inputs: np.ndarray) -> np.ndarray:
                 """Prepare."""
-                return frame
+                return inputs
 
-            # Missing run and post_proc
+            # Missing run, post_proc, verify_outputs
 
         with pytest.raises(TypeError):
             _Incomplete("v", Path("/x"))  # type: ignore[abstract]
+
+    def test_verify_outputs_abstract_enforced(self) -> None:
+        """Subclass missing verify_outputs cannot be instantiated."""
+
+        class _NoVerify(ImageModel[object, object]):
+            def load(self, backend: object) -> None:
+                """Load."""
+
+            def unload(self) -> None:
+                """Unload."""
+
+            def prepare(self, inputs: np.ndarray) -> np.ndarray:
+                """Prepare."""
+                return inputs
+
+            def run(self, prepared: np.ndarray) -> object:
+                """Run."""
+                return prepared
+
+            def post_proc(self, raw: object) -> list[object]:
+                """Post-process."""
+                return []
+
+            # Missing verify_outputs
+
+        with pytest.raises(TypeError):
+            _NoVerify("v", Path("/x"))  # type: ignore[abstract]

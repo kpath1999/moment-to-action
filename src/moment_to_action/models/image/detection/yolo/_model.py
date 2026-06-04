@@ -204,7 +204,7 @@ class YOLOModel(ImageDetectionModel):
             return self._backend.run(self._handle, prepared)
         return [self._backend.infer_dlc(self._handle, prepared)]
 
-    def post_proc(self, raw: object) -> list[Detection]:  # type: ignore[override]
+    def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
         """Decode YOLOv8 3-output format into detections.
 
         Expects ``raw`` to be a list of three tensors:
@@ -213,15 +213,14 @@ class YOLOModel(ImageDetectionModel):
         - ``outputs[2]``: ``[1, N]`` uint8 — class IDs
 
         Args:
-            raw: Value returned by :meth:`run` (``list[np.ndarray]``).
+            raw: Value returned by :meth:`run`.
 
         Returns:
             Detections above :attr:`confidence_threshold` after NMS, scaled to
             the original frame's pixel coordinates.  Caller must pass the
             original frame size separately (see :meth:`_decode`).
         """
-        outputs = list(raw)  # type: ignore[call-overload]
-        return self._decode(outputs, original_size=None)
+        return self._decode(raw, original_size=None)
 
     def decode(
         self,

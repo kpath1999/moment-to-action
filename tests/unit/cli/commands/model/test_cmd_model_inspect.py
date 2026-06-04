@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -94,3 +95,40 @@ class TestModelInspectCommand:
         mgr.is_available.return_value = False
         _invoke(["yolo_v8", "--variant", "qcs6490"], tmp_path, mgr)
         mgr.is_available.assert_called_once_with(ModelID.YOLO_V8, "qcs6490")
+
+    def test_json_flag_exits_zero(self, tmp_path: Path) -> None:
+        """--json exits 0."""
+        mgr = MagicMock()
+        mgr.is_available.return_value = False
+        result = _invoke(["yolo_v8", "--json"], tmp_path, mgr)
+        assert result.exit_code == 0
+
+    def test_json_flag_outputs_valid_json(self, tmp_path: Path) -> None:
+        """--json outputs a valid JSON object."""
+        mgr = MagicMock()
+        mgr.is_available.return_value = False
+        result = _invoke(["yolo_v8", "--json"], tmp_path, mgr)
+        data = json.loads(result.output)
+        assert isinstance(data, dict)
+
+    def test_json_includes_expected_keys(self, tmp_path: Path) -> None:
+        """--json output includes all expected metadata keys."""
+        mgr = MagicMock()
+        mgr.is_available.return_value = False
+        result = _invoke(["yolo_v8", "--json"], tmp_path, mgr)
+        data = json.loads(result.output)
+        for key in ("model_id", "variant", "source_type", "format", "available_variants", "cached"):
+            assert key in data
+
+    def test_json_cached_fields_present_when_available(self, tmp_path: Path) -> None:
+        """--json shows path/size/sha256 when model is cached."""
+        model_file = tmp_path / "model.onnx"
+        model_file.write_bytes(b"fake_model_content")
+        mgr = MagicMock()
+        mgr.is_available.return_value = True
+        mgr.get_path.return_value = model_file
+        result = _invoke(["yolo_v8", "--json"], tmp_path, mgr)
+        data = json.loads(result.output)
+        assert data["cached"] is True
+        assert data["path"] == str(model_file)
+        assert data["sha256"] is not None

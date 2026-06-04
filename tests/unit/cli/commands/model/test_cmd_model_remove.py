@@ -14,10 +14,9 @@ from click.testing import CliRunner, Result
 from moment_to_action.config import AppConfig
 
 
-def _patched_pm(tmp_path: Path, freed: int = 0) -> MagicMock:
+def _patched_pm(tmp_path: Path) -> MagicMock:
     pm = MagicMock()
     pm.app_config_file = tmp_path / "cfg.json"
-    pm.cache.models.remove_variant.return_value = freed
     return pm
 
 
@@ -54,45 +53,48 @@ class TestModelRemoveCommand:
 
     def test_removes_non_vendored_variant(self, tmp_path: Path) -> None:
         """Non-vendored variant is removed and bytes freed are printed."""
-        pm = _patched_pm(tmp_path, freed=1024)
         mgr = MagicMock()
-        result = _invoke(["yolo_v8", "--variant", "qcs6490", "--yes"], tmp_path, mgr, pm)
+        mgr.remove_variant.return_value = 1024
+        result = _invoke(["yolo_v8", "--variant", "qcs6490", "--yes"], tmp_path, mgr)
         assert result.exit_code == 0
         assert "1,024" in result.output
 
     def test_remove_variant_called(self, tmp_path: Path) -> None:
-        """remove_variant is called with correct model_id and variant."""
-        pm = _patched_pm(tmp_path, freed=512)
+        """ModelManager.remove_variant is called with correct model_id and variant."""
+        from moment_to_action.models import ModelID
+
         mgr = MagicMock()
-        _invoke(["yolo_v8", "--variant", "qcs6490", "--yes"], tmp_path, mgr, pm)
-        pm.cache.models.remove_variant.assert_called_once_with("yolo_v8", "qcs6490")
+        mgr.remove_variant.return_value = 512
+        _invoke(["yolo_v8", "--variant", "qcs6490", "--yes"], tmp_path, mgr)
+        mgr.remove_variant.assert_called_once_with(ModelID.YOLO_V8, "qcs6490")
 
     def test_confirm_prompt_shown_without_yes(self, tmp_path: Path) -> None:
         """Confirmation prompt is shown when --yes is omitted."""
-        pm = _patched_pm(tmp_path, freed=0)
         mgr = MagicMock()
-        result = _invoke(["yolo_v8", "--variant", "qcs6490"], tmp_path, mgr, pm)
+        mgr.remove_variant.return_value = 0
+        result = _invoke(["yolo_v8", "--variant", "qcs6490"], tmp_path, mgr)
         # Without input the prompt aborts
         assert result.exit_code != 0
 
     def test_remove_all_skips_vendored(self, tmp_path: Path) -> None:
         """--all does not attempt to remove vendored variants."""
-        pm = _patched_pm(tmp_path, freed=0)
         mgr = MagicMock()
         mgr.is_available.return_value = False
-        _invoke(["--all", "--yes"], tmp_path, mgr, pm)
+        _invoke(["--all", "--yes"], tmp_path, mgr)
         # remove_variant should not be called for vendored 'default' variant
-        for call in pm.cache.models.remove_variant.call_args_list:
+        for call in mgr.remove_variant.call_args_list:
             assert call[0][1] != "default"
 
     def test_remove_all_removes_cached_non_vendored(self, tmp_path: Path) -> None:
         """--all removes non-vendored variants that are available."""
-        pm = _patched_pm(tmp_path, freed=2048)
+        from moment_to_action.models import ModelID
+
         mgr = MagicMock()
         mgr.is_available.side_effect = lambda _, vkey: vkey == "qcs6490"
-        result = _invoke(["--all", "--yes"], tmp_path, mgr, pm)
+        mgr.remove_variant.return_value = 2048
+        result = _invoke(["--all", "--yes"], tmp_path, mgr)
         assert result.exit_code == 0
-        pm.cache.models.remove_variant.assert_called_with("yolo_v8", "qcs6490")
+        mgr.remove_variant.assert_called_with(ModelID.YOLO_V8, "qcs6490")
 
     def test_no_model_id_without_all_errors(self, tmp_path: Path) -> None:
         """Missing MODEL_ID without --all exits non-zero."""
@@ -108,10 +110,9 @@ class TestModelRemoveCommand:
 
     def test_remove_all_shows_confirmation_prompt(self, tmp_path: Path) -> None:
         """--all without --yes shows confirmation prompt."""
-        pm = _patched_pm(tmp_path, freed=0)
         mgr = MagicMock()
         mgr.is_available.return_value = False
-        result = _invoke(["--all"], tmp_path, mgr, pm)
+        result = _invoke(["--all"], tmp_path, mgr)
         # Without providing input, the prompt aborts
         assert result.exit_code != 0
         # Confirmation text should be in output

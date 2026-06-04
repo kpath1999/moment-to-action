@@ -12,6 +12,7 @@ import rich_click as click
 
 from moment_to_action.hardware import ComputeBackend
 from moment_to_action.models import DEFAULT_VARIANT_KEY, ModelID, ModelManager
+from moment_to_action.models.image._base import ImageModel
 from moment_to_action.utils.cli import GlobalData, pass_global_data
 
 if TYPE_CHECKING:
@@ -86,6 +87,8 @@ def run(
     Loads the model, runs inference on the image, and prints detections as
     JSON or renders bounding boxes onto the image.
 
+    Currently only image models are supported.
+
     \b
     Examples:
       m2a model run yolo_v8 image.jpg
@@ -99,12 +102,16 @@ def run(
 
     mid = ModelID(model_id)
     model = ModelManager(data.path_manager).get_model(mid, variant=variant)
+    if not isinstance(model, ImageModel):
+        msg = f"'{model_id}' is not an image model; run only supports image models currently."
+        raise click.ClickException(msg)
+
     backend = ComputeBackend()
     model.load(backend)
     try:
-        prepared = model.prepare(frame)  # type: ignore[attr-defined]
-        raw = model.run(prepared)  # type: ignore[attr-defined]
-        detections = model.post_proc(raw)  # type: ignore[attr-defined]
+        prepared = model.prepare(frame)
+        raw = model.run(prepared)
+        detections = model.post_proc(raw)
     finally:
         model.unload()
 

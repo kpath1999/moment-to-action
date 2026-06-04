@@ -15,6 +15,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
+from moment_to_action.models.image._base import ImageModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
 
@@ -26,6 +27,15 @@ def _patched_pm(tmp_path: Path) -> MagicMock:
 
 def _make_detection(label: str = "person", conf: float = 0.9) -> Detection:
     return Detection(label=label, confidence=conf, bbox=BoundingBox(10, 20, 100, 200))
+
+
+def _make_mock_model(detections: list[Detection] | None = None) -> MagicMock:
+    """Build an ImageModel mock with canned inference output."""
+    mock_model = MagicMock(spec=ImageModel)
+    mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
+    mock_model.run.return_value = [np.zeros((1, 5, 4))]
+    mock_model.post_proc.return_value = detections if detections is not None else []
+    return mock_model
 
 
 def _invoke(
@@ -52,8 +62,6 @@ def _invoke(
 
 
 def _write_image(path: Path) -> None:
-    import cv2
-
     img = np.zeros((100, 100, 3), dtype=np.uint8)
     cv2.imwrite(str(path), img)
 
@@ -67,10 +75,7 @@ class TestModelRunCommand:
         img_path = tmp_path / "img.jpg"
         _write_image(img_path)
         det = _make_detection()
-        mock_model = MagicMock()
-        mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
-        mock_model.run.return_value = [np.zeros((1, 5, 4))]
-        mock_model.post_proc.return_value = [det]
+        mock_model = _make_mock_model([det])
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
 
@@ -86,10 +91,7 @@ class TestModelRunCommand:
         img_path = tmp_path / "img.jpg"
         _write_image(img_path)
         det = _make_detection()
-        mock_model = MagicMock()
-        mock_model.post_proc.return_value = [det]
-        mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
-        mock_model.run.return_value = [np.zeros((1, 5, 4))]
+        mock_model = _make_mock_model([det])
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
 
@@ -101,10 +103,7 @@ class TestModelRunCommand:
         """--format image writes an output file."""
         img_path = tmp_path / "img.jpg"
         _write_image(img_path)
-        mock_model = MagicMock()
-        mock_model.post_proc.return_value = []
-        mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
-        mock_model.run.return_value = [np.zeros((1, 5, 4))]
+        mock_model = _make_mock_model()
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
 
@@ -121,10 +120,7 @@ class TestModelRunCommand:
         """Default output path is <stem>_detections<ext> next to input."""
         img_path = tmp_path / "smoke.jpg"
         _write_image(img_path)
-        mock_model = MagicMock()
-        mock_model.post_proc.return_value = []
-        mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
-        mock_model.run.return_value = [np.zeros((1, 5, 4))]
+        mock_model = _make_mock_model()
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
 
@@ -143,19 +139,31 @@ class TestModelRunCommand:
         """File that cv2 cannot read as image exits non-zero."""
         bad_img = tmp_path / "bad.jpg"
         bad_img.write_bytes(b"not an image")
-        mock_model = MagicMock()
+        mock_model = _make_mock_model()
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
 
         result = _invoke(["yolo_v8", str(bad_img)], tmp_path, mgr)
         assert result.exit_code != 0
 
+    def test_non_image_model_errors(self, tmp_path: Path) -> None:
+        """Non-ImageModel subclass exits non-zero with a clear error."""
+        img_path = tmp_path / "img.jpg"
+        _write_image(img_path)
+        # Plain MagicMock is not an ImageModel instance
+        mock_model = MagicMock()
+        mgr = MagicMock()
+        mgr.get_model.return_value = mock_model
+
+        result = _invoke(["yolo_v8", str(img_path)], tmp_path, mgr)
+        assert result.exit_code != 0
+        assert "image model" in result.output.lower()
+
     def test_model_unloaded_even_on_error(self, tmp_path: Path) -> None:
         """model.unload() is called even when inference raises."""
         img_path = tmp_path / "img.jpg"
         _write_image(img_path)
-        mock_model = MagicMock()
-        mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
+        mock_model = _make_mock_model()
         mock_model.run.side_effect = RuntimeError("inference failed")
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
@@ -168,10 +176,7 @@ class TestModelRunCommand:
         img_path = tmp_path / "img.jpg"
         _write_image(img_path)
         det = _make_detection(label="car", conf=0.85)
-        mock_model = MagicMock()
-        mock_model.post_proc.return_value = [det]
-        mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
-        mock_model.run.return_value = [np.zeros((1, 5, 4))]
+        mock_model = _make_mock_model([det])
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
 
@@ -183,7 +188,6 @@ class TestModelRunCommand:
         )
         assert result.exit_code == 0
         assert out_path.exists()
-        # Verify the output file is written with annotations
         out_img = cv2.imread(str(out_path))
         assert out_img is not None
         assert out_img.shape == (100, 100, 3)

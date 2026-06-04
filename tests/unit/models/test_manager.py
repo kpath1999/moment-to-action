@@ -346,6 +346,51 @@ class TestClearCache:
 
 
 @pytest.mark.unit
+class TestRemoveVariant:
+    """Tests for remove_variant()."""
+
+    def test_delegates_to_cache_remove_variant(self, path_manager: PathManager) -> None:
+        """remove_variant delegates to path_manager.cache.models.remove_variant."""
+        mgr = ModelManager(path_manager)
+        target = path_manager.cache.models.models_dir / "yolo_v8" / DEFAULT_VARIANT_KEY / "blob.bin"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"x" * 64)
+
+        freed = mgr.remove_variant(ModelID.YOLO_V8, DEFAULT_VARIANT_KEY)
+        assert freed == 64
+        assert not target.exists()
+
+    def test_raises_when_variant_not_cached(self, path_manager: PathManager) -> None:
+        """remove_variant raises FileNotFoundError if the variant directory is absent."""
+        mgr = ModelManager(path_manager)
+        with pytest.raises(FileNotFoundError):
+            mgr.remove_variant(ModelID.YOLO_V8, "nonexistent_variant")
+
+
+@pytest.mark.unit
+class TestRemoveModel:
+    """Tests for remove_model()."""
+
+    def test_delegates_to_cache_remove_model(self, path_manager: PathManager) -> None:
+        """remove_model delegates to path_manager.cache.models.remove_model."""
+        mgr = ModelManager(path_manager)
+        target = path_manager.cache.models.models_dir / "yolo_v8" / DEFAULT_VARIANT_KEY / "blob.bin"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"y" * 128)
+
+        info = mgr.remove_model(ModelID.YOLO_V8)
+        assert info.size_bytes == 128
+        assert info.model_id == "yolo_v8"
+        assert not (path_manager.cache.models.models_dir / "yolo_v8").exists()
+
+    def test_raises_when_model_not_cached(self, path_manager: PathManager) -> None:
+        """remove_model raises FileNotFoundError if the model directory is absent."""
+        mgr = ModelManager(path_manager)
+        with pytest.raises(FileNotFoundError):
+            mgr.remove_model(ModelID.MOBILECLIP_S2)
+
+
+@pytest.mark.unit
 class TestGetModel:
     """Tests for get_model()."""
 

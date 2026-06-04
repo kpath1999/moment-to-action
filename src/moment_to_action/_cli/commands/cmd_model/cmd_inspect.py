@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import TYPE_CHECKING
 
 import rich_click as click
@@ -41,8 +42,15 @@ def _sha256_file(path: Path) -> str:
     show_default=True,
     help="Variant key to inspect.",
 )
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Output as JSON instead of a rich table.",
+)
 @pass_global_data
-def inspect(data: GlobalData, model_id: str, variant: str) -> None:
+def inspect(data: GlobalData, model_id: str, variant: str, *, as_json: bool) -> None:
     r"""Print metadata for a model variant.
 
     Always shows registry metadata: source type, format, and all available
@@ -53,31 +61,60 @@ def inspect(data: GlobalData, model_id: str, variant: str) -> None:
     Examples:
       m2a model inspect yolo_v8
       m2a model inspect yolo_v8 --variant qcs6490
+      m2a model inspect yolo_v8 --json
     """
     mid = ModelID(model_id)
     info = MODEL_REGISTRY[mid]
     mgr = ModelManager(data.path_manager)
+
+    source = info.variants[variant]
+    available = mgr.is_available(mid, variant)
+
+    if available:
+        path = mgr.get_path(mid, variant)
+        size = disk_size(path)
+        path_str = str(path)
+        if path.is_file():
+            sha256 = _sha256_file(path)
+        else:
+            n_files = sum(1 for _ in path.rglob("*") if _.is_file())
+            sha256 = f"directory ({n_files} files)"
+    else:
+        size = None
+        path_str = None
+        sha256 = None
+
+    if as_json:
+        output = {
+            "model_id": mid.value,
+            "variant": variant,
+            "source_type": type(source).__name__,
+            "format": source.format.name,
+            "available_variants": list(info.variants),
+            "cached": available,
+            "size_bytes": size,
+            "path": path_str,
+            "sha256": sha256,
+        }
+        click.echo(json.dumps(output, indent=2))
+        return
 
     console = Console()
     table = Table(title=f"Model: {mid.value} / {variant}")
     table.add_column("Field")
     table.add_column("Value")
 
-    source = info.variants[variant]
     table.add_row("Source type", type(source).__name__)
     table.add_row("Format", source.format.name)
     table.add_row("Available variants", ", ".join(info.variants))
 
-    if mgr.is_available(mid, variant):
-        path = mgr.get_path(mid, variant)
-        size = disk_size(path)
+    if available:
         table.add_row("Size", f"{size:,} B")
-        table.add_row("Path", str(path))
-        if path.is_file():
-            table.add_row("SHA-256", _sha256_file(path))
+        table.add_row("Path", path_str or "")
+        if sha256 and sha256.startswith("directory"):
+            table.add_row("SHA-256", f"[dim]{sha256}[/dim]")
         else:
-            n_files = sum(1 for _ in path.rglob("*") if _.is_file())
-            table.add_row("SHA-256", f"[dim]directory ({n_files} files)[/dim]")
+            table.add_row("SHA-256", sha256 or "")
     else:
         table.add_row("Size", "[dim]not cached[/dim]")
         table.add_row("Path", "[dim]not cached[/dim]")

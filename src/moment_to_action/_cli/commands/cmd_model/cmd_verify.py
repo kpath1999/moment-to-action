@@ -12,6 +12,7 @@ from rich.table import Table
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.models import DEFAULT_VARIANT_KEY, MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.models._formats import ModelFormat
+from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.utils.cli import GlobalData, pass_global_data
 
 if TYPE_CHECKING:
@@ -61,68 +62,6 @@ def _find_dlc_variant(model_id: ModelID) -> str | None:
         if source.format == ModelFormat.DLC:
             return vkey
     return None
-
-
-def _compare_decoded(
-    ref_detections: list[object],
-    act_detections: list[object],
-) -> bool:
-    """Check that actual decoded detections match reference by label set.
-
-    Args:
-        ref_detections: Reference Detection list.
-        act_detections: Actual Detection list.
-
-    Returns:
-        True if the sorted label lists match.
-    """
-    ref_labels = sorted(d.label for d in ref_detections)  # type: ignore[attr-defined]
-    act_labels = sorted(d.label for d in act_detections)  # type: ignore[attr-defined]
-    return ref_labels == act_labels
-
-
-def _check_images(
-    model: object,
-    inputs: np.ndarray,
-    ref_outputs: list[np.ndarray],
-    *,
-    tol: float,
-    is_npu: bool,
-) -> tuple[bool, str]:
-    """Run per-image comparison between model outputs and reference outputs.
-
-    Args:
-        model: Loaded model with ``run`` and ``post_proc`` methods.
-        inputs: Input array of shape (N, C, H, W).
-        ref_outputs: List of reference output arrays, each of shape (N, ...).
-        tol: Max absolute element-wise error allowed for CPU/GPU raw comparison.
-        is_npu: When True, skip raw diff check and compare decoded detections only.
-
-    Returns:
-        Tuple of (passed, fail_reason). ``passed`` is True when all images pass;
-        ``fail_reason`` is an empty string on success, or a description of the
-        first failure encountered.
-    """
-    for i in range(len(inputs)):
-        inp = inputs[i : i + 1]
-        act_raw = model.run(inp)  # type: ignore[attr-defined]
-
-        if not is_npu:
-            for k, (act_t, ref_t) in enumerate(zip(act_raw, ref_outputs, strict=False)):
-                ref_row = ref_t[i : i + 1]
-                max_err = float(
-                    np.max(np.abs(act_t.astype(np.float32) - ref_row.astype(np.float32)))
-                )
-                if max_err > tol:
-                    return False, f"output_{k}[{i}] max_err={max_err:.4f} > tol={tol}"
-
-        ref_raw = [ref_outputs[k][i : i + 1] for k in range(len(ref_outputs))]
-        ref_dets = model.post_proc(ref_raw)  # type: ignore[attr-defined]
-        act_dets = model.post_proc(act_raw)  # type: ignore[attr-defined]
-        if not _compare_decoded(ref_dets, act_dets):
-            return False, f"decoded mismatch at image {i}"
-
-    return True, ""
 
 
 @click.command()
@@ -190,11 +129,15 @@ def verify(
         else:
             model = mgr.get_model(mid, variant=DEFAULT_VARIANT_KEY)
 
+        if not isinstance(model, ImageDetectionModel):
+            results.append((backend_name, False, "model does not support verify"))
+            continue
+
         be = ComputeBackend(unit)
         model.load(be)
         try:
-            pass_all, fail_reason = _check_images(
-                model, inputs, ref_outputs, tol=tol, is_npu=is_npu
+            pass_all, fail_reason = model.verify_outputs(
+                inputs, ref_outputs, tol=tol, is_npu=is_npu
             )
         finally:
             model.unload()

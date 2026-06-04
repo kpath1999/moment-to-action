@@ -14,7 +14,7 @@ from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
 from moment_to_action.models import ModelID
-from moment_to_action.models.image.detection._types import BoundingBox, Detection
+from moment_to_action.models.image.detection._base import ImageDetectionModel
 
 
 def _make_ref_outputs(ref_dir: Path, n_images: int = 2) -> None:
@@ -63,16 +63,10 @@ def _invoke(
                         return CliRunner().invoke(cli, ["model", "verify", *args])
 
 
-def _make_model_mgr(detections: list[Detection] | None = None) -> MagicMock:
-    if detections is None:
-        detections = []
-    mock_model = MagicMock()
-    mock_model.run.return_value = [
-        np.zeros((1, 10, 4), dtype=np.float32),
-        np.zeros((1, 10), dtype=np.float32),
-        np.zeros((1, 10), dtype=np.uint8),
-    ]
-    mock_model.post_proc.return_value = detections
+def _make_model_mgr(*, verify_result: tuple[bool, str] = (True, "")) -> MagicMock:
+    """Build a mock manager whose model passes the ImageDetectionModel isinstance check."""
+    mock_model = MagicMock(spec=ImageDetectionModel)
+    mock_model.verify_outputs.return_value = verify_result
     mgr = MagicMock()
     mgr.get_model.return_value = mock_model
     mgr.is_available.return_value = True
@@ -93,58 +87,34 @@ class TestModelVerifyCommand:
         assert result.exit_code != 0
 
     def test_passes_when_outputs_match(self, tmp_path: Path) -> None:
-        """Exits 0 when model outputs match reference within tolerance."""
+        """Exits 0 when verify_outputs returns (True, '')."""
         variant_dir = tmp_path / "variants" / "default"
         ref_dir = variant_dir / "reference_outputs"
         _make_ref_outputs(ref_dir)
 
-        mgr = _make_model_mgr()
+        mgr = _make_model_mgr(verify_result=(True, ""))
         result = _invoke(["yolo_v8", "--backend", "cpu"], tmp_path, mgr, variant_dir)
         assert result.exit_code == 0
         assert "PASS" in result.output
 
-    def test_fails_when_raw_diff_exceeds_tol(self, tmp_path: Path) -> None:
-        """Exits non-zero when raw element-wise diff exceeds --tol."""
+    def test_fails_when_verify_returns_fail(self, tmp_path: Path) -> None:
+        """Exits non-zero when verify_outputs returns (False, reason)."""
         variant_dir = tmp_path / "variants" / "default"
         ref_dir = variant_dir / "reference_outputs"
         _make_ref_outputs(ref_dir)
 
-        mock_model = MagicMock()
-        mock_model.post_proc.return_value = []
-        # Return outputs that differ significantly from zeros
-        mock_model.run.return_value = [
-            np.ones((1, 10, 4), dtype=np.float32) * 999.0,
-            np.zeros((1, 10), dtype=np.float32),
-            np.zeros((1, 10), dtype=np.uint8),
-        ]
-        mgr = MagicMock()
-        mgr.get_model.return_value = mock_model
-        mgr.is_available.return_value = True
-
-        result = _invoke(
-            ["yolo_v8", "--backend", "cpu", "--tol", "0.001"], tmp_path, mgr, variant_dir
-        )
+        mgr = _make_model_mgr(verify_result=(False, "max_err=999"))
+        result = _invoke(["yolo_v8", "--backend", "cpu"], tmp_path, mgr, variant_dir)
         assert result.exit_code != 0
         assert "FAIL" in result.output
 
-    def test_npu_skips_raw_diff(self, tmp_path: Path) -> None:
-        """NPU backend does not fail on raw diff — decoded comparison only."""
+    def test_npu_backend_uses_dlc_variant(self, tmp_path: Path) -> None:
+        """NPU backend loads the DLC variant."""
         variant_dir = tmp_path / "variants" / "default"
         ref_dir = variant_dir / "reference_outputs"
         _make_ref_outputs(ref_dir)
 
-        mock_model = MagicMock()
-        mock_model.post_proc.return_value = []
-        # NPU returns large raw diff — should still pass (decoded check passes)
-        mock_model.run.return_value = [
-            np.ones((1, 10, 4), dtype=np.float32) * 999.0,
-            np.zeros((1, 10), dtype=np.float32),
-            np.zeros((1, 10), dtype=np.uint8),
-        ]
-        mgr = MagicMock()
-        mgr.get_model.return_value = mock_model
-        mgr.is_available.return_value = True
-
+        mgr = _make_model_mgr(verify_result=(True, ""))
         result = _invoke(["yolo_v8", "--backend", "npu"], tmp_path, mgr, variant_dir)
         assert result.exit_code == 0
         assert "PASS" in result.output
@@ -158,7 +128,6 @@ class TestModelVerifyCommand:
         _make_ref_outputs(ref_dir)
 
         mgr = MagicMock()
-        # Patch MODEL_REGISTRY to return only ONNX variants
         mock_info = MagicMock()
         mock_info.variants = {}
         with _patch(
@@ -169,26 +138,14 @@ class TestModelVerifyCommand:
         assert result.exit_code != 0
         assert "FAIL" in result.output
 
-    def test_decoded_mismatch_fails(self, tmp_path: Path) -> None:
-        """Exits non-zero when decoded detections don't match reference."""
+    def test_non_detection_model_fails_gracefully(self, tmp_path: Path) -> None:
+        """Non-ImageDetectionModel exits non-zero with 'does not support verify'."""
         variant_dir = tmp_path / "variants" / "default"
         ref_dir = variant_dir / "reference_outputs"
         _make_ref_outputs(ref_dir)
 
-        ref_det = Detection(label="cat", confidence=0.8, bbox=BoundingBox(0, 0, 10, 10))
-        act_det = Detection(label="dog", confidence=0.8, bbox=BoundingBox(0, 0, 10, 10))
-
-        call_count = 0
-
-        def _post_proc_side_effect(_raw: object) -> list[Detection]:
-            nonlocal call_count
-            call_count += 1
-            # Alternate: first call returns ref label, second returns different
-            return [ref_det] if call_count % 2 == 1 else [act_det]
-
+        # Plain MagicMock is not an ImageDetectionModel
         mock_model = MagicMock()
-        mock_model.run.return_value = [np.zeros((1, 10, 4)), np.zeros((1, 10)), np.zeros((1, 10))]
-        mock_model.post_proc.side_effect = _post_proc_side_effect
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
         mgr.is_available.return_value = True
@@ -203,7 +160,7 @@ class TestModelVerifyCommand:
         ref_dir = variant_dir / "reference_outputs"
         _make_ref_outputs(ref_dir)
 
-        mgr = _make_model_mgr()
+        mgr = _make_model_mgr(verify_result=(True, ""))
         result = _invoke(["yolo_v8"], tmp_path, mgr, variant_dir)
         assert "CPU" in result.output
         assert "GPU" in result.output
@@ -216,8 +173,7 @@ class TestModelVerifyCommand:
         _make_ref_outputs(ref_dir)
 
         mgr = MagicMock()
-        mgr.get_model.return_value = MagicMock()
-        # is_available returns False — variant exists but not cached
+        mgr.get_model.return_value = MagicMock(spec=ImageDetectionModel)
         mgr.is_available.return_value = False
 
         result = _invoke(["yolo_v8", "--backend", "npu"], tmp_path, mgr, variant_dir)
