@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-05-21T02:13:43.790451639Z"
+exclude-newer = "2026-05-28T13:20:15.730241233Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -1888,6 +1888,7 @@ dependencies = [
     { name = "ai-edge-litert" },
     { name = "attrs" },
     { name = "click" },
+    { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "num2words" },
     { name = "numpy" },
@@ -1997,6 +1998,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.3.1,<9.0.0" },
     { name = "dash", marker = "extra == 'host'", specifier = "==2.12.1" },
     { name = "decorator", marker = "extra == 'host'", specifier = "==4.4.2" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "huggingface-hub", specifier = ">=0.18.0" },
     { name = "invoke", marker = "extra == 'host'", specifier = "==1.7.3" },
     { name = "joblib", marker = "extra == 'host'", specifier = "==1.4.0" },

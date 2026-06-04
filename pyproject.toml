@@ -28,6 +28,7 @@ dependencies = [
     "rich-click>=1.9.7",
     "tensorflow==2.20.0",            # pinned: Python 3.10 max; TF gencode 5.x vs protobuf 6.x suppressed in pytest
     "typing-extensions==4.14.0",     # qairt SDK (qairt-visualizer)
+    "httpx>=0.28.1",
 ]
 
 [project.scripts]
