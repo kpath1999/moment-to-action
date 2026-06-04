@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 import attrs
@@ -56,6 +57,8 @@ def resolve_hugging_face_source(
     Each file in ``source.files`` is a path relative to ``source.hf_subdir`` (or the repo
     root). Files are stored locally under ``variant_dir`` with the same relative structure.
 
+    Reads ``HF_TOKEN`` from the environment for authenticating against private repositories.
+
     Args:
         source: The HuggingFaceSource to resolve.
         variant_dir: The directory where the model variant files are stored.
@@ -75,6 +78,9 @@ def resolve_hugging_face_source(
         if not download:
             return None
 
+        token = os.environ.get("HF_TOKEN")
+        auth_headers = {"Authorization": f"Bearer {token}"} if token else {}
+
         # Run downloads
         # TODO(#102): This could easily be parallelized if there are multiple files
         for filename in missing_files:
@@ -89,13 +95,15 @@ def resolve_hugging_face_source(
             )
 
             # Get the expected file size for progress tracking
-            metadata = get_hf_file_metadata(url)
+            metadata = get_hf_file_metadata(url, token=token)
             file_size = metadata.size
 
             # Store at the relative path under variant_dir, creating parent dirs as needed
             target_path = variant_dir / filename
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            download_file(url, target_path, show_progress=progress, total=file_size)
+            download_file(
+                url, target_path, show_progress=progress, total=file_size, headers=auth_headers
+            )
 
     # All files should now exist (either they already existed or we just downloaded them)
     for filename in source.files:
