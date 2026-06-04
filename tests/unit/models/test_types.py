@@ -138,7 +138,7 @@ class TestHuggingFaceSource:
             HuggingFaceSource()  # type: ignore[call-arg]
 
     def test_stores_fields(self) -> None:
-        """Constructor stores all fields."""
+        """Constructor stores all fields; hf_subdir defaults to None."""
         s = HuggingFaceSource(
             format=ModelFormat.ONNX,
             hf_repo_id="org/repo",
@@ -148,6 +148,18 @@ class TestHuggingFaceSource:
         assert s.hf_repo_id == "org/repo"
         assert s.files == ["a", "b"]
         assert s.revision == "abc123"
+        assert s.hf_subdir is None
+
+    def test_hf_subdir_stored(self) -> None:
+        """hf_subdir is stored when provided."""
+        s = HuggingFaceSource(
+            format=ModelFormat.ONNX,
+            hf_repo_id="org/repo",
+            files=["model.bin"],
+            revision="abc123",
+            hf_subdir="mydir",
+        )
+        assert s.hf_subdir == "mydir"
 
 
 # ---------------------------------------------------------------------------

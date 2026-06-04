@@ -156,7 +156,7 @@ class YOLOModel(ImageDetectionModel):
         if self._format is ModelFormat.ONNX:
             self._handle = backend.load_model(self._path)
         else:
-            self._handle = backend.load_model_dlc(self._path)
+            self._handle = backend.load_model_dlc(self._path / "model.dlc")
         self._backend = backend
 
     def unload(self) -> None:

@@ -26,7 +26,7 @@ def onnx_model() -> YOLOModel:
 @pytest.fixture
 def dlc_model() -> YOLOModel:
     """Return an unloaded YOLOModel in DLC format."""
-    return YOLOModel("qcs6490", Path("/fake/model.dlc"), ModelFormat.DLC)
+    return YOLOModel("qcs6490", Path("/fake/qcs6490"), ModelFormat.DLC)
 
 
 @pytest.fixture
@@ -120,7 +120,7 @@ class TestYOLOModelLoadUnload:
     ) -> None:
         """DLC load() calls backend.load_model_dlc with the model path."""
         dlc_model.load(mock_backend)
-        mock_backend.load_model_dlc.assert_called_once_with(Path("/fake/model.dlc"))
+        mock_backend.load_model_dlc.assert_called_once_with(Path("/fake/qcs6490/model.dlc"))
 
     def test_load_sets_backend(self, onnx_model: YOLOModel, mock_backend: MagicMock) -> None:
         """load() stores the backend on _backend."""
