@@ -181,6 +181,65 @@ class TestResolveHuggingFace:
             with pytest.raises(RuntimeError, match="Failed to download"):
                 resolve_hugging_face_source(s, tmp_path, download=True)
 
+    def test_hf_subdir_prefixes_download_url(self, tmp_path: Path) -> None:
+        """When hf_subdir is set, hf_hub_url receives the subdir-prefixed path."""
+        s = HuggingFaceSource(
+            format=ModelFormat.ONNX,
+            hf_repo_id="org/repo",
+            hf_subdir="mydir",
+            files=["model.bin"],
+            revision="rev",
+        )
+
+        def fake_dl(_url: str, dest: Path, **_kwargs: object) -> None:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text("got")
+
+        meta = mock.MagicMock()
+        meta.size = 10
+
+        with (
+            mock.patch(
+                "moment_to_action.models._sources._hugging_face.hf_hub_url",
+                return_value="https://hf.co/file",
+            ) as mock_url,
+            mock.patch(
+                "moment_to_action.models._sources._hugging_face.get_hf_file_metadata",
+                return_value=meta,
+            ),
+            mock.patch(
+                "moment_to_action.models._sources._hugging_face.download_file",
+                side_effect=fake_dl,
+            ),
+        ):
+            result = resolve_hugging_face_source(s, tmp_path, download=True, progress=False)
+
+        assert result == tmp_path
+        mock_url.assert_called_once_with(
+            repo_id="org/repo", filename="mydir/model.bin", revision="rev"
+        )
+
+    def test_hf_subdir_preserves_local_structure(self, tmp_path: Path) -> None:
+        """Nested files under hf_subdir are stored with relative structure in variant_dir."""
+        s = HuggingFaceSource(
+            format=ModelFormat.ONNX,
+            hf_repo_id="org/repo",
+            hf_subdir="mydir",
+            files=["model.bin", "ref/out.bin"],
+            revision="rev",
+        )
+        (tmp_path / "model.bin").write_text("ok")
+        (tmp_path / "ref").mkdir()
+        (tmp_path / "ref" / "out.bin").write_text("ok")
+
+        with mock.patch("moment_to_action.models._sources._hugging_face.download_file") as mock_dl:
+            result = resolve_hugging_face_source(s, tmp_path)
+
+        assert result == tmp_path
+        mock_dl.assert_not_called()
+        assert (tmp_path / "model.bin").exists()
+        assert (tmp_path / "ref" / "out.bin").exists()
+
 
 # ---------------------------------------------------------------------------
 # resolve_model_source dispatch
