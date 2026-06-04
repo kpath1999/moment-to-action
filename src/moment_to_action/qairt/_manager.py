@@ -90,7 +90,7 @@ class QairtSDKManager:
     # --- Environment ---
 
     def configure_env(self) -> None:
-        """Set QAIRT_SDK_ROOT and pre-load libpython so ``import qairt`` resolves correctly.
+        """Set QAIRT_SDK_ROOT, ADSP_LIBRARY_PATH, and pre-load libpython.
 
         QAIRT's native pybind extension (libPyNetRun) lists libpython3.10.so.1.0 as a
         NEEDED dependency. When Python is managed by uv its interpreter is a static
@@ -100,6 +100,12 @@ class QairtSDKManager:
         this registers it in the loaded-libs table under its SONAME, satisfying
         libPyNetRun's dependency check without any filesystem search.
 
+        ADSP_LIBRARY_PATH is prepended with the SDK's ``lib/hexagon-v*/unsigned``
+        directories so that the DSP skel libraries bundled with this SDK version are
+        found before any system-installed skels. A version mismatch between the HTP
+        stub (in the SDK) and the skel (on the device) causes the FastRPC transport
+        CRC check to fail; keeping them in sync prevents that.
+
         Raises:
             RuntimeError: If SDK path is not configured.
         """
@@ -108,6 +114,15 @@ class QairtSDKManager:
             raise RuntimeError(_ERR_NOT_INSTALLED)
         _log.info(f"Setting QAIRT_SDK_ROOT={self._sdk_path}")
         os.environ["QAIRT_SDK_ROOT"] = str(self._sdk_path)
+
+        # Prepend versioned hexagon skel dirs so they shadow any system-installed skels
+        hexagon_dirs = sorted((self._sdk_path / "lib").glob("hexagon-v*/unsigned"))
+        if hexagon_dirs:
+            adsp_paths = ":".join(str(p) for p in hexagon_dirs)
+            existing = os.environ.get("ADSP_LIBRARY_PATH", "")
+            os.environ["ADSP_LIBRARY_PATH"] = f"{adsp_paths}:{existing}" if existing else adsp_paths
+            _log.info(f"Setting ADSP_LIBRARY_PATH={os.environ['ADSP_LIBRARY_PATH']}")
+
         lib_dir = sysconfig.get_config_var("LIBDIR")
         lib_name = sysconfig.get_config_var("INSTSONAME")
         if lib_dir and lib_name:
