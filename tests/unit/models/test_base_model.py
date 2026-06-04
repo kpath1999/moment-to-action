@@ -5,12 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 from moment_to_action.models._base import BaseModel
 
 
-class _ConcreteModel(BaseModel):
+class _ConcreteModel(BaseModel[object, object, object, object]):
     """Minimal concrete subclass for testing."""
 
     def load(self, backend: object) -> None:
@@ -20,6 +21,29 @@ class _ConcreteModel(BaseModel):
     def unload(self) -> None:
         """Unload the model."""
         self._backend = None
+
+    def prepare(self, inputs: object) -> object:
+        """Prepare inputs."""
+        return inputs
+
+    def run(self, prepared: object) -> object:
+        """Run forward pass."""
+        return prepared
+
+    def post_proc(self, raw: object) -> list[object]:
+        """Post-process outputs."""
+        return []
+
+    def verify_outputs(
+        self,
+        inputs: np.ndarray,
+        ref_outputs: list[np.ndarray],
+        *,
+        tol: float,
+        is_npu: bool,
+    ) -> tuple[bool, str]:
+        """Verify outputs."""
+        return True, ""
 
 
 @pytest.mark.unit
@@ -31,11 +55,30 @@ class TestBaseModel:
         with pytest.raises(TypeError):
             BaseModel("default", Path("/x"))  # type: ignore[abstract]
 
+    def test_missing_abstracts_prevent_instantiation(self) -> None:
+        """Subclass missing prepare/run/post_proc/verify_outputs cannot be instantiated."""
+
+        class _Incomplete(BaseModel[object, object, object, object]):
+            def load(self, backend: object) -> None:
+                """Load."""
+
+            def unload(self) -> None:
+                """Unload."""
+
+        with pytest.raises(TypeError):
+            _Incomplete("v", Path("/x"))  # type: ignore[abstract]
+
     def test_init_stores_variant_and_path(self) -> None:
         """__init__ stores _variant and _path."""
         model = _ConcreteModel("myvariant", Path("/some/path.onnx"))
         assert model._variant == "myvariant"
         assert model._path == Path("/some/path.onnx")
+
+    def test_path_property_returns_path(self) -> None:
+        """Path property exposes _path read-only."""
+        p = Path("/some/model.onnx")
+        model = _ConcreteModel("default", p)
+        assert model.path == p
 
     def test_backend_starts_as_none(self) -> None:
         """_backend is None before load() is called."""
@@ -161,7 +204,7 @@ class TestBaseModelDel:
     def test_del_suppresses_unload_exceptions(self) -> None:
         """__del__ does not propagate exceptions from unload()."""
 
-        class _FailingModel(BaseModel):
+        class _FailingModel(BaseModel[object, object, object, object]):
             def load(self, backend: object) -> None:
                 """Load."""
                 self._backend = backend  # type: ignore[assignment]
@@ -169,6 +212,29 @@ class TestBaseModelDel:
             def unload(self) -> None:
                 """Always raises."""
                 raise RuntimeError("unload failed")
+
+            def prepare(self, inputs: object) -> object:
+                """Prepare."""
+                return inputs
+
+            def run(self, prepared: object) -> object:
+                """Run."""
+                return prepared
+
+            def post_proc(self, raw: object) -> list[object]:
+                """Post-process."""
+                return []
+
+            def verify_outputs(
+                self,
+                inputs: np.ndarray,
+                ref_outputs: list[np.ndarray],
+                *,
+                tol: float,
+                is_npu: bool,
+            ) -> tuple[bool, str]:
+                """Verify."""
+                return True, ""
 
         model = _FailingModel("default", Path("/x"))
         model.load(MagicMock())

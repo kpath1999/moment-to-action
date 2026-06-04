@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import warnings
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from typing_extensions import Self
 
@@ -13,21 +13,37 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
+    import numpy as np
+
     from moment_to_action.hardware import ComputeBackend
 
+_InputT = TypeVar("_InputT")
+_PreparedT = TypeVar("_PreparedT")
+_RawOutputT = TypeVar("_RawOutputT")
+_ResultT = TypeVar("_ResultT")
 
-class BaseModel(ABC):
+
+class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
     """Abstract base for all loadable, runnable models.
 
-    Subclasses implement :meth:`load` and :meth:`unload` for lifecycle management.
-    Image-specific inference methods (``prepare``, ``run``, ``post_proc``) are
-    declared on :class:`~moment_to_action.models.image.ImageModel`.
+    Every model follows a three-stage inference pipeline::
 
-    Use :meth:`loaded` as a context manager to automatically pair load/unload:
+        prepare(inputs) -> PreparedT
+        run(prepared)   -> RawOutputT
+        post_proc(raw)  -> list[ResultT]
+
+    Plus a ``verify_outputs`` method for correctness checking against reference
+    data.  Use :meth:`loaded` as a context manager to pair load/unload:
 
     Example:
-        >>> with model_mgr.get_model(ModelID.YOLO_V8).loaded(backend) as model:
-        ...     detections = model.decode(model.run(model.prepare(frame)), frame.shape[:2])
+        >>> with model_mgr.get_model(ModelID.YOLO_V8).loaded(backend) as m:
+        ...     results = m.post_proc(m.run(m.prepare(frame)))
+
+    Type parameters:
+        _InputT: Raw input type accepted by :meth:`prepare`.
+        _PreparedT: Output of :meth:`prepare` / input to :meth:`run`.
+        _RawOutputT: Output of :meth:`run` / input to :meth:`post_proc`.
+        _ResultT: Element type returned by :meth:`post_proc`.
 
     Args:
         variant: Variant name used to identify this instance in the registry.
@@ -46,9 +62,77 @@ class BaseModel(ABC):
         self._backend: ComputeBackend | None = None
 
     @property
+    def path(self) -> Path:
+        """Filesystem path to the model weights file (read-only)."""
+        return self._path
+
+    @property
     def is_loaded(self) -> bool:
         """True if the model has been loaded onto a backend, False otherwise."""
         return self._backend is not None
+
+    @abstractmethod
+    def prepare(self, inputs: _InputT) -> _PreparedT:
+        """Preprocess raw inputs for inference.
+
+        Args:
+            inputs: Raw input to preprocess.
+
+        Returns:
+            Preprocessed data ready to pass to :meth:`run`.
+        """
+        ...
+
+    @abstractmethod
+    def run(self, prepared: _PreparedT) -> _RawOutputT:
+        """Run forward pass on preprocessed inputs.
+
+        Args:
+            prepared: Output of :meth:`prepare`.
+
+        Returns:
+            Raw model output to pass to :meth:`post_proc`.
+
+        Raises:
+            RuntimeError: If the model has not been loaded.
+        """
+        ...
+
+    @abstractmethod
+    def post_proc(self, raw: _RawOutputT) -> list[_ResultT]:
+        """Decode raw model output into structured results.
+
+        Args:
+            raw: Output returned by :meth:`run`.
+
+        Returns:
+            List of structured results (element type narrowed by subclasses).
+        """
+        ...
+
+    @abstractmethod
+    def verify_outputs(
+        self,
+        inputs: np.ndarray,
+        ref_outputs: list[np.ndarray],
+        *,
+        tol: float,
+        is_npu: bool,
+    ) -> tuple[bool, str]:
+        """Verify model outputs against reference data.
+
+        Args:
+            inputs: Input array of shape ``(N, ...)``.
+            ref_outputs: List of reference output arrays, each of shape ``(N, ...)``.
+            tol: Max absolute element-wise error threshold for raw comparison.
+            is_npu: When True, skip raw diff and compare decoded outputs only.
+
+        Returns:
+            ``(passed, fail_reason)``.  ``passed`` is True when all samples
+            pass; ``fail_reason`` is empty on success or describes the first
+            failure.
+        """
+        ...
 
     @abstractmethod
     def load(self, backend: ComputeBackend) -> None:
@@ -82,7 +166,7 @@ class BaseModel(ABC):
 
         Example:
             >>> with model.loaded(backend) as m:
-            ...     result = m.run(m.prepare(frame))
+            ...     result = m.post_proc(m.run(m.prepare(frame)))
         """
         self.load(backend)
         try:

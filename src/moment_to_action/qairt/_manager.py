@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 from moment_to_action.qairt._deps import check_system_deps as _check_system_deps
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from moment_to_action.config import AppConfig
     from moment_to_action.paths import PathManager
 
@@ -219,6 +221,49 @@ class QairtSDKManager:
         else:
             _log.info("Verification passed: no issues found")
         return issues
+
+    def convert(
+        self,
+        input_path: Path,
+        output_path: Path,
+        calibration_data: np.ndarray,
+        *,
+        stream: bool = True,  # noqa: ARG002
+    ) -> Path:
+        """Convert an ONNX model to quantized DLC using the QAIRT Python API.
+
+        Builds a CalibrationConfig from ``calibration_data`` and calls
+        ``qairt.convert`` to produce an INT8-quantized ``qairt.Model``, then
+        saves it via ``model.save``.  Does NOT call ``qairt.compile`` —
+        that produces a device-specific ``.bin``, not a portable ``.dlc``.
+
+        Args:
+            input_path: Path to the source ONNX model.
+            output_path: Destination path for the ``.dlc`` output file.
+            calibration_data: Float32 array of shape ``(N, C, H, W)`` —
+                stacked preprocessed calibration images used for INT8
+                quantization.
+            stream: Unused; kept for API symmetry with ``install`` and
+                ``verify``.
+
+        Returns:
+            Resolved output path.
+
+        Raises:
+            RuntimeError: If the SDK is not available or conversion fails.
+        """
+        if not self.is_available:
+            raise RuntimeError(_ERR_NOT_INSTALLED)
+        import qairt  # noqa: PLC0415
+
+        try:
+            calib_config = qairt.CalibrationConfig(dataset=calibration_data)
+            dlc = qairt.convert(str(input_path), calibration_config=calib_config)
+            dlc.save(str(output_path))
+        except Exception as exc:
+            msg = f"QAIRT conversion failed: {exc}"
+            raise RuntimeError(msg) from exc
+        return output_path.resolve()
 
     def clean(self) -> Path:
         """Remove the SDK directory.

@@ -192,7 +192,7 @@ class TestBasePreprocessor:
                 self._buffers.register("buffer2", BufferSpec(shape=(10,), dtype=np.int32))
                 self._buffers.register("buffer3", BufferSpec(shape=(3, 3), dtype=np.uint8))
 
-            def _process(self, data: np.ndarray) -> dict:  # noqa: ARG002
+            def _process(self, data: np.ndarray) -> dict:
                 # Just return a dict with buffer info
                 return {"status": "ok"}
 
