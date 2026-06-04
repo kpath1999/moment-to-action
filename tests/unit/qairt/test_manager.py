@@ -122,7 +122,7 @@ class TestQairtSDKManagerConfigureEnv:
                 os.environ["QAIRT_SDK_ROOT"] = old
 
     def test_configure_env_sets_adsp_library_path(self, tmp_path: Path) -> None:
-        """configure_env sets ADSP_LIBRARY_PATH to the platform-specific hexagon dir."""
+        """configure_env builds ADSP_LIBRARY_PATH with SDK skel dir then required paths."""
         sdk = tmp_path / "2.45.0.24"
         v68 = sdk / "lib" / "hexagon-v68" / "unsigned"
         v68.mkdir(parents=True)
@@ -135,7 +135,12 @@ class TestQairtSDKManagerConfigureEnv:
                 return_value=Platform.QCS6490,
             ):
                 mgr.configure_env()
-            assert os.environ.get("ADSP_LIBRARY_PATH") == str(v68)
+            adsp = os.environ.get("ADSP_LIBRARY_PATH", "")
+            # SDK skel dir is first; required system paths follow, separated by ';'
+            assert adsp.startswith(str(v68))
+            assert "/usr/lib/rfsa/adsp" in adsp
+            assert "/dsp" in adsp
+            assert ":" not in adsp
         finally:
             for key, val in [("QAIRT_SDK_ROOT", old_sdk), ("ADSP_LIBRARY_PATH", old_adsp)]:
                 if val is None:

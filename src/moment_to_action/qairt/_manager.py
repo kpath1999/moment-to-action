@@ -31,11 +31,17 @@ _ERR_FETCH_PATH = "fetch succeeded but SDK path not found under install dir"
 _ERR_ALREADY_INSTALLED = "QAIRT SDK {version} already installed at {path}"
 
 # Maps each Qualcomm platform to the Hexagon DSP version it uses.
-# The FastRPC runtime on these devices does NOT split ADSP_LIBRARY_PATH on ':';
-# it treats the entire value as one literal directory. We therefore set it to
-# exactly the one versioned directory that matches the target SoC.
 _HEXAGON_VERSION: dict[Platform, str] = {
     Platform.QCS6490: "hexagon-v68",
+}
+
+# Required DSP search paths per platform that must always be present in ADSP_LIBRARY_PATH.
+# ADSP_LIBRARY_PATH uses ';' as the path separator (not ':').
+# If any required path is missing the DSP runtime may fail to load skel libraries.
+# Automotive embedded Linux (e.g. QCS6490 Ubuntu): /usr/lib/rfsa/adsp and /dsp.
+# Android/standard embedded Linux: /system/lib/rfsa/adsp, /system/vendor/lib/rfsa/adsp, /dsp.
+_REQUIRED_DSP_PATHS: dict[Platform, list[str]] = {
+    Platform.QCS6490: ["/usr/lib/rfsa/adsp", "/dsp"],
 }
 
 
@@ -109,13 +115,15 @@ class QairtSDKManager:
         this registers it in the loaded-libs table under its SONAME, satisfying
         libPyNetRun's dependency check without any filesystem search.
 
-        ADSP_LIBRARY_PATH is set to the exact ``lib/hexagon-v{N}/unsigned`` directory
-        for the detected platform (see ``_HEXAGON_VERSION``). FastRPC on these devices
-        treats ADSP_LIBRARY_PATH as a single literal path, not a colon-separated list;
-        using the platform-specific directory ensures the bundled skel shadows any
-        system-installed skel and keeps stub/skel versions in sync, preventing the
-        FastRPC CRC32 handshake failure. Platforms not present in ``_HEXAGON_VERSION``
-        (e.g. x86_64, macOS) skip this step.
+        ADSP_LIBRARY_PATH is built as ``{sdk_skel_dir};{required_paths...}`` for the
+        detected platform (see ``_HEXAGON_VERSION`` and ``_REQUIRED_DSP_PATHS``).
+        ADSP_LIBRARY_PATH uses ``;`` as its path separator (not ``:``). The SDK skel
+        directory is placed first so the bundled skel shadows any system-installed skel,
+        keeping stub/skel versions in sync and preventing the FastRPC CRC32 handshake
+        failure. The required system paths (e.g. ``/usr/lib/rfsa/adsp``, ``/dsp``) are
+        always appended — if any are missing the DSP runtime may fail to load.
+        Platforms not present in ``_HEXAGON_VERSION`` (e.g. x86_64, macOS) skip
+        this step.
 
         Raises:
             RuntimeError: If SDK path is not configured.
@@ -126,22 +134,23 @@ class QairtSDKManager:
         _log.info(f"Setting QAIRT_SDK_ROOT={self._sdk_path}")
         os.environ["QAIRT_SDK_ROOT"] = str(self._sdk_path)
 
-        # Set ADSP_LIBRARY_PATH to the single hexagon skel dir for this platform.
-        # FastRPC on these devices treats the env var as a literal single path, not
-        # colon-separated, so we must set exactly one directory.
+        # Build ADSP_LIBRARY_PATH: SDK skel dir first (to shadow system skels), then
+        # required system paths. ADSP_LIBRARY_PATH uses ';' as separator, not ':'.
         try:
             cur_platform = detect_platform()
             hexagon_ver = _HEXAGON_VERSION.get(cur_platform)
+            required_paths = _REQUIRED_DSP_PATHS.get(cur_platform, [])
         except RuntimeError:
             hexagon_ver = None
+            required_paths = []
         if hexagon_ver is not None:
             skel_dir = self._sdk_path / "lib" / hexagon_ver / "unsigned"
             if skel_dir.exists():
-                os.environ["ADSP_LIBRARY_PATH"] = str(skel_dir)
-                _log.info(f"Setting ADSP_LIBRARY_PATH={skel_dir}")
+                adsp = ";".join([str(skel_dir), *required_paths])
+                os.environ["ADSP_LIBRARY_PATH"] = adsp
+                _log.info(f"Setting ADSP_LIBRARY_PATH={adsp}")
             else:
                 _log.warning(f"Hexagon skel dir not found in SDK: {skel_dir}")
-
         lib_dir = sysconfig.get_config_var("LIBDIR")
         lib_name = sysconfig.get_config_var("INSTSONAME")
         if lib_dir and lib_name:
