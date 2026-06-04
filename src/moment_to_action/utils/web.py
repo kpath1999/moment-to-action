@@ -76,7 +76,10 @@ def download_file(
         httpx.HTTPError: If the HTTP request fails.
         OSError: If writing to the destination path fails.
     """
-    with httpx.stream("GET", url, headers=headers or {}) as res, dest_path.open("wb") as f:
+    with (
+        httpx.stream("GET", url, headers=headers or {}, follow_redirects=True) as res,
+        dest_path.open("wb") as f,
+    ):
         res.raise_for_status()
 
         # Fast path: just download directly
