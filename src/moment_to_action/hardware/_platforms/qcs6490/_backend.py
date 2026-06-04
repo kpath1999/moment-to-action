@@ -274,7 +274,7 @@ class QCS6490Backend(InferenceBackend):
             Mapping of output tensor names to arrays.
         """
         result = handle(inputs=inputs)  # type: ignore[operator]
-        return {k: result[k] for k in result}  # type: ignore[index]
+        return dict(result.data)  # type: ignore[attr-defined]
 
     def unload_dlc(self, handle: object) -> None:
         """Release DLC backend resources.

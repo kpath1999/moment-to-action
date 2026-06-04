@@ -700,8 +700,10 @@ class TestQCS6490DLCMethods:
         scores = np.zeros((1, 8400), dtype=np.float32)
         class_idx = np.zeros((1, 8400), dtype=np.float32)
         fake_output = {"boxes": boxes, "scores": scores, "class_idx": class_idx}
+        mock_qairt_result = MagicMock()
+        mock_qairt_result.data = fake_output
         mock_handle = MagicMock()
-        mock_handle.return_value = fake_output
+        mock_handle.return_value = mock_qairt_result
         backend, _, _ = self._make_cpu_backend()
 
         result = backend.infer_dlc(mock_handle, np.zeros((1, 3, 640, 640), dtype=np.float32))
