@@ -172,16 +172,24 @@ class YOLOModel(ImageDetectionModel):
     def prepare(self, frame: np.ndarray) -> np.ndarray:
         """Resize, normalize, and batch a raw BGR frame for YOLO inference.
 
+        ONNX models expect NCHW ``(1, 3, 640, 640)``.
+        DLC models expect NHWC ``(1, 640, 640, 3)`` because qnn-onnx-converter
+        transposes NCHW → NHWC internally when targeting HTP.
+
         Args:
             frame: Raw BGR image (HxWxC, uint8).
 
         Returns:
-            Float32 tensor of shape ``(1, 3, 640, 640)`` with values in ``[0, 1]``.
+            Float32 tensor with values in ``[0, 1]``.
+            Shape is ``(1, 3, 640, 640)`` for ONNX and ``(1, 640, 640, 3)`` for DLC.
         """
         resized = cv2.resize(frame, (_YOLO_INPUT_SIZE, _YOLO_INPUT_SIZE))
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         normalized = rgb.astype(np.float32) / 255.0
-        # HxWxC → CxHxW → 1xCxHxW
+        if self._format is ModelFormat.DLC:
+            # HxWxC → 1xHxWxC (NHWC)
+            return np.expand_dims(normalized, axis=0)
+        # HxWxC → CxHxW → 1xCxHxW (NCHW)
         chw = np.transpose(normalized, (2, 0, 1))
         return np.expand_dims(chw, axis=0)
 

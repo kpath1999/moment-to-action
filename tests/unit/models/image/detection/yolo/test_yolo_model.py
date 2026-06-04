@@ -54,10 +54,15 @@ def _make_outputs(
 class TestYOLOModelPrepare:
     """Tests for YOLOModel.prepare()."""
 
-    def test_output_shape(self, onnx_model: YOLOModel, sample_image_array: np.ndarray) -> None:
-        """prepare() returns (1, 3, 640, 640) tensor."""
+    def test_onnx_output_shape(self, onnx_model: YOLOModel, sample_image_array: np.ndarray) -> None:
+        """prepare() returns NCHW (1, 3, 640, 640) for ONNX."""
         result = onnx_model.prepare(sample_image_array)
         assert result.shape == (1, 3, 640, 640)
+
+    def test_dlc_output_shape(self, dlc_model: YOLOModel, sample_image_array: np.ndarray) -> None:
+        """prepare() returns NHWC (1, 640, 640, 3) for DLC (HTP expects NHWC)."""
+        result = dlc_model.prepare(sample_image_array)
+        assert result.shape == (1, 640, 640, 3)
 
     def test_output_dtype_float32(
         self, onnx_model: YOLOModel, sample_image_array: np.ndarray
