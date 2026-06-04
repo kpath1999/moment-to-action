@@ -125,8 +125,13 @@ def convert(
         stacked = np.stack([all_raw[i][k] for i in range(len(all_raw))])
         np.save(str(ref_dir / f"outputs_{k}.npy"), stacked)
 
-    # Convert to DLC
-    dlc_path = output_dir / "model.dlc"
-    qairt_mgr.convert(model.path, dlc_path, calibration_data)
+    # Apply model-specific ONNX surgery (e.g. split mixed-range outputs for YOLO)
+    conversion_onnx = model.prepare_for_conversion(model.path)
+    try:
+        dlc_path = output_dir / "model.dlc"
+        qairt_mgr.convert(conversion_onnx, dlc_path, calibration_data)
+    finally:
+        if conversion_onnx != model.path:
+            conversion_onnx.unlink(missing_ok=True)
 
     click.echo(f"Converted: {output_dir}")

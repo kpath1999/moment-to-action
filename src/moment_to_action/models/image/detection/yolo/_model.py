@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 import cv2
@@ -12,11 +14,12 @@ from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from moment_to_action.hardware import ComputeBackend
 
+_YOLO_OUTPUT_NAME = "output0"
 _YOLO_INPUT_SIZE = 640
+_YOLO_ANCHORS = 8400
+_ONNX_OPSET_AXES_AS_INPUT = 18
 
 
 class YOLOModel(ImageDetectionModel):
@@ -168,6 +171,92 @@ class YOLOModel(ImageDetectionModel):
                 self._backend.unload_dlc(self._handle)
         self._backend = None
         self._handle = None
+
+    def prepare_for_conversion(self, onnx_path: Path) -> Path:
+        """Split YOLOv8 output0 Concat before DLC conversion if needed.
+
+        Standard YOLOv8 exports produce a single ``output0 (1, 84, 8400)`` that
+        concatenates box coordinates (0-640) and class scores (0-1).  QNN assigns
+        one quantization scale per output tensor, so a mixed-range tensor causes
+        the 0-1 scores to collapse to zero after INT8 quantization.
+
+        This method detects that Concat and rewrites the graph to expose three
+        homogeneous-range outputs instead:
+        - ``boxes (1, 8400, 4)`` - decoded bounding boxes
+        - ``scores (1, 8400)`` - per-anchor max class probability
+        - ``class_idx (1, 8400)`` - per-anchor argmax class index (float32)
+
+        If the ONNX already has split outputs (e.g. the vendored model), returns
+        ``onnx_path`` unchanged.
+
+        Args:
+            onnx_path: Path to the source YOLOv8 ONNX.
+
+        Returns:
+            ``onnx_path`` if no surgery was needed, otherwise a path to a
+            temporary file that the caller must delete after conversion.
+        """
+        import onnx  # noqa: PLC0415
+        from onnx import TensorProto  # noqa: PLC0415
+        from onnx import helper as oh  # noqa: PLC0415
+
+        model_proto = onnx.load(str(onnx_path))
+        graph = model_proto.graph
+
+        out_names = {o.name for o in graph.output}
+        if _YOLO_OUTPUT_NAME not in out_names:
+            return onnx_path  # already split
+
+        concat_node = next(
+            (n for n in graph.node if _YOLO_OUTPUT_NAME in n.output and n.op_type == "Concat"),
+            None,
+        )
+        if concat_node is None:
+            return onnx_path
+
+        dbox_name, cls_name = concat_node.input[0], concat_node.input[1]
+        boxes_name = "_m2a_boxes"
+        scores_name = "_m2a_scores"
+        argmax_name = "_m2a_argmax"
+        class_idx_name = "_m2a_class_idx"
+
+        # ReduceMax: axes is an attribute (opset < 18) or an input tensor (opset >= 18)
+        opset = next(
+            (op.version for op in model_proto.opset_import if op.domain in {"", "ai.onnx"}),
+            11,
+        )
+        if opset >= _ONNX_OPSET_AXES_AS_INPUT:
+            axes_init_name = "_m2a_reduce_axes"
+            graph.initializer.append(oh.make_tensor(axes_init_name, TensorProto.INT64, [1], [1]))
+            reduce_node = oh.make_node(
+                "ReduceMax", [cls_name, axes_init_name], [scores_name], keepdims=0
+            )
+        else:
+            reduce_node = oh.make_node("ReduceMax", [cls_name], [scores_name], axes=[1], keepdims=0)
+
+        graph.node.extend(
+            [
+                oh.make_node("Transpose", [dbox_name], [boxes_name], perm=[0, 2, 1]),
+                reduce_node,
+                oh.make_node("ArgMax", [cls_name], [argmax_name], axis=1, keepdims=0),
+                oh.make_node("Cast", [argmax_name], [class_idx_name], to=TensorProto.FLOAT),
+            ]
+        )
+        graph.node.remove(concat_node)
+
+        del graph.output[:]
+        graph.output.extend(
+            [
+                oh.make_tensor_value_info(boxes_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS, 4]),
+                oh.make_tensor_value_info(scores_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS]),
+                oh.make_tensor_value_info(class_idx_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS]),
+            ]
+        )
+
+        with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        onnx.save(model_proto, str(tmp_path))
+        return tmp_path
 
     def prepare(self, frame: np.ndarray) -> np.ndarray:
         """Resize, normalize, and batch a raw BGR frame for YOLO inference.

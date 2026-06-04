@@ -240,3 +240,9 @@ class TestBaseModelDel:
         model.load(MagicMock())
         with pytest.warns(ResourceWarning):
             model.__del__()  # Should not raise despite unload() failing
+
+    def test_prepare_for_conversion_default_returns_path(self) -> None:
+        """Default prepare_for_conversion() returns onnx_path unchanged."""
+        model = _ConcreteModel("default", Path("/x"))
+        onnx_path = Path("/some/model.onnx")
+        assert model.prepare_for_conversion(onnx_path) is onnx_path

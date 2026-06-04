@@ -71,6 +71,25 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         """True if the model has been loaded onto a backend, False otherwise."""
         return self._backend is not None
 
+    def prepare_for_conversion(self, onnx_path: Path) -> Path:
+        """Return an ONNX path ready for DLC conversion.
+
+        The default implementation returns ``onnx_path`` unchanged.  Subclasses
+        override to apply graph surgery (e.g. splitting mixed-range output tensors)
+        before INT8 quantization so each output gets an independent scale.
+
+        The caller is responsible for deleting any temporary file if the returned
+        path differs from ``onnx_path``.
+
+        Args:
+            onnx_path: Path to the source ONNX model.
+
+        Returns:
+            Path to the ONNX to pass to the converter — either ``onnx_path``
+            unchanged or a new temporary file.
+        """
+        return onnx_path
+
     @abstractmethod
     def prepare(self, inputs: _InputT) -> _PreparedT:
         """Preprocess raw inputs for inference.

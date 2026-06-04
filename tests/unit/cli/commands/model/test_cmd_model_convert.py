@@ -66,6 +66,7 @@ def _make_model_mgr(tmp_path: Path) -> MagicMock:
     mock_model.path = model_file
     mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
     mock_model.run.return_value = [np.zeros((1, 10, 4)), np.zeros((1, 10)), np.zeros((1, 10))]
+    mock_model.prepare_for_conversion.return_value = model_file
     mgr.get_model.return_value = mock_model
     return mgr
 
@@ -207,6 +208,38 @@ class TestModelConvertCommand:
         # arg[0] = model.path, arg[1] = dlc output path
         dlc_path = call_kwargs[0][1]
         assert str(dlc_path).endswith("model.dlc")
+
+    def test_prepare_for_conversion_result_passed_to_qairt(self, tmp_path: Path) -> None:
+        """qairt.convert() receives the path returned by prepare_for_conversion()."""
+        calib_dir = tmp_path / "calib"
+        calib_dir.mkdir()
+        img = np.zeros((100, 100, 3), dtype=np.uint8)
+        import cv2
+
+        cv2.imwrite(str(calib_dir / "img.jpg"), img)
+
+        surgery_path = tmp_path / "surgery.onnx"
+        surgery_path.write_bytes(b"onnx-surgery")
+
+        output_dir = tmp_path / "out"
+        qairt_mgr = _make_qairt_mgr(available=True)
+        model_mgr = _make_model_mgr(tmp_path)
+        model_mgr.get_model.return_value.prepare_for_conversion.return_value = surgery_path
+
+        _invoke(
+            [
+                "yolo_v8",
+                "-o",
+                str(output_dir),
+                "--calibration-dir",
+                str(calib_dir),
+            ],
+            tmp_path,
+            model_mgr,
+            qairt_mgr,
+        )
+        call_args = qairt_mgr.convert.call_args[0]
+        assert call_args[0] == surgery_path
 
     def test_non_image_model_errors(self, tmp_path: Path) -> None:
         """Exits non-zero when model is not an ImageModel."""

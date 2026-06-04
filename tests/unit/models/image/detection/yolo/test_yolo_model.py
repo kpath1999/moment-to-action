@@ -370,3 +370,137 @@ class TestYOLOModelProperties:
         """Custom confidence_threshold is stored."""
         model = YOLOModel("v", Path("/x"), ModelFormat.ONNX, confidence_threshold=0.75)
         assert model.confidence_threshold == pytest.approx(0.75)
+
+
+def _make_yolo_onnx_with_concat(path: Path, opset: int = 11) -> None:
+    """Write a minimal YOLOv8-style ONNX with a mixed-range output0 Concat."""
+    import onnx
+    from onnx import TensorProto
+    from onnx import helper as oh
+
+    dbox = oh.make_tensor_value_info("dbox", TensorProto.FLOAT, [1, 4, 8400])
+    cls = oh.make_tensor_value_info("cls", TensorProto.FLOAT, [1, 80, 8400])
+    output0 = oh.make_tensor_value_info("output0", TensorProto.FLOAT, [1, 84, 8400])
+
+    concat = oh.make_node("Concat", inputs=["dbox", "cls"], outputs=["output0"], axis=1)
+    graph = oh.make_graph([concat], "yolov8", [dbox, cls], [output0])
+    model_proto = oh.make_model(graph, opset_imports=[oh.make_opsetid("", opset)])
+    onnx.save(model_proto, str(path))
+
+
+def _make_yolo_onnx_output0_no_concat(path: Path) -> None:
+    """Write an ONNX with output0 produced by Identity (not Concat)."""
+    import onnx
+    from onnx import TensorProto
+    from onnx import helper as oh
+
+    inp = oh.make_tensor_value_info("data", TensorProto.FLOAT, [1, 84, 8400])
+    output0 = oh.make_tensor_value_info("output0", TensorProto.FLOAT, [1, 84, 8400])
+
+    identity = oh.make_node("Identity", inputs=["data"], outputs=["output0"])
+    graph = oh.make_graph([identity], "no_concat", [inp], [output0])
+    model_proto = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 11)])
+    onnx.save(model_proto, str(path))
+
+
+def _make_yolo_onnx_already_split(path: Path) -> None:
+    """Write a minimal ONNX with three already-split outputs (no output0 Concat)."""
+    import onnx
+    from onnx import TensorProto
+    from onnx import helper as oh
+
+    inp = oh.make_tensor_value_info("images", TensorProto.FLOAT, [1, 3, 640, 640])
+    boxes = oh.make_tensor_value_info("boxes", TensorProto.FLOAT, [1, 8400, 4])
+    scores = oh.make_tensor_value_info("scores", TensorProto.FLOAT, [1, 8400])
+    class_idx = oh.make_tensor_value_info("class_idx", TensorProto.FLOAT, [1, 8400])
+
+    identity = oh.make_node("Identity", inputs=["images"], outputs=["_dummy"])
+    graph = oh.make_graph([identity], "split", [inp], [boxes, scores, class_idx])
+    model_proto = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 11)])
+    onnx.save(model_proto, str(path))
+
+
+@pytest.mark.unit
+class TestYOLOModelPrepareForConversion:
+    """Tests for YOLOModel.prepare_for_conversion()."""
+
+    def test_returns_same_path_when_already_split(self, tmp_path: Path) -> None:
+        """prepare_for_conversion() returns onnx_path unchanged when outputs are already split."""
+        onnx_path = tmp_path / "split.onnx"
+        _make_yolo_onnx_already_split(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        assert result == onnx_path
+
+    def test_surgery_produces_different_path(self, tmp_path: Path) -> None:
+        """prepare_for_conversion() returns a new temp path for a mixed-range ONNX."""
+        onnx_path = tmp_path / "raw.onnx"
+        _make_yolo_onnx_with_concat(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        try:
+            assert result != onnx_path
+            assert result.exists()
+        finally:
+            if result != onnx_path:
+                result.unlink(missing_ok=True)
+
+    def test_surgery_output_has_three_outputs(self, tmp_path: Path) -> None:
+        """Surgically modified ONNX has boxes, scores, class_idx as graph outputs."""
+        import onnx
+
+        onnx_path = tmp_path / "raw.onnx"
+        _make_yolo_onnx_with_concat(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        try:
+            modified = onnx.load(str(result))
+            out_names = [o.name for o in modified.graph.output]
+            assert len(out_names) == 3
+            assert "_m2a_boxes" in out_names
+            assert "_m2a_scores" in out_names
+            assert "_m2a_class_idx" in out_names
+        finally:
+            if result != onnx_path:
+                result.unlink(missing_ok=True)
+
+    def test_surgery_removes_concat_node(self, tmp_path: Path) -> None:
+        """Surgically modified ONNX does not contain the original Concat node."""
+        import onnx
+
+        onnx_path = tmp_path / "raw.onnx"
+        _make_yolo_onnx_with_concat(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        try:
+            modified = onnx.load(str(result))
+            concat_nodes = [n for n in modified.graph.node if n.op_type == "Concat"]
+            assert len(concat_nodes) == 0
+        finally:
+            if result != onnx_path:
+                result.unlink(missing_ok=True)
+
+    def test_returns_same_path_when_output0_not_from_concat(self, tmp_path: Path) -> None:
+        """prepare_for_conversion() returns onnx_path when output0 has no Concat feeding it."""
+        onnx_path = tmp_path / "no_concat.onnx"
+        _make_yolo_onnx_output0_no_concat(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        assert result == onnx_path
+
+    def test_surgery_opset18_uses_axes_input(self, tmp_path: Path) -> None:
+        """For opset >= 18, surgery uses an axes initializer for ReduceMax."""
+        import onnx
+
+        onnx_path = tmp_path / "opset18.onnx"
+        _make_yolo_onnx_with_concat(onnx_path, opset=18)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        try:
+            assert result != onnx_path
+            modified = onnx.load(str(result))
+            init_names = {i.name for i in modified.graph.initializer}
+            assert "_m2a_reduce_axes" in init_names
+        finally:
+            if result != onnx_path:
+                result.unlink(missing_ok=True)
