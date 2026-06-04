@@ -22,6 +22,132 @@ _YOLO_ANCHORS = 8400
 _ONNX_OPSET_AXES_AS_INPUT = 18
 
 
+def _strip_qdq(model_proto: object) -> bool:
+    """Remove QuantizeLinear/DequantizeLinear pairs from an ONNX graph in-place.
+
+    QAIRT treats any ONNX containing QuantizeLinear nodes as fully pre-quantized
+    and skips calibration entirely.  This function removes all Q→DQ pairs so
+    QAIRT performs its own INT8 quantization from the supplied calibration data.
+
+    Args:
+        model_proto: ``onnx.ModelProto`` to modify in-place.
+
+    Returns:
+        ``True`` if any nodes were removed, ``False`` if the graph had no QDQ nodes.
+    """
+    graph = model_proto.graph  # type: ignore[attr-defined]
+
+    # q_out → float_input for every QuantizeLinear node
+    q_output_to_input: dict[str, str] = {}
+    for node in graph.node:
+        if node.op_type == "QuantizeLinear":
+            q_output_to_input[node.output[0]] = node.input[0]
+
+    if not q_output_to_input:
+        return False
+
+    # dq_out → original float tensor for every paired DequantizeLinear node
+    dq_remap: dict[str, str] = {}
+    for node in graph.node:
+        if node.op_type == "DequantizeLinear" and node.input[0] in q_output_to_input:
+            dq_remap[node.output[0]] = q_output_to_input[node.input[0]]
+
+    # Drop all Q and DQ nodes; remap inputs of surviving nodes
+    new_nodes = []
+    for node in graph.node:
+        if node.op_type in {"QuantizeLinear", "DequantizeLinear"}:
+            continue
+        new_inputs = [dq_remap.get(inp, inp) for inp in node.input]
+        del node.input[:]
+        node.input.extend(new_inputs)
+        new_nodes.append(node)
+
+    del graph.node[:]
+    graph.node.extend(new_nodes)
+
+    # Remap graph outputs whose names were DQ outputs
+    for out in graph.output:
+        if out.name in dq_remap:
+            out.name = dq_remap[out.name]
+
+    return True
+
+
+def _split_yolo_concat(model_proto: object) -> bool:
+    """Rewrite a single ``output0`` Concat into three homogeneous-range outputs.
+
+    Standard YOLOv8 exports concatenate box coordinates (0-640) and class scores
+    (0-1) into a single ``output0 (1, 84, 8400)`` tensor.  QNN assigns one
+    quantization scale per output tensor, so the mixed-range tensor causes scores
+    to collapse after INT8 quantization.
+
+    This function detects the Concat and replaces it with:
+    - ``_m2a_boxes (1, 8400, 4)`` - decoded bounding boxes
+    - ``_m2a_scores (1, 8400)`` - per-anchor max class probability
+    - ``_m2a_class_idx (1, 8400)`` - per-anchor argmax class index (float32)
+
+    Args:
+        model_proto: ``onnx.ModelProto`` to modify in-place.
+
+    Returns:
+        ``True`` if the Concat was split, ``False`` if no changes were made.
+    """
+    from onnx import TensorProto  # noqa: PLC0415
+    from onnx import helper as oh  # noqa: PLC0415
+
+    graph = model_proto.graph  # type: ignore[attr-defined]
+
+    out_names = {o.name for o in graph.output}
+    if _YOLO_OUTPUT_NAME not in out_names:
+        return False
+
+    concat_node = next(
+        (n for n in graph.node if _YOLO_OUTPUT_NAME in n.output and n.op_type == "Concat"),
+        None,
+    )
+    if concat_node is None:
+        return False
+
+    dbox_name, cls_name = concat_node.input[0], concat_node.input[1]
+    boxes_name = "_m2a_boxes"
+    scores_name = "_m2a_scores"
+    argmax_name = "_m2a_argmax"
+    class_idx_name = "_m2a_class_idx"
+
+    opset = next(
+        (op.version for op in model_proto.opset_import if op.domain in {"", "ai.onnx"}),  # type: ignore[attr-defined]
+        11,
+    )
+    if opset >= _ONNX_OPSET_AXES_AS_INPUT:
+        axes_init_name = "_m2a_reduce_axes"
+        graph.initializer.append(oh.make_tensor(axes_init_name, TensorProto.INT64, [1], [1]))
+        reduce_node = oh.make_node(
+            "ReduceMax", [cls_name, axes_init_name], [scores_name], keepdims=0
+        )
+    else:
+        reduce_node = oh.make_node("ReduceMax", [cls_name], [scores_name], axes=[1], keepdims=0)
+
+    graph.node.extend(
+        [
+            oh.make_node("Transpose", [dbox_name], [boxes_name], perm=[0, 2, 1]),
+            reduce_node,
+            oh.make_node("ArgMax", [cls_name], [argmax_name], axis=1, keepdims=0),
+            oh.make_node("Cast", [argmax_name], [class_idx_name], to=TensorProto.FLOAT),
+        ]
+    )
+    graph.node.remove(concat_node)
+
+    del graph.output[:]
+    graph.output.extend(
+        [
+            oh.make_tensor_value_info(boxes_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS, 4]),
+            oh.make_tensor_value_info(scores_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS]),
+            oh.make_tensor_value_info(class_idx_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS]),
+        ]
+    )
+    return True
+
+
 class YOLOModel(ImageDetectionModel):
     """YOLOv8 object detector.
 
@@ -173,21 +299,21 @@ class YOLOModel(ImageDetectionModel):
         self._handle = None
 
     def prepare_for_conversion(self, onnx_path: Path) -> Path:
-        """Split YOLOv8 output0 Concat before DLC conversion if needed.
+        """Apply ONNX surgery to prepare for DLC conversion.
 
-        Standard YOLOv8 exports produce a single ``output0 (1, 84, 8400)`` that
-        concatenates box coordinates (0-640) and class scores (0-1).  QNN assigns
-        one quantization scale per output tensor, so a mixed-range tensor causes
-        the 0-1 scores to collapse to zero after INT8 quantization.
+        Performs two transformations as needed:
 
-        This method detects that Concat and rewrites the graph to expose three
-        homogeneous-range outputs instead:
-        - ``boxes (1, 8400, 4)`` - decoded bounding boxes
-        - ``scores (1, 8400)`` - per-anchor max class probability
-        - ``class_idx (1, 8400)`` - per-anchor argmax class index (float32)
+        1. **QDQ stripping**: removes QuantizeLinear/DequantizeLinear pairs so
+           QAIRT performs its own INT8 quantization from calibration data rather
+           than reusing embedded scales (which produce collapsed scores on HTP).
 
-        If the ONNX already has split outputs (e.g. the vendored model), returns
-        ``onnx_path`` unchanged.
+        2. **Concat split**: if the model has a single ``output0 (1, 84, 8400)``
+           tensor that mixes box coordinates (0-640) and class scores (0-1),
+           rewrites it into three homogeneous-range outputs so each gets its own
+           INT8 scale:
+           - ``_m2a_boxes (1, 8400, 4)`` - decoded bounding boxes
+           - ``_m2a_scores (1, 8400)`` - per-anchor max class probability
+           - ``_m2a_class_idx (1, 8400)`` - per-anchor argmax class index
 
         Args:
             onnx_path: Path to the source YOLOv8 ONNX.
@@ -197,61 +323,14 @@ class YOLOModel(ImageDetectionModel):
             temporary file that the caller must delete after conversion.
         """
         import onnx  # noqa: PLC0415
-        from onnx import TensorProto  # noqa: PLC0415
-        from onnx import helper as oh  # noqa: PLC0415
 
         model_proto = onnx.load(str(onnx_path))
-        graph = model_proto.graph
 
-        out_names = {o.name for o in graph.output}
-        if _YOLO_OUTPUT_NAME not in out_names:
-            return onnx_path  # already split
+        changed = _strip_qdq(model_proto)
+        changed |= _split_yolo_concat(model_proto)
 
-        concat_node = next(
-            (n for n in graph.node if _YOLO_OUTPUT_NAME in n.output and n.op_type == "Concat"),
-            None,
-        )
-        if concat_node is None:
+        if not changed:
             return onnx_path
-
-        dbox_name, cls_name = concat_node.input[0], concat_node.input[1]
-        boxes_name = "_m2a_boxes"
-        scores_name = "_m2a_scores"
-        argmax_name = "_m2a_argmax"
-        class_idx_name = "_m2a_class_idx"
-
-        # ReduceMax: axes is an attribute (opset < 18) or an input tensor (opset >= 18)
-        opset = next(
-            (op.version for op in model_proto.opset_import if op.domain in {"", "ai.onnx"}),
-            11,
-        )
-        if opset >= _ONNX_OPSET_AXES_AS_INPUT:
-            axes_init_name = "_m2a_reduce_axes"
-            graph.initializer.append(oh.make_tensor(axes_init_name, TensorProto.INT64, [1], [1]))
-            reduce_node = oh.make_node(
-                "ReduceMax", [cls_name, axes_init_name], [scores_name], keepdims=0
-            )
-        else:
-            reduce_node = oh.make_node("ReduceMax", [cls_name], [scores_name], axes=[1], keepdims=0)
-
-        graph.node.extend(
-            [
-                oh.make_node("Transpose", [dbox_name], [boxes_name], perm=[0, 2, 1]),
-                reduce_node,
-                oh.make_node("ArgMax", [cls_name], [argmax_name], axis=1, keepdims=0),
-                oh.make_node("Cast", [argmax_name], [class_idx_name], to=TensorProto.FLOAT),
-            ]
-        )
-        graph.node.remove(concat_node)
-
-        del graph.output[:]
-        graph.output.extend(
-            [
-                oh.make_tensor_value_info(boxes_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS, 4]),
-                oh.make_tensor_value_info(scores_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS]),
-                oh.make_tensor_value_info(class_idx_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS]),
-            ]
-        )
 
         with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmp:
             tmp_path = Path(tmp.name)
@@ -261,23 +340,17 @@ class YOLOModel(ImageDetectionModel):
     def prepare(self, frame: np.ndarray) -> np.ndarray:
         """Resize, normalize, and batch a raw BGR frame for YOLO inference.
 
-        ONNX models expect NCHW ``(1, 3, 640, 640)``.
-        DLC models expect NHWC ``(1, 640, 640, 3)`` because qnn-onnx-converter
-        transposes NCHW → NHWC internally when targeting HTP.
-
         Args:
             frame: Raw BGR image (HxWxC, uint8).
 
         Returns:
-            Float32 tensor with values in ``[0, 1]``.
-            Shape is ``(1, 3, 640, 640)`` for ONNX and ``(1, 640, 640, 3)`` for DLC.
+            Float32 NCHW tensor of shape ``(1, 3, 640, 640)`` with values in ``[0, 1]``.
+            QAIRT handles NCHW → NHWC internally for HTP, so NCHW is correct for both
+            ONNX and DLC formats.
         """
         resized = cv2.resize(frame, (_YOLO_INPUT_SIZE, _YOLO_INPUT_SIZE))
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         normalized = rgb.astype(np.float32) / 255.0
-        if self._format is ModelFormat.DLC:
-            # HxWxC → 1xHxWxC (NHWC)
-            return np.expand_dims(normalized, axis=0)
         # HxWxC → CxHxW → 1xCxHxW (NCHW)
         chw = np.transpose(normalized, (2, 0, 1))
         return np.expand_dims(chw, axis=0)

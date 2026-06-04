@@ -54,15 +54,15 @@ def _make_outputs(
 class TestYOLOModelPrepare:
     """Tests for YOLOModel.prepare()."""
 
-    def test_onnx_output_shape(self, onnx_model: YOLOModel, sample_image_array: np.ndarray) -> None:
-        """prepare() returns NCHW (1, 3, 640, 640) for ONNX."""
+    def test_output_shape(self, onnx_model: YOLOModel, sample_image_array: np.ndarray) -> None:
+        """prepare() returns NCHW (1, 3, 640, 640) for both ONNX and DLC."""
         result = onnx_model.prepare(sample_image_array)
         assert result.shape == (1, 3, 640, 640)
 
     def test_dlc_output_shape(self, dlc_model: YOLOModel, sample_image_array: np.ndarray) -> None:
-        """prepare() returns NHWC (1, 640, 640, 3) for DLC (HTP expects NHWC)."""
+        """prepare() returns NCHW (1, 3, 640, 640) for DLC — QAIRT handles NCHW→NHWC."""
         result = dlc_model.prepare(sample_image_array)
-        assert result.shape == (1, 640, 640, 3)
+        assert result.shape == (1, 3, 640, 640)
 
     def test_output_dtype_float32(
         self, onnx_model: YOLOModel, sample_image_array: np.ndarray
@@ -501,6 +501,123 @@ class TestYOLOModelPrepareForConversion:
             modified = onnx.load(str(result))
             init_names = {i.name for i in modified.graph.initializer}
             assert "_m2a_reduce_axes" in init_names
+        finally:
+            if result != onnx_path:
+                result.unlink(missing_ok=True)
+
+
+def _make_yolo_onnx_with_qdq(path: Path) -> None:
+    """Write a minimal ONNX with Q→DQ→Identity chain.
+
+    Structure: inp → Q → DQ → Identity → out
+    After stripping: inp → Identity → out
+    The Identity node's input remap exercises lines 60-63 of _strip_qdq.
+    """
+    import numpy as np
+    import onnx
+    from onnx import TensorProto, numpy_helper
+    from onnx import helper as oh
+
+    inp = oh.make_tensor_value_info("inp", TensorProto.FLOAT, [1])
+    out = oh.make_tensor_value_info("out", TensorProto.FLOAT, [1])
+    scale = numpy_helper.from_array(np.array(0.01, dtype=np.float32), name="scale")
+    zp = numpy_helper.from_array(np.array(0, dtype=np.int8), name="zp")
+    q_node = oh.make_node("QuantizeLinear", ["inp", "scale", "zp"], ["inp_q"])
+    dq_node = oh.make_node("DequantizeLinear", ["inp_q", "scale", "zp"], ["inp_dq"])
+    identity = oh.make_node("Identity", ["inp_dq"], ["out"])
+    graph = oh.make_graph([q_node, dq_node, identity], "qdq", [inp], [out], initializer=[scale, zp])
+    model_proto = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 17)])
+    onnx.save(model_proto, str(path))
+
+
+def _make_yolo_onnx_with_qdq_output(path: Path) -> None:
+    """Write a minimal ONNX where the DQ output is directly a graph output.
+
+    Structure: inp → Q → DQ → out (graph output)
+    After stripping: graph output remapped from "out" to "inp".
+    """
+    import numpy as np
+    import onnx
+    from onnx import TensorProto, numpy_helper
+    from onnx import helper as oh
+
+    inp = oh.make_tensor_value_info("inp", TensorProto.FLOAT, [1])
+    out = oh.make_tensor_value_info("out", TensorProto.FLOAT, [1])
+    scale = numpy_helper.from_array(np.array(0.01, dtype=np.float32), name="scale")
+    zp = numpy_helper.from_array(np.array(0, dtype=np.int8), name="zp")
+    q_node = oh.make_node("QuantizeLinear", ["inp", "scale", "zp"], ["inp_q"])
+    dq_node = oh.make_node("DequantizeLinear", ["inp_q", "scale", "zp"], ["out"])
+    graph = oh.make_graph([q_node, dq_node], "qdq_out", [inp], [out], initializer=[scale, zp])
+    model_proto = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 17)])
+    onnx.save(model_proto, str(path))
+
+
+@pytest.mark.unit
+class TestYOLOModelStripQDQ:
+    """Tests for prepare_for_conversion() QDQ-stripping path."""
+
+    def test_qdq_produces_different_path(self, tmp_path: Path) -> None:
+        """An ONNX with Q→DQ nodes produces a new temp path."""
+        onnx_path = tmp_path / "qdq.onnx"
+        _make_yolo_onnx_with_qdq(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        try:
+            assert result != onnx_path
+            assert result.exists()
+        finally:
+            if result != onnx_path:
+                result.unlink(missing_ok=True)
+
+    def test_qdq_nodes_removed(self, tmp_path: Path) -> None:
+        """Stripped ONNX contains no QuantizeLinear or DequantizeLinear nodes."""
+        import onnx
+
+        onnx_path = tmp_path / "qdq.onnx"
+        _make_yolo_onnx_with_qdq(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        try:
+            modified = onnx.load(str(result))
+            op_types = {n.op_type for n in modified.graph.node}
+            assert "QuantizeLinear" not in op_types
+            assert "DequantizeLinear" not in op_types
+        finally:
+            if result != onnx_path:
+                result.unlink(missing_ok=True)
+
+    def test_qdq_node_input_remapped(self, tmp_path: Path) -> None:
+        """Non-QDQ node that consumed a DQ output gets its input remapped to the original tensor."""
+        import onnx
+
+        onnx_path = tmp_path / "qdq.onnx"
+        _make_yolo_onnx_with_qdq(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        try:
+            modified = onnx.load(str(result))
+            identity_nodes = [n for n in modified.graph.node if n.op_type == "Identity"]
+            assert len(identity_nodes) == 1
+            # Identity input was "inp_dq"; after strip it should be "inp"
+            assert identity_nodes[0].input[0] == "inp"
+        finally:
+            if result != onnx_path:
+                result.unlink(missing_ok=True)
+
+    def test_qdq_graph_output_remapped(self, tmp_path: Path) -> None:
+        """Graph output that was a DQ output gets remapped to the original float tensor."""
+        import onnx
+
+        onnx_path = tmp_path / "qdq_out.onnx"
+        _make_yolo_onnx_with_qdq_output(onnx_path)
+        model = YOLOModel("default", onnx_path, ModelFormat.ONNX)
+        result = model.prepare_for_conversion(onnx_path)
+        try:
+            modified = onnx.load(str(result))
+            out_names = [o.name for o in modified.graph.output]
+            # DQ output "out" mapped back to Q's input "inp"
+            assert "inp" in out_names
+            assert "out" not in out_names
         finally:
             if result != onnx_path:
                 result.unlink(missing_ok=True)
