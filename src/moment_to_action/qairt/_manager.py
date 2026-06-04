@@ -12,6 +12,7 @@ import sysconfig
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from moment_to_action.hardware._platforms._detection import Platform, detect_platform
 from moment_to_action.qairt._deps import check_system_deps as _check_system_deps
 
 if TYPE_CHECKING:
@@ -28,6 +29,14 @@ _ERR_NOT_INSTALLED = "SDK not installed; run 'm2a qairt install' first"
 _ERR_NOT_INSTALLED_M2A = "SDK not installed via m2a"
 _ERR_FETCH_PATH = "fetch succeeded but SDK path not found under install dir"
 _ERR_ALREADY_INSTALLED = "QAIRT SDK {version} already installed at {path}"
+
+# Maps each Qualcomm platform to the Hexagon DSP version it uses.
+# The FastRPC runtime on these devices does NOT split ADSP_LIBRARY_PATH on ':';
+# it treats the entire value as one literal directory. We therefore set it to
+# exactly the one versioned directory that matches the target SoC.
+_HEXAGON_VERSION: dict[Platform, str] = {
+    Platform.QCS6490: "hexagon-v68",
+}
 
 
 class QairtSDKManager:
@@ -100,11 +109,13 @@ class QairtSDKManager:
         this registers it in the loaded-libs table under its SONAME, satisfying
         libPyNetRun's dependency check without any filesystem search.
 
-        ADSP_LIBRARY_PATH is prepended with the SDK's ``lib/hexagon-v*/unsigned``
-        directories so that the DSP skel libraries bundled with this SDK version are
-        found before any system-installed skels. A version mismatch between the HTP
-        stub (in the SDK) and the skel (on the device) causes the FastRPC transport
-        CRC check to fail; keeping them in sync prevents that.
+        ADSP_LIBRARY_PATH is set to the exact ``lib/hexagon-v{N}/unsigned`` directory
+        for the detected platform (see ``_HEXAGON_VERSION``). FastRPC on these devices
+        treats ADSP_LIBRARY_PATH as a single literal path, not a colon-separated list;
+        using the platform-specific directory ensures the bundled skel shadows any
+        system-installed skel and keeps stub/skel versions in sync, preventing the
+        FastRPC CRC32 handshake failure. Platforms not present in ``_HEXAGON_VERSION``
+        (e.g. x86_64, macOS) skip this step.
 
         Raises:
             RuntimeError: If SDK path is not configured.
@@ -115,13 +126,21 @@ class QairtSDKManager:
         _log.info(f"Setting QAIRT_SDK_ROOT={self._sdk_path}")
         os.environ["QAIRT_SDK_ROOT"] = str(self._sdk_path)
 
-        # Prepend versioned hexagon skel dirs so they shadow any system-installed skels
-        hexagon_dirs = sorted((self._sdk_path / "lib").glob("hexagon-v*/unsigned"))
-        if hexagon_dirs:
-            adsp_paths = ":".join(str(p) for p in hexagon_dirs)
-            existing = os.environ.get("ADSP_LIBRARY_PATH", "")
-            os.environ["ADSP_LIBRARY_PATH"] = f"{adsp_paths}:{existing}" if existing else adsp_paths
-            _log.info(f"Setting ADSP_LIBRARY_PATH={os.environ['ADSP_LIBRARY_PATH']}")
+        # Set ADSP_LIBRARY_PATH to the single hexagon skel dir for this platform.
+        # FastRPC on these devices treats the env var as a literal single path, not
+        # colon-separated, so we must set exactly one directory.
+        try:
+            cur_platform = detect_platform()
+            hexagon_ver = _HEXAGON_VERSION.get(cur_platform)
+        except RuntimeError:
+            hexagon_ver = None
+        if hexagon_ver is not None:
+            skel_dir = self._sdk_path / "lib" / hexagon_ver / "unsigned"
+            if skel_dir.exists():
+                os.environ["ADSP_LIBRARY_PATH"] = str(skel_dir)
+                _log.info(f"Setting ADSP_LIBRARY_PATH={skel_dir}")
+            else:
+                _log.warning(f"Hexagon skel dir not found in SDK: {skel_dir}")
 
         lib_dir = sysconfig.get_config_var("LIBDIR")
         lib_name = sysconfig.get_config_var("INSTSONAME")
