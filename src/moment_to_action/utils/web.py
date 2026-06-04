@@ -52,7 +52,12 @@ def stream_with_progress(
 
 
 def download_file(
-    url: str, dest_path: Path, *, show_progress: bool = True, total: int | None = None
+    url: str,
+    dest_path: Path,
+    *,
+    show_progress: bool = True,
+    total: int | None = None,
+    headers: dict[str, str] | None = None,
 ) -> int:
     """Download a file from a URL to a local path, with optional progress display.
 
@@ -62,6 +67,7 @@ def download_file(
         show_progress: Whether to display download progress using Rich.
         total: Total size of the content in bytes, if known. If None, will attempt to
             infer from the Content-Length header or proceed without a total.
+        headers: Optional HTTP headers to include in the request (e.g. Authorization).
 
     Returns:
         The total number of bytes downloaded.
@@ -70,7 +76,7 @@ def download_file(
         httpx.HTTPError: If the HTTP request fails.
         OSError: If writing to the destination path fails.
     """
-    with httpx.stream("GET", url) as res, dest_path.open("wb") as f:
+    with httpx.stream("GET", url, headers=headers or {}) as res, dest_path.open("wb") as f:
         res.raise_for_status()
 
         # Fast path: just download directly
