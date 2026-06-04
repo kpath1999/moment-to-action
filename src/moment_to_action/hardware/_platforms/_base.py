@@ -145,7 +145,7 @@ class InferenceBackend(ABC):
         msg = f"{type(self).__name__} does not support DLC models"
         raise NotImplementedError(msg)
 
-    def infer_dlc(self, handle: object, inputs: np.ndarray) -> np.ndarray:
+    def infer_dlc(self, handle: object, inputs: np.ndarray) -> dict[str, np.ndarray]:
         """Run inference on a loaded DLC model.
 
         Override in platform backends that support DLC (e.g. QCS6490).
@@ -155,7 +155,7 @@ class InferenceBackend(ABC):
             inputs: Input tensor for inference.
 
         Returns:
-            Output tensor from the model.
+            Mapping of output tensor names to arrays.
 
         Raises:
             NotImplementedError: On platforms that do not support DLC.

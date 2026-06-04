@@ -202,7 +202,8 @@ class YOLOModel(ImageDetectionModel):
             raise RuntimeError(msg)
         if self._format is ModelFormat.ONNX:
             return self._backend.run(self._handle, prepared)
-        return [self._backend.infer_dlc(self._handle, prepared)]
+        dlc_out = self._backend.infer_dlc(self._handle, prepared)
+        return [dlc_out["boxes"], dlc_out["scores"], dlc_out["class_idx"]]
 
     def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
         """Decode YOLOv8 3-output format into detections.
