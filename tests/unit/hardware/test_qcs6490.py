@@ -667,8 +667,8 @@ class TestQCS6490DLCMethods:
         ):
             return QCS6490Backend(preferred_unit=ComputeUnit.CPU), mock_litert_cpu, mock_onnx
 
-    def test_load_model_dlc_calls_qairt_load_and_initialize(self) -> None:
-        """load_model_dlc() calls qairt.load(str(path)) then raw.initialize(backend='HTP')."""
+    def test_load_model_dlc_cpu_unit_initializes_cpu(self) -> None:
+        """CPU preferred_unit → raw.initialize(backend='CPU')."""
         import sys
         from pathlib import Path
 
@@ -681,8 +681,37 @@ class TestQCS6490DLCMethods:
             handle = backend.load_model_dlc(path)
 
         mock_qairt.load.assert_called_once_with(str(path))
-        mock_raw.initialize.assert_called_once_with(backend="HTP")
+        mock_raw.initialize.assert_called_once_with(backend="CPU")
         assert handle is mock_raw
+
+    def test_load_model_dlc_npu_unit_initializes_htp(self) -> None:
+        """NPU preferred_unit → raw.initialize(backend='HTP')."""
+        import sys
+        from pathlib import Path
+
+        mock_litert = MagicMock()
+        mock_litert.get_supported_unit.return_value = ComputeUnit.NPU
+        mock_onnx = MagicMock()
+        mock_raw = MagicMock()
+        mock_qairt = MagicMock()
+        mock_qairt.load.return_value = mock_raw
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490LiteRTBackend",
+                return_value=mock_litert,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._backend.QCS6490ONNXBackend",
+                return_value=mock_onnx,
+            ),
+        ):
+            backend = QCS6490Backend(preferred_unit=ComputeUnit.NPU)
+
+        path = Path("/fake/model.dlc")
+        with patch.dict(sys.modules, {"qairt": mock_qairt}):
+            backend.load_model_dlc(path)
+
+        mock_raw.initialize.assert_called_once_with(backend="HTP")
 
     def test_load_model_dlc_raises_if_qairt_unavailable(self) -> None:
         """load_model_dlc() raises RuntimeError when the QAIRT SDK cannot be imported."""

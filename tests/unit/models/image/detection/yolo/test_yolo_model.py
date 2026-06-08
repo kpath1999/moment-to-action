@@ -378,11 +378,13 @@ def _make_yolo_onnx_with_concat(path: Path, opset: int = 11) -> None:
     from onnx import TensorProto
     from onnx import helper as oh
 
-    dbox = oh.make_tensor_value_info("dbox", TensorProto.FLOAT, [1, 4, 8400])
-    cls = oh.make_tensor_value_info("cls", TensorProto.FLOAT, [1, 80, 8400])
+    # Use distinct input names so the "cls" output produced by surgery does not
+    # collide with any graph-input tensor name.
+    dbox = oh.make_tensor_value_info("dbox_in", TensorProto.FLOAT, [1, 4, 8400])
+    cls = oh.make_tensor_value_info("cls_in", TensorProto.FLOAT, [1, 80, 8400])
     output0 = oh.make_tensor_value_info("output0", TensorProto.FLOAT, [1, 84, 8400])
 
-    concat = oh.make_node("Concat", inputs=["dbox", "cls"], outputs=["output0"], axis=1)
+    concat = oh.make_node("Concat", inputs=["dbox_in", "cls_in"], outputs=["output0"], axis=1)
     graph = oh.make_graph([concat], "yolov8", [dbox, cls], [output0])
     model_proto = oh.make_model(graph, opset_imports=[oh.make_opsetid("", opset)])
     onnx.save(model_proto, str(path))
@@ -446,7 +448,7 @@ class TestYOLOModelPrepareForConversion:
                 result.unlink(missing_ok=True)
 
     def test_surgery_output_has_three_outputs(self, tmp_path: Path) -> None:
-        """Surgically modified ONNX has boxes, scores, class_idx as graph outputs."""
+        """Surgically modified ONNX has boxes, cls, class_idx as graph outputs."""
         import onnx
 
         onnx_path = tmp_path / "raw.onnx"
@@ -458,7 +460,7 @@ class TestYOLOModelPrepareForConversion:
             out_names = [o.name for o in modified.graph.output]
             assert len(out_names) == 3
             assert "boxes" in out_names
-            assert "scores" in out_names
+            assert "cls" in out_names
             assert "class_idx" in out_names
         finally:
             if result != onnx_path:
@@ -488,8 +490,8 @@ class TestYOLOModelPrepareForConversion:
         result = model.prepare_for_conversion(onnx_path)
         assert result == onnx_path
 
-    def test_surgery_opset18_uses_axes_input(self, tmp_path: Path) -> None:
-        """For opset >= 18, surgery uses an axes initializer for ReduceMax."""
+    def test_surgery_opset18_produces_cls_output(self, tmp_path: Path) -> None:
+        """Surgery on opset-18 models produces a cls output instead of scores+ReduceMax."""
         import onnx
 
         onnx_path = tmp_path / "opset18.onnx"
@@ -499,8 +501,10 @@ class TestYOLOModelPrepareForConversion:
         try:
             assert result != onnx_path
             modified = onnx.load(str(result))
-            init_names = {i.name for i in modified.graph.initializer}
-            assert "_m2a_reduce_axes" in init_names
+            out_names = [o.name for o in modified.graph.output]
+            assert "cls" in out_names
+            reduce_nodes = [n for n in modified.graph.node if n.op_type == "ReduceMax"]
+            assert len(reduce_nodes) == 0
         finally:
             if result != onnx_path:
                 result.unlink(missing_ok=True)
@@ -624,3 +628,123 @@ class TestYOLOModelStripQDQ:
         finally:
             if result != onnx_path:
                 result.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# _expose_cls_for_reducemax helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_yolo_onnx_with_reducemax(path: Path) -> None:
+    """Write a minimal ONNX with a ReduceMax→scores output plus Identity→scores chain.
+
+    Structure:
+      images → Identity → cls_tensor
+      cls_tensor → ReduceMax(axes=[-1]) → scores_raw → Identity → scores (output)
+      images → Identity → class_idx (output)
+    """
+    import numpy as np
+    import onnx
+    from onnx import TensorProto, numpy_helper
+    from onnx import helper as oh
+
+    inp = oh.make_tensor_value_info("images", TensorProto.FLOAT, [1, 3, 640, 640])
+    boxes_out = oh.make_tensor_value_info("boxes", TensorProto.FLOAT, [1, 8400, 4])
+    scores_out = oh.make_tensor_value_info("scores", TensorProto.FLOAT, [1, 8400])
+    class_idx_out = oh.make_tensor_value_info("class_idx", TensorProto.FLOAT, [1, 8400])
+
+    axes_init = numpy_helper.from_array(np.array([-1], dtype=np.int64), name="_axes")
+    make_cls = oh.make_node("Identity", ["images"], ["cls_tensor"])
+    reducemax = oh.make_node("ReduceMax", ["cls_tensor", "_axes"], ["scores_raw"], keepdims=0)
+    id_scores = oh.make_node("Identity", ["scores_raw"], ["scores"])
+    id_cidx = oh.make_node("Identity", ["images"], ["class_idx"])
+
+    graph = oh.make_graph(
+        [make_cls, reducemax, id_scores, id_cidx],
+        "with_reducemax",
+        [inp],
+        [boxes_out, scores_out, class_idx_out],
+        initializer=[axes_init],
+    )
+    model_proto = oh.make_model(graph, opset_imports=[oh.make_opsetid("", 18)])
+    onnx.save(model_proto, str(path))
+
+
+@pytest.mark.unit
+class TestExposeClsForReducemax:
+    """Tests for _expose_cls_for_reducemax()."""
+
+    def test_returns_false_when_no_reducemax(self, tmp_path: Path) -> None:
+        """Returns False when the graph has no ReduceMax node."""
+        import onnx
+
+        from moment_to_action.models.image.detection.yolo._model import _expose_cls_for_reducemax
+
+        onnx_path = tmp_path / "split.onnx"
+        _make_yolo_onnx_already_split(onnx_path)
+        m = onnx.load(str(onnx_path))
+        assert _expose_cls_for_reducemax(m) is False
+
+    def test_returns_true_when_reducemax_found(self, tmp_path: Path) -> None:
+        """Returns True when a ReduceMax node is replaced."""
+        import onnx
+
+        from moment_to_action.models.image.detection.yolo._model import _expose_cls_for_reducemax
+
+        onnx_path = tmp_path / "rm.onnx"
+        _make_yolo_onnx_with_reducemax(onnx_path)
+        m = onnx.load(str(onnx_path))
+        assert _expose_cls_for_reducemax(m) is True
+
+    def test_reducemax_removed(self, tmp_path: Path) -> None:
+        """ReduceMax node is removed from the graph."""
+        import onnx
+
+        from moment_to_action.models.image.detection.yolo._model import _expose_cls_for_reducemax
+
+        onnx_path = tmp_path / "rm.onnx"
+        _make_yolo_onnx_with_reducemax(onnx_path)
+        m = onnx.load(str(onnx_path))
+        _expose_cls_for_reducemax(m)
+        op_types = [n.op_type for n in m.graph.node]
+        assert "ReduceMax" not in op_types
+
+    def test_scores_replaced_by_cls_output(self, tmp_path: Path) -> None:
+        """Graph output 'scores' is replaced by 'cls'."""
+        import onnx
+
+        from moment_to_action.models.image.detection.yolo._model import _expose_cls_for_reducemax
+
+        onnx_path = tmp_path / "rm.onnx"
+        _make_yolo_onnx_with_reducemax(onnx_path)
+        m = onnx.load(str(onnx_path))
+        _expose_cls_for_reducemax(m)
+        out_names = [o.name for o in m.graph.output]
+        assert "cls" in out_names
+        assert "scores" not in out_names
+
+    def test_identity_feeding_scores_removed(self, tmp_path: Path) -> None:
+        """Identity node that forwarded ReduceMax output to 'scores' is removed."""
+        import onnx
+
+        from moment_to_action.models.image.detection.yolo._model import _expose_cls_for_reducemax
+
+        onnx_path = tmp_path / "rm.onnx"
+        _make_yolo_onnx_with_reducemax(onnx_path)
+        m = onnx.load(str(onnx_path))
+        _expose_cls_for_reducemax(m)
+        id_nodes = [n for n in m.graph.node if n.op_type == "Identity"]
+        assert not any(n.output[0] == "scores" for n in id_nodes)
+
+    def test_cls_identity_node_added(self, tmp_path: Path) -> None:
+        """An Identity node mapping the ReduceMax input to 'cls' is inserted."""
+        import onnx
+
+        from moment_to_action.models.image.detection.yolo._model import _expose_cls_for_reducemax
+
+        onnx_path = tmp_path / "rm.onnx"
+        _make_yolo_onnx_with_reducemax(onnx_path)
+        m = onnx.load(str(onnx_path))
+        _expose_cls_for_reducemax(m)
+        id_nodes = [n for n in m.graph.node if n.op_type == "Identity"]
+        assert any(n.output[0] == "cls" for n in id_nodes)

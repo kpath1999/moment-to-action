@@ -21,9 +21,12 @@ from typing import TYPE_CHECKING, Any, cast
 import attrs
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import numpy as np
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
+from moment_to_action.hardware._platforms._runtimes._qairt import qairt_backend_for
 from moment_to_action.hardware._platforms._runtimes._torch_policy import (
     resolve_torch_execution_policy,
 )
@@ -64,31 +67,38 @@ class _ModelHandle:
 
 
 class X86_64Backend(InferenceBackend):  # noqa: N801
-    """Unified inference backend for x86_64 (CPU-only).
+    """Unified inference backend for x86_64.
 
     Internally delegates to format-specific sub-backends, all created eagerly:
 
     - ``.tflite`` → ``_litert_backend`` (CPU via LiteRT/XNNPACK)
     - ``.onnx``   → ``_onnx_backend`` (CPU via ONNX Runtime)
+    - ``.dlc``    → QAIRT with ``preferred_unit`` selecting the backend
 
-    Both CPU-only; GPU support (CUDA/ROCm) can be added in the future via
-    sub-backend overrides.
+    Args:
+        preferred_unit: Compute unit to request for DLC models via QAIRT.
+            LiteRT and ONNX always run on CPU regardless of this setting.
 
     Usage::
 
-        backend = X86_64Backend()
+        backend = X86_64Backend(preferred_unit=ComputeUnit.CPU)
         handle  = backend.load_model("mobileclip.tflite")
         outputs = backend.run(handle, image_tensor)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, preferred_unit: ComputeUnit = ComputeUnit.CPU) -> None:
+        if preferred_unit is not ComputeUnit.CPU:
+            msg = f"X86_64Backend only supports CPU; got {preferred_unit.name}"
+            raise ValueError(msg)
+        self._preferred_unit = preferred_unit
+
         # CPU-only backends — always available.
         self._litert_backend: X86_64LiteRTBackend = X86_64LiteRTBackend(
             compute_unit=ComputeUnit.CPU
         )
         self._onnx_backend: X86_64ONNXBackend = X86_64ONNXBackend()
 
-        logger.info("X86_64Backend: CPU-only (LiteRT + ONNX Runtime)")
+        logger.info("X86_64Backend: CPU (LiteRT + ONNX Runtime)")
 
     # ------------------------------------------------------------------
     # InferenceBackend interface
@@ -176,3 +186,52 @@ class X86_64Backend(InferenceBackend):  # noqa: N801
         """Load an .onnx model via the ONNX sub-backend."""
         raw = self._onnx_backend.load_model(path)
         return _ModelHandle(raw=raw, backend=self._onnx_backend)
+
+    # ------------------------------------------------------------------
+    # DLC (QAIRT / CPU) interface
+    # ------------------------------------------------------------------
+
+    def load_model_dlc(self, path: Path) -> object:
+        """Load a DLC model and initialize the QAIRT CPU backend.
+
+        Enables running DLC models on x86_64 for local debugging without a
+        QCS6490 device.  Requires the QAIRT SDK to be installed.
+
+        Args:
+            path: Path to the ``.dlc`` model file.
+
+        Returns:
+            An opaque QAIRT model handle — pass it back to :meth:`infer_dlc`.
+
+        Raises:
+            RuntimeError: If the QAIRT SDK is not installed.
+        """
+        try:
+            import qairt  # noqa: PLC0415
+        except Exception as exc:
+            msg = "QAIRT SDK is not available; install it with 'm2a qairt install'"
+            raise RuntimeError(msg) from exc
+        raw = qairt.load(str(path))
+        raw.initialize(backend=qairt_backend_for(self._preferred_unit))
+        return raw
+
+    def infer_dlc(self, handle: object, inputs: np.ndarray) -> dict[str, np.ndarray]:
+        """Run inference on a loaded DLC model via the QAIRT CPU backend.
+
+        Args:
+            handle: Handle returned by :meth:`load_model_dlc`.
+            inputs: Input tensor for inference.
+
+        Returns:
+            Mapping of output tensor names to arrays.
+        """
+        result = handle(inputs=inputs)  # type: ignore[operator]
+        return dict(result.data)  # type: ignore[attr-defined]
+
+    def unload_dlc(self, handle: object) -> None:
+        """Release DLC model resources.
+
+        Args:
+            handle: Handle returned by :meth:`load_model_dlc`.
+        """
+        handle.destroy()  # type: ignore[attr-defined]

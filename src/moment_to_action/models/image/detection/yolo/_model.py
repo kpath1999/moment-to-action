@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 _YOLO_OUTPUT_NAME = "output0"
 _YOLO_INPUT_SIZE = 640
 _YOLO_ANCHORS = 8400
-_ONNX_OPSET_AXES_AS_INPUT = 18
 
 
 def _strip_qdq(model_proto: object) -> bool:
@@ -77,6 +76,66 @@ def _strip_qdq(model_proto: object) -> bool:
     return True
 
 
+def _expose_cls_for_reducemax(model_proto: object) -> bool:
+    """Replace a ReduceMax-based ``scores`` output with the raw transposed class tensor.
+
+    QAIRT CPU has a bug where ``ReduceMax`` on INT8 tensors produces constant
+    outputs.  This function removes the ``ReduceMax`` (and any ``Identity`` node
+    feeding the ``scores`` graph output) and instead exposes the ``ReduceMax``
+    input—the already-transposed ``(1, 8400, 80)`` class tensor—as a ``"cls"``
+    graph output.
+
+    :meth:`YOLOModel.run` computes ``scores = dlc_out["cls"].max(axis=-1)``
+    in numpy so the reduction happens outside the quantized DLC.
+
+    Args:
+        model_proto: ``onnx.ModelProto`` to modify in-place.
+
+    Returns:
+        ``True`` if a ``ReduceMax`` was found and replaced, ``False`` otherwise.
+    """
+    from onnx import TensorProto  # noqa: PLC0415
+    from onnx import helper as oh  # noqa: PLC0415
+
+    graph = model_proto.graph  # type: ignore[attr-defined]
+
+    reducemax_node = next((n for n in graph.node if n.op_type == "ReduceMax"), None)
+    if reducemax_node is None:
+        return False
+
+    cls_input_name: str = reducemax_node.input[0]
+    reducemax_output: str = reducemax_node.output[0]
+
+    # Remove ReduceMax and any Identity(reducemax_output → scores) that follows.
+    new_nodes = []
+    for node in graph.node:
+        if node is reducemax_node:
+            continue
+        if node.op_type == "Identity" and node.input[0] == reducemax_output:
+            continue
+        new_nodes.append(node)
+    del graph.node[:]
+    graph.node.extend(new_nodes)
+
+    # Expose cls_input_name as a "cls" graph output via Identity (preserves the
+    # internal tensor name so QAIRT can still find it as an intermediate output).
+    graph.node.append(oh.make_node("Identity", [cls_input_name], ["cls"]))
+
+    # Replace the "scores" entry in graph.output with "cls".
+    new_outputs = []
+    for out in graph.output:
+        if out.name == "scores":
+            new_outputs.append(
+                oh.make_tensor_value_info("cls", TensorProto.FLOAT, [1, _YOLO_ANCHORS, 80])
+            )
+        else:
+            new_outputs.append(out)
+    del graph.output[:]
+    graph.output.extend(new_outputs)
+
+    return True
+
+
 def _split_yolo_concat(model_proto: object) -> bool:
     """Rewrite a single ``output0`` Concat into three homogeneous-range outputs.
 
@@ -86,9 +145,10 @@ def _split_yolo_concat(model_proto: object) -> bool:
     to collapse after INT8 quantization.
 
     This function detects the Concat and replaces it with:
-    - ``_m2a_boxes (1, 8400, 4)`` - decoded bounding boxes
-    - ``_m2a_scores (1, 8400)`` - per-anchor max class probability
-    - ``_m2a_class_idx (1, 8400)`` - per-anchor argmax class index (float32)
+    - ``boxes (1, 8400, 4)`` - decoded bounding boxes
+    - ``cls (1, 8400, 80)`` - transposed raw class probabilities (scores computed
+      outside the DLC via :meth:`YOLOModel.run`)
+    - ``class_idx (1, 8400)`` - per-anchor argmax class index (float32)
 
     Args:
         model_proto: ``onnx.ModelProto`` to modify in-place.
@@ -114,38 +174,32 @@ def _split_yolo_concat(model_proto: object) -> bool:
 
     dbox_name, cls_name = concat_node.input[0], concat_node.input[1]
     boxes_name = "boxes"
-    scores_name = "scores"
+    cls_t_name = "_m2a_cls_T"
+    cls_out_name = "cls"
     argmax_name = "_m2a_argmax"
     class_idx_name = "class_idx"
 
-    opset = next(
-        (op.version for op in model_proto.opset_import if op.domain in {"", "ai.onnx"}),  # type: ignore[attr-defined]
-        11,
-    )
-    if opset >= _ONNX_OPSET_AXES_AS_INPUT:
-        axes_init_name = "_m2a_reduce_axes"
-        graph.initializer.append(oh.make_tensor(axes_init_name, TensorProto.INT64, [1], [1]))
-        reduce_node = oh.make_node(
-            "ReduceMax", [cls_name, axes_init_name], [scores_name], keepdims=0
-        )
-    else:
-        reduce_node = oh.make_node("ReduceMax", [cls_name], [scores_name], axes=[1], keepdims=0)
-
+    # Transpose cls from (1, 80, 8400) → (1, 8400, 80) so run() can always use
+    # axis=-1 for the in-Python ReduceMax regardless of which surgery path ran.
     graph.node.extend(
         [
             oh.make_node("Transpose", [dbox_name], [boxes_name], perm=[0, 2, 1]),
-            reduce_node,
+            oh.make_node("Transpose", [cls_name], [cls_t_name], perm=[0, 2, 1]),
+            oh.make_node("Identity", [cls_t_name], [cls_out_name]),
             oh.make_node("ArgMax", [cls_name], [argmax_name], axis=1, keepdims=0),
             oh.make_node("Cast", [argmax_name], [class_idx_name], to=TensorProto.FLOAT),
         ]
     )
     graph.node.remove(concat_node)
 
+    _yolo_classes = 80
     del graph.output[:]
     graph.output.extend(
         [
             oh.make_tensor_value_info(boxes_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS, 4]),
-            oh.make_tensor_value_info(scores_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS]),
+            oh.make_tensor_value_info(
+                cls_out_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS, _yolo_classes]
+            ),
             oh.make_tensor_value_info(class_idx_name, TensorProto.FLOAT, [1, _YOLO_ANCHORS]),
         ]
     )
@@ -315,9 +369,15 @@ class YOLOModel(ImageDetectionModel):
            tensor that mixes box coordinates (0-640) and class scores (0-1),
            rewrites it into three homogeneous-range outputs so each gets its own
            INT8 scale:
-           - ``_m2a_boxes (1, 8400, 4)`` - decoded bounding boxes
-           - ``_m2a_scores (1, 8400)`` - per-anchor max class probability
-           - ``_m2a_class_idx (1, 8400)`` - per-anchor argmax class index
+           - ``boxes (1, 8400, 4)`` - decoded bounding boxes
+           - ``cls (1, 8400, 80)`` - transposed raw class probabilities
+           - ``class_idx (1, 8400)`` - per-anchor argmax class index
+
+        3. **ReduceMax replacement**: replaces any ``ReduceMax``-based ``scores``
+           output with the raw transposed class tensor ``cls (1, 8400, 80)``.
+           QAIRT CPU has a bug producing constant outputs from quantized ReduceMax;
+           :meth:`run` computes ``scores`` via ``dlc_out["cls"].max(axis=-1)``
+           in numpy instead.
 
         Args:
             onnx_path: Path to the source YOLOv8 ONNX.
@@ -332,6 +392,7 @@ class YOLOModel(ImageDetectionModel):
 
         changed = _strip_qdq(model_proto)
         changed |= _split_yolo_concat(model_proto)
+        changed |= _expose_cls_for_reducemax(model_proto)
 
         if not changed:
             return onnx_path
@@ -377,7 +438,10 @@ class YOLOModel(ImageDetectionModel):
         if self._format is ModelFormat.ONNX:
             return self._backend.run(self._handle, prepared)
         dlc_out = self._backend.infer_dlc(self._handle, prepared)
-        return [dlc_out["boxes"], dlc_out["scores"], dlc_out["class_idx"]]
+        # DLC outputs "cls" (1, 8400, 80) instead of "scores" to avoid QAIRT
+        # CPU's broken ReduceMax on INT8.  Compute max class prob in numpy.
+        scores = dlc_out["cls"].max(axis=dlc_out["cls"].ndim - 1)
+        return [dlc_out["boxes"], scores, dlc_out["class_idx"]]
 
     def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
         """Decode YOLOv8 3-output format into detections.

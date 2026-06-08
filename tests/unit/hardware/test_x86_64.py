@@ -210,6 +210,99 @@ class TestX86_64Backend:  # noqa: N801
 
 
 @pytest.mark.unit
+class TestX86_64DLCMethods:  # noqa: N801
+    """Tests for X86_64Backend DLC methods using the QAIRT CPU backend."""
+
+    def _make_backend(self, preferred_unit: ComputeUnit = ComputeUnit.CPU) -> X86_64Backend:
+        """Return an X86_64Backend with sub-backends mocked out."""
+        mock_litert = MagicMock()
+        mock_onnx = MagicMock()
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
+                return_value=mock_litert,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
+                return_value=mock_onnx,
+            ),
+        ):
+            return X86_64Backend(preferred_unit=preferred_unit)
+
+    def test_load_model_dlc_cpu_unit_initializes_cpu(self) -> None:
+        """CPU preferred_unit → raw.initialize(backend='CPU')."""
+        import sys
+        from pathlib import Path
+
+        mock_raw = MagicMock()
+        mock_qairt = MagicMock()
+        mock_qairt.load.return_value = mock_raw
+        backend = self._make_backend(ComputeUnit.CPU)
+        path = Path("/fake/model.dlc")
+        with patch.dict(sys.modules, {"qairt": mock_qairt}):
+            handle = backend.load_model_dlc(path)
+
+        mock_qairt.load.assert_called_once_with(str(path))
+        mock_raw.initialize.assert_called_once_with(backend="CPU")
+        assert handle is mock_raw
+
+    def test_non_cpu_unit_raises_at_construction(self) -> None:
+        """X86_64Backend raises ValueError for any non-CPU preferred_unit."""
+        mock_litert = MagicMock()
+        mock_onnx = MagicMock()
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
+                return_value=mock_litert,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
+                return_value=mock_onnx,
+            ),
+            pytest.raises(ValueError, match="only supports CPU"),
+        ):
+            X86_64Backend(preferred_unit=ComputeUnit.NPU)
+
+    def test_load_model_dlc_raises_if_qairt_unavailable(self) -> None:
+        """load_model_dlc() raises RuntimeError when the QAIRT SDK cannot be imported."""
+        import sys
+        from pathlib import Path
+
+        backend = self._make_backend()
+        with patch.dict(sys.modules, {"qairt": None}):  # type: ignore[dict-item]
+            with pytest.raises(RuntimeError, match="QAIRT SDK is not available"):
+                backend.load_model_dlc(Path("/fake/model.dlc"))
+
+    def test_infer_dlc_calls_handle_and_returns_output(self) -> None:
+        """infer_dlc() calls handle(inputs=...) and returns the full output dict."""
+        boxes = np.zeros((1, 8400, 4), dtype=np.float32)
+        scores = np.zeros((1, 8400), dtype=np.float32)
+        class_idx = np.zeros((1, 8400), dtype=np.float32)
+        fake_output = {"boxes": boxes, "scores": scores, "class_idx": class_idx}
+        mock_result = MagicMock()
+        mock_result.data = fake_output
+        mock_handle = MagicMock()
+        mock_handle.return_value = mock_result
+        backend = self._make_backend()
+
+        result = backend.infer_dlc(mock_handle, np.zeros((1, 3, 640, 640), dtype=np.float32))
+
+        mock_handle.assert_called_once()
+        assert result.keys() == fake_output.keys()
+        for k, v in fake_output.items():
+            np.testing.assert_array_equal(result[k], v)
+
+    def test_unload_dlc_calls_handle_destroy(self) -> None:
+        """unload_dlc() calls handle.destroy()."""
+        backend = self._make_backend()
+        mock_handle = MagicMock()
+
+        backend.unload_dlc(mock_handle)
+
+        mock_handle.destroy.assert_called_once_with()
+
+
+@pytest.mark.unit
 class TestX86_64ResourceMonitor:  # noqa: N801
     """Test X86_64ResourceMonitor power sampling."""
 

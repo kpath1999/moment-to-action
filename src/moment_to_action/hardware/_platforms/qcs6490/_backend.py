@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, cast
 import attrs
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
+from moment_to_action.hardware._platforms._runtimes._qairt import qairt_backend_for
 from moment_to_action.hardware._platforms._runtimes._torch_policy import (
     resolve_torch_execution_policy,
 )
@@ -260,7 +261,7 @@ class QCS6490Backend(InferenceBackend):
             msg = "QAIRT SDK is not available; load_model_dlc requires a QCS6490 device"
             raise RuntimeError(msg) from exc
         raw = qairt.load(str(path))
-        raw.initialize(backend="HTP")
+        raw.initialize(backend=qairt_backend_for(self._preferred_unit))
         return raw
 
     def infer_dlc(self, handle: object, inputs: np.ndarray) -> dict[str, np.ndarray]:

@@ -159,6 +159,49 @@ class TestModelRunCommand:
         assert result.exit_code != 0
         assert "image model" in result.output.lower()
 
+    def test_threshold_option_forwarded_to_get_model(self, tmp_path: Path) -> None:
+        """--threshold is forwarded as confidence_threshold to get_model."""
+        img_path = tmp_path / "img.jpg"
+        _write_image(img_path)
+        mock_model = _make_mock_model()
+        mgr = MagicMock()
+        mgr.get_model.return_value = mock_model
+
+        _invoke(["yolo_v8", str(img_path), "--threshold", "0.1"], tmp_path, mgr)
+
+        mgr.get_model.assert_called_once()
+        _, kwargs = mgr.get_model.call_args
+        assert kwargs["confidence_threshold"] == pytest.approx(0.1)
+
+    def test_backend_option_forwarded_to_compute_backend(self, tmp_path: Path) -> None:
+        """--backend CPU passes ComputeUnit.CPU to ComputeBackend."""
+        from moment_to_action.hardware import ComputeUnit
+
+        img_path = tmp_path / "img.jpg"
+        _write_image(img_path)
+        mock_model = _make_mock_model()
+        mgr = MagicMock()
+        mgr.get_model.return_value = mock_model
+
+        mock_backend = MagicMock()
+        with patch("moment_to_action._cli.init_logging"):
+            with patch("moment_to_action._cli.PathManager", return_value=_patched_pm(tmp_path)):
+                with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    with patch(
+                        "moment_to_action._cli.commands.cmd_model.cmd_run.ModelManager",
+                        return_value=mgr,
+                    ):
+                        with patch(
+                            "moment_to_action._cli.commands.cmd_model.cmd_run.ComputeBackend",
+                            return_value=mock_backend,
+                        ) as cb_cls:
+                            from moment_to_action._cli import cli
+
+                            CliRunner().invoke(
+                                cli, ["model", "run", "yolo_v8", str(img_path), "--backend", "CPU"]
+                            )
+                            cb_cls.assert_called_once_with(preferred_unit=ComputeUnit.CPU)
+
     def test_model_unloaded_even_on_error(self, tmp_path: Path) -> None:
         """model.unload() is called even when inference raises."""
         img_path = tmp_path / "img.jpg"

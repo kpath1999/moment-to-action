@@ -10,7 +10,7 @@ import attrs
 import cv2
 import rich_click as click
 
-from moment_to_action.hardware import ComputeBackend
+from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.models import DEFAULT_VARIANT_KEY, ModelID, ModelManager
 from moment_to_action.models.image._base import ImageModel
 from moment_to_action.utils.cli import GlobalData, pass_global_data
@@ -73,6 +73,21 @@ def _draw_detections(frame: np.ndarray, detections: list[Detection]) -> np.ndarr
     default=None,
     help="Output path for image format. Defaults to <stem>_detections<ext> next to input.",
 )
+@click.option(
+    "--backend",
+    "backend_unit",
+    type=click.Choice([u.value for u in ComputeUnit], case_sensitive=False),
+    default=ComputeUnit.NPU.value,
+    show_default=True,
+    help="Preferred compute unit.",
+)
+@click.option(
+    "--threshold",
+    "confidence_threshold",
+    type=float,
+    default=None,
+    help="Override model confidence threshold (0.0-1.0). Default uses model's built-in threshold.",
+)
 @pass_global_data
 def run(
     data: GlobalData,
@@ -81,6 +96,8 @@ def run(
     variant: str,
     output_format: str,
     output_path: Path | None,
+    backend_unit: str,
+    confidence_threshold: float | None,
 ) -> None:
     r"""Run a model on a single input image end-to-end.
 
@@ -94,6 +111,7 @@ def run(
       m2a model run yolo_v8 image.jpg
       m2a model run yolo_v8 image.jpg --format image --output out.jpg
       m2a model run yolo_v8 image.jpg --variant qcs6490 --format json
+      m2a model run yolo_v8 image.jpg --variant qcs6490 --backend CPU
     """
     frame = cv2.imread(str(input_path))
     if frame is None:
@@ -101,12 +119,15 @@ def run(
         raise click.ClickException(msg)
 
     mid = ModelID(model_id)
-    model = ModelManager(data.path_manager).get_model(mid, variant=variant)
+    kwargs: dict[str, object] = {}
+    if confidence_threshold is not None:
+        kwargs["confidence_threshold"] = confidence_threshold
+    model = ModelManager(data.path_manager).get_model(mid, variant=variant, **kwargs)
     if not isinstance(model, ImageModel):
         msg = f"'{model_id}' is not an image model; run only supports image models currently."
         raise click.ClickException(msg)
 
-    backend = ComputeBackend()
+    backend = ComputeBackend(preferred_unit=ComputeUnit(backend_unit))
     model.load(backend)
     try:
         prepared = model.prepare(frame)
