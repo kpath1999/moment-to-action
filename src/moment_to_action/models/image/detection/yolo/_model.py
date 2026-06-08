@@ -65,10 +65,14 @@ def _strip_qdq(model_proto: object) -> bool:
     del graph.node[:]
     graph.node.extend(new_nodes)
 
-    # Remap graph outputs whose names were DQ outputs
+    # For graph outputs produced by removed DQ nodes, insert an Identity node
+    # that maps the original float tensor to the preserved output name.  Renaming
+    # out.name would change the DLC tensor key that run() looks up.
+    from onnx import helper as oh  # noqa: PLC0415
+
     for out in graph.output:
         if out.name in dq_remap:
-            out.name = dq_remap[out.name]
+            graph.node.append(oh.make_node("Identity", [dq_remap[out.name]], [out.name]))
 
     return True
 
@@ -109,10 +113,10 @@ def _split_yolo_concat(model_proto: object) -> bool:
         return False
 
     dbox_name, cls_name = concat_node.input[0], concat_node.input[1]
-    boxes_name = "_m2a_boxes"
-    scores_name = "_m2a_scores"
+    boxes_name = "boxes"
+    scores_name = "scores"
     argmax_name = "_m2a_argmax"
-    class_idx_name = "_m2a_class_idx"
+    class_idx_name = "class_idx"
 
     opset = next(
         (op.version for op in model_proto.opset_import if op.domain in {"", "ai.onnx"}),  # type: ignore[attr-defined]

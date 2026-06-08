@@ -457,9 +457,9 @@ class TestYOLOModelPrepareForConversion:
             modified = onnx.load(str(result))
             out_names = [o.name for o in modified.graph.output]
             assert len(out_names) == 3
-            assert "_m2a_boxes" in out_names
-            assert "_m2a_scores" in out_names
-            assert "_m2a_class_idx" in out_names
+            assert "boxes" in out_names
+            assert "scores" in out_names
+            assert "class_idx" in out_names
         finally:
             if result != onnx_path:
                 result.unlink(missing_ok=True)
@@ -605,7 +605,7 @@ class TestYOLOModelStripQDQ:
                 result.unlink(missing_ok=True)
 
     def test_qdq_graph_output_remapped(self, tmp_path: Path) -> None:
-        """Graph output that was a DQ output gets remapped to the original float tensor."""
+        """Graph output whose tensor was produced by a removed DQ node is preserved via Identity."""
         import onnx
 
         onnx_path = tmp_path / "qdq_out.onnx"
@@ -615,9 +615,12 @@ class TestYOLOModelStripQDQ:
         try:
             modified = onnx.load(str(result))
             out_names = [o.name for o in modified.graph.output]
-            # DQ output "out" mapped back to Q's input "inp"
-            assert "inp" in out_names
-            assert "out" not in out_names
+            # Output name "out" is preserved (DLC tensor key stays correct)
+            assert "out" in out_names
+            assert "inp" not in out_names
+            # An Identity node wires the original float tensor "inp" to "out"
+            identity_nodes = [n for n in modified.graph.node if n.op_type == "Identity"]
+            assert any(n.input[0] == "inp" and n.output[0] == "out" for n in identity_nodes)
         finally:
             if result != onnx_path:
                 result.unlink(missing_ok=True)
