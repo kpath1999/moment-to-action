@@ -30,6 +30,7 @@ dependencies = [
     "tensorflow==2.20.0",            # pinned: Python 3.10 max; TF gencode 5.x vs protobuf 6.x suppressed in pytest
     "typing-extensions==4.14.0",     # qairt SDK (qairt-visualizer)
     "httpx>=0.28.1",
+    "pycocotools>=2.0.11",
 ]
 
 [project.scripts]
@@ -43,7 +44,7 @@ yolo-export = [
 ]
 host = [
     # QAI Hub
-    "qai-hub-models>=0.54.0",
+    "qai-hub-models[yolov8-det]>=0.54.0",
     # QAIRT dev runtime
     "qairt-dev[onnx,torch]>=0.6.0",
     # QAIRT SDK deps
