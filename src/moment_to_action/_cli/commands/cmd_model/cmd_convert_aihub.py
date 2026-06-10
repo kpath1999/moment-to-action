@@ -287,7 +287,7 @@ def convert_aihub(
     # Step 1: Portable DLC
     dlc_path = _run_aihub_export(
         model_id=aihub_model_id,
-        precision=precision,
+        precision="float",
         runtime="qnn_dlc",
         chipset=chipset,
         output_dir=build_dir / "dlc",

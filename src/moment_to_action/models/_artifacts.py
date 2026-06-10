@@ -49,5 +49,6 @@ def resolve_backend_artifact(variant_dir: Path, unit: ComputeUnit) -> Path:
     dlc = variant_dir / "model.dlc"
     if dlc.exists():
         return dlc
-    msg = f"No artifact found in {variant_dir}: tried {cand.name} and model.dlc"
+    tried = f"{bin_name}, " if bin_name else ""
+    msg = f"No artifact found in {variant_dir}: tried {tried}model.dlc"
     raise FileNotFoundError(msg)

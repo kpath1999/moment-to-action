@@ -57,7 +57,7 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     "reference_outputs/outputs_1.npy",
                     "reference_outputs/outputs_2.npy",
                 ],
-                revision="922081b172275f58f0df0454bca47e73fd03b634",
+                revision="299e2abf9723627d5f9779eb663284598f3bad5c",
             ),
         },
     ),
