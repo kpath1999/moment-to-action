@@ -24,13 +24,6 @@ _AIHUB_MODEL_MAP: dict[ModelID, tuple[str, str]] = {
     ModelID.YOLO_V8: ("yolov8_det", "yolov8-det"),
 }
 
-# (compute_unit_name, dest_filename) for the three per-backend context binaries
-_AIHUB_COMPUTE_UNITS: list[tuple[str, str]] = [
-    ("cpu", "model.cpu.bin"),
-    ("gpu", "model.gpu.bin"),
-    ("npu", "model.npu.bin"),
-]
-
 
 def _build_dlc_model(model_id: ModelID, variant_dir: Path) -> ImageModel:
     """Instantiate the correct model class pointing at the DLC in ``variant_dir``.
@@ -135,8 +128,6 @@ def _run_aihub_export(
     chipset: str,
     output_dir: Path,
     token: str,
-    *,
-    compute_unit: str | None = None,
 ) -> Path:
     """Run the qai_hub_models export and return the path to the produced artifact.
 
@@ -151,9 +142,6 @@ def _run_aihub_export(
         chipset: Target chipset slug (e.g. ``"qualcomm-qcs6490"``).
         output_dir: Directory to write artifacts into.
         token: AI Hub API token.
-        compute_unit: Optional compute unit for context binaries (``"cpu"``,
-            ``"gpu"``, or ``"npu"``).  Passed as ``--compute_unit`` to the
-            compile step.  Ignored for ``qnn_dlc`` exports.
 
     Returns:
         Path to the produced ``.dlc`` or ``.bin`` file.
@@ -192,13 +180,10 @@ def _run_aihub_export(
 
     precision_obj = getattr(export_mod.Precision, precision)
     runtime_obj = export_mod.TargetRuntime(runtime)
-    compile_options = f"--compute_unit {compute_unit}" if compute_unit else ""
 
-    label = f"{model_id} ({precision}, {runtime}, {chipset}"
-    if compute_unit:
-        label += f", {compute_unit}"
-    label += ")"
-    click.echo(f"Submitting AI Hub export job for {label} ...")
+    click.echo(
+        f"Submitting AI Hub export job for {model_id} ({precision}, {runtime}, {chipset}) ..."
+    )
 
     # Call the export function. Note: do NOT pass num_calibration_samples — their
     # parser leaves it as a str, causing TypeError inside get_calibration_data.
@@ -210,7 +195,6 @@ def _run_aihub_export(
         output_dir=str(output_dir),
         precision=precision_obj,
         target_runtime=runtime_obj,
-        compile_options=compile_options,
     )
 
     # Determine the expected file extension for this runtime
@@ -326,17 +310,15 @@ def convert_aihub(
     # resolve_backend_artifact falls back to model.dlc when no .bin files are present.
     _capture_reference_outputs(mid, calibration_dir, output_dir)
 
-    # Step 3: Per-backend context binaries (cpu, gpu, npu)
-    for compute_unit, dest_name in _AIHUB_COMPUTE_UNITS:
-        bin_path = _run_aihub_export(
-            model_id=aihub_model_id,
-            precision=precision,
-            runtime="qnn_context_binary",
-            chipset=chipset,
-            output_dir=build_dir / compute_unit,
-            token=token,
-            compute_unit=compute_unit,
-        )
-        dest_bin = output_dir / dest_name
-        shutil.copy2(bin_path, dest_bin)
-        click.echo(f"Context binary: {dest_bin}")
+    # Step 3: NPU context binary (HTP AOT-compiled; CPU/GPU fall back to model.dlc)
+    npu_bin_path = _run_aihub_export(
+        model_id=aihub_model_id,
+        precision=precision,
+        runtime="qnn_context_binary",
+        chipset=chipset,
+        output_dir=build_dir / "npu",
+        token=token,
+    )
+    dest_npu = output_dir / "model.npu.bin"
+    shutil.copy2(npu_bin_path, dest_npu)
+    click.echo(f"Context binary: {dest_npu}")

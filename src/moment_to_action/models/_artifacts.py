@@ -14,10 +14,9 @@ from moment_to_action.hardware._types import ComputeUnit
 if TYPE_CHECKING:
     from pathlib import Path
 
-# Map each compute unit to its preferred context-binary filename.
+# Context binaries are HTP-compiled device artifacts; only NPU/DSP can load them.
+# CPU and GPU inference uses the portable model.dlc (no entry → DLC fallback).
 _BIN_BY_UNIT: dict[ComputeUnit, str] = {
-    ComputeUnit.CPU: "model.cpu.bin",
-    ComputeUnit.GPU: "model.gpu.bin",
     ComputeUnit.NPU: "model.npu.bin",
     ComputeUnit.DSP: "model.npu.bin",
 }
@@ -42,9 +41,11 @@ def resolve_backend_artifact(variant_dir: Path, unit: ComputeUnit) -> Path:
     Raises:
         FileNotFoundError: If neither the context binary nor ``model.dlc`` exists.
     """
-    cand = variant_dir / _BIN_BY_UNIT[unit]
-    if cand.exists():
-        return cand
+    bin_name = _BIN_BY_UNIT.get(unit)
+    if bin_name is not None:
+        cand = variant_dir / bin_name
+        if cand.exists():
+            return cand
     dlc = variant_dir / "model.dlc"
     if dlc.exists():
         return dlc

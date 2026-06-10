@@ -91,19 +91,17 @@ class TestConvertAihubCommand:
         assert result.exit_code != 0
 
     def test_successful_export_copies_dlc(self, tmp_path: Path) -> None:
-        """On success, model.dlc and three context binaries are written to output_dir."""
+        """On success, model.dlc and model.npu.bin are written to output_dir."""
         out = tmp_path / "out"
         out.mkdir()
 
         dlc_src = _make_artifact(tmp_path / "dlc", ".dlc")
-        cpu_src = _make_artifact(tmp_path / "cpu", ".bin")
-        gpu_src = _make_artifact(tmp_path / "gpu", ".bin")
         npu_src = _make_artifact(tmp_path / "npu", ".bin")
 
         with (
             patch(
                 "moment_to_action._cli.commands.cmd_model.cmd_convert_aihub._run_aihub_export",
-                side_effect=[dlc_src, cpu_src, gpu_src, npu_src],
+                side_effect=[dlc_src, npu_src],
             ),
             patch(
                 "moment_to_action._cli.commands.cmd_model.cmd_convert_aihub._capture_reference_outputs"
@@ -117,8 +115,6 @@ class TestConvertAihubCommand:
 
         assert result.exit_code == 0, result.output
         assert (out / "model.dlc").exists()
-        assert (out / "model.cpu.bin").exists()
-        assert (out / "model.gpu.bin").exists()
         assert (out / "model.npu.bin").exists()
 
     def test_successful_export_copies_sidecars(self, tmp_path: Path) -> None:
@@ -133,14 +129,12 @@ class TestConvertAihubCommand:
         (build_dlc_dir / "metadata.json").write_text("{}")
         (build_dlc_dir / "labels.txt").write_text("person\n")
 
-        cpu_src = _make_artifact(tmp_path / "cpu", ".bin")
-        gpu_src = _make_artifact(tmp_path / "gpu", ".bin")
         npu_src = _make_artifact(tmp_path / "npu", ".bin")
 
         with (
             patch(
                 "moment_to_action._cli.commands.cmd_model.cmd_convert_aihub._run_aihub_export",
-                side_effect=[dlc_src, cpu_src, gpu_src, npu_src],
+                side_effect=[dlc_src, npu_src],
             ),
             patch(
                 "moment_to_action._cli.commands.cmd_model.cmd_convert_aihub._capture_reference_outputs"
@@ -157,19 +151,17 @@ class TestConvertAihubCommand:
         assert (out / "labels.txt").read_text() == "person\n"
 
     def test_run_aihub_export_calls_correct_runtimes(self, tmp_path: Path) -> None:
-        """convert-aihub calls _run_aihub_export once for DLC and once per compute unit."""
+        """convert-aihub calls _run_aihub_export once for DLC then once for npu bin."""
         out = tmp_path / "out"
         out.mkdir()
 
         dlc_src = _make_artifact(tmp_path / "dlc", ".dlc")
-        cpu_src = _make_artifact(tmp_path / "cpu", ".bin")
-        gpu_src = _make_artifact(tmp_path / "gpu", ".bin")
         npu_src = _make_artifact(tmp_path / "npu", ".bin")
 
         with (
             patch(
                 "moment_to_action._cli.commands.cmd_model.cmd_convert_aihub._run_aihub_export",
-                side_effect=[dlc_src, cpu_src, gpu_src, npu_src],
+                side_effect=[dlc_src, npu_src],
             ) as mock_export,
             patch(
                 "moment_to_action._cli.commands.cmd_model.cmd_convert_aihub._capture_reference_outputs"
@@ -182,10 +174,9 @@ class TestConvertAihubCommand:
             )
 
         assert result.exit_code == 0, result.output
-        assert mock_export.call_count == 4
-        # First call: DLC, no compute_unit
-        first_call = mock_export.call_args_list[0]
-        assert first_call == call(
+        assert mock_export.call_count == 2
+        # First call: DLC
+        assert mock_export.call_args_list[0] == call(
             model_id="yolov8_det",
             precision="w8a8",
             runtime="qnn_dlc",
@@ -193,20 +184,17 @@ class TestConvertAihubCommand:
             output_dir=out / "_aihub_build" / "dlc",
             token="tok",
         )
-        # Reference outputs captured after DLC but before context binaries
+        # Reference outputs captured after DLC but before context binary
         assert mock_capture.call_count == 1
-        # Remaining export calls: context binary, one per compute unit
-        for i, (unit, _) in enumerate([("cpu", ""), ("gpu", ""), ("npu", "")], start=1):
-            cb_call = mock_export.call_args_list[i]
-            assert cb_call == call(
-                model_id="yolov8_det",
-                precision="w8a8",
-                runtime="qnn_context_binary",
-                chipset="qualcomm-qcs6490",
-                output_dir=out / "_aihub_build" / unit,
-                token="tok",
-                compute_unit=unit,
-            )
+        # Second call: context binary for NPU
+        assert mock_export.call_args_list[1] == call(
+            model_id="yolov8_det",
+            precision="w8a8",
+            runtime="qnn_context_binary",
+            chipset="qualcomm-qcs6490",
+            output_dir=out / "_aihub_build" / "npu",
+            token="tok",
+        )
 
     def test_no_dlc_found_raises(self, tmp_path: Path) -> None:
         """Exits non-zero when export produces no .dlc file (empty output dir)."""
@@ -264,7 +252,6 @@ class TestConvertAihubCommand:
                     chipset="qualcomm-qcs6490",
                     output_dir=out / "_build",
                     token="tok",
-                    compute_unit="npu",
                 )
 
     def test_check_token_raises_when_unset(self) -> None:
@@ -413,7 +400,6 @@ class TestConvertAihubCommand:
                 chipset="qualcomm-qcs6490",
                 output_dir=build_dir,
                 token="tok",
-                compute_unit="npu",
             )
         assert result == bin_file
 
