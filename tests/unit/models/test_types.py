@@ -304,13 +304,15 @@ class TestModelRegistry:
     """Tests for MODEL_REGISTRY."""
 
     def test_yolo_v8_registered(self) -> None:
-        """YOLO_V8 is in the registry with a VendoredSource default variant."""
+        """YOLO_V8 is in the registry with an UltralyticsSource default variant."""
+        from moment_to_action.models._sources._ultralytics import UltralyticsSource
+
         assert ModelID.YOLO_V8 in MODEL_REGISTRY
         info = MODEL_REGISTRY[ModelID.YOLO_V8]
         assert info.id is ModelID.YOLO_V8
         default = info.variants[DEFAULT_KEY]
-        assert isinstance(default, VendoredSource)
-        assert default.path == Path("yolo/model.onnx")
+        assert isinstance(default, UltralyticsSource)
+        assert default.name == "yolov8n"
         assert default.format is ModelFormat.ONNX
 
     def test_yolo_v8_has_model_class(self) -> None:

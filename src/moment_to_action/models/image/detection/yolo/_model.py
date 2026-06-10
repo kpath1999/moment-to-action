@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 import cv2
 import numpy as np
 
+from moment_to_action.models._artifacts import resolve_backend_artifact
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
@@ -309,6 +310,7 @@ class YOLOModel(ImageDetectionModel):
         path: Path,
         model_format: ModelFormat,
         confidence_threshold: float = 0.5,
+        input_layout: str | None = None,
     ) -> None:
         """Initialize an unloaded YOLOModel.
 
@@ -317,11 +319,20 @@ class YOLOModel(ImageDetectionModel):
             path: Path to the model weights file.
             model_format: ``ModelFormat.ONNX`` or ``ModelFormat.DLC``.
             confidence_threshold: Detections below this score are discarded.
+            input_layout: ``"NCHW"`` or ``"NHWC"``.  When ``None`` the layout
+                is derived automatically: DLC ``qcs6490`` variants use
+                ``"NHWC"`` (AI Hub export); all other variants use ``"NCHW"``.
         """
         super().__init__(variant, path)
         self._format = model_format
         self._confidence_threshold = confidence_threshold
         self._handle: object = None
+        if input_layout is None:
+            # AI Hub qcs6490 DLC exports to NHWC [1,640,640,3]; others use NCHW.
+            input_layout = (
+                "NHWC" if (model_format is ModelFormat.DLC and variant == "qcs6490") else "NCHW"
+            )
+        self._input_layout = input_layout
 
     @property
     def confidence_threshold(self) -> float:
@@ -330,6 +341,11 @@ class YOLOModel(ImageDetectionModel):
 
     def load(self, backend: ComputeBackend) -> None:
         """Load model weights onto the backend.
+
+        For DLC variants, selects the best artifact via
+        :func:`~moment_to_action.models._artifacts.resolve_backend_artifact`:
+        a per-backend context binary (``model.<unit>.bin``) when present,
+        falling back to ``model.dlc``.
 
         Args:
             backend: Hardware backend to load the model onto.
@@ -343,7 +359,8 @@ class YOLOModel(ImageDetectionModel):
         if self._format is ModelFormat.ONNX:
             self._handle = backend.load_model(self._path)
         else:
-            self._handle = backend.load_model_dlc(self._path / "model.dlc")
+            artifact = resolve_backend_artifact(self._path, backend.preferred_unit)
+            self._handle = backend.load_model_dlc(artifact)
         self._backend = backend
 
     def unload(self) -> None:
@@ -402,6 +419,11 @@ class YOLOModel(ImageDetectionModel):
         onnx.save(model_proto, str(tmp_path))
         return tmp_path
 
+    @property
+    def input_layout(self) -> str:
+        """Input tensor layout: ``"NCHW"`` or ``"NHWC"``."""
+        return self._input_layout
+
     def prepare(self, frame: np.ndarray) -> np.ndarray:
         """Resize, normalize, and batch a raw BGR frame for YOLO inference.
 
@@ -409,13 +431,19 @@ class YOLOModel(ImageDetectionModel):
             frame: Raw BGR image (HxWxC, uint8).
 
         Returns:
-            Float32 NCHW tensor of shape ``(1, 3, 640, 640)`` with values in ``[0, 1]``.
-            QAIRT handles NCHW → NHWC internally for HTP, so NCHW is correct for both
-            ONNX and DLC formats.
+            Float32 tensor with values in ``[0, 1]``:
+
+            - ``(1, 3, 640, 640)`` when :attr:`input_layout` is ``"NCHW"``
+              (ONNX / local-convert DLC).
+            - ``(1, 640, 640, 3)`` when :attr:`input_layout` is ``"NHWC"``
+              (AI Hub DLC — the model was exported with NHWC input).
         """
         resized = cv2.resize(frame, (_YOLO_INPUT_SIZE, _YOLO_INPUT_SIZE))
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         normalized = rgb.astype(np.float32) / 255.0
+        if self._input_layout == "NHWC":
+            # Keep HxWxC, just add batch dim → (1, 640, 640, 3)
+            return np.expand_dims(normalized, axis=0)
         # HxWxC → CxHxW → 1xCxHxW (NCHW)
         chw = np.transpose(normalized, (2, 0, 1))
         return np.expand_dims(chw, axis=0)
@@ -438,8 +466,11 @@ class YOLOModel(ImageDetectionModel):
         if self._format is ModelFormat.ONNX:
             return self._backend.run(self._handle, prepared)
         dlc_out = self._backend.infer_dlc(self._handle, prepared)
-        # DLC outputs "cls" (1, 8400, 80) instead of "scores" to avoid QAIRT
-        # CPU's broken ReduceMax on INT8.  Compute max class prob in numpy.
+        if "scores" in dlc_out:
+            # AI Hub DLC already emits per-anchor max class prob directly.
+            return [dlc_out["boxes"], dlc_out["scores"], dlc_out["class_idx"]]
+        # Local-convert DLC outputs "cls" (1, 8400, 80) to avoid QAIRT CPU's
+        # broken ReduceMax on INT8.  Compute max class prob in numpy.
         scores = dlc_out["cls"].max(axis=dlc_out["cls"].ndim - 1)
         return [dlc_out["boxes"], scores, dlc_out["class_idx"]]
 

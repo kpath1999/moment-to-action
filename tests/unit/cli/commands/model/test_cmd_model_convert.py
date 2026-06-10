@@ -241,6 +241,23 @@ class TestModelConvertCommand:
         call_args = qairt_mgr.convert.call_args[0]
         assert call_args[0] == surgery_path
 
+    def test_warning_printed_on_every_invocation(self, tmp_path: Path) -> None:
+        """The QAIRT quantizer limitation warning is printed even before SDK check."""
+        calib_dir = tmp_path / "calib"
+        calib_dir.mkdir()
+        output_dir = tmp_path / "out"
+        qairt_mgr = _make_qairt_mgr(available=False)
+        model_mgr = MagicMock()
+
+        result = _invoke(
+            ["yolo_v8", "-o", str(output_dir), "--calibration-dir", str(calib_dir)],
+            tmp_path,
+            model_mgr,
+            qairt_mgr,
+        )
+        assert "warning" in result.output.lower()
+        assert "convert-aihub" in result.output
+
     def test_non_image_model_errors(self, tmp_path: Path) -> None:
         """Exits non-zero when model is not an ImageModel."""
         calib_dir = tmp_path / "calib"
@@ -264,4 +281,4 @@ class TestModelConvertCommand:
             qairt_mgr,
         )
         assert result.exit_code != 0
-        assert "image detection model" in result.output
+        assert "image model" in result.output

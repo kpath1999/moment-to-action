@@ -394,6 +394,13 @@ class TestRemoveModel:
 class TestGetModel:
     """Tests for get_model()."""
 
+    @pytest.fixture(autouse=True)
+    def _prefill_yolo_default(self, path_manager: PathManager) -> None:
+        """Pre-create the cached ONNX so UltralyticsSource skips the real download."""
+        variant_dir = path_manager.cache.models.get_variant_dir("yolo_v8", "default")
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        (variant_dir / "model.onnx").write_bytes(b"fake_onnx")
+
     def test_returns_yolo_model_instance(self, path_manager: PathManager) -> None:
         """get_model() returns a YOLOModel for YOLO_V8."""
         mgr = ModelManager(path_manager)
@@ -436,16 +443,27 @@ class TestGetModel:
 
 
 @pytest.mark.unit
-class TestVendoredFlow:
-    """End-to-end-ish test using the real vendored YOLO model."""
+class TestUltralyticsFlow:
+    """End-to-end-ish tests using the UltralyticsSource YOLO default variant."""
 
-    def test_yolo_v8_default_is_available(self, path_manager: PathManager) -> None:
-        """Vendored YOLO_V8 default variant is available via the default registry."""
+    def test_yolo_v8_default_unavailable_when_not_cached(self, path_manager: PathManager) -> None:
+        """UltralyticsSource YOLO_V8 default variant is not available before download."""
+        mgr = ModelManager(path_manager)
+        assert mgr.is_available(ModelID.YOLO_V8) is False
+
+    def test_yolo_v8_default_available_when_cached(self, path_manager: PathManager) -> None:
+        """UltralyticsSource reports available when model.onnx exists in variant dir."""
+        variant_dir = path_manager.cache.models.get_variant_dir("yolo_v8", "default")
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        (variant_dir / "model.onnx").write_bytes(b"fake_onnx")
         mgr = ModelManager(path_manager)
         assert mgr.is_available(ModelID.YOLO_V8) is True
 
-    def test_yolo_v8_get_path_returns_existing_file(self, path_manager: PathManager) -> None:
-        """`get_path` returns the on-disk vendored YOLO file."""
+    def test_yolo_v8_get_path_returns_cached_file(self, path_manager: PathManager) -> None:
+        """get_path() returns the cached ONNX when it already exists (no re-download)."""
+        variant_dir = path_manager.cache.models.get_variant_dir("yolo_v8", "default")
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        (variant_dir / "model.onnx").write_bytes(b"fake_onnx")
         mgr = ModelManager(path_manager)
         p = mgr.get_path(ModelID.YOLO_V8)
         assert p.exists()

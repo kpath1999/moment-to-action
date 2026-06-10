@@ -7,6 +7,7 @@ NMS, confidence filtering, coordinate scaling, and COCO label mapping.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest import mock
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -25,8 +26,14 @@ def onnx_model() -> YOLOModel:
 
 @pytest.fixture
 def dlc_model() -> YOLOModel:
-    """Return an unloaded YOLOModel in DLC format."""
+    """Return an unloaded YOLOModel in DLC format (qcs6490 → NHWC auto-detected)."""
     return YOLOModel("qcs6490", Path("/fake/qcs6490"), ModelFormat.DLC)
+
+
+@pytest.fixture
+def dlc_model_nchw() -> YOLOModel:
+    """Return an unloaded YOLOModel in DLC format with explicit NCHW layout."""
+    return YOLOModel("other", Path("/fake/other"), ModelFormat.DLC)
 
 
 @pytest.fixture
@@ -55,14 +62,24 @@ class TestYOLOModelPrepare:
     """Tests for YOLOModel.prepare()."""
 
     def test_output_shape(self, onnx_model: YOLOModel, sample_image_array: np.ndarray) -> None:
-        """prepare() returns NCHW (1, 3, 640, 640) for both ONNX and DLC."""
+        """prepare() returns NCHW (1, 3, 640, 640) for ONNX."""
         result = onnx_model.prepare(sample_image_array)
         assert result.shape == (1, 3, 640, 640)
 
-    def test_dlc_output_shape(self, dlc_model: YOLOModel, sample_image_array: np.ndarray) -> None:
-        """prepare() returns NCHW (1, 3, 640, 640) for DLC — QAIRT handles NCHW→NHWC."""
-        result = dlc_model.prepare(sample_image_array)
+    def test_dlc_nchw_output_shape(
+        self, dlc_model_nchw: YOLOModel, sample_image_array: np.ndarray
+    ) -> None:
+        """prepare() returns NCHW (1, 3, 640, 640) for non-qcs6490 DLC."""
+        result = dlc_model_nchw.prepare(sample_image_array)
         assert result.shape == (1, 3, 640, 640)
+
+    def test_dlc_nhwc_output_shape(
+        self, dlc_model: YOLOModel, sample_image_array: np.ndarray
+    ) -> None:
+        """prepare() returns NHWC (1, 640, 640, 3) for qcs6490 AI Hub DLC."""
+        assert dlc_model.input_layout == "NHWC"
+        result = dlc_model.prepare(sample_image_array)
+        assert result.shape == (1, 640, 640, 3)
 
     def test_output_dtype_float32(
         self, onnx_model: YOLOModel, sample_image_array: np.ndarray
@@ -71,11 +88,26 @@ class TestYOLOModelPrepare:
         result = onnx_model.prepare(sample_image_array)
         assert result.dtype == np.float32
 
+    def test_nhwc_output_dtype_float32(
+        self, dlc_model: YOLOModel, sample_image_array: np.ndarray
+    ) -> None:
+        """NHWC prepare() returns float32."""
+        result = dlc_model.prepare(sample_image_array)
+        assert result.dtype == np.float32
+
     def test_values_in_unit_range(
         self, onnx_model: YOLOModel, sample_image_array: np.ndarray
     ) -> None:
         """prepare() normalizes pixel values to [0, 1]."""
         result = onnx_model.prepare(sample_image_array)
+        assert float(result.min()) >= 0.0
+        assert float(result.max()) <= 1.0
+
+    def test_nhwc_values_in_unit_range(
+        self, dlc_model: YOLOModel, sample_image_array: np.ndarray
+    ) -> None:
+        """NHWC prepare() normalizes pixel values to [0, 1]."""
+        result = dlc_model.prepare(sample_image_array)
         assert float(result.min()) >= 0.0
         assert float(result.max()) <= 1.0
 
@@ -95,12 +127,63 @@ class TestYOLOModelRun:
         self, dlc_model: YOLOModel, mock_backend: MagicMock
     ) -> None:
         """DLC run() delegates to backend.infer_dlc()."""
-        dlc_model.load(mock_backend)
-        prepared = np.zeros((1, 3, 640, 640), dtype=np.float32)
-        dlc_model.run(prepared)
-        mock_backend.infer_dlc.assert_called_once_with(
-            mock_backend.load_model_dlc.return_value, prepared
-        )
+        mock_backend.infer_dlc.return_value = {
+            "boxes": np.zeros((1, 8400, 4)),
+            "cls": np.zeros((1, 8400, 80)),
+            "class_idx": np.zeros((1, 8400)),
+        }
+        with mock.patch(
+            "moment_to_action.models.image.detection.yolo._model.resolve_backend_artifact",
+            return_value=Path("/fake/model.dlc"),
+        ):
+            dlc_model.load(mock_backend)
+            prepared = np.zeros((1, 640, 640, 3), dtype=np.float32)
+            dlc_model.run(prepared)
+        mock_backend.infer_dlc.assert_called_once()
+
+    def test_dlc_aihub_run_uses_scores_directly(
+        self, dlc_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """AI Hub DLC run() returns scores directly when 'scores' key is present."""
+        mock_backend.preferred_unit = MagicMock()
+        boxes = np.zeros((1, 8400, 4), dtype=np.float32)
+        scores = np.full((1, 8400), 0.9, dtype=np.float32)
+        class_idx = np.zeros((1, 8400), dtype=np.float32)
+        mock_backend.infer_dlc.return_value = {
+            "boxes": boxes,
+            "scores": scores,
+            "class_idx": class_idx,
+        }
+        with mock.patch(
+            "moment_to_action.models.image.detection.yolo._model.resolve_backend_artifact",
+            return_value=Path("/fake/model.dlc"),
+        ):
+            dlc_model.load(mock_backend)
+            prepared = np.zeros((1, 640, 640, 3), dtype=np.float32)
+            result = dlc_model.run(prepared)
+        assert len(result) == 3
+        assert result[1] is scores  # scores returned directly
+
+    def test_dlc_local_convert_run_computes_cls_max(
+        self, dlc_model: YOLOModel, mock_backend: MagicMock
+    ) -> None:
+        """Local-convert DLC run() computes scores from cls.max() when 'scores' absent."""
+        mock_backend.preferred_unit = MagicMock()
+        cls = np.zeros((1, 8400, 80), dtype=np.float32)
+        cls[0, 0, 5] = 0.85  # anchor 0, class 5 is the max
+        mock_backend.infer_dlc.return_value = {
+            "boxes": np.zeros((1, 8400, 4), dtype=np.float32),
+            "cls": cls,
+            "class_idx": np.zeros((1, 8400), dtype=np.float32),
+        }
+        with mock.patch(
+            "moment_to_action.models.image.detection.yolo._model.resolve_backend_artifact",
+            return_value=Path("/fake/model.dlc"),
+        ):
+            dlc_model.load(mock_backend)
+            prepared = np.zeros((1, 640, 640, 3), dtype=np.float32)
+            result = dlc_model.run(prepared)
+        assert result[1][0, 0] == pytest.approx(0.85)
 
     def test_raises_if_not_loaded(self, onnx_model: YOLOModel) -> None:
         """run() raises RuntimeError if load() was not called."""
@@ -123,9 +206,16 @@ class TestYOLOModelLoadUnload:
     def test_load_dlc_calls_load_model_dlc(
         self, dlc_model: YOLOModel, mock_backend: MagicMock
     ) -> None:
-        """DLC load() calls backend.load_model_dlc with the model path."""
-        dlc_model.load(mock_backend)
-        mock_backend.load_model_dlc.assert_called_once_with(Path("/fake/qcs6490/model.dlc"))
+        """DLC load() resolves the backend artifact and passes it to load_model_dlc."""
+        artifact = Path("/fake/qcs6490/model.dlc")
+        mock_backend.preferred_unit = MagicMock()
+        with mock.patch(
+            "moment_to_action.models.image.detection.yolo._model.resolve_backend_artifact",
+            return_value=artifact,
+        ) as mock_resolve:
+            dlc_model.load(mock_backend)
+        mock_resolve.assert_called_once_with(Path("/fake/qcs6490"), mock_backend.preferred_unit)
+        mock_backend.load_model_dlc.assert_called_once_with(artifact)
 
     def test_load_sets_backend(self, onnx_model: YOLOModel, mock_backend: MagicMock) -> None:
         """load() stores the backend on _backend."""
@@ -145,7 +235,12 @@ class TestYOLOModelLoadUnload:
         self, dlc_model: YOLOModel, mock_backend: MagicMock
     ) -> None:
         """DLC unload() calls backend.unload_dlc(handle)."""
-        dlc_model.load(mock_backend)
+        mock_backend.preferred_unit = MagicMock()
+        with mock.patch(
+            "moment_to_action.models.image.detection.yolo._model.resolve_backend_artifact",
+            return_value=Path("/fake/qcs6490/model.dlc"),
+        ):
+            dlc_model.load(mock_backend)
         handle = mock_backend.load_model_dlc.return_value
         dlc_model.unload()
         mock_backend.unload_dlc.assert_called_once_with(handle)
@@ -370,6 +465,23 @@ class TestYOLOModelProperties:
         """Custom confidence_threshold is stored."""
         model = YOLOModel("v", Path("/x"), ModelFormat.ONNX, confidence_threshold=0.75)
         assert model.confidence_threshold == pytest.approx(0.75)
+
+    def test_input_layout_onnx_defaults_nchw(self, onnx_model: YOLOModel) -> None:
+        """ONNX variant defaults to NCHW."""
+        assert onnx_model.input_layout == "NCHW"
+
+    def test_input_layout_dlc_qcs6490_auto_nhwc(self, dlc_model: YOLOModel) -> None:
+        """DLC qcs6490 variant auto-detects NHWC (AI Hub export)."""
+        assert dlc_model.input_layout == "NHWC"
+
+    def test_input_layout_dlc_non_qcs6490_nchw(self, dlc_model_nchw: YOLOModel) -> None:
+        """DLC non-qcs6490 variant defaults to NCHW."""
+        assert dlc_model_nchw.input_layout == "NCHW"
+
+    def test_input_layout_explicit_override(self) -> None:
+        """Explicit input_layout overrides auto-detection."""
+        model = YOLOModel("qcs6490", Path("/x"), ModelFormat.DLC, input_layout="NCHW")
+        assert model.input_layout == "NCHW"
 
 
 def _make_yolo_onnx_with_concat(path: Path, opset: int = 11) -> None:

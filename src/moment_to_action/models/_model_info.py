@@ -13,6 +13,7 @@ class ModelID(Enum):
     YOLO_V8 = "yolo_v8"
     MOBILECLIP_S2 = "mobileclip_s2"
     SMOLVLM2_2_2B = "smolvlm2_2_2b"
+    MOBILENET_V2 = "mobilenet_v2"
 
 
 @attrs.frozen

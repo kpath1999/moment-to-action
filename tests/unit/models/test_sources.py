@@ -11,6 +11,7 @@ from moment_to_action.models import (
     DownloadSource,
     HuggingFaceSource,
     ModelFormat,
+    UltralyticsSource,
     VendoredSource,
     resolve_download_source,
     resolve_hugging_face_source,
@@ -275,6 +276,13 @@ class TestResolveModelSourceDispatch:
         (tmp_path / "a").write_text("ok")
         result = resolve_model_source(s, tmp_path)
         assert result == tmp_path
+
+    def test_dispatches_to_ultralytics(self, tmp_path: Path) -> None:
+        """An UltralyticsSource is routed through resolve_ultralytics_source."""
+        s = UltralyticsSource(format=ModelFormat.ONNX, name="yolov8n")
+        (tmp_path / "model.onnx").write_text("ok")
+        result = resolve_model_source(s, tmp_path)
+        assert result == tmp_path / "model.onnx"
 
     def test_unsupported_source_raises(self, tmp_path: Path) -> None:
         """An unknown source type raises ValueError."""

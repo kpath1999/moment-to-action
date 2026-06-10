@@ -16,6 +16,8 @@ from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
 from moment_to_action.models.image._base import ImageModel
+from moment_to_action.models.image.classification._base import ImageClassificationModel
+from moment_to_action.models.image.classification._types import Classification
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
 
@@ -35,6 +37,22 @@ def _make_mock_model(detections: list[Detection] | None = None) -> MagicMock:
     mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
     mock_model.run.return_value = [np.zeros((1, 5, 4))]
     mock_model.post_proc.return_value = detections if detections is not None else []
+    return mock_model
+
+
+def _make_classification(label: str = "tench", conf: float = 0.95) -> Classification:
+    """Return a single Classification for use in tests."""
+    return Classification(label=label, confidence=conf, class_id=0)
+
+
+def _make_mock_classification_model(
+    classifications: list[Classification] | None = None,
+) -> MagicMock:
+    """Build an ImageClassificationModel mock with canned inference output."""
+    mock_model = MagicMock(spec=ImageClassificationModel)
+    mock_model.prepare.return_value = np.zeros((1, 3, 224, 224), dtype=np.float32)
+    mock_model.run.return_value = [np.zeros((1, 1000), dtype=np.float32)]
+    mock_model.post_proc.return_value = classifications if classifications is not None else []
     return mock_model
 
 
@@ -234,3 +252,67 @@ class TestModelRunCommand:
         out_img = cv2.imread(str(out_path))
         assert out_img is not None
         assert out_img.shape == (100, 100, 3)
+
+    def test_classification_image_format_writes_file(self, tmp_path: Path) -> None:
+        """--format image on a classification model writes annotated output."""
+        img_path = tmp_path / "img.jpg"
+        _write_image(img_path)
+        cls = _make_classification()
+        mock_model = _make_mock_classification_model([cls])
+        mgr = MagicMock()
+        mgr.get_model.return_value = mock_model
+
+        out_path = tmp_path / "out.jpg"
+        result = _invoke(
+            ["mobilenet_v2", str(img_path), "--format", "image", "--output", str(out_path)],
+            tmp_path,
+            mgr,
+        )
+        assert result.exit_code == 0
+        assert out_path.exists()
+
+    def test_classification_image_format_default_output_path(self, tmp_path: Path) -> None:
+        """Default output path for classification adds _classifications suffix."""
+        img_path = tmp_path / "photo.jpg"
+        _write_image(img_path)
+        mock_model = _make_mock_classification_model()
+        mgr = MagicMock()
+        mgr.get_model.return_value = mock_model
+
+        result = _invoke(["mobilenet_v2", str(img_path), "--format", "image"], tmp_path, mgr)
+        assert result.exit_code == 0
+        expected = tmp_path / "photo_classifications.jpg"
+        assert expected.exists()
+
+
+@pytest.mark.unit
+class TestOverlayClassifications:
+    """Tests for _overlay_classifications helper."""
+
+    def test_returns_ndarray_with_same_shape(self) -> None:
+        """_overlay_classifications returns an array with same shape as input frame."""
+        from moment_to_action._cli.commands.cmd_model.cmd_run import _overlay_classifications
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        cls = _make_classification()
+        result = _overlay_classifications(frame, [cls])
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (100, 100, 3)
+
+    def test_does_not_modify_original_frame(self) -> None:
+        """_overlay_classifications returns a copy, leaving original unchanged."""
+        from moment_to_action._cli.commands.cmd_model.cmd_run import _overlay_classifications
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        cls = _make_classification()
+        result = _overlay_classifications(frame, [cls])
+        assert result is not frame
+
+    def test_empty_classifications_returns_copy(self) -> None:
+        """Empty classifications list returns copy of frame without modification."""
+        from moment_to_action._cli.commands.cmd_model.cmd_run import _overlay_classifications
+
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        result = _overlay_classifications(frame, [])
+        assert result is not frame
+        np.testing.assert_array_equal(result, frame)

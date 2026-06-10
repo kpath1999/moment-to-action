@@ -70,12 +70,32 @@ class TestModelListCommand:
 
     def test_vendored_status_shown(self, tmp_path: Path) -> None:
         """Vendored variant shows 'vendored' status."""
+        from pathlib import Path as _Path
+
+        from moment_to_action.models import ModelFormat, ModelInfo, YOLOModel
+        from moment_to_action.models._sources._vendored import VendoredSource
+
         mid = ModelID.YOLO_V8
-        vs = _make_variant_status(mid, "default", available=True)
-        info = MODEL_REGISTRY[mid]
+        vs = _make_variant_status(mid, "vendored_variant", available=True)
+        vendored_registry = {
+            mid: ModelInfo(
+                id=mid,
+                model_class=YOLOModel,
+                variants={
+                    "vendored_variant": VendoredSource(
+                        format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")
+                    )
+                },
+            )
+        }
+        info = vendored_registry[mid]
         status = ModelStatus(info=info, variants=[vs], path=None)
         mgr = _make_mgr([status])
-        result = _invoke([], tmp_path, mgr)
+        with patch(
+            "moment_to_action._cli.commands.cmd_model.cmd_list.MODEL_REGISTRY",
+            vendored_registry,
+        ):
+            result = _invoke([], tmp_path, mgr)
         assert result.exit_code == 0
         assert "vendored" in result.output
 

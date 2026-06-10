@@ -13,12 +13,43 @@ import rich_click as click
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.models import DEFAULT_VARIANT_KEY, ModelID, ModelManager
 from moment_to_action.models.image._base import ImageModel
+from moment_to_action.models.image.classification._base import ImageClassificationModel
 from moment_to_action.utils.cli import GlobalData, pass_global_data
 
 if TYPE_CHECKING:
     import numpy as np
 
+    from moment_to_action.models.image.classification._types import Classification
     from moment_to_action.models.image.detection._types import Detection
+
+
+def _overlay_classifications(
+    frame: np.ndarray, classifications: list[Classification]
+) -> np.ndarray:
+    """Overlay top-k classification labels onto a BGR frame.
+
+    Args:
+        frame: BGR uint8 image array (H, W, 3).
+        classifications: Classification results ordered by descending confidence.
+
+    Returns:
+        Annotated BGR image array.
+    """
+    annotated = frame.copy()
+    for rank, cls in enumerate(classifications):
+        label = f"#{rank + 1} {cls.label} {cls.confidence:.2f}"
+        y = 30 + rank * 30
+        cv2.putText(
+            annotated,
+            label,
+            (10, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0),
+            2,
+            cv2.LINE_AA,
+        )
+    return annotated
 
 
 def _draw_detections(frame: np.ndarray, detections: list[Detection]) -> np.ndarray:
@@ -138,9 +169,15 @@ def run(
 
     if output_format == "json":
         click.echo(json.dumps([attrs.asdict(d) for d in detections], indent=2))
+    elif isinstance(model, ImageClassificationModel):
+        if output_path is None:
+            output_path = input_path.with_stem(input_path.stem + "_classifications")
+        annotated = _overlay_classifications(frame, detections)  # type: ignore[arg-type]
+        cv2.imwrite(str(output_path), annotated)
+        click.echo(f"Saved: {output_path}")
     else:
         if output_path is None:
             output_path = input_path.with_stem(input_path.stem + "_detections")
-        annotated = _draw_detections(frame, detections)
+        annotated = _draw_detections(frame, detections)  # type: ignore[arg-type]
         cv2.imwrite(str(output_path), annotated)
         click.echo(f"Saved: {output_path}")
