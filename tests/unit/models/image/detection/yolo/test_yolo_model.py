@@ -362,13 +362,27 @@ class TestYOLOModelDecode:
         assert result == []
 
     def test_post_proc_returns_detections(self, onnx_model: YOLOModel) -> None:
-        """post_proc() returns list[Detection] without coordinate scaling."""
+        """post_proc() returns list[Detection] using size recorded by prepare()."""
         outputs = _make_outputs([[100, 100, 200, 200]], [0.9], [0])
         result = onnx_model.post_proc(outputs)
         assert isinstance(result, list)
         assert len(result) == 1
         assert isinstance(result[0], Detection)
         assert isinstance(result[0].bbox, BoundingBox)
+
+    def test_post_proc_scales_to_original_size(
+        self, onnx_model: YOLOModel, sample_image_array: np.ndarray
+    ) -> None:
+        """post_proc() uses size recorded by prepare() to scale box coords."""
+        onnx_model.prepare(sample_image_array)  # 480x640 → records (480, 640)
+        outputs = _make_outputs([[100, 150, 300, 350]], [0.95], [0])
+        result = onnx_model.post_proc(outputs)
+        box = result[0].bbox
+        # x scale = 640/640 = 1.0, y scale = 480/640 = 0.75
+        assert box.x1 == pytest.approx(100.0)
+        assert box.y1 == pytest.approx(112.5)  # 150 * 0.75
+        assert box.x2 == pytest.approx(300.0)
+        assert box.y2 == pytest.approx(262.5)  # 350 * 0.75
 
     def test_decode_bounding_box_fields(self, onnx_model: YOLOModel) -> None:
         """decode() sets bbox fields correctly."""

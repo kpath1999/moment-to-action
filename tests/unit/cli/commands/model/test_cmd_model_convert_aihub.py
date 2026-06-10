@@ -175,10 +175,10 @@ class TestConvertAihubCommand:
 
         assert result.exit_code == 0, result.output
         assert mock_export.call_count == 2
-        # First call: DLC
+        # First call: DLC (always float — portable master artifact)
         assert mock_export.call_args_list[0] == call(
             model_id="yolov8_det",
-            precision="w8a8",
+            precision="float",
             runtime="qnn_dlc",
             chipset="qualcomm-qcs6490",
             output_dir=out / "_aihub_build" / "dlc",

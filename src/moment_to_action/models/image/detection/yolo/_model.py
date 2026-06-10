@@ -327,6 +327,7 @@ class YOLOModel(ImageDetectionModel):
         self._format = model_format
         self._confidence_threshold = confidence_threshold
         self._handle: object = None
+        self._last_original_size: tuple[int, int] | None = None
         if input_layout is None:
             # AI Hub qcs6490 DLC exports to NHWC [1,640,640,3]; others use NCHW.
             input_layout = (
@@ -438,6 +439,7 @@ class YOLOModel(ImageDetectionModel):
             - ``(1, 640, 640, 3)`` when :attr:`input_layout` is ``"NHWC"``
               (AI Hub DLC — the model was exported with NHWC input).
         """
+        self._last_original_size = (frame.shape[0], frame.shape[1])
         resized = cv2.resize(frame, (_YOLO_INPUT_SIZE, _YOLO_INPUT_SIZE))
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         normalized = rgb.astype(np.float32) / 255.0
@@ -487,10 +489,10 @@ class YOLOModel(ImageDetectionModel):
 
         Returns:
             Detections above :attr:`confidence_threshold` after NMS, scaled to
-            the original frame's pixel coordinates.  Caller must pass the
-            original frame size separately (see :meth:`_decode`).
+            the original frame's pixel coordinates using the size recorded by
+            the preceding :meth:`prepare` call.
         """
-        return self._decode(raw, original_size=None)
+        return self._decode(raw, original_size=self._last_original_size)
 
     def decode(
         self,
