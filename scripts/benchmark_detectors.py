@@ -37,10 +37,12 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.table import Table
 
+from moment_to_action.config import load_config
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.paths import PathManager
+from moment_to_action.qairt import QairtSDKManager
 
 console = Console()
 
@@ -69,6 +71,11 @@ _BACKENDS: list[tuple[str, ComputeUnit]] = [
 
 _N_CYCLES = 3
 _IOU_THRESHOLD_AP50 = 0.5
+
+# Toggled by --hw-metrics.  When False, traces record timing only (no power /
+# frequency sampling) — avoids per-sample sensor-read warnings on boards whose
+# power sysfs path is absent.  Set in main().
+_HW_METRICS = False
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +316,7 @@ def _run_benchmark(
         console.print(f"  [yellow]Skip {model_name}/{backend_name} ({variant}): {exc}[/yellow]")
         return rows
 
-    metrics = MetricsCollector(backend)
+    metrics = MetricsCollector(backend if _HW_METRICS else None)
 
     for cycle in range(1, _N_CYCLES + 1):
         # One trace per load/infer/unload cycle (drives hardware sampling).
@@ -561,6 +568,12 @@ def _parse_args() -> argparse.Namespace:
         default="benchmark_results.csv",
         help="Output CSV path (default: benchmark_results.csv).",
     )
+    parser.add_argument(
+        "--hw-metrics",
+        action="store_true",
+        help="Sample on-device power/frequency during traces (off by default; "
+        "enable only where the power sysfs path exists, else it logs per-sample warnings).",
+    )
     return parser.parse_args()
 
 
@@ -626,17 +639,41 @@ def _write_csv(rows: list[dict], output_path: Path) -> None:
         writer.writerows(rows)
 
 
+def _configure_qairt() -> None:
+    """Set up the QAIRT SDK environment (QAIRT_SDK_ROOT etc.) for DLC loading.
+
+    Mirrors the ``m2a`` CLI root callback: without this, ``load_model_dlc``
+    raises "QAIRT SDK is not available" even when the SDK is installed, because
+    the environment variables are never exported into this process.
+    """
+    path_manager = PathManager()
+    config = load_config(path_manager.app_config_file)
+    if config.qairt_sdk_path is None:
+        console.print(
+            "  [yellow]QAIRT SDK path not configured — DLC backends may be unavailable.[/yellow]"
+        )
+        return
+    try:
+        QairtSDKManager.from_app_config(config, path_manager).configure_env()
+    except RuntimeError as exc:
+        console.print(f"  [yellow]QAIRT env setup failed: {exc}[/yellow]")
+
+
 def main() -> None:
     """Entry point for the benchmark script."""
+    global _HW_METRICS  # noqa: PLW0603
     args = _parse_args()
     n_images: int = args.n_images
     output_path = Path(args.output)
+    _HW_METRICS = bool(args.hw_metrics)
 
     console.rule("[bold]M2A Detector Benchmark[/bold]")
     console.print(f"  images : {n_images}")
     console.print(f"  cycles : {_N_CYCLES}")
     console.print(f"  output : {output_path}")
     console.print()
+
+    _configure_qairt()
 
     images, gt_boxes_list = _load_coco_images(n_images)
 
