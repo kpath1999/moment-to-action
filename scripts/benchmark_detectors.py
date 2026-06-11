@@ -37,7 +37,15 @@ import cv2
 import httpx
 import numpy as np
 from rich.console import Console
-from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+)
 from rich.table import Table
 
 if TYPE_CHECKING:
@@ -82,6 +90,18 @@ _IOU_THRESHOLD_AP50 = 0.5
 # frequency sampling) — avoids per-sample sensor-read warnings on boards whose
 # power sysfs path is absent.  Set in main().
 _HW_METRICS = False
+
+# Sub progress bar tracking per-image progress within the current run.  Set in
+# main() so the nested _run_cycle can advance it without threading it through
+# every call.
+_IMG_PROGRESS: Progress | None = None
+_IMG_TASK: TaskID | None = None
+
+
+def _advance_image() -> None:
+    """Advance the per-image sub progress bar by one, if it is active."""
+    if _IMG_PROGRESS is not None and _IMG_TASK is not None:
+        _IMG_PROGRESS.advance(_IMG_TASK)
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +458,7 @@ def _run_cycle(
         )
         if row is not None:
             cycle_rows.append(row)
+        _advance_image()
 
     # --- unload (best-effort) and backfill timing on this cycle's rows ---
     t_unload = time.perf_counter_ns()
@@ -711,7 +732,7 @@ def _configure_qairt() -> None:
 
 def main() -> None:
     """Entry point for the benchmark script."""
-    global _HW_METRICS  # noqa: PLW0603
+    global _HW_METRICS, _IMG_PROGRESS, _IMG_TASK  # noqa: PLW0603
     args = _parse_args()
     n_images: int = args.n_images
     output_path = Path(args.output)
@@ -742,10 +763,13 @@ def main() -> None:
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TaskProgressColumn(),
+        MofNCompleteColumn(),
         console=console,
     ) as progress:
         total_runs = len(_MODEL_CONFIGS) * len(_BACKENDS)
         task = progress.add_task("benchmarking", total=total_runs)
+        img_task = progress.add_task("images", total=len(images) * _N_CYCLES)
+        _IMG_PROGRESS, _IMG_TASK = progress, img_task
 
         for model_id, model_name, variant in _MODEL_CONFIGS:
             info = MODEL_REGISTRY.get(model_id)
@@ -758,6 +782,11 @@ def main() -> None:
 
             for backend_name, unit in _BACKENDS:
                 progress.update(task, description=f"{model_name}/{backend_name}")
+                progress.reset(
+                    img_task,
+                    total=len(images) * _N_CYCLES,
+                    description=f"  {model_name}/{backend_name} imgs",
+                )
                 try:
                     rows = _run_benchmark(
                         manager=manager,
