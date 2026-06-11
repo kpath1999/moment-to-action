@@ -145,14 +145,16 @@ class InferenceBackend(ABC):
         msg = f"{type(self).__name__} does not support DLC models"
         raise NotImplementedError(msg)
 
-    def infer_dlc(self, handle: object, inputs: np.ndarray) -> dict[str, np.ndarray]:
+    def infer_dlc(self, handle: object, inputs: ModelInput) -> dict[str, np.ndarray]:
         """Run inference on a loaded DLC model.
 
         Override in platform backends that support DLC (e.g. QCS6490).
 
         Args:
             handle: Handle returned by :meth:`load_model_dlc`.
-            inputs: Input tensor for inference.
+            inputs: Single input tensor, or a name→tensor dict for multi-input
+                graphs (e.g. the Detectron2 ROI head's ``features`` +
+                ``proposals_boxes``).
 
         Returns:
             Mapping of output tensor names to arrays.

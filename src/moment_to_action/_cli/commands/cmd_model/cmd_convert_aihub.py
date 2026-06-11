@@ -14,6 +14,9 @@ from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.models import ModelID
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image._base import ImageModel
+from moment_to_action.models.image.detection.detectron2._model import Detectron2Model
+from moment_to_action.models.image.detection.rf_detr._model import RFDETRModel
+from moment_to_action.models.image.detection.rtmdet._model import RTMDetModel
 from moment_to_action.models.image.detection.yolo._model import YOLOModel
 from moment_to_action.utils.cli import GlobalData, pass_global_data
 
@@ -22,7 +25,94 @@ _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp"}
 # Map ModelID → (qai_hub_models module id, pip extra for the model)
 _AIHUB_MODEL_MAP: dict[ModelID, tuple[str, str]] = {
     ModelID.YOLO_V8: ("yolov8_det", "yolov8-det"),
+    ModelID.RF_DETR: ("rf_detr", "rf-detr"),
+    ModelID.RTM_DET: ("rtmdet", "rtmdet"),
+    ModelID.DETECTRON2: ("detectron2_detection", "detectron2-detection"),
 }
+
+# Multi-component (CollectionModel) detectors.  Each export produces one artifact
+# per component, named with the component string; we place them as
+# ``model.<component>.dlc`` / ``model.<component>.npu.bin`` so
+# resolve_backend_artifact(stem=...) can find each graph.  Single-graph models are
+# absent here and use the plain ``model.dlc`` / ``model.npu.bin`` names.
+_COMPONENT_STEMS: dict[ModelID, tuple[str, ...]] = {
+    ModelID.DETECTRON2: ("proposal_generator", "roi_head"),
+}
+
+# Per-model NPU precision override for the context binary step.
+# None → skip the context binary entirely (resolve_backend_artifact falls back to model.dlc).
+#
+# The Hexagon v68 AOT context-binary linker (qcs6490) rejects *any* floating-point graph
+# I/O — both float32 and fp16 (an fp16 `image` input is rejected just like a float32
+# output).  A model can only produce a v68 context binary if every I/O tensor is integer-
+# quantised.  Both detection models below fail that requirement and fall back to model.dlc:
+#
+# RF-DETR: qai_hub_models exposes only `float` precision — there is no quantised export at
+#   all, so the I/O is unavoidably float32.
+# RTMDet: the exportable head runs the box decode in-graph — anchor arithmetic
+#   (`block ± box` over linspace constants) plus an `argmax → float32` class cast.  These
+#   ops are not integer-quantisable, so the `boxes` output stays floating-point under every
+#   precision.  Empirically all of w8a16_mixed_fp16, full-fp16 (`--quantize_full_type
+#   float16`), and plain w8a16 fail the v68 link with "Tensor '…' has a floating-point type
+#   which is not supported by the targeted device", and `--quantize_io_type` (which could
+#   force integer I/O) is TFLite-only.  A working v68 binary would require exporting the raw
+#   pre-decode conv heads and moving the decode to CPU post-processing — out of scope here.
+#
+# Detectron2 is the counter-example and is intentionally absent here: it exposes full-integer
+# `w8a8` / `w8a16` precisions, so both component graphs quantise end-to-end to integer I/O and
+# link cleanly on v68.  With no override entry it follows the CLI `--precision`, letting us
+# build either an int8 or int16 context-binary variant.
+_NPU_PRECISION_OVERRIDE: dict[ModelID, str | None] = {
+    ModelID.RF_DETR: None,
+    ModelID.RTM_DET: None,
+}
+
+
+def _npu_compile_link_options(model_id: ModelID) -> tuple[str, str]:
+    """Return ``(compile_options, link_options)`` for the NPU context-binary step.
+
+    YOLO needs ``default_graph_htp_precision=FLOAT16`` so any float32 tensors that
+    survive quantisation are handled as fp16 (valid on v68).  The full-integer
+    Detectron2 graphs need no such flag — the spike linked cleanly without it.
+
+    Args:
+        model_id: Model being converted.
+
+    Returns:
+        ``(compile_options, link_options)`` strings for :func:`_run_aihub_export`.
+    """
+    if model_id in _COMPONENT_STEMS:
+        return "", ""
+    fp16 = "--qnn_options default_graph_htp_precision=FLOAT16"
+    return fp16, fp16
+
+
+def _place_components(
+    src_dir: Path, glob_ext: str, dest_dir: Path, components: tuple[str, ...], dest_suffix: str
+) -> None:
+    """Copy each component artifact into ``dest_dir`` under its stem name.
+
+    Globs ``src_dir`` for ``*{glob_ext}`` files and matches each ``component`` by
+    substring, writing it to ``dest_dir/model.<component>{dest_suffix}``.
+
+    Args:
+        src_dir: Build directory the export wrote artifacts into.
+        glob_ext: Artifact extension to match (``".dlc"`` or ``".bin"``).
+        dest_dir: Destination variant directory.
+        components: Component stems to place (e.g. ``("proposal_generator", "roi_head")``).
+        dest_suffix: Suffix for the destination filename (``".dlc"`` or ``".npu.bin"``).
+
+    Raises:
+        click.ClickException: If a component's artifact is not found.
+    """
+    for comp in components:
+        matches = sorted(p for p in src_dir.rglob(f"*{glob_ext}") if comp in p.name)
+        if not matches:
+            msg = f"No {comp}{glob_ext} artifact found under {src_dir} after export."
+            raise click.ClickException(msg)
+        dest = dest_dir / f"model.{comp}{dest_suffix}"
+        shutil.copy2(matches[0], dest)
+        click.echo(f"Component artifact: {dest}")
 
 
 def _build_dlc_model(model_id: ModelID, variant_dir: Path) -> ImageModel:
@@ -45,6 +135,12 @@ def _build_dlc_model(model_id: ModelID, variant_dir: Path) -> ImageModel:
     """
     if model_id is ModelID.YOLO_V8:
         return YOLOModel(variant="qcs6490", path=variant_dir, model_format=ModelFormat.DLC)
+    if model_id is ModelID.RF_DETR:
+        return RFDETRModel(variant="qcs6490", path=variant_dir, model_format=ModelFormat.DLC)
+    if model_id is ModelID.RTM_DET:
+        return RTMDetModel(variant="qcs6490", path=variant_dir, model_format=ModelFormat.DLC)
+    if model_id is ModelID.DETECTRON2:
+        return Detectron2Model(variant="qcs6490", path=variant_dir, model_format=ModelFormat.DLC)
     msg = f"No DLC model factory for '{model_id.value}'."
     raise click.ClickException(msg)
 
@@ -128,6 +224,8 @@ def _run_aihub_export(
     chipset: str,
     output_dir: Path,
     token: str,
+    compile_options: str = "",
+    link_options: str = "",
 ) -> Path:
     """Run the qai_hub_models export and return the path to the produced artifact.
 
@@ -142,6 +240,11 @@ def _run_aihub_export(
         chipset: Target chipset slug (e.g. ``"qualcomm-qcs6490"``).
         output_dir: Directory to write artifacts into.
         token: AI Hub API token.
+        compile_options: Extra QNN compiler flags for the compile step.
+        link_options: Extra QNN compiler flags for the link step.  The
+            ``qai_hub_models`` ``export_model`` API does not forward
+            ``compile_options`` to the link job, so any options needed at link
+            time must be supplied separately here via monkey-patching.
 
     Returns:
         Path to the produced ``.dlc`` or ``.bin`` file.
@@ -185,17 +288,48 @@ def _run_aihub_export(
         f"Submitting AI Hub export job for {model_id} ({precision}, {runtime}, {chipset}) ..."
     )
 
-    # Call the export function. Note: do NOT pass num_calibration_samples — their
-    # parser leaves it as a str, causing TypeError inside get_calibration_data.
-    export_mod.export_model(
-        device=hub_device,
-        skip_profiling=True,
-        skip_inferencing=True,
-        skip_summary=True,
-        output_dir=str(output_dir),
-        precision=precision_obj,
-        target_runtime=runtime_obj,
-    )
+    # export_model does not forward compile_options to the link job.  Patch
+    # link_model in the export module to inject link_options for this call only.
+    _orig_link = getattr(export_mod, "link_model", None)
+    if link_options and _orig_link is not None:
+        _injected = link_options
+
+        def _patched_link(
+            compiled_model: object,
+            device: object,
+            model_name: str,
+            model: object,
+            target_runtime: object,
+            extra_options: str = "",
+        ) -> object:
+            combined = (_injected + " " + extra_options).strip()
+            return _orig_link(  # type: ignore[misc]
+                compiled_model,
+                device,
+                model_name,
+                model,
+                target_runtime,
+                extra_options=combined,
+            )
+
+        export_mod.link_model = _patched_link  # type: ignore[attr-defined]
+
+    try:
+        # Note: do NOT pass num_calibration_samples — their parser leaves it as a
+        # str, causing TypeError inside get_calibration_data.
+        export_mod.export_model(
+            device=hub_device,
+            skip_profiling=True,
+            skip_inferencing=True,
+            skip_summary=True,
+            output_dir=str(output_dir),
+            precision=precision_obj,
+            target_runtime=runtime_obj,
+            compile_options=compile_options,
+        )
+    finally:
+        if link_options and _orig_link is not None:
+            export_mod.link_model = _orig_link  # type: ignore[attr-defined]
 
     # Determine the expected file extension for this runtime
     ext = ".bin" if runtime == "qnn_context_binary" else ".dlc"
@@ -281,10 +415,12 @@ def convert_aihub(
 
     token = _check_token()
     aihub_model_id, _ = _AIHUB_MODEL_MAP[mid]
+    components = _COMPONENT_STEMS.get(mid)
     build_dir = output_dir / "_aihub_build"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Portable DLC
+    # Step 1: Portable DLC.  Multi-component (CollectionModel) detectors yield one DLC per
+    # component, placed as model.<component>.dlc; single-graph models use model.dlc.
     dlc_path = _run_aihub_export(
         model_id=aihub_model_id,
         precision="float",
@@ -293,8 +429,12 @@ def convert_aihub(
         output_dir=build_dir / "dlc",
         token=token,
     )
-    dest_dlc = output_dir / "model.dlc"
-    shutil.copy2(dlc_path, dest_dlc)
+    if components is None:
+        dest_dlc = output_dir / "model.dlc"
+        shutil.copy2(dlc_path, dest_dlc)
+        click.echo(f"DLC: {dest_dlc}")
+    else:
+        _place_components(build_dir / "dlc", ".dlc", output_dir, components, ".dlc")
 
     # Copy sidecar files (metadata.json, labels.txt) if present
     for sidecar in ("metadata.json", "labels.txt"):
@@ -302,23 +442,39 @@ def convert_aihub(
         if src.exists():
             shutil.copy2(src, output_dir / sidecar)
 
-    click.echo(f"DLC: {dest_dlc}")
-
     # Step 2: Reference outputs from the portable DLC.
     # Must run before context binaries are copied into output_dir — context binaries
     # are compiled for the qcs6490 device (aarch64/HTP) and cannot load on x86.
     # resolve_backend_artifact falls back to model.dlc when no .bin files are present.
     _capture_reference_outputs(mid, calibration_dir, output_dir)
 
-    # Step 3: NPU context binary (HTP AOT-compiled; CPU/GPU fall back to model.dlc)
-    npu_bin_path = _run_aihub_export(
-        model_id=aihub_model_id,
-        precision=precision,
-        runtime="qnn_context_binary",
-        chipset=chipset,
-        output_dir=build_dir / "npu",
-        token=token,
-    )
-    dest_npu = output_dir / "model.npu.bin"
-    shutil.copy2(npu_bin_path, dest_npu)
-    click.echo(f"Context binary: {dest_npu}")
+    # Step 3: NPU context binary (HTP AOT-compiled; CPU/GPU fall back to the DLC).
+    # Per-model precision overrides live in _NPU_PRECISION_OVERRIDE.  When the override
+    # is None the context binary step is skipped entirely; resolve_backend_artifact will
+    # fall back to the DLC at runtime.  Compile/link options come from
+    # _npu_compile_link_options (FLOAT16 for YOLO, none for full-int Detectron2).
+    npu_precision = _NPU_PRECISION_OVERRIDE.get(mid, precision)
+    if npu_precision is None:
+        click.echo(
+            f"Skipping NPU context binary for {model_id}: model has floating-point I/O "
+            "that the Hexagon v68 linker rejects (see _NPU_PRECISION_OVERRIDE). "
+            "resolve_backend_artifact will fall back to model.dlc."
+        )
+    else:
+        compile_opts, link_opts = _npu_compile_link_options(mid)
+        npu_bin_path = _run_aihub_export(
+            model_id=aihub_model_id,
+            precision=npu_precision,
+            runtime="qnn_context_binary",
+            chipset=chipset,
+            output_dir=build_dir / "npu",
+            token=token,
+            compile_options=compile_opts,
+            link_options=link_opts,
+        )
+        if components is None:
+            dest_npu = output_dir / "model.npu.bin"
+            shutil.copy2(npu_bin_path, dest_npu)
+            click.echo(f"Context binary: {dest_npu}")
+        else:
+            _place_components(build_dir / "npu", ".bin", output_dir, components, ".npu.bin")

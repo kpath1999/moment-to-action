@@ -264,12 +264,14 @@ class QCS6490Backend(InferenceBackend):
         raw.initialize(backend=qairt_backend_for(self._preferred_unit))
         return raw
 
-    def infer_dlc(self, handle: object, inputs: np.ndarray) -> dict[str, np.ndarray]:
+    def infer_dlc(self, handle: object, inputs: ModelInput) -> dict[str, np.ndarray]:
         """Run inference on a loaded DLC model via QAIRT.
 
         Args:
             handle: Handle returned by :meth:`load_model_dlc`.
-            inputs: Input tensor for inference.
+            inputs: Single input tensor, or a name→tensor dict for multi-input
+                graphs (e.g. the Detectron2 ROI head's ``features`` +
+                ``proposals_boxes``).
 
         Returns:
             Mapping of output tensor names to arrays.

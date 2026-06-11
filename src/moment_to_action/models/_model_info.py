@@ -14,6 +14,9 @@ class ModelID(Enum):
     MOBILECLIP_S2 = "mobileclip_s2"
     SMOLVLM2_2_2B = "smolvlm2_2_2b"
     MOBILENET_V2 = "mobilenet_v2"
+    RF_DETR = "rf_detr"
+    RTM_DET = "rtm_det"
+    DETECTRON2 = "detectron2"
 
 
 @attrs.frozen

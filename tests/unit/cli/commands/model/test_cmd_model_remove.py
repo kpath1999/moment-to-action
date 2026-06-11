@@ -128,7 +128,8 @@ class TestModelRemoveCommand:
         mgr.remove_variant.return_value = 2048
         result = _invoke(["--all", "--yes"], tmp_path, mgr)
         assert result.exit_code == 0
-        mgr.remove_variant.assert_called_with(ModelID.YOLO_V8, "qcs6490")
+        # Multiple models register a "qcs6490" variant; YOLO's must be among those removed.
+        mgr.remove_variant.assert_any_call(ModelID.YOLO_V8, "qcs6490")
 
     def test_no_model_id_without_all_errors(self, tmp_path: Path) -> None:
         """Missing MODEL_ID without --all exits non-zero."""

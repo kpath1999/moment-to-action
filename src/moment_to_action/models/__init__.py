@@ -25,6 +25,8 @@ from .image.classification._types import Classification
 from .image.classification.mobilenet_v2._model import MobileNetV2Model
 from .image.detection._base import ImageDetectionModel
 from .image.detection._types import BoundingBox, Detection
+from .image.detection.rf_detr._model import RFDETRModel
+from .image.detection.rtmdet._model import RTMDetModel
 from .image.detection.yolo._model import YOLOModel
 
 __all__ = [
@@ -45,6 +47,8 @@ __all__ = [
     "ModelInfo",
     "ModelManager",
     "ModelSource",
+    "RFDETRModel",
+    "RTMDetModel",
     "UltralyticsSource",
     "VariantStatus",
     "VendoredSource",

@@ -36,6 +36,9 @@ dependencies = [
 [project.scripts]
 m2a = "moment_to_action._cli:cli"
 
+[tool.uv.extra-build-dependencies]
+detectron2 = ["torch"]
+
 [project.optional-dependencies]
 # Ultralytics YOLOv8 ONNX export (heavy: torch).  Required for the default
 # YOLO_V8 variant when downloading for the first time.
@@ -44,7 +47,8 @@ yolo-export = [
 ]
 host = [
     # QAI Hub
-    "qai-hub-models[yolov8-det]>=0.54.0",
+    "qai-hub-models[yolov8-det,rf-detr,rtmdet,detectron2-detection]>=0.55.0",
+    "detectron2 @ git+https://github.com/facebookresearch/detectron2.git@8a9d885",
     # QAIRT dev runtime
     "qairt-dev[onnx,torch]>=0.6.0",
     # QAIRT SDK deps

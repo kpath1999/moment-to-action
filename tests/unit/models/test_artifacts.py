@@ -57,3 +57,25 @@ class TestResolveBackendArtifact:
         """FileNotFoundError when no usable artifact exists."""
         with pytest.raises(FileNotFoundError, match="No artifact found"):
             resolve_backend_artifact(tmp_path, ComputeUnit.CPU)
+
+    def test_stem_resolves_named_component_bin(self, tmp_path: Path) -> None:
+        """A custom stem resolves the matching per-component context binary."""
+        bin_file = tmp_path / "model.roi_head.npu.bin"
+        bin_file.write_text("bin")
+        (tmp_path / "model.roi_head.dlc").write_text("dlc")
+        result = resolve_backend_artifact(tmp_path, ComputeUnit.NPU, stem="model.roi_head")
+        assert result == bin_file
+
+    def test_stem_falls_back_to_named_component_dlc(self, tmp_path: Path) -> None:
+        """A custom stem falls back to the matching component DLC on CPU."""
+        dlc = tmp_path / "model.proposal_generator.dlc"
+        dlc.write_text("dlc")
+        result = resolve_backend_artifact(
+            tmp_path, ComputeUnit.CPU, stem="model.proposal_generator"
+        )
+        assert result == dlc
+
+    def test_stem_missing_raises_with_stem_in_message(self, tmp_path: Path) -> None:
+        """Missing component artifacts raise, naming the stem that was tried."""
+        with pytest.raises(FileNotFoundError, match=r"model\.roi_head\.dlc"):
+            resolve_backend_artifact(tmp_path, ComputeUnit.NPU, stem="model.roi_head")

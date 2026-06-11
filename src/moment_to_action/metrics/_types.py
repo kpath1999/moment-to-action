@@ -53,6 +53,12 @@ class SpanType(Enum):
     MODEL_POST_PROCESS = auto()
     """Time taken for post-processing steps after a model inference (e.g. NMS, decoding)."""
 
+    MODEL_LOAD = auto()
+    """Time taken to load model weights onto a backend."""
+
+    MODEL_UNLOAD = auto()
+    """Time taken to release model weights from a backend."""
+
 
 @attrs.frozen
 class MemoryUsageSample:
