@@ -6,7 +6,7 @@
 # ]
 #
 # [tool.uv.sources]
-# moment-to-action = { path = "./moment-to-action" }
+# moment-to-action = { path = "../moment-to-action" }
 # ///
 """Benchmark detection models on a COCO val2017 subset.
 
