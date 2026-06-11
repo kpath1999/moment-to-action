@@ -645,7 +645,78 @@ def _parse_args() -> argparse.Namespace:
         help="Sample on-device power/frequency during traces (off by default; "
         "enable only where the power sysfs path exists, else it logs per-sample warnings).",
     )
+    parser.add_argument(
+        "--models",
+        default=None,
+        help="Comma-separated model display names to run (default: all). "
+        "E.g. --models detectron2_w8a16,detectron2_w8a8",
+    )
+    parser.add_argument(
+        "--backends",
+        default=None,
+        help="Comma-separated backends to run: cpu,gpu,npu (default: all).",
+    )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge results into the existing --output CSV: rows for the "
+        "(model, backend) pairs re-run are replaced; all others are kept. "
+        "Use with --models/--backends to re-run just one combo after a fix.",
+    )
     return parser.parse_args()
+
+
+# CSV columns and their types, used when merging an existing results file.
+_CSV_FLOAT_FIELDS = ("load_ms", "preproc_ms", "infer_ms", "postproc_ms", "unload_ms", "ap50")
+_CSV_INT_FIELDS = ("image_idx", "run")
+
+
+def _read_existing_csv(path: Path) -> list[dict]:
+    """Read an existing results CSV, coercing numeric columns back to numbers.
+
+    Args:
+        path: Path to a CSV previously written by :func:`_write_csv`.
+
+    Returns:
+        List of row dicts with numeric fields as ``float``/``int`` (so they can be
+        averaged alongside freshly produced rows).
+    """
+    rows: list[dict] = []
+    with path.open(newline="") as f:
+        for raw in csv.DictReader(f):
+            row = dict(raw)
+            for k in _CSV_FLOAT_FIELDS:
+                row[k] = float(row[k])
+            for k in _CSV_INT_FIELDS:
+                row[k] = int(row[k])
+            rows.append(row)
+    return rows
+
+
+def _merge_rows(
+    existing_path: Path,
+    new_rows: list[dict],
+    rerun_pairs: set[tuple[str, str]],
+) -> list[dict]:
+    """Merge ``new_rows`` into an existing CSV, replacing the re-run pairs.
+
+    Rows in the existing file whose ``(model, backend)`` is in ``rerun_pairs`` are
+    dropped (they were just re-run); everything else is kept and the new rows are
+    appended.
+
+    Args:
+        existing_path: Path to the existing results CSV (may not exist).
+        new_rows: Freshly produced rows from this run.
+        rerun_pairs: ``(model, backend)`` pairs that were attempted this run.
+
+    Returns:
+        The merged row list.
+    """
+    if not existing_path.exists():
+        return new_rows
+    existing = _read_existing_csv(existing_path)
+    kept = [r for r in existing if (r["model"], r["backend"]) not in rerun_pairs]
+    return kept + new_rows
 
 
 def _load_coco_images(
@@ -730,7 +801,7 @@ def _configure_qairt() -> None:
         console.print(f"  [yellow]QAIRT env setup failed: {exc}[/yellow]")
 
 
-def main() -> None:
+def main() -> None:  # noqa: PLR0915
     """Entry point for the benchmark script."""
     global _HW_METRICS, _IMG_PROGRESS, _IMG_TASK  # noqa: PLW0603
     args = _parse_args()
@@ -738,11 +809,25 @@ def main() -> None:
     output_path = Path(args.output)
     _HW_METRICS = bool(args.hw_metrics)
 
+    # Optional subset filters (for re-running a single model/backend after a fix).
+    model_filter = set(args.models.split(",")) if args.models else None
+    backend_filter = set(args.backends.split(",")) if args.backends else None
+    configs = [c for c in _MODEL_CONFIGS if model_filter is None or c[1] in model_filter]
+    backends = [b for b in _BACKENDS if backend_filter is None or b[0] in backend_filter]
+
     console.rule("[bold]M2A Detector Benchmark[/bold]")
     console.print(f"  images : {n_images}")
     console.print(f"  cycles : {_N_CYCLES}")
     console.print(f"  output : {output_path}")
+    console.print(f"  models : {', '.join(c[1] for c in configs)}")
+    console.print(f"  backend: {', '.join(b[0] for b in backends)}")
+    if args.merge:
+        console.print("  merge  : on (re-run pairs replace existing rows)")
     console.print()
+
+    if not configs or not backends:
+        console.print("[red]No model/backend selected by filters. Exiting.[/red]")
+        sys.exit(1)
 
     _configure_qairt()
 
@@ -757,6 +842,7 @@ def main() -> None:
     # 2. Run benchmarks (each run builds its own MetricsCollector + per-cycle trace)
     manager = ModelManager(PathManager())
     all_rows: list[dict] = []
+    rerun_pairs: set[tuple[str, str]] = set()
 
     with Progress(
         SpinnerColumn(),
@@ -766,21 +852,22 @@ def main() -> None:
         MofNCompleteColumn(),
         console=console,
     ) as progress:
-        total_runs = len(_MODEL_CONFIGS) * len(_BACKENDS)
+        total_runs = len(configs) * len(backends)
         task = progress.add_task("benchmarking", total=total_runs)
         img_task = progress.add_task("images", total=len(images) * _N_CYCLES)
         _IMG_PROGRESS, _IMG_TASK = progress, img_task
 
-        for model_id, model_name, variant in _MODEL_CONFIGS:
+        for model_id, model_name, variant in configs:
             info = MODEL_REGISTRY.get(model_id)
             if info is None or variant not in info.variants:
                 console.print(
                     f"  [yellow]{model_name} ({variant}) not in registry, skipping.[/yellow]"
                 )
-                progress.advance(task, len(_BACKENDS))
+                progress.advance(task, len(backends))
                 continue
 
-            for backend_name, unit in _BACKENDS:
+            for backend_name, unit in backends:
+                rerun_pairs.add((model_name, backend_name))
                 progress.update(task, description=f"{model_name}/{backend_name}")
                 progress.reset(
                     img_task,
@@ -803,14 +890,17 @@ def main() -> None:
                     console.print(f"  [red]Run {model_name}/{backend_name} crashed: {exc}[/red]")
                 progress.advance(task)
 
-    # 3. Write CSV
+    # 3. Merge with existing results (if requested) and write CSV
+    if args.merge:
+        all_rows = _merge_rows(output_path, all_rows, rerun_pairs)
+
     if all_rows:
         _write_csv(all_rows, output_path)
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")
 
-    # 4. Print summary table
+    # 4. Print summary table (full merged picture)
     console.print()
     _print_summary(all_rows)
 
