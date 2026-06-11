@@ -1,3 +1,13 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10,<3.11"
+# dependencies = [
+#     "moment-to-action",
+# ]
+#
+# [tool.uv.sources]
+# moment-to-action = { path = "./moment-to-action" }
+# ///
 """Benchmark detection models on a COCO val2017 subset.
 
 Downloads ~N images from COCO val2017, runs yolo_v8 / rf_detr / rtm_det on
@@ -246,7 +256,7 @@ def _ap50(
 # ---------------------------------------------------------------------------
 
 
-def _run_benchmark(  # noqa: PLR0913
+def _run_benchmark(
     manager: ModelManager,
     model_id: ModelID,
     variant: str,
@@ -255,23 +265,23 @@ def _run_benchmark(  # noqa: PLR0913
     unit: ComputeUnit,
     images: list[np.ndarray],
     gt_by_image: list[list[list[float]]],
-    metrics: MetricsCollector,
 ) -> list[dict]:
     """Run one (model, backend, N_CYCLES) benchmark and return per-row results.
 
     Each row covers one (model, backend, image_id, run) combination.  Models are
-    resolved and downloaded (if necessary) through ``manager.get_model``.
+    resolved and downloaded (if necessary) through ``manager.get_model``.  Each
+    load/infer/unload cycle is wrapped in its own metrics trace, with on-device
+    hardware sampling driven by the run's :class:`ComputeBackend`.
 
     Args:
         manager: ModelManager used to resolve/download/instantiate the model.
         model_id: Model to benchmark.
-        variant: Registry variant key to load (ONNX for cpu/gpu, DLC for npu).
+        variant: Registry variant key to load (qcs DLC variant on-device).
         model_name: Human-readable model name for output rows.
         backend_name: Backend name string for output rows.
         unit: :class:`~moment_to_action.hardware.ComputeUnit` to use.
         images: List of BGR uint8 frames.
         gt_by_image: List of GT box lists per image ``[[x1,y1,x2,y2], …]``.
-        metrics: MetricsCollector to use for all spans.
 
     Returns:
         List of dicts, each representing one CSV row.
@@ -299,45 +309,93 @@ def _run_benchmark(  # noqa: PLR0913
         console.print(f"  [yellow]Skip {model_name}/{backend_name} ({variant}): {exc}[/yellow]")
         return rows
 
-    for cycle in range(1, _N_CYCLES + 1):
-        # --- load (skip rest of this cycle on failure) ---
-        t_load_start = time.perf_counter_ns()
-        try:
-            with metrics.start_span(SpanType.MODEL_LOAD, f"{model_name}.{backend_name}.load"):
-                model.load(backend)
-        except Exception as exc:  # noqa: BLE001
-            console.print(
-                f"  [yellow]Load failed {model_name}/{backend_name} cycle {cycle}: {exc}[/yellow]"
-            )
-            _safe_unload(model)
-            continue
-        load_ms = (time.perf_counter_ns() - t_load_start) / 1e6
+    metrics = MetricsCollector(backend)
 
-        cycle_rows: list[dict] = []
-        for img_idx, (frame, gt_boxes_raw) in enumerate(zip(images, gt_by_image, strict=True)):
-            row = _process_image(
+    for cycle in range(1, _N_CYCLES + 1):
+        # One trace per load/infer/unload cycle (drives hardware sampling).
+        with metrics.start_trace():
+            cycle_rows = _run_cycle(
                 model=model,
-                frame=frame,
-                gt_boxes_raw=gt_boxes_raw,
+                backend=backend,
                 model_name=model_name,
                 backend_name=backend_name,
-                img_idx=img_idx,
                 cycle=cycle,
-                load_ms=load_ms,
+                images=images,
+                gt_by_image=gt_by_image,
                 metrics=metrics,
             )
-            if row is not None:
-                cycle_rows.append(row)
-
-        # --- unload (best-effort) and backfill timing on this cycle's rows ---
-        t_unload = time.perf_counter_ns()
-        _safe_unload(model, metrics=metrics, span_name=f"{model_name}.{backend_name}.unload")
-        unload_ms = (time.perf_counter_ns() - t_unload) / 1e6
-        for row in cycle_rows:
-            row["unload_ms"] = round(unload_ms, 3)
         rows.extend(cycle_rows)
 
+    report = metrics.report()
+    if report.traces:
+        console.print(
+            f"  [dim]{model_name}/{backend_name}: {len(report.traces)} traces "
+            f"({len(report.slow_traces)} over budget)[/dim]"
+        )
     return rows
+
+
+def _run_cycle(
+    model: object,
+    backend: ComputeBackend,
+    model_name: str,
+    backend_name: str,
+    cycle: int,
+    images: list[np.ndarray],
+    gt_by_image: list[list[list[float]]],
+    metrics: MetricsCollector,
+) -> list[dict]:
+    """Run one load → per-image infer → unload cycle inside an active trace.
+
+    Args:
+        model: Unloaded detection model instance.
+        backend: ComputeBackend to load the model onto.
+        model_name: Model name for output rows.
+        backend_name: Backend name for output rows.
+        cycle: Cycle index (1-based).
+        images: List of BGR uint8 frames.
+        gt_by_image: Ground-truth boxes per image.
+        metrics: Active MetricsCollector (a trace must be open).
+
+    Returns:
+        Rows produced this cycle (empty if load failed).
+    """
+    # --- load (abort cycle on failure) ---
+    t_load_start = time.perf_counter_ns()
+    try:
+        with metrics.start_span(SpanType.MODEL_LOAD, f"{model_name}.{backend_name}.load"):
+            model.load(backend)  # type: ignore[attr-defined]
+    except Exception as exc:  # noqa: BLE001
+        console.print(
+            f"  [yellow]Load failed {model_name}/{backend_name} cycle {cycle}: {exc}[/yellow]"
+        )
+        _safe_unload(model)
+        return []
+    load_ms = (time.perf_counter_ns() - t_load_start) / 1e6
+
+    cycle_rows: list[dict] = []
+    for img_idx, (frame, gt_boxes_raw) in enumerate(zip(images, gt_by_image, strict=True)):
+        row = _process_image(
+            model=model,
+            frame=frame,
+            gt_boxes_raw=gt_boxes_raw,
+            model_name=model_name,
+            backend_name=backend_name,
+            img_idx=img_idx,
+            cycle=cycle,
+            load_ms=load_ms,
+            metrics=metrics,
+        )
+        if row is not None:
+            cycle_rows.append(row)
+
+    # --- unload (best-effort) and backfill timing on this cycle's rows ---
+    t_unload = time.perf_counter_ns()
+    _safe_unload(model, metrics=metrics, span_name=f"{model_name}.{backend_name}.unload")
+    unload_ms = (time.perf_counter_ns() - t_unload) / 1e6
+    for row in cycle_rows:
+        row["unload_ms"] = round(unload_ms, 3)
+    return cycle_rows
 
 
 def _safe_unload(
@@ -588,8 +646,7 @@ def main() -> None:
 
     console.print(f"  Loaded {len(images)} images.\n")
 
-    # 2. Run benchmarks
-    metrics = MetricsCollector()
+    # 2. Run benchmarks (each run builds its own MetricsCollector + per-cycle trace)
     manager = ModelManager(PathManager())
     all_rows: list[dict] = []
 
@@ -624,7 +681,6 @@ def main() -> None:
                         unit=unit,
                         images=images,
                         gt_by_image=gt_boxes_list,
-                        metrics=metrics,
                     )
                     all_rows.extend(rows)
                 except Exception as exc:  # noqa: BLE001
