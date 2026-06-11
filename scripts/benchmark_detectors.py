@@ -6,7 +6,7 @@
 # ]
 #
 # [tool.uv.sources]
-# moment-to-action = { path = "../moment-to-action" }
+# moment-to-action = { path = ".." }
 # ///
 """Benchmark detection models on a COCO val2017 subset.
 
@@ -24,11 +24,14 @@ gracefully when the environment is not configured or the backend is unavailable.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import json
+import os
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import cv2
 import httpx
@@ -36,6 +39,9 @@ import numpy as np
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.table import Table
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 from moment_to_action.config import load_config
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
@@ -76,6 +82,40 @@ _IOU_THRESHOLD_AP50 = 0.5
 # frequency sampling) — avoids per-sample sensor-read warnings on boards whose
 # power sysfs path is absent.  Set in main().
 _HW_METRICS = False
+
+
+# ---------------------------------------------------------------------------
+# Native log suppression
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _silence_native_output() -> Iterator[None]:
+    """Redirect OS-level stdout+stderr to /dev/null for the duration of the block.
+
+    The QAIRT runtime emits C++ logger chatter (e.g. "Profile Logger with name =
+    defaultKey doesn't exist!") straight to file descriptors 1/2, bypassing
+    Python's logging and corrupting the rich progress bar.  Wrapping the QAIRT
+    calls (load/run/unload) in this redirects those fds to /dev/null and restores
+    them afterwards, so only Python-level output reaches the terminal.
+
+    Yields:
+        None.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    saved = (os.dup(1), os.dup(2))
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        yield
+    finally:
+        os.dup2(saved[0], 1)
+        os.dup2(saved[1], 2)
+        os.close(devnull)
+        os.close(saved[0])
+        os.close(saved[1])
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +410,10 @@ def _run_cycle(
     # --- load (abort cycle on failure) ---
     t_load_start = time.perf_counter_ns()
     try:
-        with metrics.start_span(SpanType.MODEL_LOAD, f"{model_name}.{backend_name}.load"):
+        with (
+            metrics.start_span(SpanType.MODEL_LOAD, f"{model_name}.{backend_name}.load"),
+            _silence_native_output(),
+        ):
             model.load(backend)  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(
@@ -419,10 +462,14 @@ def _safe_unload(
     """
     try:
         if metrics is not None:
-            with metrics.start_span(SpanType.MODEL_UNLOAD, span_name):
+            with (
+                metrics.start_span(SpanType.MODEL_UNLOAD, span_name),
+                _silence_native_output(),
+            ):
                 model.unload()  # type: ignore[attr-defined]
         else:
-            model.unload()  # type: ignore[attr-defined]
+            with _silence_native_output():
+                model.unload()  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(f"  [yellow]Unload failed: {exc}[/yellow]")
 
@@ -464,7 +511,10 @@ def _process_image(  # noqa: PLR0913
         pre_ms = (time.perf_counter_ns() - t_pre) / 1e6
 
         t_inf = time.perf_counter_ns()
-        with metrics.start_span(SpanType.MODEL_INFERENCE, f"{model_name}.infer"):
+        with (
+            metrics.start_span(SpanType.MODEL_INFERENCE, f"{model_name}.infer"),
+            _silence_native_output(),
+        ):
             raw = model.run(prepared)  # type: ignore[attr-defined]
         inf_ms = (time.perf_counter_ns() - t_inf) / 1e6
 
