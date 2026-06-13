@@ -47,6 +47,27 @@ _PROPOSAL_IOU = 0.7
 _BOX_IOU = 0.5
 
 
+def _letterbox_params(orig_h: int, orig_w: int) -> tuple[float, int, int]:
+    """Aspect-preserving resize-and-pad parameters for an ``_INPUT_SIZE`` square.
+
+    Mirrors qai_hub_models' ``resize_pad`` (center float): scale by the smaller
+    ratio, then center the resized image in the square canvas.
+
+    Args:
+        orig_h: Original frame height.
+        orig_w: Original frame width.
+
+    Returns:
+        ``(scale, pad_left, pad_top)``.  A model-space box maps back to the
+        original via ``(coord - pad) / scale``.
+    """
+    scale = min(_INPUT_SIZE / orig_h, _INPUT_SIZE / orig_w)
+    new_h, new_w = int(orig_h * scale), int(orig_w * scale)
+    pad_left = (_INPUT_SIZE - new_w) // 2
+    pad_top = (_INPUT_SIZE - new_h) // 2
+    return scale, pad_left, pad_top
+
+
 class Detectron2Model(ImageDetectionModel):
     """Detectron2 Faster R-CNN object detector (COCO 80-class).
 
@@ -160,9 +181,18 @@ class Detectron2Model(ImageDetectionModel):
             - ``(1, 3, 800, 800)`` when :attr:`input_layout` is ``"NCHW"``.
             - ``(1, 800, 800, 3)`` when :attr:`input_layout` is ``"NHWC"``.
         """
-        self._last_original_size = (frame.shape[0], frame.shape[1])
-        resized = cv2.resize(frame, (_INPUT_SIZE, _INPUT_SIZE))
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        orig_h, orig_w = frame.shape[0], frame.shape[1]
+        self._last_original_size = (orig_h, orig_w)
+        scale, pad_left, pad_top = _letterbox_params(orig_h, orig_w)
+        new_h, new_w = int(orig_h * scale), int(orig_w * scale)
+
+        # Aspect-preserving resize + center pad into an _INPUT_SIZE square
+        # (matches the Detectron2 app's resize_pad); the decode undoes pad/scale.
+        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        canvas = np.zeros((_INPUT_SIZE, _INPUT_SIZE, 3), dtype=frame.dtype)
+        canvas[pad_top : pad_top + new_h, pad_left : pad_left + new_w] = resized
+
+        rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
         normalized = rgb.astype(np.float32) / 255.0
         if self._input_layout == "NHWC":
             return np.expand_dims(normalized, axis=0)
@@ -198,9 +228,15 @@ class Detectron2Model(ImageDetectionModel):
         else:
             out1 = self._backend.infer_dlc(self._handle_pg, prepared)
             padded = self._filter_proposals(out1["proposals"], out1["score"])
+            # The ROI head's `features` input is channel-last on the AI Hub
+            # export (get_channel_last_inputs=["features"]), but the proposal
+            # generator emits `feature` as NCHW.  qai_hub's on-device wrapper
+            # auto-transposes; calling infer_dlc directly does not, so we must
+            # transpose NCHW -> NHWC here or the ROI head pools garbage features.
+            feat = np.ascontiguousarray(np.transpose(out1["feature"], (0, 2, 3, 1)))
             out2 = self._backend.infer_dlc(
                 self._handle_roi,
-                {"features": out1["feature"], "proposals_boxes": padded},
+                {"features": feat, "proposals_boxes": padded},
             )
             boxes, scores, classes = out2["boxes"], out2["scores"], out2["classes"]
         return [boxes, scores, classes]
@@ -306,18 +342,18 @@ class Detectron2Model(ImageDetectionModel):
 
         if original_size is not None:
             orig_h, orig_w = original_size
-            sx = orig_w / float(_INPUT_SIZE)
-            sy = orig_h / float(_INPUT_SIZE)
+            scale, pad_left, pad_top = _letterbox_params(orig_h, orig_w)
         else:
-            sx, sy = 1.0, 1.0
+            scale, pad_left, pad_top = 1.0, 0, 0
             orig_w, orig_h = _INPUT_SIZE, _INPUT_SIZE
 
+        # Undo the letterbox: subtract pad, divide by scale, clamp to the frame.
         detections: list[Detection] = []
         for box, score, cid in zip(boxes, scores, classes, strict=False):
-            x1 = max(0.0, float(box[0]) * sx)
-            y1 = max(0.0, float(box[1]) * sy)
-            x2 = min(float(orig_w), float(box[2]) * sx)
-            y2 = min(float(orig_h), float(box[3]) * sy)
+            x1 = min(max(0.0, (float(box[0]) - pad_left) / scale), float(orig_w))
+            y1 = min(max(0.0, (float(box[1]) - pad_top) / scale), float(orig_h))
+            x2 = min(max(0.0, (float(box[2]) - pad_left) / scale), float(orig_w))
+            y2 = min(max(0.0, (float(box[3]) - pad_top) / scale), float(orig_h))
             class_id = int(cid)
             in_range = 0 <= class_id < len(self.COCO_LABELS)
             label = self.COCO_LABELS[class_id] if in_range else str(class_id)

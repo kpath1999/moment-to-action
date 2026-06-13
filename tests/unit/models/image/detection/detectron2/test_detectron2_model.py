@@ -238,6 +238,58 @@ class TestRun:
         roi_inputs = mock_backend.infer_dlc.call_args_list[1].args[1]
         assert set(roi_inputs) == {"features", "proposals_boxes"}
 
+    def test_dlc_transposes_feature_nchw_to_nhwc(
+        self, dlc_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
+    ) -> None:
+        """DLC run transposes the NCHW feature to NHWC for the channel-last ROI head."""
+        feature = np.zeros((1, 1024, 50, 50), dtype=np.float32)  # NCHW
+        proposals = np.array([[[0, 0, 100, 100]]], dtype=np.float32)
+        score = np.array([[0.9]], dtype=np.float32)
+        mock_backend.infer_dlc.side_effect = [
+            {"feature": feature, "proposals": proposals, "score": score},
+            {
+                "boxes": np.zeros((1, 1, 4), np.float32),
+                "scores": np.zeros((1, 1), np.float32),
+                "classes": np.zeros((1, 1), np.int64),
+            },
+        ]
+        import moment_to_action.models.image.detection.detectron2._model as m
+
+        orig = m.resolve_backend_artifact
+        m.resolve_backend_artifact = MagicMock(return_value=Path("/fake/x.dlc"))
+        try:
+            dlc_model.load(mock_backend)
+        finally:
+            m.resolve_backend_artifact = orig
+        dlc_model.run(dlc_model.prepare(sample_image_array))
+        roi_feat = mock_backend.infer_dlc.call_args_list[1].args[1]["features"]
+        assert roi_feat.shape == (1, 50, 50, 1024)  # NHWC
+
+
+@pytest.mark.unit
+class TestLetterbox:
+    """Tests for aspect-preserving letterbox prepare + decode round-trip."""
+
+    def test_prepare_pads_non_square(self, dlc_model: Detectron2Model) -> None:
+        """A 480x640 frame is letterboxed: zero pad rows top/bottom, content centred."""
+        frame = np.full((480, 640, 3), 200, dtype=np.uint8)
+        out = dlc_model.prepare(frame)[0]  # NHWC (800, 800, 3)
+        # scale=1.25 -> new 600x800, pad_top=100: rows [0:100] and [700:800] are pad (0).
+        assert float(out[:100].max()) == 0.0
+        assert float(out[700:].max()) == 0.0
+        assert float(out[400].max()) > 0.0
+
+    def test_decode_unmaps_letterbox(self, onnx_model: Detectron2Model) -> None:
+        """A box spanning the padded content maps back to the full original frame."""
+        # 480x640 -> scale 1.25, pad=(0,100); content box [0,100,800,700] -> full frame.
+        raw = _roi_outputs([[0, 100, 800, 700]], [0.9], [0])
+        out = onnx_model._decode(raw, original_size=(480, 640))
+        b = out[0].bbox
+        assert b.x1 == pytest.approx(0.0)
+        assert b.x2 == pytest.approx(640.0)
+        assert b.y1 == pytest.approx(0.0)
+        assert b.y2 == pytest.approx(480.0)
+
 
 @pytest.mark.unit
 class TestFilterProposals:
