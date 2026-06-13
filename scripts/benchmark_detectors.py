@@ -371,7 +371,7 @@ def _run_benchmark(
         return rows
 
     try:
-        model = manager.get_model(model_id, variant=variant)
+        model = manager.get_model(model_id, variant=variant, unit=unit)
     except Exception as exc:  # noqa: BLE001
         console.print(f"  [yellow]Skip {model_name}/{backend_name} ({variant}): {exc}[/yellow]")
         return rows

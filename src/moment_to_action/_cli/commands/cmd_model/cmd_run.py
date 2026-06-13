@@ -150,15 +150,16 @@ def run(
         raise click.ClickException(msg)
 
     mid = ModelID(model_id)
+    unit = ComputeUnit(backend_unit)
     kwargs: dict[str, object] = {}
     if confidence_threshold is not None:
         kwargs["confidence_threshold"] = confidence_threshold
-    model = ModelManager(data.path_manager).get_model(mid, variant=variant, **kwargs)
+    model = ModelManager(data.path_manager).get_model(mid, variant=variant, unit=unit, **kwargs)
     if not isinstance(model, ImageModel):
         msg = f"'{model_id}' is not an image model; run only supports image models currently."
         raise click.ClickException(msg)
 
-    backend = ComputeBackend(preferred_unit=ComputeUnit(backend_unit))
+    backend = ComputeBackend(preferred_unit=unit)
     model.load(backend)
     try:
         prepared = model.prepare(frame)

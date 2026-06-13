@@ -33,6 +33,14 @@ class ModelInfo:
     """Concrete model class to instantiate when
     :meth:`~moment_to_action.models.ModelManager.get_model` is called."""
 
+    npu_only_variants: frozenset[str] = frozenset()
+    """Variants whose artifacts are HTP-calibrated quantized graphs valid only on
+    the NPU.  When such a variant is requested for a CPU/GPU compute unit,
+    :class:`~moment_to_action.models.ModelManager` substitutes the ``default``
+    variant instead — the QAIRT CPU/GPU reference backends do not reproduce the
+    HTP fixed-point numerics, so the quantized graph collapses (see
+    :meth:`~moment_to_action.models.ModelManager.get_model`)."""
+
 
 @attrs.frozen
 class VariantStatus:

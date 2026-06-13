@@ -158,6 +158,7 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                 revision="062c95760b60e42a64f9b5b65e2921aa629f7ad5",
             ),
         },
+        npu_only_variants=frozenset({"qcs6490_w8a16", "qcs6490_w8a8"}),
     ),
 }
 

@@ -73,6 +73,14 @@ def _run_one(unit: ComputeUnit, img_path: Path, manager: ModelManager) -> None:
     prepared = model.prepare(frame)
     print(_stats("input", prepared))
 
+    # What layout does the roi_head graph declare for `features`?  This tells us
+    # whether the artifact is channel-last (NHWC) or NCHW.
+    try:
+        details = backend.get_input_details(model._handle_roi)
+        print(f"  roi_head input_details: {details}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  roi_head input_details unavailable: {exc!r}")
+
     out1 = backend.infer_dlc(model._handle_pg, prepared)
     for k in ("feature", "proposals", "score"):
         if k in out1:
@@ -81,18 +89,24 @@ def _run_one(unit: ComputeUnit, img_path: Path, manager: ModelManager) -> None:
     padded = model._filter_proposals(out1["proposals"], out1["score"])
     nz = int((padded[0].sum(axis=1) != 0).sum())
     print(f"  filtered proposals (non-zero rows): {nz}/{padded.shape[1]}")
-    print(_stats("  padded_proposals", padded))
 
-    feat = np.ascontiguousarray(np.transpose(out1["feature"], (0, 2, 3, 1)))
-    out2 = backend.infer_dlc(model._handle_roi, {"features": feat, "proposals_boxes": padded})
-    for k in ("boxes", "scores", "classes"):
-        if k in out2:
-            print(_stats(f"  roi.{k}", out2[k]))
-
-    dets = model.post_proc([out2["boxes"], out2["scores"], out2["classes"]])
-    print(f"  detections (>{model.confidence_threshold}): {len(dets)}")
-    for d in dets[:10]:
-        print(f"    {d.label:<14} {d.confidence:.3f}  {d.bbox}")
+    nchw = np.ascontiguousarray(out1["feature"])  # [1,1024,50,50]
+    nhwc = np.ascontiguousarray(np.transpose(out1["feature"], (0, 2, 3, 1)))  # [1,50,50,1024]
+    for tag, feat in (("NHWC(transpose)", nhwc), ("NCHW(raw)", nchw)):
+        try:
+            out2 = backend.infer_dlc(
+                model._handle_roi, {"features": feat, "proposals_boxes": padded}
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"  roi[{tag}]: ERROR {exc!r}")
+            continue
+        dets = model.post_proc([out2["boxes"], out2["scores"], out2["classes"]])
+        print(
+            f"  roi[{tag}]: scores max={np.max(out2['scores']):.3f} "
+            f"-> detections(>{model.confidence_threshold})={len(dets)}"
+        )
+        for d in dets[:5]:
+            print(f"      {d.label:<14} {d.confidence:.3f}")
 
     model.unload()
 

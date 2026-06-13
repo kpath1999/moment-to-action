@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.utils.files import disk_size
 
 from ._model_info import ModelID, ModelInfo, ModelStatus, VariantStatus
@@ -16,6 +17,11 @@ if TYPE_CHECKING:
     from moment_to_action.paths._cache._models import CachedModelInfo, ModelCacheContents
 
     from ._base import BaseModel
+
+# Compute units whose runtimes are software reference backends (QAIRT CPU/GPU,
+# ONNX Runtime) — they cannot faithfully execute HTP-calibrated quantized
+# graphs, so :data:`ModelInfo.npu_only_variants` are redirected to ``default``.
+_REFERENCE_UNITS: frozenset[ComputeUnit] = frozenset({ComputeUnit.CPU, ComputeUnit.GPU})
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +53,39 @@ class ModelManager:
             msg = f"Model {model} not found in registry."
             raise ValueError(msg)
         return self._registry[model]
+
+    @staticmethod
+    def _effective_variant(model_info: ModelInfo, variant: str, unit: ComputeUnit | None) -> str:
+        """Resolve the variant to actually load for a target compute unit.
+
+        NPU-only variants (HTP-calibrated quantized graphs) collapse on the
+        QAIRT CPU/GPU reference backends, so they are redirected to the
+        ``default`` (float) variant when *unit* is a reference unit.
+
+        Args:
+            model_info: Static metadata for the model being resolved.
+            variant: The variant the caller requested.
+            unit: Target compute unit, or ``None`` to disable redirection
+                (the variant is returned verbatim).
+
+        Returns:
+            The variant key to load — ``default`` when redirected, otherwise
+            the requested *variant* unchanged.
+        """
+        if (
+            unit in _REFERENCE_UNITS
+            and variant in model_info.npu_only_variants
+            and variant != DEFAULT_KEY
+        ):
+            log.info(
+                "Variant '%s' of %s is NPU-only; using '%s' on %s.",
+                variant,
+                model_info.id,
+                DEFAULT_KEY,
+                unit.name if unit is not None else "?",
+            )
+            return DEFAULT_KEY
+        return variant
 
     @staticmethod
     def _get_source(model_info: ModelInfo, variant: str) -> ModelSource:
@@ -87,16 +126,22 @@ class ModelManager:
 
         return True
 
-    def get_path(self, model: ModelID, variant: str = DEFAULT_KEY) -> Path:
+    def get_path(
+        self, model: ModelID, variant: str = DEFAULT_KEY, unit: ComputeUnit | None = None
+    ) -> Path:
         """Get the file path for a given model and variant, downloading if necessary.
 
         Args:
             model: The ModelID of the desired model.
             variant: The variant name of the model to retrieve.
+            unit: Target compute unit.  When set, an NPU-only *variant* is
+                redirected to ``default`` for CPU/GPU units (see
+                :meth:`_effective_variant`).
 
         Returns:
             Path to the model file(s).
         """
+        variant = self._effective_variant(self._get_model_info(model), variant, unit)
         # Resolve the model source to get the path
         path = self._resolve_model(model, variant, download=True)
 
@@ -180,6 +225,7 @@ class ModelManager:
         model_id: ModelID,
         *,
         variant: str = DEFAULT_KEY,
+        unit: ComputeUnit | None = None,
         **model_kwargs: object,
     ) -> BaseModel:
         """Construct an unloaded model instance for the given model and variant.
@@ -191,6 +237,12 @@ class ModelManager:
         Args:
             model_id: Identifier of the desired model.
             variant: Variant name to load.  Defaults to :data:`DEFAULT_KEY`.
+            unit: Target compute unit the model will run on.  When set, an
+                NPU-only *variant* (see :attr:`ModelInfo.npu_only_variants`) is
+                redirected to ``default`` for CPU/GPU units, so the returned
+                model is constructed for the float variant — including its
+                format, so its inference path matches.  ``None`` disables
+                redirection.
             **model_kwargs: Additional keyword arguments forwarded verbatim to
                 the model constructor.  Use for model-specific parameters such
                 as ``confidence_threshold`` on detection models.
@@ -199,6 +251,7 @@ class ModelManager:
             An unloaded :class:`~moment_to_action.models._base.BaseModel` subclass instance.
         """
         info = self._get_model_info(model_id)
+        variant = self._effective_variant(info, variant, unit)
         source = self._get_source(info, variant)
         path = self.get_path(model_id, variant)
         return info.model_class(variant, path, source.format, **model_kwargs)  # type: ignore[call-arg]
