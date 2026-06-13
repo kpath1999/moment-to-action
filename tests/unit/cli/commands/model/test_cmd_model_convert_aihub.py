@@ -284,8 +284,10 @@ class TestConvertAihubCommand:
             )
 
         assert result.exit_code == 0, result.output
-        assert (out / "model.proposal_generator.dlc").exists()
-        assert (out / "model.roi_head.dlc").exists()
+        # Float component DLCs are produced transiently for reference capture, then
+        # deleted (NPU-only ship): CPU/GPU use the single-graph ONNX default variant.
+        assert not (out / "model.proposal_generator.dlc").exists()
+        assert not (out / "model.roi_head.dlc").exists()
         assert (out / "model.proposal_generator.npu.bin").exists()
         assert (out / "model.roi_head.npu.bin").exists()
         # Single-graph names are NOT produced for a multi-component model

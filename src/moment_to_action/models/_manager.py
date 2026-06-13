@@ -82,7 +82,7 @@ class ModelManager:
                 variant,
                 model_info.id,
                 DEFAULT_KEY,
-                unit.name if unit is not None else "?",
+                unit,
             )
             return DEFAULT_KEY
         return variant

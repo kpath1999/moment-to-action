@@ -107,8 +107,17 @@ class Detectron2Model(ImageDetectionModel):
         super().__init__(variant, path)
         self._format = model_format
         self._confidence_threshold = confidence_threshold
+        # ONNX is the single-graph float export (detectron2 tracing): one
+        # end-to-end model.onnx that runs RPN + ROI head + NMS internally.  DLC
+        # is the two-component AI Hub split (proposal generator + ROI head).
+        self._single_graph_onnx = model_format is ModelFormat.ONNX
         self._handle_pg: object = None
         self._handle_roi: object = None
+        # Whether the loaded ROI-head artifact declares its `features` input as
+        # channel-last (NHWC).  Only the HTP context binary (.npu.bin) does; the
+        # portable float .dlc keeps NCHW.  Set in load(); gates the transpose in
+        # run().  ONNX leaves this False (NCHW features).
+        self._roi_channel_last: bool = False
         self._last_original_size: tuple[int, int] | None = None
         # AI Hub qcs6490 DLC exports to NHWC; all other variants use NCHW.  Both
         # precision variants ("qcs6490_w8a16", "qcs6490_w8a8") share the layout.
@@ -129,13 +138,13 @@ class Detectron2Model(ImageDetectionModel):
         return self._input_layout
 
     def load(self, backend: ComputeBackend) -> None:
-        """Load both component graphs onto the backend.
+        """Load the model graph(s) onto the backend.
 
-        For DLC variants, resolves each component via
+        For the single-graph ONNX variant, loads ``model.onnx`` from the variant
+        directory.  For DLC variants, resolves each component via
         :func:`~moment_to_action.models._artifacts.resolve_backend_artifact`
         with its stem — a per-backend context binary (``<stem>.npu.bin``) when
-        present, falling back to ``<stem>.dlc``.  For ONNX, loads
-        ``<stem>.onnx`` from the variant directory.
+        present, falling back to ``<stem>.dlc``.
 
         Args:
             backend: Hardware backend to load the model onto.
@@ -146,22 +155,24 @@ class Detectron2Model(ImageDetectionModel):
         if self._backend is not None:
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
-        if self._format is ModelFormat.ONNX:
-            self._handle_pg = backend.load_model(self._path / f"{_PG_STEM}.onnx")
-            self._handle_roi = backend.load_model(self._path / f"{_ROI_STEM}.onnx")
+        if self._single_graph_onnx:
+            # Single end-to-end graph; reuse _handle_pg as the sole handle.
+            self._handle_pg = backend.load_model(self._path / "model.onnx")
         else:
             pg = resolve_backend_artifact(self._path, backend.preferred_unit, stem=_PG_STEM)
             roi = resolve_backend_artifact(self._path, backend.preferred_unit, stem=_ROI_STEM)
+            # Only the HTP context binary lays `features` out channel-last; the
+            # float .dlc keeps NCHW, so the transpose in run() is binary-only.
+            self._roi_channel_last = roi.name.endswith(".npu.bin")
             self._handle_pg = backend.load_model_dlc(pg)
             self._handle_roi = backend.load_model_dlc(roi)
         self._backend = backend
 
     def unload(self) -> None:
-        """Release backend resources for both graphs and reset internal state."""
+        """Release backend resources for the loaded graph(s) and reset state."""
         if self._backend is not None:
-            if self._format is ModelFormat.ONNX:
+            if self._single_graph_onnx:
                 self._backend.unload_model(self._handle_pg)
-                self._backend.unload_model(self._handle_roi)
             else:
                 self._backend.unload_dlc(self._handle_pg)
                 self._backend.unload_dlc(self._handle_roi)
@@ -170,27 +181,37 @@ class Detectron2Model(ImageDetectionModel):
         self._handle_roi = None
 
     def prepare(self, frame: np.ndarray) -> np.ndarray:
-        """Resize, normalize, and batch a raw BGR frame for Detectron2 inference.
+        """Letterbox and format a raw BGR frame for Detectron2 inference.
+
+        Both paths aspect-preserve resize + center pad into an ``_INPUT_SIZE``
+        square (matching the Detectron2 app's ``resize_pad``); the decode undoes
+        the pad/scale.  Formatting then differs by graph:
 
         Args:
             frame: Raw BGR image (HxWxC, uint8).
 
         Returns:
-            Float32 tensor with values in ``[0, 1]``:
+            Float32 tensor:
 
-            - ``(1, 3, 800, 800)`` when :attr:`input_layout` is ``"NCHW"``.
-            - ``(1, 800, 800, 3)`` when :attr:`input_layout` is ``"NHWC"``.
+            - ``(3, 800, 800)`` raw **BGR, 0-255** for the single-graph ONNX
+              (detectron2 normalizes with PIXEL_MEAN/STD internally; no batch dim).
+            - ``(1, 3, 800, 800)`` **RGB, [0, 1]** when :attr:`input_layout` is
+              ``"NCHW"`` (DLC).
+            - ``(1, 800, 800, 3)`` **RGB, [0, 1]** when :attr:`input_layout` is
+              ``"NHWC"`` (qcs6490 DLC).
         """
         orig_h, orig_w = frame.shape[0], frame.shape[1]
         self._last_original_size = (orig_h, orig_w)
         scale, pad_left, pad_top = _letterbox_params(orig_h, orig_w)
         new_h, new_w = int(orig_h * scale), int(orig_w * scale)
 
-        # Aspect-preserving resize + center pad into an _INPUT_SIZE square
-        # (matches the Detectron2 app's resize_pad); the decode undoes pad/scale.
         resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
         canvas = np.zeros((_INPUT_SIZE, _INPUT_SIZE, 3), dtype=frame.dtype)
         canvas[pad_top : pad_top + new_h, pad_left : pad_left + new_w] = resized
+
+        if self._single_graph_onnx:
+            # detectron2 tracing contract: raw BGR, 0-255 float32, CHW, no batch.
+            return canvas.astype(np.float32).transpose(2, 0, 1)
 
         rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
         normalized = rgb.astype(np.float32) / 255.0
@@ -200,17 +221,18 @@ class Detectron2Model(ImageDetectionModel):
         return np.expand_dims(chw, axis=0)
 
     def run(self, prepared: np.ndarray) -> list[np.ndarray]:
-        """Run the two-stage Detectron2 forward pass.
+        """Run the Detectron2 forward pass.
 
-        Runs the proposal generator, filters proposals on the CPU, then runs the
-        ROI head on the filtered proposals.
+        The single-graph ONNX runs the whole detector end-to-end (RPN + ROI head
+        + NMS).  The DLC path runs the proposal generator, filters proposals on
+        the CPU, then runs the ROI head on the filtered proposals.
 
         Args:
-            prepared: Batch tensor from :meth:`prepare`.
+            prepared: Tensor from :meth:`prepare`.
 
         Returns:
-            List of raw output tensors ``[boxes, scores, classes]`` from the ROI
-            head, each with leading batch dim.
+            List of raw output tensors ``[boxes, scores, classes]``, each with a
+            leading batch dim, ready for :meth:`post_proc`.
 
         Raises:
             RuntimeError: If the model has not been loaded.
@@ -219,26 +241,31 @@ class Detectron2Model(ImageDetectionModel):
             msg = "Detectron2Model.load() must be called before run()"
             raise RuntimeError(msg)
 
-        if self._format is ModelFormat.ONNX:
-            feature, proposals, score = self._backend.run(self._handle_pg, prepared)
-            padded = self._filter_proposals(proposals, score)
-            boxes, scores, classes = self._backend.run(
-                self._handle_roi, {"features": feature, "proposals_boxes": padded}
-            )
-        else:
-            out1 = self._backend.infer_dlc(self._handle_pg, prepared)
-            padded = self._filter_proposals(out1["proposals"], out1["score"])
-            # The ROI head's `features` input is channel-last on the AI Hub
-            # export (get_channel_last_inputs=["features"]), but the proposal
-            # generator emits `feature` as NCHW.  qai_hub's on-device wrapper
-            # auto-transposes; calling infer_dlc directly does not, so we must
-            # transpose NCHW -> NHWC here or the ROI head pools garbage features.
+        if self._single_graph_onnx:
+            # Traced GeneralizedRCNN outputs (in order): boxes [N,4], classes
+            # [N] int64, scores [N], image_size [2].  Reorder to [boxes, scores,
+            # classes] and add the batch dim _decode expects.
+            outs = self._backend.run(self._handle_pg, prepared)
+            boxes, classes, scores = outs[0], outs[1], outs[2]
+            return [boxes[np.newaxis], scores[np.newaxis], classes[np.newaxis]]
+
+        out1 = self._backend.infer_dlc(self._handle_pg, prepared)
+        padded = self._filter_proposals(out1["proposals"], out1["score"])
+        # The proposal generator emits `feature` as NCHW.  Only the HTP context
+        # binary declares the ROI head's `features` input as channel-last
+        # (get_channel_last_inputs=["features"]) -- qai_hub's on-device wrapper
+        # auto-transposes there, infer_dlc does not, so we transpose NCHW ->
+        # NHWC for the binary.  The portable float .dlc keeps NCHW; transposing
+        # it would pool garbage features.
+        if self._roi_channel_last:
             feat = np.ascontiguousarray(np.transpose(out1["feature"], (0, 2, 3, 1)))
-            out2 = self._backend.infer_dlc(
-                self._handle_roi,
-                {"features": feat, "proposals_boxes": padded},
-            )
-            boxes, scores, classes = out2["boxes"], out2["scores"], out2["classes"]
+        else:
+            feat = np.ascontiguousarray(out1["feature"])
+        out2 = self._backend.infer_dlc(
+            self._handle_roi,
+            {"features": feat, "proposals_boxes": padded},
+        )
+        boxes, scores, classes = out2["boxes"], out2["scores"], out2["classes"]
         return [boxes, scores, classes]
 
     def _filter_proposals(self, proposals: np.ndarray, score: np.ndarray) -> np.ndarray:

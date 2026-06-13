@@ -119,18 +119,19 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         id=ModelID.DETECTRON2,
         model_class=Detectron2Model,
         variants={
-            DEFAULT_KEY: UltralyticsSource(
+            DEFAULT_KEY: HuggingFaceSource(
                 format=ModelFormat.ONNX,
-                name="detectron2",
+                hf_repo_id="llamas-lab/m2a-models",
+                hf_subdir="detectron2_float_onnx",
+                files=["model.onnx"],
+                revision="5e24d703d92960e189dfda7173e4dd445ebf2f11",
             ),
             "qcs6490_w8a16": HuggingFaceSource(
                 format=ModelFormat.DLC,
                 hf_repo_id="llamas-lab/m2a-models",
                 hf_subdir="detectron2_qcs_w8a16",
                 files=[
-                    "model.proposal_generator.dlc",
                     "model.proposal_generator.npu.bin",
-                    "model.roi_head.dlc",
                     "model.roi_head.npu.bin",
                     "metadata.json",
                     "reference_outputs/inputs.npy",
@@ -138,16 +139,14 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     "reference_outputs/outputs_1.npy",
                     "reference_outputs/outputs_2.npy",
                 ],
-                revision="062c95760b60e42a64f9b5b65e2921aa629f7ad5",
+                revision="5e24d703d92960e189dfda7173e4dd445ebf2f11",
             ),
             "qcs6490_w8a8": HuggingFaceSource(
                 format=ModelFormat.DLC,
                 hf_repo_id="llamas-lab/m2a-models",
                 hf_subdir="detectron2_qcs_w8a8",
                 files=[
-                    "model.proposal_generator.dlc",
                     "model.proposal_generator.npu.bin",
-                    "model.roi_head.dlc",
                     "model.roi_head.npu.bin",
                     "metadata.json",
                     "reference_outputs/inputs.npy",
@@ -155,7 +154,7 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     "reference_outputs/outputs_1.npy",
                     "reference_outputs/outputs_2.npy",
                 ],
-                revision="062c95760b60e42a64f9b5b65e2921aa629f7ad5",
+                revision="5e24d703d92960e189dfda7173e4dd445ebf2f11",
             ),
         },
         npu_only_variants=frozenset({"qcs6490_w8a16", "qcs6490_w8a8"}),

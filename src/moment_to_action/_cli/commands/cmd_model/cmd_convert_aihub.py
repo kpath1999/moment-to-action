@@ -67,6 +67,13 @@ _NPU_PRECISION_OVERRIDE: dict[ModelID, str | None] = {
     ModelID.RTM_DET: None,
 }
 
+# Models that must NOT ship the portable float DLC.  The two-component float DLC's
+# proposal-generator -> ROI-head feature handoff does not reproduce on the QAIRT
+# CPU/GPU reference backends, so those units use the single-graph ONNX `default`
+# variant instead; only the NPU `.npu.bin` is shipped.  The component DLCs are
+# still produced transiently to capture reference outputs, then deleted.
+_NO_SHIP_DLC: frozenset[ModelID] = frozenset({ModelID.DETECTRON2})
+
 
 def _npu_compile_link_options(model_id: ModelID) -> tuple[str, str]:
     """Return ``(compile_options, link_options)`` for the NPU context-binary step.
@@ -447,6 +454,14 @@ def convert_aihub(
     # are compiled for the qcs6490 device (aarch64/HTP) and cannot load on x86.
     # resolve_backend_artifact falls back to model.dlc when no .bin files are present.
     _capture_reference_outputs(mid, calibration_dir, output_dir)
+
+    # Drop the float component DLCs we just used for reference capture: they are
+    # dead weight at runtime for NPU-only-shipping models (CPU/GPU use the
+    # single-graph ONNX `default` variant; NPU loads the .npu.bin below).
+    if mid in _NO_SHIP_DLC and components is not None:
+        for comp in components:
+            (output_dir / f"model.{comp}.dlc").unlink(missing_ok=True)
+            click.echo(f"Removed dead float DLC: model.{comp}.dlc")
 
     # Step 3: NPU context binary (HTP AOT-compiled; CPU/GPU fall back to the DLC).
     # Per-model precision overrides live in _NPU_PRECISION_OVERRIDE.  When the override

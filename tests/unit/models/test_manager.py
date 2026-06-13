@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 
+from moment_to_action.hardware import ComputeUnit
 from moment_to_action.models import (
     DEFAULT_VARIANT_KEY,
     DownloadSource,
@@ -468,3 +469,83 @@ class TestUltralyticsFlow:
         p = mgr.get_path(ModelID.YOLO_V8)
         assert p.exists()
         assert p.name == "model.onnx"
+
+
+def _npu_only_info(npu_only: frozenset[str] = frozenset({"q"})) -> ModelInfo:
+    """ModelInfo with a `default` + NPU-only `q` variant (DownloadSource each)."""
+    src = DownloadSource(format=ModelFormat.ONNX, url="https://e/m", filename="m")
+    return ModelInfo(
+        id=ModelID.DETECTRON2,
+        model_class=YOLOModel,
+        variants={DEFAULT_VARIANT_KEY: src, "q": src},
+        npu_only_variants=npu_only,
+    )
+
+
+@pytest.mark.unit
+class TestEffectiveVariant:
+    """Tests for `_effective_variant` NPU-only redirection."""
+
+    @pytest.mark.parametrize("unit", [ComputeUnit.CPU, ComputeUnit.GPU])
+    def test_redirects_on_reference_units(self, unit: ComputeUnit) -> None:
+        """An NPU-only variant redirects to `default` on CPU/GPU."""
+        assert ModelManager._effective_variant(_npu_only_info(), "q", unit) == DEFAULT_VARIANT_KEY
+
+    def test_keeps_variant_on_npu(self) -> None:
+        """NPU keeps the requested NPU-only variant."""
+        assert ModelManager._effective_variant(_npu_only_info(), "q", ComputeUnit.NPU) == "q"
+
+    def test_keeps_variant_when_unit_none(self) -> None:
+        """No unit disables redirection."""
+        assert ModelManager._effective_variant(_npu_only_info(), "q", None) == "q"
+
+    def test_keeps_non_flagged_variant(self) -> None:
+        """A non-NPU-only variant is unchanged even on CPU."""
+        info = _npu_only_info()
+        got = ModelManager._effective_variant(info, DEFAULT_VARIANT_KEY, ComputeUnit.CPU)
+        assert got == DEFAULT_VARIANT_KEY
+
+    def test_default_variant_never_redirected(self) -> None:
+        """`default` is never redirected even if itself flagged (no self-loop)."""
+        info = _npu_only_info(npu_only=frozenset({DEFAULT_VARIANT_KEY, "q"}))
+        got = ModelManager._effective_variant(info, DEFAULT_VARIANT_KEY, ComputeUnit.CPU)
+        assert got == DEFAULT_VARIANT_KEY
+
+
+@pytest.mark.unit
+class TestUnitRouting:
+    """Tests that `get_model`/`get_path` honour the NPU-only redirect."""
+
+    @staticmethod
+    def _prefill_default(path_manager: PathManager) -> Path:
+        """Create the cached default-variant file and return its path."""
+        variant_dir = path_manager.cache.models.get_variant_dir("detectron2", DEFAULT_VARIANT_KEY)
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        target = variant_dir / "m"
+        target.write_bytes(b"x")
+        return target
+
+    def test_get_model_redirects_on_cpu(
+        self, path_manager: PathManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """get_model(variant='q', unit=CPU) constructs the default variant."""
+        target = self._prefill_default(path_manager)
+        monkeypatch.setattr(
+            "moment_to_action.models._manager.resolve_model_source",
+            lambda *a, **k: target,  # noqa: ARG005
+        )
+        mgr = ModelManager(path_manager, registry={ModelID.DETECTRON2: _npu_only_info()})
+        model = mgr.get_model(ModelID.DETECTRON2, variant="q", unit=ComputeUnit.CPU)
+        assert model._variant == DEFAULT_VARIANT_KEY
+
+    def test_get_path_redirects_on_cpu(
+        self, path_manager: PathManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """get_path(variant='q', unit=CPU) resolves the default variant path."""
+        target = self._prefill_default(path_manager)
+        monkeypatch.setattr(
+            "moment_to_action.models._manager.resolve_model_source",
+            lambda *a, **k: target,  # noqa: ARG005
+        )
+        mgr = ModelManager(path_manager, registry={ModelID.DETECTRON2: _npu_only_info()})
+        assert mgr.get_path(ModelID.DETECTRON2, "q", unit=ComputeUnit.CPU) == target
