@@ -8,13 +8,22 @@
 # [tool.uv.sources]
 # moment-to-action = { path = "..", editable = true }
 # ///
-"""Benchmark LLM models on scene-reasoning prompts.
+"""Benchmark LLM models on application-specific classification prompts.
 
-Creates a fixed set of synthetic scenes and asks each model a reasoning question
-that cannot be answered by repeating the input (e.g. "Is this safe? What should
-the person do?").  Accuracy is measured as keyword recall against action/context
-terms that a model can only produce by actually reasoning about the scene — not
-by echoing the object list.
+Each scene maps to one of the five target applications (violence detection,
+fall detection, animal threat, eating detection, PPE compliance).  Every
+scene poses the binary or multi-label question the deployed system would ask.
+
+Inputs are restricted to what real models actually produce:
+  - Detections from YOLO: label, confidence, bounding box (pixel coordinates).
+    Spatial context (overlap, orientation, foreground/background) is derived
+    from the bboxes rather than assumed from free-form natural language.
+  - Audio transcript from an audio model, where the application uses audio.
+
+Two scenes per application: one positive case, one negative case.
+
+Accuracy is keyword recall: words a model produces only by answering the
+classification question correctly, not by echoing the input labels.
 
 Usage:
     uv run python scripts/benchmark_llms.py [--n-cycles 3] [--output llm_benchmark_results.csv]
@@ -28,6 +37,7 @@ import argparse
 import csv
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from rich.console import Console
@@ -59,169 +69,472 @@ _MODEL_CONFIGS: list[tuple[ModelID, str]] = [
 ]
 
 _N_CYCLES = 3
+_MAX_TOKENS = 128
 
-# System prompt: steer toward recommendation, not description.
 _BENCHMARK_SYSTEM = (
-    "You are a scene analyst. Given detected objects, briefly describe what is "
-    "most likely happening and recommend one specific action. Respond in 1-2 sentences. "
-    "Do not just list the objects."
+    "You are a scene analysis AI. Answer the user's question directly and concisely. "
+    "Lead with your direct answer, then give one sentence of reasoning."
 )
+
+# Required PPE items — used to infer what is absent in PPE scenes.
+_REQUIRED_PPE: frozenset[str] = frozenset({"hard hat", "safety vest", "glove", "boot"})
+
+# Standard frame dimensions assumed for bbox context derivation.
+_FRAME_W = 640
+_FRAME_H = 480
+
+# Thresholds for spatial context derivation.
+_DEPTH_FG_THRESH = 0.25  # bbox area fraction → foreground
+_DEPTH_MG_THRESH = 0.08  # bbox area fraction → midground (else background)
+_OVERLAP_THRESH = 0.05  # IoU above this → "overlapping"
+_MIN_PAIR = 2  # minimum persons to compute pairwise IoU
+
+
+# ---------------------------------------------------------------------------
+# Spatial helpers — derive context from raw YOLO bbox output
+# ---------------------------------------------------------------------------
+
+
+def _area(b: BoundingBox) -> float:
+    """Compute bounding box area in pixels.
+
+    Args:
+        b: Bounding box.
+
+    Returns:
+        Area in pixels.
+    """
+    return (b.x2 - b.x1) * (b.y2 - b.y1)
+
+
+def _iou(a: BoundingBox, b: BoundingBox) -> float:
+    """Compute intersection-over-union between two bounding boxes.
+
+    Args:
+        a: First bounding box.
+        b: Second bounding box.
+
+    Returns:
+        IoU in [0, 1].
+    """
+    ix1, iy1 = max(a.x1, b.x1), max(a.y1, b.y1)
+    ix2, iy2 = min(a.x2, b.x2), min(a.y2, b.y2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0.0
+    inter = (ix2 - ix1) * (iy2 - iy1)
+    union = _area(a) + _area(b) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _frame_zone(b: BoundingBox) -> str:
+    """Return a natural-language frame zone for a bounding box centroid.
+
+    Args:
+        b: Bounding box.
+
+    Returns:
+        String like "bottom-left", "mid-center", etc.
+    """
+    cx = (b.x1 + b.x2) / 2
+    cy = (b.y1 + b.y2) / 2
+    h = "left" if cx < _FRAME_W / 3 else ("right" if cx > 2 * _FRAME_W / 3 else "center")
+    v = "top" if cy < _FRAME_H / 3 else ("bottom" if cy > 2 * _FRAME_H / 3 else "mid")
+    return f"{v}-{h}"
+
+
+def _depth(b: BoundingBox) -> str:
+    """Return foreground/midground/background based on bbox area fraction.
+
+    Args:
+        b: Bounding box.
+
+    Returns:
+        "foreground", "midground", or "background".
+    """
+    frac = _area(b) / (_FRAME_W * _FRAME_H)
+    if frac > _DEPTH_FG_THRESH:
+        return "foreground"
+    if frac > _DEPTH_MG_THRESH:
+        return "midground"
+    return "background"
+
+
+def _is_horizontal(b: BoundingBox) -> bool:
+    """Return True when the bounding box is wider than it is tall.
+
+    Args:
+        b: Bounding box.
+
+    Returns:
+        True if width > height.
+    """
+    return (b.x2 - b.x1) > (b.y2 - b.y1)
+
+
+# ---------------------------------------------------------------------------
+# Scene definition
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Scene:
+    """One benchmark scene backed by YOLO-realistic inputs.
+
+    Attributes:
+        name: Short identifier used in CSV output.
+        app: Target application name.
+        task: The binary question the system asks (used as prompt suffix).
+        detections: YOLO detections (label + confidence + bbox).  Spatial
+            context is derived from bboxes by ``_build_prompt``.
+        audio_transcript: Transcript from an audio model.  ``None`` for apps
+            that do not use audio.
+        expected_label: Correct answer token (e.g. "YES", "NO", "COMPLIANT").
+        recall_keywords: Words expected from a correct answer.  Labels that
+            appear verbatim in ``detections`` are excluded so that input-echoing
+            does not inflate recall.
+    """
+
+    name: str
+    app: str
+    task: str
+    detections: list[Detection]
+    audio_transcript: str | None
+    expected_label: str
+    recall_keywords: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Prompt builder — derives spatial context from raw bboxes
+# ---------------------------------------------------------------------------
+
+
+def _build_prompt(scene: Scene) -> str:
+    """Build a model prompt from YOLO detections and optional audio.
+
+    Spatial features (overlap, orientation, foreground/background) are derived
+    from bounding box coordinates rather than assumed from free text.  No
+    language appears in the prompt that could not be computed from real YOLO
+    output.
+
+    Args:
+        scene: Scene definition.
+
+    Returns:
+        Formatted prompt string ending with the binary question.
+    """
+    lines: list[str] = [f"Task: {scene.task}", ""]
+
+    # --- per-detection lines ---
+    det_lines: list[str] = []
+    for d in scene.detections:
+        zone = _frame_zone(d.bbox)
+        depth = _depth(d.bbox)
+        parts = [f"{d.label} (conf {d.confidence:.2f}, {zone}, {depth}"]
+        if d.label == "person" and _is_horizontal(d.bbox):
+            parts.append(", horizontal orientation")
+        parts.append(")")
+        det_lines.append("".join(parts))
+    lines.append("Detections:\n" + "\n".join(f"  - {dl}" for dl in det_lines))
+
+    # --- derived pairwise context ---
+    persons = [d for d in scene.detections if d.label == "person"]
+    animals = [d for d in scene.detections if d.label in ("dog", "cat", "bear", "wolf")]
+
+    if len(persons) >= _MIN_PAIR:
+        max_person_iou = max(
+            _iou(persons[i].bbox, persons[j].bbox)
+            for i in range(len(persons))
+            for j in range(i + 1, len(persons))
+        )
+        overlap_desc = "overlapping" if max_person_iou > _OVERLAP_THRESH else "non-overlapping"
+        lines.append(f"Person bounding boxes: {overlap_desc} (max IoU={max_person_iou:.2f})")
+
+    if persons and animals:
+        max_pa_iou = max(_iou(p.bbox, a.bbox) for p in persons for a in animals)
+        pa_desc = "overlapping with person" if max_pa_iou > _OVERLAP_THRESH else "not overlapping"
+        lines.append(f"Animal bounding box: {pa_desc} (max IoU with person={max_pa_iou:.2f})")
+
+    # --- audio ---
+    if scene.audio_transcript is not None:
+        lines.append(f"Audio: {scene.audio_transcript}")
+
+    lines.append("")
+    lines.append(scene.task)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Scenes — 2 per application (positive then negative)
+# ---------------------------------------------------------------------------
 
 
 def _bb(x1: int, y1: int, x2: int, y2: int) -> BoundingBox:
-    """Shorthand BoundingBox constructor for scene definitions."""
+    """Shorthand BoundingBox constructor.
+
+    Args:
+        x1: Left edge.
+        y1: Top edge.
+        x2: Right edge.
+        y2: Bottom edge.
+
+    Returns:
+        BoundingBox instance.
+    """
     return BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
 
 
 def _det(label: str, conf: float, x1: int, y1: int, x2: int, y2: int) -> Detection:
-    """Shorthand Detection constructor for scene definitions."""
+    """Shorthand Detection constructor.
+
+    Args:
+        label: Class label.
+        conf: Confidence score.
+        x1: Left edge.
+        y1: Top edge.
+        x2: Right edge.
+        y2: Bottom edge.
+
+    Returns:
+        Detection instance.
+    """
     return Detection(label=label, confidence=conf, bbox=_bb(x1, y1, x2, y2))
 
 
-def _build_benchmark_prompt(detections: list[Detection]) -> str:
-    """Build a reasoning prompt from a detection list.
-
-    Presents only object labels (no raw pixel coordinates or confidence scores —
-    they add noise that small models cannot reason over) and asks for a situational
-    assessment + recommendation.
-
-    Args:
-        detections: Detections from a synthetic scene.
-
-    Returns:
-        Formatted prompt string.
-    """
-    top5 = sorted(detections, key=lambda d: d.confidence, reverse=True)[:5]
-    labels = ", ".join(d.label for d in top5)
-    return (
-        f"Objects detected: {labels}.\nWhat is most likely happening and what should the person do?"
-    )
-
-
-# Each scene: (name, detections, action_keywords).
-# action_keywords are terms a model should produce when reasoning correctly —
-# these cannot be satisfied by simply echoing the detection list.
-_SCENES: list[tuple[str, list[Detection], list[str]]] = [
-    (
-        "kitchen_prep",
-        [
-            _det("person", 0.95, 50, 10, 200, 480),
-            _det("refrigerator", 0.88, 300, 0, 500, 480),
-            _det("cup", 0.72, 210, 200, 260, 250),
-            _det("bottle", 0.65, 270, 180, 310, 260),
+_SCENES: list[Scene] = [
+    # --- Violence Detection -------------------------------------------------
+    # Positive: two persons with heavily overlapping bboxes, audio confirms altercation
+    Scene(
+        name="violence_fight",
+        app="violence_detection",
+        task="Is a violent incident occurring? Answer YES or NO, then one sentence of reasoning.",
+        detections=[
+            _det("person", 0.95, 80, 40, 360, 480),
+            _det("person", 0.92, 200, 30, 500, 480),  # large overlap with first person
         ],
-        # expect reasoning about food/drink preparation
-        ["cook", "prepare", "food", "drink", "eat", "kitchen", "meal", "water"],
+        audio_transcript="shouting, impact sounds, glass breaking",
+        expected_label="YES",
+        recall_keywords=["yes", "fight", "violen", "aggress", "altercation", "physical"],
     ),
-    (
-        "street_traffic",
-        [
-            _det("person", 0.93, 10, 50, 120, 480),
-            _det("car", 0.91, 200, 200, 600, 420),
-            _det("truck", 0.79, 620, 150, 900, 450),
-            _det("traffic light", 0.84, 350, 10, 390, 80),
+    # Negative: two persons at opposite sides of frame, no overlap, calm audio
+    Scene(
+        name="violence_calm",
+        app="violence_detection",
+        task="Is a violent incident occurring? Answer YES or NO, then one sentence of reasoning.",
+        detections=[
+            _det("person", 0.93, 10, 50, 200, 480),  # left side
+            _det("person", 0.90, 440, 50, 630, 480),  # right side, no overlap
         ],
-        # expect traffic-safety reasoning
-        ["wait", "cross", "look", "traffic", "caution", "safe", "signal", "road", "danger"],
+        audio_transcript="ambient music, quiet conversation, laughter",
+        expected_label="NO",
+        recall_keywords=["no", "calm", "peaceful", "safe", "non-violent", "normal"],
     ),
-    (
-        "office_work",
-        [
-            _det("person", 0.97, 100, 0, 300, 480),
-            _det("laptop", 0.90, 310, 200, 540, 380),
-            _det("chair", 0.76, 80, 300, 200, 480),
-            _det("monitor", 0.82, 550, 100, 800, 350),
+    # --- Fall Detection -----------------------------------------------------
+    # Positive: person bbox is horizontal (width >> height), located at bottom of frame
+    Scene(
+        name="fall_detected",
+        app="fall_detection",
+        task="Has a person fallen? Answer YES or NO, then one sentence of reasoning.",
+        detections=[
+            _det("person", 0.91, 50, 390, 520, 470),  # horizontal (w=470 > h=80), bottom frame
+            _det("chair", 0.74, 300, 200, 500, 400),
         ],
-        # expect work/desk reasoning
-        ["work", "sit", "type", "computer", "desk", "office", "screen", "task"],
+        audio_transcript=None,
+        expected_label="YES",
+        recall_keywords=["yes", "fall", "fallen", "ground", "floor", "horizontal", "lying"],
     ),
-    (
-        "relaxing_tv",
-        [
-            _det("person", 0.89, 20, 100, 200, 480),
-            _det("couch", 0.92, 150, 280, 700, 480),
-            _det("tv", 0.85, 250, 50, 600, 270),
-            _det("remote", 0.61, 400, 300, 450, 330),
+    # Negative: person bbox is vertical (height >> width), centered in frame
+    Scene(
+        name="fall_standing",
+        app="fall_detection",
+        task="Has a person fallen? Answer YES or NO, then one sentence of reasoning.",
+        detections=[
+            _det("person", 0.95, 220, 40, 400, 480),  # vertical (w=180 < h=440), mid-center
+            _det("desk", 0.81, 400, 200, 640, 480),
+            _det("monitor", 0.78, 460, 60, 620, 260),
         ],
-        # expect leisure/relaxation reasoning
-        ["watch", "sit", "relax", "rest", "television", "couch", "channel", "leisure"],
+        audio_transcript=None,
+        expected_label="NO",
+        recall_keywords=["no", "standing", "upright", "vertical", "normal", "not fallen"],
     ),
-    (
-        "outdoor_activity",
-        [
-            _det("person", 0.93, 50, 20, 220, 480),
-            _det("bicycle", 0.87, 250, 150, 550, 480),
-            _det("backpack", 0.73, 10, 50, 120, 200),
-            _det("dog", 0.68, 560, 300, 720, 480),
+    # --- Animal Threat / Attack Detection ----------------------------------
+    # Positive: dog bbox overlaps heavily with person bbox, audio confirms aggression
+    Scene(
+        name="animal_threat",
+        app="animal_threat_detection",
+        task=(
+            "Is an animal posing an immediate threat to a person? "
+            "Answer YES or NO, then one sentence of reasoning."
+        ),
+        detections=[
+            _det("person", 0.93, 150, 80, 430, 480),
+            _det("dog", 0.88, 350, 180, 620, 480),  # overlaps with person bbox
         ],
-        # expect cycling/outdoor activity reasoning
-        ["ride", "cycle", "exercise", "outdoor", "trail", "park", "sport", "walk"],
+        audio_transcript="aggressive barking, growling",
+        expected_label="YES",
+        recall_keywords=["yes", "threat", "danger", "aggress", "attack", "immediate"],
     ),
-    (
-        "fall_emergency",
-        [
-            _det("person", 0.91, 50, 380, 500, 480),  # person near floor (y1 high = near bottom)
-            _det("cell phone", 0.78, 520, 420, 600, 480),
-            _det("chair", 0.65, 300, 100, 500, 380),
+    # Negative: dog bbox small and far from person (no overlap), calm audio
+    Scene(
+        name="animal_safe",
+        app="animal_threat_detection",
+        task=(
+            "Is an animal posing an immediate threat to a person? "
+            "Answer YES or NO, then one sentence of reasoning."
+        ),
+        detections=[
+            _det("person", 0.94, 80, 50, 380, 480),  # foreground, left
+            _det("dog", 0.76, 530, 320, 610, 400),  # small (background), right, no overlap
         ],
-        # expect emergency/help reasoning — person near floor suggests a fall
-        ["help", "call", "emergency", "fallen", "assist", "911", "medical", "floor", "injured"],
+        audio_transcript="ambient park sounds, distant barking",
+        expected_label="NO",
+        recall_keywords=["no", "safe", "distant", "no threat", "away", "not immediate"],
     ),
-    (
-        "crowded_transit",
-        [
-            _det("person", 0.96, 10, 0, 180, 480),
-            _det("person", 0.94, 200, 20, 380, 480),
-            _det("suitcase", 0.88, 390, 200, 600, 480),
-            _det("backpack", 0.82, 610, 100, 750, 380),
-            _det("person", 0.79, 760, 0, 900, 480),
+    # --- Eating Detection (egocentric wearable) ----------------------------
+    # Positive: food items dominate foreground (large bbox area = close to camera)
+    Scene(
+        name="eating_yes",
+        app="eating_detection",
+        task=(
+            "Egocentric view from wearable camera. "
+            "Is the wearer currently eating or drinking? "
+            "Answer YES or NO, then one sentence of reasoning."
+        ),
+        detections=[
+            _det("fork", 0.89, 240, 300, 400, 440),  # foreground
+            _det("sandwich", 0.84, 140, 270, 450, 460),  # foreground
+            _det("plate", 0.91, 70, 260, 580, 470),  # large, foreground
+            _det("dining table", 0.72, 0, 410, 640, 480),  # background strip
         ],
-        # expect travel/transit reasoning
-        ["travel", "airport", "station", "luggage", "crowd", "transit", "commute", "board"],
+        audio_transcript=None,
+        expected_label="YES",
+        recall_keywords=["yes", "eating", "meal", "consuming", "food", "fork"],
+    ),
+    # Negative: computer peripherals dominate foreground, food present but background
+    Scene(
+        name="eating_no",
+        app="eating_detection",
+        task=(
+            "Egocentric view from wearable camera. "
+            "Is the wearer currently eating or drinking? "
+            "Answer YES or NO, then one sentence of reasoning."
+        ),
+        detections=[
+            _det("keyboard", 0.93, 90, 360, 550, 470),  # foreground
+            _det("laptop", 0.88, 140, 200, 500, 400),  # midground
+            _det("monitor", 0.85, 40, 40, 600, 300),  # large background
+            _det("cup", 0.65, 575, 360, 635, 440),  # small, right corner
+        ],
+        audio_transcript=None,
+        expected_label="NO",
+        recall_keywords=["no", "working", "typing", "not eating", "computer", "keyboard"],
+    ),
+    # --- Workplace Safety / PPE Compliance ---------------------------------
+    # Positive: all required PPE items detected on or near the person
+    Scene(
+        name="ppe_compliant",
+        app="ppe_compliance",
+        task=(
+            "Is the construction worker wearing all required PPE "
+            "(hard hat, safety vest, gloves, boots)? "
+            "Answer COMPLIANT or NON-COMPLIANT, then list present and missing items."
+        ),
+        detections=[
+            _det("person", 0.96, 120, 40, 520, 480),
+            _det("hard hat", 0.91, 230, 40, 420, 140),  # top of frame, on head
+            _det("safety vest", 0.88, 140, 150, 500, 340),
+            _det("glove", 0.79, 120, 310, 230, 420),
+            _det("glove", 0.77, 410, 310, 520, 420),
+            _det("boot", 0.83, 160, 410, 290, 480),
+            _det("boot", 0.80, 350, 410, 480, 480),
+        ],
+        audio_transcript=None,
+        expected_label="COMPLIANT",
+        recall_keywords=["compliant", "hat", "vest", "glove", "boot", "all", "present"],
+    ),
+    # Negative: hard hat and gloves absent from detections
+    Scene(
+        name="ppe_violation",
+        app="ppe_compliance",
+        task=(
+            "Is the construction worker wearing all required PPE "
+            "(hard hat, safety vest, gloves, boots)? "
+            "Answer COMPLIANT or NON-COMPLIANT, then list present and missing items."
+        ),
+        detections=[
+            _det("person", 0.95, 120, 40, 520, 480),
+            _det("safety vest", 0.90, 140, 150, 500, 340),
+            _det("boot", 0.84, 160, 410, 290, 480),
+            _det("boot", 0.82, 350, 410, 480, 480),
+            # hard hat and gloves absent
+        ],
+        audio_transcript=None,
+        expected_label="NON-COMPLIANT",
+        recall_keywords=["non-compliant", "missing", "hat", "glove", "absent", "violation"],
     ),
 ]
 
 
-def _recall(response: str, expected_keywords: list[str]) -> float:
-    """Compute keyword recall: fraction of expected action/context keywords in the response.
+# ---------------------------------------------------------------------------
+# Recall metric
+# ---------------------------------------------------------------------------
+
+
+def _recall(response: str, keywords: list[str]) -> float:
+    """Compute keyword recall: fraction of expected classification keywords found.
 
     Args:
         response: Text generated by the model.
-        expected_keywords: Action or context terms expected from correct reasoning.
+        keywords: Words expected from a correct answer (not from the input labels).
 
     Returns:
-        Fraction in [0, 1] of expected keywords found (case-insensitive).
+        Fraction in [0, 1] of keywords found (case-insensitive).
     """
-    if not expected_keywords:
+    if not keywords:
         return 1.0
     resp_lower = response.lower()
-    found = sum(1 for kw in expected_keywords if kw.lower() in resp_lower)
-    return found / len(expected_keywords)
+    found = sum(1 for kw in keywords if kw.lower() in resp_lower)
+    return found / len(keywords)
+
+
+# ---------------------------------------------------------------------------
+# Benchmark runner
+# ---------------------------------------------------------------------------
 
 
 def _run_benchmark(
     model: object,
     model_name: str,
     metrics: MetricsCollector,
+    n_cycles: int,
+    progress: Progress,
+    scene_task_id: object,
 ) -> list[dict]:
-    """Run all scenes x N_CYCLES through a loaded model, return rows.
+    """Run all scenes x n_cycles through a loaded model, return result rows.
 
-    Calls the model's prepare/run/post_proc interface directly rather than going
-    through LlamaServerStage so that the benchmark can use its own reasoning
-    prompt instead of the stage's description prompt.
+    Calls the model's prepare/run/post_proc interface directly rather than
+    going through LlamaServerStage so that the benchmark controls the prompt.
 
     Args:
         model: Loaded LlamaGGUFModel instance.
         model_name: Human-readable name for output rows.
         metrics: MetricsCollector for span timing.
+        n_cycles: Number of repetitions per scene.
+        progress: Rich Progress instance for updating the scene sub-bar.
+        scene_task_id: Task ID of the scene sub-progress bar.
 
     Returns:
         List of result dicts, one per (scene, cycle).
     """
+    total_steps = len(_SCENES) * n_cycles
+    progress.reset(scene_task_id, total=total_steps)  # type: ignore[arg-type]
     rows: list[dict] = []
-    for cycle in range(1, _N_CYCLES + 1):
-        for scene_idx, (scene_name, detections, expected_kws) in enumerate(_SCENES):
-            prompt = _build_benchmark_prompt(detections)
+    for cycle in range(1, n_cycles + 1):
+        for scene_idx, scene in enumerate(_SCENES):
+            progress.update(
+                scene_task_id,  # type: ignore[arg-type]
+                description=f"  {scene.name} [{cycle}/{n_cycles}]",
+            )
+            prompt = _build_prompt(scene)
             t_start = time.perf_counter_ns()
             try:
                 with metrics.start_trace():
@@ -230,28 +543,37 @@ def _run_benchmark(
                     response = model.post_proc(raw)[0]  # type: ignore[attr-defined]
             except Exception as exc:  # noqa: BLE001
                 console.print(
-                    f"  [yellow]{model_name} scene={scene_name} cycle={cycle}: {exc}[/yellow]"
+                    f"  [yellow]{model_name} scene={scene.name} cycle={cycle}: {exc}[/yellow]"
                 )
+                progress.advance(scene_task_id)  # type: ignore[arg-type]
                 continue
             infer_ms = (time.perf_counter_ns() - t_start) / 1e6
-            recall = _recall(response, expected_kws)
+            recall = _recall(response, scene.recall_keywords)
 
             rows.append(
                 {
                     "model": model_name,
-                    "scene": scene_name,
+                    "app": scene.app,
+                    "scene": scene.name,
                     "scene_idx": scene_idx,
+                    "expected": scene.expected_label,
                     "run": cycle,
                     "infer_ms": round(infer_ms, 3),
                     "response_chars": len(response),
                     "recall": round(recall, 4),
                 }
             )
+            progress.advance(scene_task_id)  # type: ignore[arg-type]
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+
+
 def _print_summary(all_rows: list[dict]) -> None:
-    """Print a rich summary table with averages per model.
+    """Print a rich summary table with per-model averages.
 
     Args:
         all_rows: All result rows from the benchmark.
@@ -273,9 +595,9 @@ def _print_summary(all_rows: list[dict]) -> None:
     for model_name, rows in sorted(groups.items()):
         load_ms = rows[0].get("load_ms", 0.0)
         unload_ms = rows[0].get("unload_ms", 0.0)
-        avg_infer = np.mean([r["infer_ms"] for r in rows])
-        avg_chars = np.mean([r["response_chars"] for r in rows])
-        avg_recall = np.mean([r["recall"] for r in rows])
+        avg_infer = float(np.mean([r["infer_ms"] for r in rows]))
+        avg_chars = float(np.mean([r["response_chars"] for r in rows]))
+        avg_recall = float(np.mean([r["recall"] for r in rows]))
         table.add_row(
             model_name,
             f"{load_ms:.0f}",
@@ -346,8 +668,10 @@ def _write_csv(rows: list[dict], output_path: Path) -> None:
     """
     fieldnames = [
         "model",
+        "app",
         "scene",
         "scene_idx",
+        "expected",
         "run",
         "load_ms",
         "infer_ms",
@@ -361,13 +685,20 @@ def _write_csv(rows: list[dict], output_path: Path) -> None:
         writer.writerows(rows)
 
 
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse command-line arguments.
 
     Returns:
         Parsed argument namespace.
     """
-    parser = argparse.ArgumentParser(description="Benchmark LLM models on scene-reasoning prompts.")
+    parser = argparse.ArgumentParser(
+        description="Benchmark LLM models on application-specific classification prompts."
+    )
     parser.add_argument(
         "--n-cycles",
         type=int,
@@ -397,6 +728,12 @@ def _parse_args() -> argparse.Namespace:
         "E.g. --models qwen2_1_5b,phi35_mini",
     )
     parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=_MAX_TOKENS,
+        help=f"Maximum tokens per model response (default: {_MAX_TOKENS}).",
+    )
+    parser.add_argument(
         "--merge",
         action="store_true",
         help="Merge results into the existing --output CSV; re-run models replace existing rows.",
@@ -408,10 +745,11 @@ def main() -> None:  # noqa: C901, PLR0915
     """Entry point for the LLM benchmark script."""
     import numpy as np  # noqa: PLC0415
 
-    global _N_CYCLES  # noqa: PLW0603
+    global _N_CYCLES, _MAX_TOKENS  # noqa: PLW0603
 
     args = _parse_args()
     _N_CYCLES = args.n_cycles
+    _MAX_TOKENS = args.max_tokens
     output_path = Path(args.output)
 
     path_manager = PathManager()
@@ -436,9 +774,12 @@ def main() -> None:  # noqa: C901, PLR0915
         console.print("[red]No models selected by filter. Exiting.[/red]")
         sys.exit(1)
 
+    apps = sorted({s.app for s in _SCENES})
     console.rule("[bold]M2A LLM Benchmark[/bold]")
+    console.print(f"  apps   : {', '.join(apps)}")
     console.print(f"  scenes : {len(_SCENES)}")
     console.print(f"  cycles : {_N_CYCLES}")
+    console.print(f"  tokens : {_MAX_TOKENS}")
     console.print(f"  output : {output_path}")
     console.print(f"  models : {', '.join(c[1] for c in configs)}")
     console.print(f"  server : {server_path}:{port}")
@@ -459,6 +800,7 @@ def main() -> None:  # noqa: C901, PLR0915
         console=console,
     ) as progress:
         model_task = progress.add_task("models", total=len(configs))
+        scene_task = progress.add_task("  (waiting)", total=None)
 
         for model_id, model_name in configs:
             if model_id not in MODEL_REGISTRY:
@@ -469,7 +811,6 @@ def main() -> None:  # noqa: C901, PLR0915
             rerun_models.add(model_name)
             progress.update(model_task, description=model_name)
 
-            # --- load (start llama-server) ---
             t_load = time.perf_counter_ns()
             try:
                 model = manager.get_model(
@@ -477,7 +818,7 @@ def main() -> None:  # noqa: C901, PLR0915
                     server_path=config.llama_server_path,
                     port=config.llama_server_port,
                     system_prompt=_BENCHMARK_SYSTEM,
-                    max_tokens=128,
+                    max_tokens=_MAX_TOKENS,
                 )
                 model.load(ComputeBackend(preferred_unit=ComputeUnit.GPU))  # type: ignore[union-attr]
             except Exception as exc:  # noqa: BLE001
@@ -488,9 +829,8 @@ def main() -> None:  # noqa: C901, PLR0915
             console.print(f"  [dim]{model_name}: server started in {load_ms:.0f} ms[/dim]")
 
             metrics = MetricsCollector()
-            rows = _run_benchmark(model, model_name, metrics)
+            rows = _run_benchmark(model, model_name, metrics, _N_CYCLES, progress, scene_task)
 
-            # --- unload (stop llama-server) ---
             t_unload = time.perf_counter_ns()
             try:
                 model.unload()  # type: ignore[union-attr]
