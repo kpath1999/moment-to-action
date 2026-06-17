@@ -32,7 +32,7 @@ def _remove_all(
     total_freed = 0
     for mid, info in model_registry.items():
         for vkey, source in info.variants.items():
-            if isinstance(source, VendoredSource):
+            if isinstance(source.source, VendoredSource):
                 continue
             if not model_mgr.is_available(mid, vkey):
                 continue
@@ -92,7 +92,7 @@ def remove(
     if source is None:
         msg = f"Variant '{variant}' not found for model '{model_id}'."
         raise click.ClickException(msg)
-    if isinstance(source, VendoredSource):
+    if isinstance(source.source, VendoredSource):
         msg = f"Model '{model_id}/{variant}' is vendored and cannot be removed."
         raise click.ClickException(msg)
 

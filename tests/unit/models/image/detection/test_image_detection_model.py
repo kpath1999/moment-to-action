@@ -17,7 +17,7 @@ class _ConcreteDetectionModel(ImageDetectionModel):
 
     def __init__(self, detections: list[Detection] | None = None) -> None:
         """Initialize with canned detections."""
-        super().__init__("default", Path("/x"))
+        super().__init__("default", Path("/x"), backends={})
         self._detections = detections or []
         self._run_output: list[np.ndarray] = []
 
@@ -49,7 +49,7 @@ class TestImageDetectionModel:
     def test_cannot_instantiate_abstract(self) -> None:
         """ImageDetectionModel cannot be instantiated directly."""
         with pytest.raises(TypeError):
-            ImageDetectionModel("default", Path("/x"))  # type: ignore[abstract]
+            ImageDetectionModel("default", Path("/x"))  # type: ignore[abstract, call-arg]
 
     def test_abstract_methods_enforced(self) -> None:
         """Subclasses missing abstract methods cannot be instantiated."""
@@ -72,7 +72,7 @@ class TestImageDetectionModel:
             # Missing post_proc
 
         with pytest.raises(TypeError):
-            _Incomplete("v", Path("/x"))  # type: ignore[abstract]
+            _Incomplete("v", Path("/x"))  # type: ignore[abstract, call-arg]
 
 
 def _make_ref_outputs(

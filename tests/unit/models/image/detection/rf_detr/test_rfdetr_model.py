@@ -8,33 +8,46 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import ComputeUnit
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.models.image.detection.rf_detr._model import RFDETRModel
+
+_ONNX_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "model.onnx"}}
+_DLC_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "model.dlc"}}
 
 
 @pytest.fixture
 def onnx_model() -> RFDETRModel:
     """Return an unloaded RFDETRModel in ONNX format."""
-    return RFDETRModel("default", Path("/fake/model.onnx"), ModelFormat.ONNX)
+    return RFDETRModel(
+        "default", Path("/fake/model.onnx"), ModelFormat.ONNX, backends=_ONNX_BACKENDS
+    )
 
 
 @pytest.fixture
 def dlc_model() -> RFDETRModel:
-    """Return an unloaded RFDETRModel in DLC format (qcs6490 → NHWC auto-detected)."""
-    return RFDETRModel("qcs6490", Path("/fake/qcs6490"), ModelFormat.DLC)
+    """Return an unloaded RFDETRModel in DLC format with explicit NHWC layout."""
+    return RFDETRModel(
+        "qcs6490",
+        Path("/fake/qcs6490"),
+        ModelFormat.DLC,
+        input_layout="NHWC",
+        backends=_DLC_BACKENDS,
+    )
 
 
 @pytest.fixture
 def dlc_model_nchw() -> RFDETRModel:
-    """Return an unloaded RFDETRModel in DLC format with NCHW layout (non-qcs6490 variant)."""
-    return RFDETRModel("other", Path("/fake/other"), ModelFormat.DLC)
+    """Return an unloaded RFDETRModel in DLC format with NCHW layout."""
+    return RFDETRModel("other", Path("/fake/other"), ModelFormat.DLC, backends=_DLC_BACKENDS)
 
 
 @pytest.fixture
 def mock_backend() -> MagicMock:
     """Return a mock ComputeBackend."""
     backend = MagicMock()
+    backend.preferred_unit = ComputeUnit.CPU
     backend.load_model.return_value = MagicMock()
     backend.load_model_dlc.return_value = MagicMock()
     return backend
@@ -112,19 +125,25 @@ class TestRFDETRModelProperties:
 
     def test_confidence_threshold_custom(self) -> None:
         """Custom confidence_threshold is stored."""
-        model = RFDETRModel("default", Path("/f"), ModelFormat.ONNX, confidence_threshold=0.3)
+        model = RFDETRModel(
+            "default",
+            Path("/f"),
+            ModelFormat.ONNX,
+            confidence_threshold=0.3,
+            backends=_ONNX_BACKENDS,
+        )
         assert model.confidence_threshold == 0.3
 
     def test_input_layout_onnx_is_nchw(self, onnx_model: RFDETRModel) -> None:
         """ONNX variant uses NCHW layout."""
         assert onnx_model.input_layout == "NCHW"
 
-    def test_input_layout_qcs6490_is_nhwc(self, dlc_model: RFDETRModel) -> None:
-        """qcs6490 DLC variant uses NHWC layout."""
+    def test_input_layout_dlc_nhwc_when_explicit(self, dlc_model: RFDETRModel) -> None:
+        """DLC model with explicit NHWC has NHWC layout."""
         assert dlc_model.input_layout == "NHWC"
 
     def test_input_layout_other_dlc_is_nchw(self, dlc_model_nchw: RFDETRModel) -> None:
-        """Non-qcs6490 DLC variant uses NCHW layout."""
+        """DLC model without explicit layout defaults to NCHW."""
         assert dlc_model_nchw.input_layout == "NCHW"
 
 
@@ -143,13 +162,8 @@ class TestRFDETRModelLoadUnload:
         self, dlc_model: RFDETRModel, mock_backend: MagicMock
     ) -> None:
         """load() with DLC format calls backend.load_model_dlc."""
-        with MagicMock() as mock_resolve:
-            import moment_to_action.models.image.detection.rf_detr._model as m
-
-            m.resolve_backend_artifact = mock_resolve
-            mock_resolve.return_value = Path("/fake/model.dlc")
-            dlc_model.load(mock_backend)
-        mock_backend.load_model_dlc.assert_called_once()
+        dlc_model.load(mock_backend)
+        mock_backend.load_model_dlc.assert_called_once_with(Path("/fake/qcs6490/model.dlc"))
 
     def test_load_twice_raises(self, onnx_model: RFDETRModel, mock_backend: MagicMock) -> None:
         """Loading an already-loaded model raises RuntimeError."""
@@ -212,12 +226,7 @@ class TestRFDETRModelRun:
             "logits": logits,
             "classes": classes,
         }
-        with MagicMock() as mock_resolve:
-            import moment_to_action.models.image.detection.rf_detr._model as m
-
-            m.resolve_backend_artifact = mock_resolve
-            mock_resolve.return_value = Path("/fake/model.dlc")
-            dlc_model.load(mock_backend)
+        dlc_model.load(mock_backend)
         prepared = dlc_model.prepare(sample_image_array)
         result = dlc_model.run(prepared)
         assert len(result) == 3

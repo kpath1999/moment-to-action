@@ -17,7 +17,7 @@ class TestImageModel:
     def test_cannot_instantiate_abstract(self) -> None:
         """ImageModel cannot be instantiated directly."""
         with pytest.raises(TypeError):
-            ImageModel("default", Path("/x"))  # type: ignore[abstract]
+            ImageModel("default", Path("/x"))  # type: ignore[abstract, call-arg]
 
     def test_abstract_methods_enforced(self) -> None:
         """Subclasses that skip abstract methods cannot be instantiated."""
@@ -36,7 +36,7 @@ class TestImageModel:
             # Missing run, post_proc, verify_outputs
 
         with pytest.raises(TypeError):
-            _Incomplete("v", Path("/x"))  # type: ignore[abstract]
+            _Incomplete("v", Path("/x"))  # type: ignore[abstract, call-arg]
 
     def test_verify_outputs_abstract_enforced(self) -> None:
         """Subclass missing verify_outputs cannot be instantiated."""
@@ -63,4 +63,4 @@ class TestImageModel:
             # Missing verify_outputs
 
         with pytest.raises(TypeError):
-            _NoVerify("v", Path("/x"))  # type: ignore[abstract]
+            _NoVerify("v", Path("/x"))  # type: ignore[abstract, call-arg]

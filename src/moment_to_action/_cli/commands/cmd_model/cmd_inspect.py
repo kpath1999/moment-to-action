@@ -88,8 +88,8 @@ def inspect(data: GlobalData, model_id: str, variant: str, *, as_json: bool) -> 
         output = {
             "model_id": mid.value,
             "variant": variant,
-            "source_type": type(source).__name__,
-            "format": source.format.name,
+            "source_type": type(source.source).__name__,
+            "format": source.source.format.name,
             "available_variants": list(info.variants),
             "cached": available,
             "size_bytes": size,
@@ -104,8 +104,8 @@ def inspect(data: GlobalData, model_id: str, variant: str, *, as_json: bool) -> 
     table.add_column("Field")
     table.add_column("Value")
 
-    table.add_row("Source type", type(source).__name__)
-    table.add_row("Format", source.format.name)
+    table.add_row("Source type", type(source.source).__name__)
+    table.add_row("Format", source.source.format.name)
     table.add_row("Available variants", ", ".join(info.variants))
 
     if available:

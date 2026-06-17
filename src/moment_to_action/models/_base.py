@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     import numpy as np
 
     from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware._types import ComputeUnit
+    from moment_to_action.models._formats import ModelFormat
 
 _InputT = TypeVar("_InputT")
 _PreparedT = TypeVar("_PreparedT")
@@ -50,21 +52,57 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         path: Filesystem path to the model weights file.
     """
 
-    def __init__(self, variant: str, path: Path) -> None:
-        """Initialize with variant name and path.
+    def __init__(
+        self,
+        variant: str,
+        path: Path,
+        model_format: ModelFormat | None = None,
+        *,
+        backends: dict[ComputeUnit, dict[str, str]],
+        input_layout: str | None = None,
+    ) -> None:
+        """Initialize with variant name, path, format, backend table, and input layout.
 
         Args:
             variant: Registry variant key (e.g. ``"default"``, ``"qcs6490"``).
-            path: Path to the model weights file.
+            path: Path to the model weights file or variant directory.
+            model_format: File format (``ModelFormat.ONNX``, ``ModelFormat.DLC``,
+                etc.).  ``None`` for model types that do not use a format field.
+            backends: Mapping of compute unit to component filename dicts.
+                Keys present are the supported units; ``load()`` indexes this
+                with ``backend.preferred_unit`` to pick the artifact filenames.
+            input_layout: Input tensor memory layout, ``"NCHW"`` or ``"NHWC"``,
+                or ``None`` for model types that do not require a spatial layout
+                (e.g. language models).
         """
         self._variant = variant
         self._path = path
+        self._format = model_format
+        self._backends = backends
+        self._input_layout = input_layout
         self._backend: ComputeBackend | None = None
 
     @property
     def path(self) -> Path:
         """Filesystem path to the model weights file (read-only)."""
         return self._path
+
+    def _artifact_path(self, filename: str) -> Path:
+        """Resolve an artifact filename to an absolute path.
+
+        For directory-based model paths (HuggingFace variant dirs with no file
+        suffix), joins ``filename`` to the variant directory.  For file-based
+        paths (Ultralytics exports that are already a concrete ``.onnx`` file),
+        returns the path unchanged, ignoring ``filename``.
+
+        Args:
+            filename: Artifact filename relative to the variant directory
+                (e.g. ``"model.onnx"``, ``"model.npu.bin"``).
+
+        Returns:
+            Absolute path to the artifact file.
+        """
+        return self._path if self._path.suffix else self._path / filename
 
     @property
     def is_loaded(self) -> bool:

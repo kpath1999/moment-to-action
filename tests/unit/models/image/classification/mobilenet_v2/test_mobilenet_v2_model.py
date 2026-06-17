@@ -8,29 +8,39 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import ComputeUnit
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.classification.mobilenet_v2._model import (
     MobileNetV2Model,
     _softmax,
 )
 
+_CPU_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "model.onnx"}}
+_DLC_BACKENDS: dict[ComputeUnit, dict[str, str]] = {
+    ComputeUnit.CPU: {"model": "model.dlc"},
+    ComputeUnit.NPU: {"model": "model.dlc"},
+}
+
 
 @pytest.fixture
 def onnx_model() -> MobileNetV2Model:
     """Return an unloaded MobileNetV2Model in ONNX format."""
-    return MobileNetV2Model("default", Path("/fake/mnv2"), ModelFormat.ONNX)
+    return MobileNetV2Model("default", Path("/fake/mnv2"), ModelFormat.ONNX, backends=_CPU_BACKENDS)
 
 
 @pytest.fixture
 def dlc_model() -> MobileNetV2Model:
     """Return an unloaded MobileNetV2Model in DLC format."""
-    return MobileNetV2Model("qcs6490", Path("/fake/mnv2_qcs"), ModelFormat.DLC)
+    return MobileNetV2Model(
+        "qcs6490", Path("/fake/mnv2_qcs"), ModelFormat.DLC, backends=_DLC_BACKENDS
+    )
 
 
 @pytest.fixture
 def mock_backend() -> MagicMock:
     """Return a mock ComputeBackend."""
     backend = MagicMock()
+    backend.preferred_unit = ComputeUnit.CPU
     backend.load_model.return_value = MagicMock()
     backend.load_model_dlc.return_value = MagicMock()
     return backend
@@ -234,7 +244,7 @@ class TestMobileNetV2ModelPostProc:
 
     def test_custom_top_k(self) -> None:
         """Custom top_k limits number of returned results."""
-        model = MobileNetV2Model("v", Path("/x"), ModelFormat.ONNX, top_k=3)
+        model = MobileNetV2Model("v", Path("/x"), ModelFormat.ONNX, top_k=3, backends=_CPU_BACKENDS)
         logits = [float(i) for i in range(1000)]
         result = model.post_proc([np.array([logits], dtype=np.float32)])
         assert len(result) == 3
@@ -303,16 +313,18 @@ class TestMobileNetV2ModelProperties:
 
     def test_top_k_default(self) -> None:
         """Default top_k is 5."""
-        model = MobileNetV2Model("v", Path("/x"), ModelFormat.ONNX)
+        model = MobileNetV2Model("v", Path("/x"), ModelFormat.ONNX, backends=_CPU_BACKENDS)
         assert model.top_k == 5
 
     def test_top_k_custom(self) -> None:
         """Custom top_k is stored correctly."""
-        model = MobileNetV2Model("v", Path("/x"), ModelFormat.ONNX, top_k=10)
+        model = MobileNetV2Model(
+            "v", Path("/x"), ModelFormat.ONNX, top_k=10, backends=_CPU_BACKENDS
+        )
         assert model.top_k == 10
 
     def test_prepare_for_conversion_returns_onnx_path(self) -> None:
         """prepare_for_conversion returns path unchanged (no surgery needed)."""
-        model = MobileNetV2Model("v", Path("/x"), ModelFormat.ONNX)
+        model = MobileNetV2Model("v", Path("/x"), ModelFormat.ONNX, backends=_CPU_BACKENDS)
         fake_onnx = Path("/some/model.onnx")
         assert model.prepare_for_conversion(fake_onnx) == fake_onnx

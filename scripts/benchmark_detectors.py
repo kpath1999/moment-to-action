@@ -6,7 +6,7 @@
 # ]
 #
 # [tool.uv.sources]
-# moment-to-action = { path = ".." }
+# moment-to-action = { path = "..", editable = true }
 # ///
 """Benchmark detection models on a COCO val2017 subset.
 

@@ -140,14 +140,45 @@ def _build_dlc_model(model_id: ModelID, variant_dir: Path) -> ImageModel:
     Raises:
         click.ClickException: If ``model_id`` has no registered factory.
     """
+    _cpu_single: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "model.dlc"}}
+    _cpu_det2: dict[ComputeUnit, dict[str, str]] = {
+        ComputeUnit.CPU: {
+            "proposal_generator": "model.proposal_generator.dlc",
+            "roi_head": "model.roi_head.dlc",
+        },
+    }
     if model_id is ModelID.YOLO_V8:
-        return YOLOModel(variant="qcs6490", path=variant_dir, model_format=ModelFormat.DLC)
+        return YOLOModel(
+            variant="qcs6490",
+            path=variant_dir,
+            model_format=ModelFormat.DLC,
+            backends=_cpu_single,
+            input_layout="NHWC",
+        )
     if model_id is ModelID.RF_DETR:
-        return RFDETRModel(variant="qcs6490", path=variant_dir, model_format=ModelFormat.DLC)
+        return RFDETRModel(
+            variant="qcs6490",
+            path=variant_dir,
+            model_format=ModelFormat.DLC,
+            backends=_cpu_single,
+            input_layout="NHWC",
+        )
     if model_id is ModelID.RTM_DET:
-        return RTMDetModel(variant="qcs6490", path=variant_dir, model_format=ModelFormat.DLC)
+        return RTMDetModel(
+            variant="qcs6490",
+            path=variant_dir,
+            model_format=ModelFormat.DLC,
+            backends=_cpu_single,
+            input_layout="NHWC",
+        )
     if model_id is ModelID.DETECTRON2:
-        return Detectron2Model(variant="qcs6490", path=variant_dir, model_format=ModelFormat.DLC)
+        return Detectron2Model(
+            variant="qcs6490",
+            path=variant_dir,
+            model_format=ModelFormat.DLC,
+            backends=_cpu_det2,
+            input_layout="NHWC",
+        )
     msg = f"No DLC model factory for '{model_id.value}'."
     raise click.ClickException(msg)
 

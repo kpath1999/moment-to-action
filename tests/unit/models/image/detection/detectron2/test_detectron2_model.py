@@ -8,32 +8,59 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import ComputeUnit
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.detection.detectron2._model import Detectron2Model
+
+_ONNX_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "model.onnx"}}
+_DLC_NPU_BACKENDS: dict[ComputeUnit, dict[str, str]] = {
+    ComputeUnit.CPU: {
+        "proposal_generator": "model.proposal_generator.npu.bin",
+        "roi_head": "model.roi_head.npu.bin",
+    }
+}
+_DLC_FLOAT_BACKENDS: dict[ComputeUnit, dict[str, str]] = {
+    ComputeUnit.CPU: {
+        "proposal_generator": "model.proposal_generator.dlc",
+        "roi_head": "model.roi_head.dlc",
+    }
+}
 
 
 @pytest.fixture
 def onnx_model() -> Detectron2Model:
     """Return an unloaded Detectron2Model in single-graph ONNX format."""
-    return Detectron2Model("default", Path("/fake/d2"), ModelFormat.ONNX)
+    return Detectron2Model("default", Path("/fake/d2"), ModelFormat.ONNX, backends=_ONNX_BACKENDS)
 
 
 @pytest.fixture
 def dlc_model() -> Detectron2Model:
-    """Return an unloaded Detectron2Model in DLC format (qcs6490 → NHWC)."""
-    return Detectron2Model("qcs6490", Path("/fake/d2_qcs"), ModelFormat.DLC)
+    """Return an unloaded Detectron2Model in DLC format with .npu.bin artifacts."""
+    return Detectron2Model(
+        "qcs6490_w8a16",
+        Path("/fake/d2_qcs"),
+        ModelFormat.DLC,
+        input_layout="NHWC",
+        backends=_DLC_NPU_BACKENDS,
+    )
 
 
 @pytest.fixture
 def dlc_model_nchw() -> Detectron2Model:
-    """Return an unloaded Detectron2Model in DLC format with NCHW layout."""
-    return Detectron2Model("other", Path("/fake/d2_other"), ModelFormat.DLC)
+    """Return an unloaded Detectron2Model in DLC format with float .dlc artifacts."""
+    return Detectron2Model(
+        "other",
+        Path("/fake/d2_other"),
+        ModelFormat.DLC,
+        backends=_DLC_FLOAT_BACKENDS,
+    )
 
 
 @pytest.fixture
 def mock_backend() -> MagicMock:
     """Return a mock ComputeBackend with two-graph handles."""
     backend = MagicMock()
+    backend.preferred_unit = ComputeUnit.CPU
     backend.load_model.return_value = MagicMock()
     backend.load_model_dlc.return_value = MagicMock()
     return backend
@@ -73,13 +100,13 @@ class TestPrepare:
         assert onnx_model.prepare(sample_image_array).shape == (3, 800, 800)
 
     def test_nhwc_shape(self, dlc_model: Detectron2Model, sample_image_array: np.ndarray) -> None:
-        """qcs6490 DLC prepare returns NHWC (1, 800, 800, 3)."""
+        """NHWC DLC prepare returns NHWC (1, 800, 800, 3)."""
         assert dlc_model.prepare(sample_image_array).shape == (1, 800, 800, 3)
 
     def test_dlc_nchw_shape(
         self, dlc_model_nchw: Detectron2Model, sample_image_array: np.ndarray
     ) -> None:
-        """Non-qcs6490 DLC prepare returns NCHW (1, 3, 800, 800)."""
+        """NCHW DLC prepare returns NCHW (1, 3, 800, 800)."""
         assert dlc_model_nchw.prepare(sample_image_array).shape == (1, 3, 800, 800)
 
     def test_onnx_dtype_and_range(
@@ -119,25 +146,37 @@ class TestProperties:
 
     def test_custom_confidence(self) -> None:
         """Custom confidence_threshold is stored."""
-        m = Detectron2Model("default", Path("/f"), ModelFormat.ONNX, confidence_threshold=0.2)
+        m = Detectron2Model(
+            "default",
+            Path("/f"),
+            ModelFormat.ONNX,
+            confidence_threshold=0.2,
+            backends=_ONNX_BACKENDS,
+        )
         assert m.confidence_threshold == 0.2
 
     def test_layout_onnx_nchw(self, onnx_model: Detectron2Model) -> None:
         """ONNX uses NCHW."""
         assert onnx_model.input_layout == "NCHW"
 
-    def test_layout_qcs6490_nhwc(self, dlc_model: Detectron2Model) -> None:
-        """qcs6490 DLC uses NHWC."""
+    def test_layout_dlc_nhwc_when_explicit(self, dlc_model: Detectron2Model) -> None:
+        """DLC model with explicit NHWC has NHWC layout."""
         assert dlc_model.input_layout == "NHWC"
 
     def test_layout_other_dlc_nchw(self, dlc_model_nchw: Detectron2Model) -> None:
-        """Non-qcs6490 DLC uses NCHW."""
+        """DLC model without explicit layout defaults to NCHW."""
         assert dlc_model_nchw.input_layout == "NCHW"
 
     @pytest.mark.parametrize("variant", ["qcs6490_w8a16", "qcs6490_w8a8"])
     def test_layout_qcs6490_precision_variants_nhwc(self, variant: str) -> None:
-        """Both qcs6490 precision-variant keys derive NHWC layout."""
-        m = Detectron2Model(variant, Path("/fake"), ModelFormat.DLC)
+        """Both qcs6490 precision-variant keys can carry NHWC layout when passed explicitly."""
+        m = Detectron2Model(
+            variant,
+            Path("/fake"),
+            ModelFormat.DLC,
+            input_layout="NHWC",
+            backends=_DLC_NPU_BACKENDS,
+        )
         assert m.input_layout == "NHWC"
 
 
@@ -154,22 +193,28 @@ class TestLoadUnload:
         assert mock_backend.load_model.call_args.args[0] == Path("/fake/d2/model.onnx")
         assert onnx_model._handle_roi is None
 
-    def test_load_dlc_resolves_both_stems(
+    def test_load_dlc_loads_both_components(
         self, dlc_model: Detectron2Model, mock_backend: MagicMock
     ) -> None:
-        """DLC load() resolves both component stems and loads both DLCs."""
-        import moment_to_action.models.image.detection.detectron2._model as m
-
-        mock_resolve = MagicMock(return_value=Path("/fake/x.dlc"))
-        orig = m.resolve_backend_artifact
-        m.resolve_backend_artifact = mock_resolve
-        try:
-            dlc_model.load(mock_backend)
-        finally:
-            m.resolve_backend_artifact = orig
-        stems = {c.kwargs["stem"] for c in mock_resolve.call_args_list}
-        assert stems == {"model.proposal_generator", "model.roi_head"}
+        """DLC load() loads both proposal_generator and roi_head from backends table."""
+        dlc_model.load(mock_backend)
         assert mock_backend.load_model_dlc.call_count == 2
+        loaded_names = {c.args[0].name for c in mock_backend.load_model_dlc.call_args_list}
+        assert loaded_names == {"model.proposal_generator.npu.bin", "model.roi_head.npu.bin"}
+
+    def test_load_dlc_roi_channel_last_set_for_npu_bin(
+        self, dlc_model: Detectron2Model, mock_backend: MagicMock
+    ) -> None:
+        """DLC load() sets _roi_channel_last=True when roi artifact ends with .npu.bin."""
+        dlc_model.load(mock_backend)
+        assert dlc_model._roi_channel_last is True
+
+    def test_load_dlc_roi_channel_last_false_for_float_dlc(
+        self, dlc_model_nchw: Detectron2Model, mock_backend: MagicMock
+    ) -> None:
+        """DLC load() sets _roi_channel_last=False when roi artifact ends with .dlc."""
+        dlc_model_nchw.load(mock_backend)
+        assert dlc_model_nchw._roi_channel_last is False
 
     def test_load_twice_raises(self, onnx_model: Detectron2Model, mock_backend: MagicMock) -> None:
         """Loading twice raises RuntimeError."""
@@ -192,14 +237,7 @@ class TestLoadUnload:
         self, dlc_model: Detectron2Model, mock_backend: MagicMock
     ) -> None:
         """DLC unload() calls unload_dlc for both graphs."""
-        import moment_to_action.models.image.detection.detectron2._model as m
-
-        orig = m.resolve_backend_artifact
-        m.resolve_backend_artifact = MagicMock(return_value=Path("/fake/x.dlc"))
-        try:
-            dlc_model.load(mock_backend)
-        finally:
-            m.resolve_backend_artifact = orig
+        dlc_model.load(mock_backend)
         dlc_model.unload()
         assert mock_backend.unload_dlc.call_count == 2
 
@@ -248,14 +286,7 @@ class TestRun:
             {"feature": feature, "proposals": proposals, "score": score},
             {"boxes": boxes, "scores": scores, "classes": classes},
         ]
-        import moment_to_action.models.image.detection.detectron2._model as m
-
-        orig = m.resolve_backend_artifact
-        m.resolve_backend_artifact = MagicMock(return_value=Path("/fake/x.dlc"))
-        try:
-            dlc_model.load(mock_backend)
-        finally:
-            m.resolve_backend_artifact = orig
+        dlc_model.load(mock_backend)
         prepared = dlc_model.prepare(sample_image_array)
         result = dlc_model.run(prepared)
         np.testing.assert_array_equal(result[0], boxes)
@@ -265,14 +296,9 @@ class TestRun:
         assert set(roi_inputs) == {"features", "proposals_boxes"}
 
     @staticmethod
-    def _run_dlc_capture_roi_feature(
-        model: Detectron2Model,
-        backend: MagicMock,
-        sample: np.ndarray,
-        roi_artifact: str,
-    ) -> np.ndarray:
-        """Load+run the DLC path with a given resolved ROI artifact; return roi features."""
-        feature = np.zeros((1, 1024, 50, 50), dtype=np.float32)  # NCHW
+    def _setup_dlc_run(backend: MagicMock, feature_shape: tuple[int, ...]) -> None:
+        """Configure infer_dlc side_effect for a two-stage DLC run."""
+        feature = np.zeros(feature_shape, dtype=np.float32)
         backend.infer_dlc.side_effect = [
             {
                 "feature": feature,
@@ -285,35 +311,30 @@ class TestRun:
                 "classes": np.zeros((1, 1), np.int64),
             },
         ]
-        import moment_to_action.models.image.detection.detectron2._model as m
-
-        orig = m.resolve_backend_artifact
-        m.resolve_backend_artifact = MagicMock(return_value=Path(roi_artifact))
-        try:
-            model.load(backend)
-        finally:
-            m.resolve_backend_artifact = orig
-        model.run(model.prepare(sample))
-        return backend.infer_dlc.call_args_list[1].args[1]["features"]
 
     def test_dlc_bin_transposes_feature_to_nhwc(
         self, dlc_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
     ) -> None:
         """The HTP context binary (.npu.bin) gets the feature transposed to NHWC."""
-        roi_feat = self._run_dlc_capture_roi_feature(
-            dlc_model, mock_backend, sample_image_array, "/fake/model.roi_head.npu.bin"
-        )
+        self._setup_dlc_run(mock_backend, (1, 1024, 50, 50))
+        dlc_model.load(mock_backend)
         assert dlc_model._roi_channel_last is True
+        dlc_model.run(dlc_model.prepare(sample_image_array))
+        roi_feat = mock_backend.infer_dlc.call_args_list[1].args[1]["features"]
         assert roi_feat.shape == (1, 50, 50, 1024)  # NHWC
 
     def test_dlc_keeps_feature_nchw(
-        self, dlc_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
+        self,
+        dlc_model_nchw: Detectron2Model,
+        mock_backend: MagicMock,
+        sample_image_array: np.ndarray,
     ) -> None:
         """The float .dlc keeps the feature NCHW (no transpose)."""
-        roi_feat = self._run_dlc_capture_roi_feature(
-            dlc_model, mock_backend, sample_image_array, "/fake/model.roi_head.dlc"
-        )
-        assert dlc_model._roi_channel_last is False
+        self._setup_dlc_run(mock_backend, (1, 1024, 50, 50))
+        dlc_model_nchw.load(mock_backend)
+        assert dlc_model_nchw._roi_channel_last is False
+        dlc_model_nchw.run(dlc_model_nchw.prepare(sample_image_array))
+        roi_feat = mock_backend.infer_dlc.call_args_list[1].args[1]["features"]
         assert roi_feat.shape == (1, 1024, 50, 50)  # NCHW
 
 

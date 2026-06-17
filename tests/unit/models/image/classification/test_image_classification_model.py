@@ -17,7 +17,7 @@ class _ConcreteClassificationModel(ImageClassificationModel):
 
     def __init__(self, classifications: list[Classification] | None = None) -> None:
         """Initialize with canned classifications."""
-        super().__init__("default", Path("/x"))
+        super().__init__("default", Path("/x"), backends={})
         self._classifications = classifications or []
         self._run_output: list[np.ndarray] = []
 
@@ -49,7 +49,7 @@ class TestImageClassificationModel:
     def test_cannot_instantiate_abstract(self) -> None:
         """ImageClassificationModel cannot be instantiated directly."""
         with pytest.raises(TypeError):
-            ImageClassificationModel("default", Path("/x"))  # type: ignore[abstract]
+            ImageClassificationModel("default", Path("/x"))  # type: ignore[abstract, call-arg]
 
     def test_abstract_methods_enforced(self) -> None:
         """Subclasses missing post_proc cannot be instantiated."""
@@ -72,7 +72,7 @@ class TestImageClassificationModel:
             # Missing post_proc
 
         with pytest.raises(TypeError):
-            _Incomplete("v", Path("/x"))  # type: ignore[abstract]
+            _Incomplete("v", Path("/x"))  # type: ignore[abstract, call-arg]
 
 
 def _make_ref_outputs(n: int = 2) -> tuple[np.ndarray, list[np.ndarray]]:

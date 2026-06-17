@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, ClassVar
 import cv2
 import numpy as np
 
-from moment_to_action.models._artifacts import resolve_backend_artifact
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
 if TYPE_CHECKING:
     from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware._types import ComputeUnit
 
 _YOLO_OUTPUT_NAME = "output0"
 _YOLO_INPUT_SIZE = 640
@@ -310,30 +310,27 @@ class YOLOModel(ImageDetectionModel):
         path: Path,
         model_format: ModelFormat,
         confidence_threshold: float = 0.5,
-        input_layout: str | None = None,
+        *,
+        backends: dict[ComputeUnit, dict[str, str]],
+        input_layout: str = "NCHW",
     ) -> None:
         """Initialize an unloaded YOLOModel.
 
         Args:
             variant: Registry variant key.
-            path: Path to the model weights file.
+            path: Path to the model weights file or variant directory.
             model_format: ``ModelFormat.ONNX`` or ``ModelFormat.DLC``.
             confidence_threshold: Detections below this score are discarded.
-            input_layout: ``"NCHW"`` or ``"NHWC"``.  When ``None`` the layout
-                is derived automatically: DLC ``qcs6490`` variants use
-                ``"NHWC"`` (AI Hub export); all other variants use ``"NCHW"``.
+            backends: Compute unit → ``{"model": filename}`` mapping.  Keys
+                present are the supported units; ``load()`` indexes this with
+                ``backend.preferred_unit``.
+            input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
+                use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
         """
-        super().__init__(variant, path)
-        self._format = model_format
+        super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
         self._confidence_threshold = confidence_threshold
         self._handle: object = None
         self._last_original_size: tuple[int, int] | None = None
-        if input_layout is None:
-            # AI Hub qcs6490 DLC exports to NHWC [1,640,640,3]; others use NCHW.
-            input_layout = (
-                "NHWC" if (model_format is ModelFormat.DLC and variant == "qcs6490") else "NCHW"
-            )
-        self._input_layout = input_layout
 
     @property
     def confidence_threshold(self) -> float:
@@ -343,25 +340,24 @@ class YOLOModel(ImageDetectionModel):
     def load(self, backend: ComputeBackend) -> None:
         """Load model weights onto the backend.
 
-        For DLC variants, selects the best artifact via
-        :func:`~moment_to_action.models._artifacts.resolve_backend_artifact`:
-        a per-backend context binary (``model.<unit>.bin``) when present,
-        falling back to ``model.dlc``.
+        Selects the artifact filename from the per-unit ``backends`` table
+        using ``backend.preferred_unit``.
 
         Args:
             backend: Hardware backend to load the model onto.
 
         Raises:
             RuntimeError: If the model is already loaded.
+            KeyError: If ``backend.preferred_unit`` is not supported by this variant.
         """
         if self._backend is not None:
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
+        arts = self._backends[backend.preferred_unit]
         if self._format is ModelFormat.ONNX:
-            self._handle = backend.load_model(self._path)
+            self._handle = backend.load_model(self._artifact_path(arts["model"]))
         else:
-            artifact = resolve_backend_artifact(self._path, backend.preferred_unit)
-            self._handle = backend.load_model_dlc(artifact)
+            self._handle = backend.load_model_dlc(self._artifact_path(arts["model"]))
         self._backend = backend
 
     def unload(self) -> None:
@@ -422,8 +418,8 @@ class YOLOModel(ImageDetectionModel):
 
     @property
     def input_layout(self) -> str:
-        """Input tensor layout: ``"NCHW"`` or ``"NHWC"``."""
-        return self._input_layout
+        """Input tensor layout: ``"NCHW"`` or ``"NHWC"`` (set at construction from the Variant)."""
+        return self._input_layout or "NCHW"
 
     def prepare(self, frame: np.ndarray) -> np.ndarray:
         """Resize, normalize, and batch a raw BGR frame for YOLO inference.

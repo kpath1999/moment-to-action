@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware._types import ComputeUnit
 
 _MNV2_INPUT_SIZE = 224
 _MNV2_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -57,6 +58,9 @@ class MobileNetV2Model(ImageClassificationModel):
         path: Path,
         model_format: ModelFormat,
         top_k: int = 5,
+        *,
+        backends: dict[ComputeUnit, dict[str, str]],
+        input_layout: str = "NCHW",
     ) -> None:
         """Initialize an unloaded MobileNetV2Model.
 
@@ -65,9 +69,13 @@ class MobileNetV2Model(ImageClassificationModel):
             path: Path to the model directory containing ``model.onnx`` or ``model.dlc``.
             model_format: ``ModelFormat.ONNX`` or ``ModelFormat.DLC``.
             top_k: Number of top predictions to return from :meth:`post_proc`.
+            backends: Compute unit → ``{"model": filename}`` mapping.  Keys
+                present are the supported units; ``load()`` indexes this with
+                ``backend.preferred_unit``.
+            input_layout: Input tensor layout (unused by MobileNet V2, which
+                always preprocesses to NCHW; accepted for interface uniformity).
         """
-        super().__init__(variant, path)
-        self._format = model_format
+        super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
         self._top_k = top_k
         self._handle: object = None
 
@@ -103,19 +111,24 @@ class MobileNetV2Model(ImageClassificationModel):
     def load(self, backend: ComputeBackend) -> None:
         """Load model weights onto the backend.
 
+        Selects the artifact filename from the per-unit ``backends`` table
+        using ``backend.preferred_unit``.
+
         Args:
             backend: Hardware backend to load the model onto.
 
         Raises:
             RuntimeError: If the model is already loaded.
+            KeyError: If ``backend.preferred_unit`` is not supported by this variant.
         """
         if self._backend is not None:
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
+        arts = self._backends[backend.preferred_unit]
         if self._format is ModelFormat.ONNX:
-            self._handle = backend.load_model(self._path / "model.onnx")
+            self._handle = backend.load_model(self._artifact_path(arts["model"]))
         else:
-            self._handle = backend.load_model_dlc(self._path / "model.dlc")
+            self._handle = backend.load_model_dlc(self._artifact_path(arts["model"]))
         self._backend = backend
 
     def unload(self) -> None:

@@ -9,13 +9,16 @@ from unittest.mock import MagicMock, patch
 if TYPE_CHECKING:
     from pathlib import Path
 
+from pathlib import Path as _Path
+
 import pytest
 from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
-from moment_to_action.models import ModelID
+from moment_to_action.models import ModelID, Variant
 from moment_to_action.models._model_info import ModelStatus, VariantStatus
 from moment_to_action.models._registry import MODEL_REGISTRY
+from moment_to_action.models._sources._vendored import VendoredSource
 
 
 def _make_variant_status(
@@ -70,10 +73,7 @@ class TestModelListCommand:
 
     def test_vendored_status_shown(self, tmp_path: Path) -> None:
         """Vendored variant shows 'vendored' status."""
-        from pathlib import Path as _Path
-
         from moment_to_action.models import ModelFormat, ModelInfo, YOLOModel
-        from moment_to_action.models._sources._vendored import VendoredSource
 
         mid = ModelID.YOLO_V8
         vs = _make_variant_status(mid, "vendored_variant", available=True)
@@ -82,8 +82,9 @@ class TestModelListCommand:
                 id=mid,
                 model_class=YOLOModel,
                 variants={
-                    "vendored_variant": VendoredSource(
-                        format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")
+                    "vendored_variant": Variant(
+                        source=VendoredSource(format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")),
+                        backends={},
                     )
                 },
             )

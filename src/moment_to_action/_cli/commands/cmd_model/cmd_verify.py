@@ -91,7 +91,7 @@ def _find_dlc_variant(model_id: ModelID) -> str | None:
         Variant key string, or None.
     """
     for vkey, source in MODEL_REGISTRY[model_id].variants.items():
-        if source.format == ModelFormat.DLC:
+        if source.source.format == ModelFormat.DLC:
             return vkey
     return None
 

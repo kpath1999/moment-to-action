@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING, ClassVar
 import cv2
 import numpy as np
 
-from moment_to_action.models._artifacts import resolve_backend_artifact
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import (
@@ -37,10 +36,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware._types import ComputeUnit
 
 _INPUT_SIZE = 800
-_PG_STEM = "model.proposal_generator"
-_ROI_STEM = "model.roi_head"
 _MAX_PRE_NMS = 6000
 _MAX_POST_NMS = 200
 _PROPOSAL_IOU = 0.7
@@ -94,6 +92,9 @@ class Detectron2Model(ImageDetectionModel):
         path: Path,
         model_format: ModelFormat,
         confidence_threshold: float = 0.5,
+        *,
+        backends: dict[ComputeUnit, dict[str, str]],
+        input_layout: str = "NCHW",
     ) -> None:
         """Initialize an unloaded Detectron2Model.
 
@@ -103,9 +104,13 @@ class Detectron2Model(ImageDetectionModel):
                 ``model.roi_head.*`` artifacts.
             model_format: ``ModelFormat.ONNX`` or ``ModelFormat.DLC``.
             confidence_threshold: Detections below this score are discarded.
+            backends: Compute unit → component filename mapping.  For ONNX,
+                key ``"model"``; for DLC, keys ``"proposal_generator"`` and
+                ``"roi_head"``.  Supported units = keys present.
+            input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
+                use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
         """
-        super().__init__(variant, path)
-        self._format = model_format
+        super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
         self._confidence_threshold = confidence_threshold
         # ONNX is the single-graph float export (detectron2 tracing): one
         # end-to-end model.onnx that runs RPN + ROI head + NMS internally.  DLC
@@ -119,13 +124,6 @@ class Detectron2Model(ImageDetectionModel):
         # run().  ONNX leaves this False (NCHW features).
         self._roi_channel_last: bool = False
         self._last_original_size: tuple[int, int] | None = None
-        # AI Hub qcs6490 DLC exports to NHWC; all other variants use NCHW.  Both
-        # precision variants ("qcs6490_w8a16", "qcs6490_w8a8") share the layout.
-        self._input_layout = (
-            "NHWC"
-            if (model_format is ModelFormat.DLC and variant.startswith("qcs6490"))
-            else "NCHW"
-        )
 
     @property
     def confidence_threshold(self) -> float:
@@ -134,33 +132,33 @@ class Detectron2Model(ImageDetectionModel):
 
     @property
     def input_layout(self) -> str:
-        """Input tensor layout: ``"NCHW"`` or ``"NHWC"``."""
-        return self._input_layout
+        """Input tensor layout: ``"NCHW"`` or ``"NHWC"`` (set at construction from the Variant)."""
+        return self._input_layout or "NCHW"
 
     def load(self, backend: ComputeBackend) -> None:
         """Load the model graph(s) onto the backend.
 
-        For the single-graph ONNX variant, loads ``model.onnx`` from the variant
-        directory.  For DLC variants, resolves each component via
-        :func:`~moment_to_action.models._artifacts.resolve_backend_artifact`
-        with its stem — a per-backend context binary (``<stem>.npu.bin``) when
-        present, falling back to ``<stem>.dlc``.
+        For the single-graph ONNX variant, loads ``model.onnx`` resolved via
+        the ``backends`` table.  For DLC variants, loads both the
+        ``proposal_generator`` and ``roi_head`` artifacts from the table.
 
         Args:
             backend: Hardware backend to load the model onto.
 
         Raises:
             RuntimeError: If the model is already loaded.
+            KeyError: If ``backend.preferred_unit`` is not supported by this variant.
         """
         if self._backend is not None:
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
+        arts = self._backends[backend.preferred_unit]
         if self._single_graph_onnx:
             # Single end-to-end graph; reuse _handle_pg as the sole handle.
-            self._handle_pg = backend.load_model(self._path / "model.onnx")
+            self._handle_pg = backend.load_model(self._artifact_path(arts["model"]))
         else:
-            pg = resolve_backend_artifact(self._path, backend.preferred_unit, stem=_PG_STEM)
-            roi = resolve_backend_artifact(self._path, backend.preferred_unit, stem=_ROI_STEM)
+            pg = self._artifact_path(arts["proposal_generator"])
+            roi = self._artifact_path(arts["roi_head"])
             # Only the HTP context binary lays `features` out channel-last; the
             # float .dlc keeps NCHW, so the transpose in run() is binary-only.
             self._roi_channel_last = roi.name.endswith(".npu.bin")
