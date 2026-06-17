@@ -13,7 +13,6 @@ import pytest
 from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
-from moment_to_action.models import ModelID
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 
 
@@ -83,7 +82,7 @@ class TestModelVerifyCommand:
         variant_dir = tmp_path / "variants" / "default"
         variant_dir.mkdir(parents=True)
         # no reference_outputs/ inside
-        result = _invoke(["yolo_v8", "--backend", "cpu"], tmp_path, mgr, variant_dir)
+        result = _invoke(["yolo_v8", "default", "--backend", "cpu"], tmp_path, mgr, variant_dir)
         assert result.exit_code != 0
 
     def test_passes_when_outputs_match(self, tmp_path: Path) -> None:
@@ -93,7 +92,7 @@ class TestModelVerifyCommand:
         _make_ref_outputs(ref_dir)
 
         mgr = _make_model_mgr(verify_result=(True, ""))
-        result = _invoke(["yolo_v8", "--backend", "cpu"], tmp_path, mgr, variant_dir)
+        result = _invoke(["yolo_v8", "default", "--backend", "cpu"], tmp_path, mgr, variant_dir)
         assert result.exit_code == 0
         assert "PASS" in result.output
 
@@ -104,39 +103,20 @@ class TestModelVerifyCommand:
         _make_ref_outputs(ref_dir)
 
         mgr = _make_model_mgr(verify_result=(False, "max_err=999"))
-        result = _invoke(["yolo_v8", "--backend", "cpu"], tmp_path, mgr, variant_dir)
+        result = _invoke(["yolo_v8", "default", "--backend", "cpu"], tmp_path, mgr, variant_dir)
         assert result.exit_code != 0
         assert "FAIL" in result.output
 
-    def test_npu_backend_uses_dlc_variant(self, tmp_path: Path) -> None:
-        """NPU backend loads the DLC variant."""
-        variant_dir = tmp_path / "variants" / "default"
+    def test_npu_backend(self, tmp_path: Path) -> None:
+        """NPU backend runs and passes when model verifies."""
+        variant_dir = tmp_path / "variants" / "qcs6490"
         ref_dir = variant_dir / "reference_outputs"
         _make_ref_outputs(ref_dir)
 
         mgr = _make_model_mgr(verify_result=(True, ""))
-        result = _invoke(["yolo_v8", "--backend", "npu"], tmp_path, mgr, variant_dir)
+        result = _invoke(["yolo_v8", "qcs6490", "--backend", "npu"], tmp_path, mgr, variant_dir)
         assert result.exit_code == 0
         assert "PASS" in result.output
-
-    def test_npu_no_dlc_variant_fails(self, tmp_path: Path) -> None:
-        """NPU backend fails gracefully when no DLC variant is registered."""
-        from unittest.mock import patch as _patch
-
-        variant_dir = tmp_path / "variants" / "default"
-        ref_dir = variant_dir / "reference_outputs"
-        _make_ref_outputs(ref_dir)
-
-        mgr = MagicMock()
-        mock_info = MagicMock()
-        mock_info.variants = {}
-        with _patch(
-            "moment_to_action._cli.commands.cmd_model.cmd_verify.MODEL_REGISTRY",
-            {ModelID.YOLO_V8: mock_info},
-        ):
-            result = _invoke(["yolo_v8", "--backend", "npu"], tmp_path, mgr, variant_dir)
-        assert result.exit_code != 0
-        assert "FAIL" in result.output
 
     def test_non_detection_model_fails_gracefully(self, tmp_path: Path) -> None:
         """Non-ImageDetectionModel exits non-zero with 'does not support verify'."""
@@ -150,7 +130,7 @@ class TestModelVerifyCommand:
         mgr.get_model.return_value = mock_model
         mgr.is_available.return_value = True
 
-        result = _invoke(["yolo_v8", "--backend", "cpu"], tmp_path, mgr, variant_dir)
+        result = _invoke(["yolo_v8", "default", "--backend", "cpu"], tmp_path, mgr, variant_dir)
         assert result.exit_code != 0
         assert "FAIL" in result.output
 
@@ -161,14 +141,14 @@ class TestModelVerifyCommand:
         _make_ref_outputs(ref_dir)
 
         mgr = _make_model_mgr(verify_result=(True, ""))
-        result = _invoke(["yolo_v8"], tmp_path, mgr, variant_dir)
+        result = _invoke(["yolo_v8", "default"], tmp_path, mgr, variant_dir)
         assert "CPU" in result.output
         assert "GPU" in result.output
         assert "NPU" in result.output
 
-    def test_npu_dlc_variant_not_cached_fails(self, tmp_path: Path) -> None:
-        """NPU backend fails when DLC variant exists but is not cached."""
-        variant_dir = tmp_path / "variants" / "default"
+    def test_variant_not_cached_fails(self, tmp_path: Path) -> None:
+        """Fails when requested variant is not cached."""
+        variant_dir = tmp_path / "variants" / "qcs6490"
         ref_dir = variant_dir / "reference_outputs"
         _make_ref_outputs(ref_dir)
 
@@ -176,7 +156,122 @@ class TestModelVerifyCommand:
         mgr.get_model.return_value = MagicMock(spec=ImageDetectionModel)
         mgr.is_available.return_value = False
 
-        result = _invoke(["yolo_v8", "--backend", "npu"], tmp_path, mgr, variant_dir)
+        result = _invoke(["yolo_v8", "qcs6490", "--backend", "npu"], tmp_path, mgr, variant_dir)
         assert result.exit_code != 0
         assert "FAIL" in result.output
         assert "not cached" in result.output.lower()
+
+    def test_variant_loads_ref_from_variant_dir(self, tmp_path: Path) -> None:
+        """Positional variant loads reference outputs from that variant's directory."""
+        qcs_variant_dir = tmp_path / "variants" / "qcs6490"
+        ref_dir = qcs_variant_dir / "reference_outputs"
+        _make_ref_outputs(ref_dir)
+
+        def _variant_dir(_model_id: str, variant: str) -> Path:
+            return tmp_path / "variants" / variant
+
+        pm = MagicMock()
+        pm.app_config_file = tmp_path / "cfg.json"
+        pm.cache.models.get_variant_dir.side_effect = _variant_dir
+
+        mgr = _make_model_mgr(verify_result=(True, ""))
+
+        from unittest.mock import patch as _patch
+
+        from moment_to_action._cli import cli
+
+        with _patch("moment_to_action._cli.init_logging"):
+            with _patch("moment_to_action._cli.PathManager", return_value=pm):
+                with _patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    with _patch(
+                        "moment_to_action._cli.commands.cmd_model.cmd_verify.ModelManager",
+                        return_value=mgr,
+                    ):
+                        with _patch(
+                            "moment_to_action._cli.commands.cmd_model.cmd_verify.ComputeBackend",
+                            return_value=MagicMock(),
+                        ):
+                            result = CliRunner().invoke(
+                                cli,
+                                ["model", "verify", "yolo_v8", "qcs6490", "--backend", "cpu"],
+                            )
+        assert result.exit_code == 0, result.output
+        assert "PASS" in result.output
+        pm.cache.models.get_variant_dir.assert_any_call("yolo_v8", "qcs6490")
+
+    def test_variant_used_for_all_backends(self, tmp_path: Path) -> None:
+        """Positional variant is used for every requested backend."""
+        qcs_variant_dir = tmp_path / "variants" / "qcs6490"
+        ref_dir = qcs_variant_dir / "reference_outputs"
+        _make_ref_outputs(ref_dir)
+
+        def _variant_dir(_model_id: str, variant: str) -> Path:
+            return tmp_path / "variants" / variant
+
+        pm = MagicMock()
+        pm.app_config_file = tmp_path / "cfg.json"
+        pm.cache.models.get_variant_dir.side_effect = _variant_dir
+
+        mgr = _make_model_mgr(verify_result=(True, ""))
+
+        from unittest.mock import patch as _patch
+
+        from moment_to_action._cli import cli
+
+        with _patch("moment_to_action._cli.init_logging"):
+            with _patch("moment_to_action._cli.PathManager", return_value=pm):
+                with _patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    with _patch(
+                        "moment_to_action._cli.commands.cmd_model.cmd_verify.ModelManager",
+                        return_value=mgr,
+                    ):
+                        with _patch(
+                            "moment_to_action._cli.commands.cmd_model.cmd_verify.ComputeBackend",
+                            return_value=MagicMock(),
+                        ):
+                            result = CliRunner().invoke(
+                                cli, ["model", "verify", "yolo_v8", "qcs6490"]
+                            )
+        assert "CPU" in result.output
+        assert "GPU" in result.output
+        assert "NPU" in result.output
+        for call in mgr.get_model.call_args_list:
+            assert call.kwargs.get("variant") == "qcs6490"
+
+    def test_variant_not_cached_fails_gracefully(self, tmp_path: Path) -> None:
+        """Unavailable variant reports FAIL for every backend."""
+        qcs_variant_dir = tmp_path / "variants" / "qcs6490"
+        ref_dir = qcs_variant_dir / "reference_outputs"
+        _make_ref_outputs(ref_dir)
+
+        def _variant_dir(_model_id: str, variant: str) -> Path:
+            return tmp_path / "variants" / variant
+
+        pm = MagicMock()
+        pm.app_config_file = tmp_path / "cfg.json"
+        pm.cache.models.get_variant_dir.side_effect = _variant_dir
+
+        mgr = MagicMock()
+        mgr.is_available.return_value = False
+
+        from unittest.mock import patch as _patch
+
+        from moment_to_action._cli import cli
+
+        with _patch("moment_to_action._cli.init_logging"):
+            with _patch("moment_to_action._cli.PathManager", return_value=pm):
+                with _patch("moment_to_action._cli.load_config", return_value=AppConfig()):
+                    with _patch(
+                        "moment_to_action._cli.commands.cmd_model.cmd_verify.ModelManager",
+                        return_value=mgr,
+                    ):
+                        with _patch(
+                            "moment_to_action._cli.commands.cmd_model.cmd_verify.ComputeBackend",
+                            return_value=MagicMock(),
+                        ):
+                            result = CliRunner().invoke(
+                                cli,
+                                ["model", "verify", "yolo_v8", "qcs6490", "--backend", "cpu"],
+                            )
+        assert result.exit_code != 0
+        assert "FAIL" in result.output

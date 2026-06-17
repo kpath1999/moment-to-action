@@ -10,7 +10,7 @@ import rich_click as click
 
 from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.models import DEFAULT_VARIANT_KEY, ModelID, ModelManager
-from moment_to_action.models.image.detection._base import ImageDetectionModel
+from moment_to_action.models.image._base import ImageModel
 from moment_to_action.qairt import QairtSDKManager
 from moment_to_action.utils.cli import GlobalData, pass_global_data
 
@@ -90,6 +90,16 @@ def convert(
       m2a model convert yolo_v8 -o ./out/ --calibration-dir ./calib/
       m2a model convert yolo_v8 --variant default -o ./out/ --calibration-dir ./calib/
     """
+    click.echo(
+        click.style(
+            "warning: local convert uses the QAIRT INT8 quantizer, which mis-handles some "
+            "models (e.g. the YOLOv8 detection head collapses to ~0 scores) and emits only a "
+            "portable .dlc — no per-backend context binaries. For AI Hub-supported models "
+            "prefer 'm2a model convert-aihub'.",
+            fg="yellow",
+        )
+    )
+
     qairt_mgr = QairtSDKManager.from_app_config(data.config, data.path_manager)
     if not qairt_mgr.is_available:
         msg = "QAIRT SDK not installed. Run 'm2a qairt install' first."
@@ -97,8 +107,8 @@ def convert(
 
     model_mgr = ModelManager(data.path_manager)
     model = model_mgr.get_model(ModelID(model_id), variant=variant)
-    if not isinstance(model, ImageDetectionModel):
-        msg = f"'{model_id}' is not an image detection model."
+    if not isinstance(model, ImageModel):
+        msg = f"'{model_id}' is not an image model."
         raise click.ClickException(msg)
 
     # Preprocess calibration images (pure numpy — no backend needed)
@@ -125,8 +135,15 @@ def convert(
         stacked = np.stack([all_raw[i][k] for i in range(len(all_raw))])
         np.save(str(ref_dir / f"outputs_{k}.npy"), stacked)
 
-    # Convert to DLC
-    dlc_path = output_dir / "model.dlc"
-    qairt_mgr.convert(model.path, dlc_path, calibration_data)
+    # Resolve the actual ONNX file path (model.path may be a directory for HF sources)
+    onnx_path = model.path / "model.onnx" if model.path.is_dir() else model.path
+    # Apply model-specific ONNX surgery (e.g. split mixed-range outputs for YOLO)
+    conversion_onnx = model.prepare_for_conversion(onnx_path)
+    try:
+        dlc_path = output_dir / "model.dlc"
+        qairt_mgr.convert(conversion_onnx, dlc_path, calibration_data)
+    finally:
+        if conversion_onnx != model.path:
+            conversion_onnx.unlink(missing_ok=True)
 
     click.echo(f"Converted: {output_dir}")

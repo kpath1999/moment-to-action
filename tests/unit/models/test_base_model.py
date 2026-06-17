@@ -14,6 +14,10 @@ from moment_to_action.models._base import BaseModel
 class _ConcreteModel(BaseModel[object, object, object, object]):
     """Minimal concrete subclass for testing."""
 
+    def __init__(self, variant: str = "default", path: Path = Path("/x")) -> None:
+        """Initialize with no backend table (testing-only shortcut)."""
+        super().__init__(variant, path, backends={})
+
     def load(self, backend: object) -> None:
         """Load the model."""
         self._backend = backend  # type: ignore[assignment]
@@ -53,7 +57,7 @@ class TestBaseModel:
     def test_cannot_instantiate_abstract(self) -> None:
         """BaseModel cannot be instantiated directly."""
         with pytest.raises(TypeError):
-            BaseModel("default", Path("/x"))  # type: ignore[abstract]
+            BaseModel("default", Path("/x"))  # type: ignore[abstract, call-arg]
 
     def test_missing_abstracts_prevent_instantiation(self) -> None:
         """Subclass missing prepare/run/post_proc/verify_outputs cannot be instantiated."""
@@ -66,7 +70,7 @@ class TestBaseModel:
                 """Unload."""
 
         with pytest.raises(TypeError):
-            _Incomplete("v", Path("/x"))  # type: ignore[abstract]
+            _Incomplete("v", Path("/x"))  # type: ignore[abstract, call-arg]
 
     def test_init_stores_variant_and_path(self) -> None:
         """__init__ stores _variant and _path."""
@@ -205,6 +209,10 @@ class TestBaseModelDel:
         """__del__ does not propagate exceptions from unload()."""
 
         class _FailingModel(BaseModel[object, object, object, object]):
+            def __init__(self) -> None:
+                """Initialize."""
+                super().__init__("default", Path("/x"), backends={})
+
             def load(self, backend: object) -> None:
                 """Load."""
                 self._backend = backend  # type: ignore[assignment]
@@ -236,7 +244,13 @@ class TestBaseModelDel:
                 """Verify."""
                 return True, ""
 
-        model = _FailingModel("default", Path("/x"))
+        model = _FailingModel()
         model.load(MagicMock())
         with pytest.warns(ResourceWarning):
             model.__del__()  # Should not raise despite unload() failing
+
+    def test_prepare_for_conversion_default_returns_path(self) -> None:
+        """Default prepare_for_conversion() returns onnx_path unchanged."""
+        model = _ConcreteModel("default", Path("/x"))
+        onnx_path = Path("/some/model.onnx")
+        assert model.prepare_for_conversion(onnx_path) is onnx_path

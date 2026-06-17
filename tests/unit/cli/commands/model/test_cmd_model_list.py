@@ -9,13 +9,16 @@ from unittest.mock import MagicMock, patch
 if TYPE_CHECKING:
     from pathlib import Path
 
+from pathlib import Path as _Path
+
 import pytest
 from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
-from moment_to_action.models import ModelID
+from moment_to_action.models import ModelID, Variant
 from moment_to_action.models._model_info import ModelStatus, VariantStatus
 from moment_to_action.models._registry import MODEL_REGISTRY
+from moment_to_action.models._sources._vendored import VendoredSource
 
 
 def _make_variant_status(
@@ -70,12 +73,30 @@ class TestModelListCommand:
 
     def test_vendored_status_shown(self, tmp_path: Path) -> None:
         """Vendored variant shows 'vendored' status."""
+        from moment_to_action.models import ModelFormat, ModelInfo, YOLOModel
+
         mid = ModelID.YOLO_V8
-        vs = _make_variant_status(mid, "default", available=True)
-        info = MODEL_REGISTRY[mid]
+        vs = _make_variant_status(mid, "vendored_variant", available=True)
+        vendored_registry = {
+            mid: ModelInfo(
+                id=mid,
+                model_class=YOLOModel,
+                variants={
+                    "vendored_variant": Variant(
+                        source=VendoredSource(format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")),
+                        backends={},
+                    )
+                },
+            )
+        }
+        info = vendored_registry[mid]
         status = ModelStatus(info=info, variants=[vs], path=None)
         mgr = _make_mgr([status])
-        result = _invoke([], tmp_path, mgr)
+        with patch(
+            "moment_to_action._cli.commands.cmd_model.cmd_list.MODEL_REGISTRY",
+            vendored_registry,
+        ):
+            result = _invoke([], tmp_path, mgr)
         assert result.exit_code == 0
         assert "vendored" in result.output
 

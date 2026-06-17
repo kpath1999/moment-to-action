@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 from enum import Enum
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import attrs
 
-from ._base import BaseModel
-from ._sources import ModelSource
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from moment_to_action.hardware._types import ComputeUnit
+
+    from ._base import BaseModel
+    from ._sources import ModelSource
 
 
 class ModelID(Enum):
@@ -13,6 +20,40 @@ class ModelID(Enum):
     YOLO_V8 = "yolo_v8"
     MOBILECLIP_S2 = "mobileclip_s2"
     SMOLVLM2_2_2B = "smolvlm2_2_2b"
+    MOBILENET_V2 = "mobilenet_v2"
+    RF_DETR = "rf_detr"
+    RTM_DET = "rtm_det"
+    DETECTRON2 = "detectron2"
+
+
+@attrs.frozen
+class Variant:
+    """A specific model variant with its source, supported backends, and input layout.
+
+    The ``backends`` dict is the single authoritative declaration of which compute
+    units this variant supports and which artifact files each unit loads.  Keys
+    present in ``backends`` are the only units this variant can run on; anything
+    absent will be caught at load time.
+
+    Args:
+        source: Download/vendored source for this variant's files.
+        backends: Mapping of compute unit to ``{component_name: filename}`` dicts.
+            Component key is ``"model"`` for single-graph models;
+            ``"proposal_generator"``/``"roi_head"`` for two-component Detectron2.
+            Filenames are relative to the variant directory.
+        input_layout: Input tensor layout — ``"NCHW"``, ``"NHWC"``, or ``None``
+            for model types that do not require a spatial layout (e.g. LLMs).
+            Image model constructors default to ``"NCHW"`` when ``None`` is passed.
+    """
+
+    source: ModelSource
+    """Download/vendored source for this variant's files."""
+
+    backends: dict[ComputeUnit, dict[str, str]]
+    """Compute unit → component filename mapping; keys = supported units."""
+
+    input_layout: str | None = None
+    """Input tensor layout: ``"NCHW"``, ``"NHWC"``, or ``None`` (not applicable)."""
 
 
 @attrs.frozen
@@ -22,8 +63,8 @@ class ModelInfo:
     id: ModelID
     """Unique model identifier."""
 
-    variants: dict[str, ModelSource]
-    """Dictionary mapping variant names to their respective sources."""
+    variants: dict[str, Variant]
+    """Dictionary mapping variant names to their :class:`Variant` descriptors."""
 
     model_class: type[BaseModel]
     """Concrete model class to instantiate when

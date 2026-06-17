@@ -1,0 +1,469 @@
+"""Unit tests for Detectron2Model (two-stage Faster R-CNN)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import numpy as np
+import pytest
+
+from moment_to_action.hardware import ComputeUnit
+from moment_to_action.models._formats import ModelFormat
+from moment_to_action.models.image.detection.detectron2._model import Detectron2Model
+
+_ONNX_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "model.onnx"}}
+_DLC_NPU_BACKENDS: dict[ComputeUnit, dict[str, str]] = {
+    ComputeUnit.CPU: {
+        "proposal_generator": "model.proposal_generator.npu.bin",
+        "roi_head": "model.roi_head.npu.bin",
+    }
+}
+_DLC_FLOAT_BACKENDS: dict[ComputeUnit, dict[str, str]] = {
+    ComputeUnit.CPU: {
+        "proposal_generator": "model.proposal_generator.dlc",
+        "roi_head": "model.roi_head.dlc",
+    }
+}
+
+
+@pytest.fixture
+def onnx_model() -> Detectron2Model:
+    """Return an unloaded Detectron2Model in single-graph ONNX format."""
+    return Detectron2Model("default", Path("/fake/d2"), ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+
+
+@pytest.fixture
+def dlc_model() -> Detectron2Model:
+    """Return an unloaded Detectron2Model in DLC format with .npu.bin artifacts."""
+    return Detectron2Model(
+        "qcs6490_w8a16",
+        Path("/fake/d2_qcs"),
+        ModelFormat.DLC,
+        input_layout="NHWC",
+        backends=_DLC_NPU_BACKENDS,
+    )
+
+
+@pytest.fixture
+def dlc_model_nchw() -> Detectron2Model:
+    """Return an unloaded Detectron2Model in DLC format with float .dlc artifacts."""
+    return Detectron2Model(
+        "other",
+        Path("/fake/d2_other"),
+        ModelFormat.DLC,
+        backends=_DLC_FLOAT_BACKENDS,
+    )
+
+
+@pytest.fixture
+def mock_backend() -> MagicMock:
+    """Return a mock ComputeBackend with two-graph handles."""
+    backend = MagicMock()
+    backend.preferred_unit = ComputeUnit.CPU
+    backend.load_model.return_value = MagicMock()
+    backend.load_model_dlc.return_value = MagicMock()
+    return backend
+
+
+def _roi_outputs(
+    boxes: list[list[float]], scores: list[float], classes: list[int]
+) -> list[np.ndarray]:
+    """Build a synthetic ROI-head [boxes, scores, classes] output triple."""
+    return [
+        np.array([boxes], dtype=np.float32),
+        np.array([scores], dtype=np.float32),
+        np.array([classes], dtype=np.int64),
+    ]
+
+
+def _onnx_outputs(
+    boxes: list[list[float]], classes: list[int], scores: list[float]
+) -> list[np.ndarray]:
+    """Build traced single-graph ONNX outputs: [boxes, classes, scores, size]."""
+    return [
+        np.array(boxes, dtype=np.float32),
+        np.array(classes, dtype=np.int64),
+        np.array(scores, dtype=np.float32),
+        np.array([800, 800], dtype=np.int64),
+    ]
+
+
+@pytest.mark.unit
+class TestPrepare:
+    """Tests for Detectron2Model.prepare()."""
+
+    def test_onnx_single_graph_shape(
+        self, onnx_model: Detectron2Model, sample_image_array: np.ndarray
+    ) -> None:
+        """Single-graph ONNX prepare returns CHW (3, 800, 800) with no batch dim."""
+        assert onnx_model.prepare(sample_image_array).shape == (3, 800, 800)
+
+    def test_nhwc_shape(self, dlc_model: Detectron2Model, sample_image_array: np.ndarray) -> None:
+        """NHWC DLC prepare returns NHWC (1, 800, 800, 3)."""
+        assert dlc_model.prepare(sample_image_array).shape == (1, 800, 800, 3)
+
+    def test_dlc_nchw_shape(
+        self, dlc_model_nchw: Detectron2Model, sample_image_array: np.ndarray
+    ) -> None:
+        """NCHW DLC prepare returns NCHW (1, 3, 800, 800)."""
+        assert dlc_model_nchw.prepare(sample_image_array).shape == (1, 3, 800, 800)
+
+    def test_onnx_dtype_and_range(
+        self, onnx_model: Detectron2Model, sample_image_array: np.ndarray
+    ) -> None:
+        """Single-graph ONNX prepare keeps raw BGR float32 in [0, 255]."""
+        out = onnx_model.prepare(sample_image_array)
+        assert out.dtype == np.float32
+        assert float(out.min()) >= 0.0
+        assert float(out.max()) <= 255.0
+
+    def test_dlc_dtype_and_range(
+        self, dlc_model: Detectron2Model, sample_image_array: np.ndarray
+    ) -> None:
+        """DLC prepare normalizes to float32 in [0, 1]."""
+        out = dlc_model.prepare(sample_image_array)
+        assert out.dtype == np.float32
+        assert float(out.min()) >= 0.0
+        assert float(out.max()) <= 1.0
+
+    def test_stores_original_size(
+        self, onnx_model: Detectron2Model, sample_image_array: np.ndarray
+    ) -> None:
+        """Prepare records the original frame size."""
+        onnx_model.prepare(sample_image_array)
+        h, w = sample_image_array.shape[:2]
+        assert onnx_model._last_original_size == (h, w)
+
+
+@pytest.mark.unit
+class TestProperties:
+    """Tests for Detectron2Model properties + layout derivation."""
+
+    def test_default_confidence(self, onnx_model: Detectron2Model) -> None:
+        """Default confidence_threshold is 0.5."""
+        assert onnx_model.confidence_threshold == 0.5
+
+    def test_custom_confidence(self) -> None:
+        """Custom confidence_threshold is stored."""
+        m = Detectron2Model(
+            "default",
+            Path("/f"),
+            ModelFormat.ONNX,
+            confidence_threshold=0.2,
+            backends=_ONNX_BACKENDS,
+        )
+        assert m.confidence_threshold == 0.2
+
+    def test_layout_onnx_nchw(self, onnx_model: Detectron2Model) -> None:
+        """ONNX uses NCHW."""
+        assert onnx_model.input_layout == "NCHW"
+
+    def test_layout_dlc_nhwc_when_explicit(self, dlc_model: Detectron2Model) -> None:
+        """DLC model with explicit NHWC has NHWC layout."""
+        assert dlc_model.input_layout == "NHWC"
+
+    def test_layout_other_dlc_nchw(self, dlc_model_nchw: Detectron2Model) -> None:
+        """DLC model without explicit layout defaults to NCHW."""
+        assert dlc_model_nchw.input_layout == "NCHW"
+
+    @pytest.mark.parametrize("variant", ["qcs6490_w8a16", "qcs6490_w8a8"])
+    def test_layout_qcs6490_precision_variants_nhwc(self, variant: str) -> None:
+        """Both qcs6490 precision-variant keys can carry NHWC layout when passed explicitly."""
+        m = Detectron2Model(
+            variant,
+            Path("/fake"),
+            ModelFormat.DLC,
+            input_layout="NHWC",
+            backends=_DLC_NPU_BACKENDS,
+        )
+        assert m.input_layout == "NHWC"
+
+
+@pytest.mark.unit
+class TestLoadUnload:
+    """Tests for load()/unload() of both component graphs."""
+
+    def test_load_onnx_single_graph(
+        self, onnx_model: Detectron2Model, mock_backend: MagicMock
+    ) -> None:
+        """ONNX load() loads the single end-to-end graph and leaves ROI handle unset."""
+        onnx_model.load(mock_backend)
+        assert mock_backend.load_model.call_count == 1
+        assert mock_backend.load_model.call_args.args[0] == Path("/fake/d2/model.onnx")
+        assert onnx_model._handle_roi is None
+
+    def test_load_dlc_loads_both_components(
+        self, dlc_model: Detectron2Model, mock_backend: MagicMock
+    ) -> None:
+        """DLC load() loads both proposal_generator and roi_head from backends table."""
+        dlc_model.load(mock_backend)
+        assert mock_backend.load_model_dlc.call_count == 2
+        loaded_names = {c.args[0].name for c in mock_backend.load_model_dlc.call_args_list}
+        assert loaded_names == {"model.proposal_generator.npu.bin", "model.roi_head.npu.bin"}
+
+    def test_load_dlc_roi_channel_last_set_for_npu_bin(
+        self, dlc_model: Detectron2Model, mock_backend: MagicMock
+    ) -> None:
+        """DLC load() sets _roi_channel_last=True when roi artifact ends with .npu.bin."""
+        dlc_model.load(mock_backend)
+        assert dlc_model._roi_channel_last is True
+
+    def test_load_dlc_roi_channel_last_false_for_float_dlc(
+        self, dlc_model_nchw: Detectron2Model, mock_backend: MagicMock
+    ) -> None:
+        """DLC load() sets _roi_channel_last=False when roi artifact ends with .dlc."""
+        dlc_model_nchw.load(mock_backend)
+        assert dlc_model_nchw._roi_channel_last is False
+
+    def test_load_twice_raises(self, onnx_model: Detectron2Model, mock_backend: MagicMock) -> None:
+        """Loading twice raises RuntimeError."""
+        onnx_model.load(mock_backend)
+        with pytest.raises(RuntimeError, match="already loaded"):
+            onnx_model.load(mock_backend)
+
+    def test_unload_onnx_single_graph(
+        self, onnx_model: Detectron2Model, mock_backend: MagicMock
+    ) -> None:
+        """ONNX unload() releases the single graph and clears state."""
+        onnx_model.load(mock_backend)
+        onnx_model.unload()
+        assert mock_backend.unload_model.call_count == 1
+        assert onnx_model._backend is None
+        assert onnx_model._handle_pg is None
+        assert onnx_model._handle_roi is None
+
+    def test_unload_dlc_unloads_both(
+        self, dlc_model: Detectron2Model, mock_backend: MagicMock
+    ) -> None:
+        """DLC unload() calls unload_dlc for both graphs."""
+        dlc_model.load(mock_backend)
+        dlc_model.unload()
+        assert mock_backend.unload_dlc.call_count == 2
+
+    def test_unload_without_load_noop(self, onnx_model: Detectron2Model) -> None:
+        """unload() before load() does nothing."""
+        onnx_model.unload()
+
+
+@pytest.mark.unit
+class TestRun:
+    """Tests for the two-stage run()."""
+
+    def test_run_without_load_raises(
+        self, onnx_model: Detectron2Model, sample_image_array: np.ndarray
+    ) -> None:
+        """run() before load() raises."""
+        prepared = onnx_model.prepare(sample_image_array)
+        with pytest.raises(RuntimeError, match="load\\(\\) must be called"):
+            onnx_model.run(prepared)
+
+    def test_run_onnx_single_graph(
+        self, onnx_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
+    ) -> None:
+        """ONNX run() runs once and reorders [boxes, classes, scores] -> batched triple."""
+        mock_backend.run.return_value = _onnx_outputs(
+            [[0, 0, 100, 100], [10, 10, 50, 50]], [1, 2], [0.9, 0.8]
+        )
+        onnx_model.load(mock_backend)
+        result = onnx_model.run(onnx_model.prepare(sample_image_array))
+        assert mock_backend.run.call_count == 1
+        assert result[0].shape == (1, 2, 4)  # boxes batched
+        np.testing.assert_allclose(result[1][0], [0.9, 0.8], rtol=1e-6)  # scores
+        np.testing.assert_array_equal(result[2][0], [1, 2])  # classes
+
+    def test_run_dlc_two_stage(
+        self, dlc_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
+    ) -> None:
+        """DLC run() chains both infer_dlc calls and remaps the dict outputs."""
+        feature = np.zeros((1, 4, 5, 5), dtype=np.float32)
+        proposals = np.array([[[0, 0, 100, 100]]], dtype=np.float32)
+        score = np.array([[0.9]], dtype=np.float32)
+        boxes = np.array([[[1, 2, 3, 4]]], dtype=np.float32)
+        scores = np.array([[0.7]], dtype=np.float32)
+        classes = np.array([[2]], dtype=np.int64)
+        mock_backend.infer_dlc.side_effect = [
+            {"feature": feature, "proposals": proposals, "score": score},
+            {"boxes": boxes, "scores": scores, "classes": classes},
+        ]
+        dlc_model.load(mock_backend)
+        prepared = dlc_model.prepare(sample_image_array)
+        result = dlc_model.run(prepared)
+        np.testing.assert_array_equal(result[0], boxes)
+        np.testing.assert_array_equal(result[1], scores)
+        np.testing.assert_array_equal(result[2], classes)
+        roi_inputs = mock_backend.infer_dlc.call_args_list[1].args[1]
+        assert set(roi_inputs) == {"features", "proposals_boxes"}
+
+    @staticmethod
+    def _setup_dlc_run(backend: MagicMock, feature_shape: tuple[int, ...]) -> None:
+        """Configure infer_dlc side_effect for a two-stage DLC run."""
+        feature = np.zeros(feature_shape, dtype=np.float32)
+        backend.infer_dlc.side_effect = [
+            {
+                "feature": feature,
+                "proposals": np.array([[[0, 0, 100, 100]]], dtype=np.float32),
+                "score": np.array([[0.9]], dtype=np.float32),
+            },
+            {
+                "boxes": np.zeros((1, 1, 4), np.float32),
+                "scores": np.zeros((1, 1), np.float32),
+                "classes": np.zeros((1, 1), np.int64),
+            },
+        ]
+
+    def test_dlc_bin_transposes_feature_to_nhwc(
+        self, dlc_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
+    ) -> None:
+        """The HTP context binary (.npu.bin) gets the feature transposed to NHWC."""
+        self._setup_dlc_run(mock_backend, (1, 1024, 50, 50))
+        dlc_model.load(mock_backend)
+        assert dlc_model._roi_channel_last is True
+        dlc_model.run(dlc_model.prepare(sample_image_array))
+        roi_feat = mock_backend.infer_dlc.call_args_list[1].args[1]["features"]
+        assert roi_feat.shape == (1, 50, 50, 1024)  # NHWC
+
+    def test_dlc_keeps_feature_nchw(
+        self,
+        dlc_model_nchw: Detectron2Model,
+        mock_backend: MagicMock,
+        sample_image_array: np.ndarray,
+    ) -> None:
+        """The float .dlc keeps the feature NCHW (no transpose)."""
+        self._setup_dlc_run(mock_backend, (1, 1024, 50, 50))
+        dlc_model_nchw.load(mock_backend)
+        assert dlc_model_nchw._roi_channel_last is False
+        dlc_model_nchw.run(dlc_model_nchw.prepare(sample_image_array))
+        roi_feat = mock_backend.infer_dlc.call_args_list[1].args[1]["features"]
+        assert roi_feat.shape == (1, 1024, 50, 50)  # NCHW
+
+
+@pytest.mark.unit
+class TestLetterbox:
+    """Tests for aspect-preserving letterbox prepare + decode round-trip."""
+
+    def test_prepare_pads_non_square(self, dlc_model: Detectron2Model) -> None:
+        """A 480x640 frame is letterboxed: zero pad rows top/bottom, content centred."""
+        frame = np.full((480, 640, 3), 200, dtype=np.uint8)
+        out = dlc_model.prepare(frame)[0]  # NHWC (800, 800, 3)
+        # scale=1.25 -> new 600x800, pad_top=100: rows [0:100] and [700:800] are pad (0).
+        assert float(out[:100].max()) == 0.0
+        assert float(out[700:].max()) == 0.0
+        assert float(out[400].max()) > 0.0
+
+    def test_decode_unmaps_letterbox(self, onnx_model: Detectron2Model) -> None:
+        """A box spanning the padded content maps back to the full original frame."""
+        # 480x640 -> scale 1.25, pad=(0,100); content box [0,100,800,700] -> full frame.
+        raw = _roi_outputs([[0, 100, 800, 700]], [0.9], [0])
+        out = onnx_model._decode(raw, original_size=(480, 640))
+        b = out[0].bbox
+        assert b.x1 == pytest.approx(0.0)
+        assert b.x2 == pytest.approx(640.0)
+        assert b.y1 == pytest.approx(0.0)
+        assert b.y2 == pytest.approx(480.0)
+
+
+@pytest.mark.unit
+class TestFilterProposals:
+    """Tests for the CPU proposal filter."""
+
+    def test_pads_to_fixed_length(self, onnx_model: Detectron2Model) -> None:
+        """Output is always [1, 200, 4] regardless of input count."""
+        proposals = np.array([[[0, 0, 10, 10], [20, 20, 40, 40]]], dtype=np.float32)
+        score = np.array([[0.5, 0.9]], dtype=np.float32)
+        out = onnx_model._filter_proposals(proposals, score)
+        assert out.shape == (1, 200, 4)
+
+    def test_clamps_to_image(self, onnx_model: Detectron2Model) -> None:
+        """Proposal coordinates are clamped to [0, 800]."""
+        proposals = np.array([[[-50, -50, 900, 900]]], dtype=np.float32)
+        score = np.array([[0.9]], dtype=np.float32)
+        out = onnx_model._filter_proposals(proposals, score)[0, 0]
+        assert out[0] == 0.0
+        assert out[1] == 0.0
+        assert out[2] == 800.0
+        assert out[3] == 800.0
+
+    def test_drops_empty_boxes(self, onnx_model: Detectron2Model) -> None:
+        """Zero-area proposals are removed before NMS."""
+        # second box has zero width → dropped, leaving exactly one real proposal
+        proposals = np.array([[[0, 0, 100, 100], [50, 0, 50, 100]]], dtype=np.float32)
+        score = np.array([[0.6, 0.9]], dtype=np.float32)
+        out = onnx_model._filter_proposals(proposals, score)
+        nonzero_rows = int(np.count_nonzero(out[0].any(axis=1)))
+        assert nonzero_rows == 1
+
+    def test_keeps_highest_objectness_first(self, onnx_model: Detectron2Model) -> None:
+        """The top-scoring proposal survives and lands first."""
+        proposals = np.array([[[0, 0, 10, 10], [500, 500, 600, 600]]], dtype=np.float32)
+        score = np.array([[0.1, 0.99]], dtype=np.float32)
+        out = onnx_model._filter_proposals(proposals, score)[0]
+        np.testing.assert_allclose(out[0], [500, 500, 600, 600])
+
+
+@pytest.mark.unit
+class TestPostProc:
+    """Tests for post_proc()/_decode()."""
+
+    def test_empty_outputs(self, onnx_model: Detectron2Model) -> None:
+        """No surviving boxes returns an empty list."""
+        assert onnx_model._decode(_roi_outputs([], [], []), original_size=None) == []
+
+    def test_fewer_than_three_outputs(self, onnx_model: Detectron2Model) -> None:
+        """Fewer than 3 output tensors returns empty."""
+        assert onnx_model._decode([np.zeros((1, 2, 4)), np.zeros((1, 2))], original_size=None) == []
+
+    def test_filters_low_confidence(self, onnx_model: Detectron2Model) -> None:
+        """Detections below confidence_threshold are dropped."""
+        out = onnx_model._decode(_roi_outputs([[0, 0, 50, 50]], [0.1], [0]), original_size=None)
+        assert out == []
+
+    def test_label_mapping(self, onnx_model: Detectron2Model) -> None:
+        """Class index maps to the COCO label."""
+        out = onnx_model._decode(_roi_outputs([[0, 0, 50, 50]], [0.9], [2]), original_size=None)
+        assert out[0].label == "car"
+
+    def test_unknown_class_uses_string(self, onnx_model: Detectron2Model) -> None:
+        """Out-of-range class index renders as its string."""
+        out = onnx_model._decode(_roi_outputs([[0, 0, 50, 50]], [0.9], [999]), original_size=None)
+        assert out[0].label == "999"
+
+    def test_scales_to_original(self, onnx_model: Detectron2Model) -> None:
+        """Boxes scale from 800x800 to the original size."""
+        out = onnx_model._decode(
+            _roi_outputs([[0, 0, 800, 800]], [0.9], [0]), original_size=(1600, 1600)
+        )
+        assert out[0].bbox.x2 == pytest.approx(1600.0)
+        assert out[0].bbox.y2 == pytest.approx(1600.0)
+
+    def test_per_class_nms_keeps_distinct_classes(self, onnx_model: Detectron2Model) -> None:
+        """Overlapping boxes of different classes are both kept (per-class NMS)."""
+        out = onnx_model._decode(
+            _roi_outputs([[0, 0, 100, 100], [1, 1, 99, 99]], [0.9, 0.8], [0, 1]),
+            original_size=None,
+        )
+        assert len(out) == 2
+
+    def test_per_class_nms_suppresses_same_class(self, onnx_model: Detectron2Model) -> None:
+        """Overlapping boxes of the same class collapse to one."""
+        out = onnx_model._decode(
+            _roi_outputs([[0, 0, 100, 100], [1, 1, 99, 99]], [0.9, 0.8], [0, 0]),
+            original_size=None,
+        )
+        assert len(out) == 1
+
+    def test_post_proc_uses_recorded_size(
+        self, onnx_model: Detectron2Model, sample_image_array: np.ndarray
+    ) -> None:
+        """post_proc scales using the size recorded by prepare()."""
+        onnx_model.prepare(sample_image_array)
+        h, w = sample_image_array.shape[:2]
+        out = onnx_model.post_proc(_roi_outputs([[0, 0, 800, 800]], [0.9], [0]))
+        assert out[0].bbox.x2 == pytest.approx(float(w))
+        assert out[0].bbox.y2 == pytest.approx(float(h))
+
+    def test_decode_accepts_iterable(self, onnx_model: Detectron2Model) -> None:
+        """decode() coerces its raw arg and scales to the given size."""
+        raw = _roi_outputs([[0, 0, 800, 800]], [0.9], [0])
+        out = onnx_model.decode(raw, original_size=(400, 400))
+        assert out[0].bbox.x2 == pytest.approx(400.0)

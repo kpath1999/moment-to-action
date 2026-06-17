@@ -15,6 +15,7 @@ from typing import TypeAlias
 
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
+from ._image_classification import ImageClassificationMessage
 from .audio import AudioTensorMessage
 from .detection import DetectionMessage
 from .llm import ReasoningMessage
@@ -32,6 +33,7 @@ Message: TypeAlias = (
     | DetectionMessage
     | ReasoningMessage
     | ClassificationMessage
+    | ImageClassificationMessage
 )
 
 __all__ = [
@@ -41,6 +43,7 @@ __all__ = [
     "Detection",
     "DetectionMessage",
     "FrameTensorMessage",
+    "ImageClassificationMessage",
     "Message",
     "RawFrameMessage",
     "ReasoningMessage",

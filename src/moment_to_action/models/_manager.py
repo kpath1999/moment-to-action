@@ -5,13 +5,14 @@ from typing import TYPE_CHECKING
 
 from moment_to_action.utils.files import disk_size
 
-from ._model_info import ModelID, ModelInfo, ModelStatus, VariantStatus
+from ._model_info import ModelID, ModelInfo, ModelStatus, Variant, VariantStatus
 from ._registry import DEFAULT_KEY, MODEL_REGISTRY
-from ._sources import ModelSource, resolve_model_source
+from ._sources import resolve_model_source
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from moment_to_action.hardware._types import ComputeUnit
     from moment_to_action.paths import PathManager
     from moment_to_action.paths._cache._models import CachedModelInfo, ModelCacheContents
 
@@ -49,8 +50,56 @@ class ModelManager:
         return self._registry[model]
 
     @staticmethod
-    def _get_source(model_info: ModelInfo, variant: str) -> ModelSource:
-        """Get the source URL or path for a specific model variant."""
+    def _effective_variant(model_info: ModelInfo, variant: str, unit: ComputeUnit | None) -> str:
+        """Resolve the variant to actually load for a target compute unit.
+
+        If the requested variant supports ``unit``, it is returned unchanged.
+        If not and the ``default`` variant supports ``unit``, a redirect to
+        ``default`` is logged and returned.  Otherwise the original variant is
+        returned verbatim (``load()`` will raise a clear error at that point).
+
+        Args:
+            model_info: Static metadata for the model being resolved.
+            variant: The variant the caller requested.
+            unit: Target compute unit, or ``None`` to disable redirection
+                (the variant is returned verbatim).
+
+        Returns:
+            The variant key to load.
+        """
+        if unit is None:
+            return variant
+        var_obj = model_info.variants.get(variant)
+        if var_obj is None:
+            return variant
+        if unit in var_obj.backends:
+            return variant
+        default_var = model_info.variants.get(DEFAULT_KEY)
+        if default_var is not None and unit in default_var.backends and variant != DEFAULT_KEY:
+            log.info(
+                "Variant '%s' of %s is unsupported on %s; using '%s'.",
+                variant,
+                model_info.id,
+                unit,
+                DEFAULT_KEY,
+            )
+            return DEFAULT_KEY
+        return variant
+
+    @staticmethod
+    def _get_variant(model_info: ModelInfo, variant: str) -> Variant:
+        """Get the Variant descriptor for a specific variant key.
+
+        Args:
+            model_info: Static metadata for the model being resolved.
+            variant: Variant key to look up.
+
+        Returns:
+            The :class:`Variant` descriptor for the requested key.
+
+        Raises:
+            ValueError: If ``variant`` is not registered for this model.
+        """
         if variant not in model_info.variants:
             msg = f"Variant '{variant}' not found for model {model_info.id}."
             raise ValueError(msg)
@@ -63,7 +112,7 @@ class ModelManager:
     def _resolve_model(self, model_id: ModelID, variant: str, *, download: bool) -> Path | None:
         """Resolve the model source to a local file path, downloading if necessary."""
         info = self._get_model_info(model_id)
-        source = self._get_source(info, variant)
+        variant_obj = self._get_variant(info, variant)
 
         model_dir = self._get_model_cache_dir(model_id, variant)
         if download:
@@ -71,7 +120,7 @@ class ModelManager:
             model_dir.mkdir(parents=True, exist_ok=True)
 
         return resolve_model_source(
-            source, model_dir, download=download, progress=self._show_progress
+            variant_obj.source, model_dir, download=download, progress=self._show_progress
         )
 
     @staticmethod
@@ -87,16 +136,22 @@ class ModelManager:
 
         return True
 
-    def get_path(self, model: ModelID, variant: str = DEFAULT_KEY) -> Path:
+    def get_path(
+        self, model: ModelID, variant: str = DEFAULT_KEY, unit: ComputeUnit | None = None
+    ) -> Path:
         """Get the file path for a given model and variant, downloading if necessary.
 
         Args:
             model: The ModelID of the desired model.
             variant: The variant name of the model to retrieve.
+            unit: Target compute unit.  When set, a variant that does not
+                support ``unit`` is redirected to ``default`` if ``default``
+                does support it (see :meth:`_effective_variant`).
 
         Returns:
             Path to the model file(s).
         """
+        variant = self._effective_variant(self._get_model_info(model), variant, unit)
         # Resolve the model source to get the path
         path = self._resolve_model(model, variant, download=True)
 
@@ -180,6 +235,7 @@ class ModelManager:
         model_id: ModelID,
         *,
         variant: str = DEFAULT_KEY,
+        unit: ComputeUnit | None = None,
         **model_kwargs: object,
     ) -> BaseModel:
         """Construct an unloaded model instance for the given model and variant.
@@ -191,6 +247,11 @@ class ModelManager:
         Args:
             model_id: Identifier of the desired model.
             variant: Variant name to load.  Defaults to :data:`DEFAULT_KEY`.
+            unit: Target compute unit the model will run on.  When set, a
+                variant that does not support ``unit`` is redirected to
+                ``default`` if ``default`` does support it, so the returned
+                model uses the correct format for the actual variant loaded.
+                ``None`` disables redirection.
             **model_kwargs: Additional keyword arguments forwarded verbatim to
                 the model constructor.  Use for model-specific parameters such
                 as ``confidence_threshold`` on detection models.
@@ -199,9 +260,17 @@ class ModelManager:
             An unloaded :class:`~moment_to_action.models._base.BaseModel` subclass instance.
         """
         info = self._get_model_info(model_id)
-        source = self._get_source(info, variant)
+        variant = self._effective_variant(info, variant, unit)
+        variant_obj = self._get_variant(info, variant)
         path = self.get_path(model_id, variant)
-        return info.model_class(variant, path, source.format, **model_kwargs)  # type: ignore[call-arg]
+        return info.model_class(  # type: ignore[call-arg]
+            variant,
+            path,
+            variant_obj.source.format,
+            backends=variant_obj.backends,
+            input_layout=variant_obj.input_layout,
+            **model_kwargs,
+        )
 
     def remove_variant(self, model_id: ModelID, variant: str) -> int:
         """Remove a specific cached model variant.

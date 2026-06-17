@@ -6,12 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from moment_to_action.hardware import ComputeUnit
 from moment_to_action.models import (
     DownloadSource,
     HuggingFaceSource,
     ModelFormat,
     ModelID,
     ModelInfo,
+    Variant,
     VariantStatus,
     VendoredSource,
     YOLOModel,
@@ -163,6 +165,54 @@ class TestHuggingFaceSource:
 
 
 # ---------------------------------------------------------------------------
+# Variant
+# ---------------------------------------------------------------------------
+
+
+def _make_vendored_variant(units: list[ComputeUnit] | None = None) -> Variant:
+    """Build a Variant with a VendoredSource for testing."""
+    if units is None:
+        units = [ComputeUnit.CPU]
+    src = VendoredSource(format=ModelFormat.ONNX, path=Path("model.onnx"))
+    return Variant(source=src, backends={u: {"model": "model.onnx"} for u in units})
+
+
+@pytest.mark.unit
+class TestVariant:
+    """Tests for the Variant frozen attrs class."""
+
+    def test_stores_source_and_backends(self) -> None:
+        """Source and backends are stored."""
+        v = _make_vendored_variant([ComputeUnit.CPU, ComputeUnit.GPU])
+        assert isinstance(v.source, VendoredSource)
+        assert ComputeUnit.CPU in v.backends
+        assert ComputeUnit.GPU in v.backends
+
+    def test_default_input_layout_is_none(self) -> None:
+        """input_layout defaults to None (not applicable for non-image models)."""
+        v = _make_vendored_variant()
+        assert v.input_layout is None
+
+    def test_custom_input_layout(self) -> None:
+        """input_layout can be overridden."""
+        src = VendoredSource(format=ModelFormat.ONNX, path=Path("x"))
+        v = Variant(source=src, backends={ComputeUnit.NPU: {"model": "x"}}, input_layout="NHWC")
+        assert v.input_layout == "NHWC"
+
+    def test_is_frozen(self) -> None:
+        """Variant is frozen (attrs.frozen)."""
+        v = _make_vendored_variant()
+        with pytest.raises(AttributeError):
+            v.input_layout = "NHWC"  # type: ignore[misc]
+
+    def test_equality(self) -> None:
+        """Two Variants with identical fields compare equal."""
+        a = _make_vendored_variant()
+        b = _make_vendored_variant()
+        assert a == b
+
+
+# ---------------------------------------------------------------------------
 # ModelInfo
 # ---------------------------------------------------------------------------
 
@@ -177,15 +227,15 @@ class TestModelInfo:
             ModelInfo(id=ModelID.YOLO_V8, variants={})  # type: ignore[call-arg]
 
     def test_stores_variant_map(self) -> None:
-        """`variants` is stored verbatim."""
-        v = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
+        """`variants` maps str keys to Variant objects."""
+        v = _make_vendored_variant()
         info = ModelInfo(id=ModelID.YOLO_V8, variants={DEFAULT_KEY: v}, model_class=YOLOModel)
         assert info.id is ModelID.YOLO_V8
         assert info.variants == {DEFAULT_KEY: v}
 
     def test_stores_model_class(self) -> None:
         """`model_class` is stored verbatim."""
-        v = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
+        v = _make_vendored_variant()
         info = ModelInfo(id=ModelID.YOLO_V8, variants={DEFAULT_KEY: v}, model_class=YOLOModel)
         assert info.model_class is YOLOModel
 
@@ -242,13 +292,11 @@ class TestModelStatus:
     """Tests for ModelStatus."""
 
     def _info(self) -> ModelInfo:
-        return ModelInfo(
-            id=ModelID.YOLO_V8,
-            model_class=YOLOModel,
-            variants={
-                DEFAULT_KEY: VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx"))
-            },
+        v = Variant(
+            source=VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx")),
+            backends={ComputeUnit.CPU: {"model": "model.onnx"}},
         )
+        return ModelInfo(id=ModelID.YOLO_V8, model_class=YOLOModel, variants={DEFAULT_KEY: v})
 
     def test_available_true_when_any_variant_available(self) -> None:
         """`available` is True if at least one variant is available."""
@@ -304,14 +352,17 @@ class TestModelRegistry:
     """Tests for MODEL_REGISTRY."""
 
     def test_yolo_v8_registered(self) -> None:
-        """YOLO_V8 is in the registry with a VendoredSource default variant."""
+        """YOLO_V8 is in the registry with an UltralyticsSource default variant."""
+        from moment_to_action.models._sources._ultralytics import UltralyticsSource
+
         assert ModelID.YOLO_V8 in MODEL_REGISTRY
         info = MODEL_REGISTRY[ModelID.YOLO_V8]
         assert info.id is ModelID.YOLO_V8
         default = info.variants[DEFAULT_KEY]
-        assert isinstance(default, VendoredSource)
-        assert default.path == Path("yolo/model.onnx")
-        assert default.format is ModelFormat.ONNX
+        assert isinstance(default, Variant)
+        assert isinstance(default.source, UltralyticsSource)
+        assert default.source.name == "yolov8n"
+        assert default.source.format is ModelFormat.ONNX
 
     def test_yolo_v8_has_model_class(self) -> None:
         """YOLO_V8 registry entry has YOLOModel as its model_class."""
@@ -319,9 +370,11 @@ class TestModelRegistry:
         assert info.model_class is YOLOModel
 
     def test_yolo_v8_has_qcs6490_variant(self) -> None:
-        """YOLO_V8 registry has a qcs6490 DLC variant."""
+        """YOLO_V8 registry has a qcs6490 DLC variant with NPU backend."""
         info = MODEL_REGISTRY[ModelID.YOLO_V8]
         assert "qcs6490" in info.variants
         qcs = info.variants["qcs6490"]
-        assert isinstance(qcs, HuggingFaceSource)
-        assert qcs.format is ModelFormat.DLC
+        assert isinstance(qcs, Variant)
+        assert isinstance(qcs.source, HuggingFaceSource)
+        assert qcs.source.format is ModelFormat.DLC
+        assert ComputeUnit.NPU in qcs.backends

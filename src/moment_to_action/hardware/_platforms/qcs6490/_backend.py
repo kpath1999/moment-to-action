@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, cast
 import attrs
 
 from moment_to_action.hardware._platforms._base import InferenceBackend, ModelInput
+from moment_to_action.hardware._platforms._runtimes._qairt import qairt_backend_for
 from moment_to_action.hardware._platforms._runtimes._torch_policy import (
     resolve_torch_execution_policy,
 )
@@ -260,21 +261,23 @@ class QCS6490Backend(InferenceBackend):
             msg = "QAIRT SDK is not available; load_model_dlc requires a QCS6490 device"
             raise RuntimeError(msg) from exc
         raw = qairt.load(str(path))
-        raw.initialize(backend="HTP")
+        raw.initialize(backend=qairt_backend_for(self._preferred_unit))
         return raw
 
-    def infer_dlc(self, handle: object, inputs: np.ndarray) -> dict[str, np.ndarray]:
+    def infer_dlc(self, handle: object, inputs: ModelInput) -> dict[str, np.ndarray]:
         """Run inference on a loaded DLC model via QAIRT.
 
         Args:
             handle: Handle returned by :meth:`load_model_dlc`.
-            inputs: Input tensor for inference.
+            inputs: Single input tensor, or a name→tensor dict for multi-input
+                graphs (e.g. the Detectron2 ROI head's ``features`` +
+                ``proposals_boxes``).
 
         Returns:
             Mapping of output tensor names to arrays.
         """
         result = handle(inputs=inputs)  # type: ignore[operator]
-        return {k: result[k] for k in result}  # type: ignore[index]
+        return dict(result.data)  # type: ignore[attr-defined]
 
     def unload_dlc(self, handle: object) -> None:
         """Release DLC backend resources.

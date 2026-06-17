@@ -8,10 +8,14 @@ from unittest.mock import MagicMock, patch
 if TYPE_CHECKING:
     from pathlib import Path
 
+from pathlib import Path as _Path
+
 import pytest
 from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
+from moment_to_action.models import ModelFormat, Variant
+from moment_to_action.models._sources._vendored import VendoredSource
 
 
 def _patched_pm(tmp_path: Path) -> MagicMock:
@@ -45,9 +49,26 @@ class TestModelRemoveCommand:
 
     def test_vendored_variant_rejected(self, tmp_path: Path) -> None:
         """Attempting to remove a vendored variant exits non-zero."""
+        from moment_to_action.models import ModelID, ModelInfo, YOLOModel
+
+        vendored_registry = {
+            ModelID.YOLO_V8: ModelInfo(
+                id=ModelID.YOLO_V8,
+                model_class=YOLOModel,
+                variants={
+                    "default": Variant(
+                        source=VendoredSource(format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")),
+                        backends={},
+                    ),
+                },
+            )
+        }
         mgr = MagicMock()
-        # Default variant of yolo_v8 is VendoredSource
-        result = _invoke(["yolo_v8", "--yes"], tmp_path, mgr)
+        with patch(
+            "moment_to_action._cli.commands.cmd_model.cmd_remove.MODEL_REGISTRY",
+            vendored_registry,
+        ):
+            result = _invoke(["yolo_v8", "--yes"], tmp_path, mgr)
         assert result.exit_code != 0
         assert "vendored" in result.output.lower()
 
@@ -78,9 +99,28 @@ class TestModelRemoveCommand:
 
     def test_remove_all_skips_vendored(self, tmp_path: Path) -> None:
         """--all does not attempt to remove vendored variants."""
+        from moment_to_action.models import ModelID, ModelInfo, YOLOModel
+
+        registry_with_vendored = {
+            ModelID.YOLO_V8: ModelInfo(
+                id=ModelID.YOLO_V8,
+                model_class=YOLOModel,
+                variants={
+                    "default": Variant(
+                        source=VendoredSource(format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")),
+                        backends={},
+                    ),
+                    "qcs6490": Variant(source=MagicMock(format=ModelFormat.DLC), backends={}),
+                },
+            )
+        }
         mgr = MagicMock()
         mgr.is_available.return_value = False
-        _invoke(["--all", "--yes"], tmp_path, mgr)
+        with patch(
+            "moment_to_action._cli.commands.cmd_model.cmd_remove.MODEL_REGISTRY",
+            registry_with_vendored,
+        ):
+            _invoke(["--all", "--yes"], tmp_path, mgr)
         # remove_variant should not be called for vendored 'default' variant
         for call in mgr.remove_variant.call_args_list:
             assert call[0][1] != "default"
@@ -94,7 +134,8 @@ class TestModelRemoveCommand:
         mgr.remove_variant.return_value = 2048
         result = _invoke(["--all", "--yes"], tmp_path, mgr)
         assert result.exit_code == 0
-        mgr.remove_variant.assert_called_with(ModelID.YOLO_V8, "qcs6490")
+        # Multiple models register a "qcs6490" variant; YOLO's must be among those removed.
+        mgr.remove_variant.assert_any_call(ModelID.YOLO_V8, "qcs6490")
 
     def test_no_model_id_without_all_errors(self, tmp_path: Path) -> None:
         """Missing MODEL_ID without --all exits non-zero."""

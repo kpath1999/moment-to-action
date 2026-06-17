@@ -125,6 +125,8 @@ class QairtSDKManager:
         Platforms not present in ``_HEXAGON_VERSION`` (e.g. x86_64, macOS) skip
         this step.
 
+        More details: https://docs.qualcomm.com/doc/80-63442-10/topic/dsp_runtime.html
+
         Raises:
             RuntimeError: If SDK path is not configured.
         """

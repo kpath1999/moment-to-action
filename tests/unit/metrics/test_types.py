@@ -59,6 +59,16 @@ class TestSpanType:
         assert hasattr(SpanType, "MODEL_POST_PROCESS")
         assert isinstance(SpanType.MODEL_POST_PROCESS, SpanType)
 
+    def test_spantype_model_load_member(self) -> None:
+        """Test SpanType.MODEL_LOAD member."""
+        assert hasattr(SpanType, "MODEL_LOAD")
+        assert isinstance(SpanType.MODEL_LOAD, SpanType)
+
+    def test_spantype_model_unload_member(self) -> None:
+        """Test SpanType.MODEL_UNLOAD member."""
+        assert hasattr(SpanType, "MODEL_UNLOAD")
+        assert isinstance(SpanType.MODEL_UNLOAD, SpanType)
+
     def test_spantype_all_members(self) -> None:
         """Test that all expected SpanType members exist."""
         members = [member.name for member in SpanType]
@@ -67,7 +77,9 @@ class TestSpanType:
         assert "MODEL_PREPROCESS" in members
         assert "MODEL_INFERENCE" in members
         assert "MODEL_POST_PROCESS" in members
-        assert len(members) == 5
+        assert "MODEL_LOAD" in members
+        assert "MODEL_UNLOAD" in members
+        assert len(members) == 7
 
 
 @pytest.mark.unit

@@ -13,6 +13,7 @@ dependencies = [
     "protobuf==6.31.0",     # qairt-dev (TF gencode mismatch suppressed in pytest)
     "rich==13.9.4",         # qairt-dev
     "torch==2.4.1",         # qairt-dev (qairt-dev[torch])
+    "torchvision==0.19.1",  # MobileNet V2 export + label loading
     "transformers==4.57.1", # qairt-dev
     "pydantic==2.8.2",      # qairt-dev
     # Other project deps
@@ -29,16 +30,29 @@ dependencies = [
     "tensorflow==2.20.0",            # pinned: Python 3.10 max; TF gencode 5.x vs protobuf 6.x suppressed in pytest
     "typing-extensions==4.14.0",     # qairt SDK (qairt-visualizer)
     "httpx>=0.28.1",
+    "pycocotools>=2.0.11",
 ]
 
 [project.scripts]
 m2a = "moment_to_action._cli:cli"
 
+[tool.uv.extra-build-dependencies]
+detectron2 = ["torch"]
+
 [project.optional-dependencies]
+# Ultralytics YOLOv8 ONNX export (heavy: torch).  Required for the default
+# YOLO_V8 variant when downloading for the first time.
+yolo-export = [
+    "ultralytics>=8.3",
+]
 host = [
+    # QAI Hub
+    "qai-hub-models[yolov8-det,rf-detr,rtmdet,detectron2-detection]>=0.55.0",
+    "detectron2 @ git+https://github.com/facebookresearch/detectron2.git@8a9d885",
+    # QAIRT dev runtime
     "qairt-dev[onnx,torch]>=0.6.0",
-    # qairt SDK requirements
-    "qairt-visualizer==0.8.0",
+    # QAIRT SDK deps
+    "qairt-visualizer>=0.8.0",
     "absl-py==2.1.0",
     "aenum==3.1.15",
     "dash==2.12.1",
@@ -52,7 +66,7 @@ host = [
     "mock==3.0.5",
     "opencv-python==4.8.1.78",
     "optuna==3.3.0",
-    "packaging==24.0",
+    "packaging>=24.0",
     "pandas==2.0.1",
     "paramiko==3.5.1",
     "pathlib2==2.3.6",
@@ -69,7 +83,21 @@ host = [
 ]
 # Ensure we install all extras
 # https://github.com/astral-sh/uv/issues/8607#issuecomment-2540156984
-full = ["moment-to-action[host]"]
+full = ["moment-to-action[host,yolo-export]"]
+
+[tool.uv]
+# Override dependencies
+override-dependencies = [
+    # So QAIRT SDK depends on onnxruntime 1.23.2
+    # But the QAI Hub models package wants <1.22.1.
+    # We're going to pull the higher version since that's most likely to work.
+    "onnxruntime==1.23.2",
+    # Same for ONNX: hub wants <1.18, SDK wants 1.19.1
+    "onnx==1.19.1",
+    # Same for ipython: hub wants 8.12.3
+    "ipython>=8.29.0,<9.0.0",
+]
+environments = ["sys_platform == 'linux'"]
 
 [build-system]
 requires = ["uv_build>=0.10.8,<0.12.0"]
@@ -151,6 +179,10 @@ ignore = [
     "TRY003",
     # stub/fixture methods often have unused args to match the required signature
     "ARG002",
+    # hardcoded test tokens/passwords are expected in test code
+    "S106",
+    # stdlib imports are OK at runtime in tests (no performance concern)
+    "TC003",
 ]
 
 [tool.ruff.lint.pydocstyle]

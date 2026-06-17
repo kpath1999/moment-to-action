@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 
+from moment_to_action.hardware import ComputeUnit
 from moment_to_action.models import (
     DEFAULT_VARIANT_KEY,
     DownloadSource,
@@ -15,6 +16,7 @@ from moment_to_action.models import (
     ModelID,
     ModelInfo,
     ModelManager,
+    Variant,
     YOLOModel,
 )
 
@@ -27,18 +29,27 @@ def _custom_registry(info: ModelInfo) -> dict[ModelID, ModelInfo]:
     return {info.id: info}
 
 
+def _make_variant(units: list[ComputeUnit] | None = None) -> Variant:
+    """Build a Variant backed by a DownloadSource for testing."""
+    if units is None:
+        units = [ComputeUnit.CPU, ComputeUnit.GPU]
+    src = DownloadSource(
+        format=ModelFormat.ONNX,
+        url="https://example.com/model.bin",
+        filename="model.bin",
+    )
+    return Variant(
+        source=src,
+        backends={u: {"model": "model.bin"} for u in units},
+    )
+
+
 def _download_info() -> ModelInfo:
     """Build a single-variant DownloadSource ModelInfo for MOBILECLIP_S2."""
     return ModelInfo(
         id=ModelID.MOBILECLIP_S2,
         model_class=YOLOModel,
-        variants={
-            DEFAULT_VARIANT_KEY: DownloadSource(
-                format=ModelFormat.ONNX,
-                url="https://example.com/model.bin",
-                filename="model.bin",
-            ),
-        },
+        variants={DEFAULT_VARIANT_KEY: _make_variant()},
     )
 
 
@@ -86,20 +97,20 @@ class TestGetModelInfo:
 
 
 @pytest.mark.unit
-class TestGetSource:
-    """Tests for `_get_source`."""
+class TestGetVariant:
+    """Tests for `_get_variant`."""
 
-    def test_returns_source_for_variant(self) -> None:
-        """Returns the source bound to the variant key."""
+    def test_returns_variant_for_key(self) -> None:
+        """Returns the Variant bound to the variant key."""
         info = _download_info()
-        src = ModelManager._get_source(info, DEFAULT_VARIANT_KEY)
-        assert src is info.variants[DEFAULT_VARIANT_KEY]
+        v = ModelManager._get_variant(info, DEFAULT_VARIANT_KEY)
+        assert v is info.variants[DEFAULT_VARIANT_KEY]
 
     def test_raises_value_error_for_unknown_variant(self) -> None:
         """Raises ValueError for a missing variant."""
         info = _download_info()
         with pytest.raises(ValueError, match="Variant 'ghost' not found"):
-            ModelManager._get_source(info, "ghost")
+            ModelManager._get_variant(info, "ghost")
 
 
 @pytest.mark.unit
@@ -394,6 +405,13 @@ class TestRemoveModel:
 class TestGetModel:
     """Tests for get_model()."""
 
+    @pytest.fixture(autouse=True)
+    def _prefill_yolo_default(self, path_manager: PathManager) -> None:
+        """Pre-create the cached ONNX so UltralyticsSource skips the real download."""
+        variant_dir = path_manager.cache.models.get_variant_dir("yolo_v8", "default")
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        (variant_dir / "model.onnx").write_bytes(b"fake_onnx")
+
     def test_returns_yolo_model_instance(self, path_manager: PathManager) -> None:
         """get_model() returns a YOLOModel for YOLO_V8."""
         mgr = ModelManager(path_manager)
@@ -434,19 +452,147 @@ class TestGetModel:
         assert isinstance(model, YOLOModel)
         assert model.confidence_threshold == pytest.approx(0.3)
 
+    def test_model_backends_set_from_variant(self, path_manager: PathManager) -> None:
+        """get_model() passes the variant's backends table to the model constructor."""
+        from moment_to_action.models._registry import MODEL_REGISTRY
+
+        mgr = ModelManager(path_manager)
+        model = mgr.get_model(ModelID.YOLO_V8)
+        expected_backends = MODEL_REGISTRY[ModelID.YOLO_V8].variants[DEFAULT_VARIANT_KEY].backends
+        assert model._backends == expected_backends
+
 
 @pytest.mark.unit
-class TestVendoredFlow:
-    """End-to-end-ish test using the real vendored YOLO model."""
+class TestUltralyticsFlow:
+    """End-to-end-ish tests using the UltralyticsSource YOLO default variant."""
 
-    def test_yolo_v8_default_is_available(self, path_manager: PathManager) -> None:
-        """Vendored YOLO_V8 default variant is available via the default registry."""
+    def test_yolo_v8_default_unavailable_when_not_cached(self, path_manager: PathManager) -> None:
+        """UltralyticsSource YOLO_V8 default variant is not available before download."""
+        mgr = ModelManager(path_manager)
+        assert mgr.is_available(ModelID.YOLO_V8) is False
+
+    def test_yolo_v8_default_available_when_cached(self, path_manager: PathManager) -> None:
+        """UltralyticsSource reports available when model.onnx exists in variant dir."""
+        variant_dir = path_manager.cache.models.get_variant_dir("yolo_v8", "default")
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        (variant_dir / "model.onnx").write_bytes(b"fake_onnx")
         mgr = ModelManager(path_manager)
         assert mgr.is_available(ModelID.YOLO_V8) is True
 
-    def test_yolo_v8_get_path_returns_existing_file(self, path_manager: PathManager) -> None:
-        """`get_path` returns the on-disk vendored YOLO file."""
+    def test_yolo_v8_get_path_returns_cached_file(self, path_manager: PathManager) -> None:
+        """get_path() returns the cached ONNX when it already exists (no re-download)."""
+        variant_dir = path_manager.cache.models.get_variant_dir("yolo_v8", "default")
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        (variant_dir / "model.onnx").write_bytes(b"fake_onnx")
         mgr = ModelManager(path_manager)
         p = mgr.get_path(ModelID.YOLO_V8)
         assert p.exists()
         assert p.name == "model.onnx"
+
+
+def _variant_routing_info() -> ModelInfo:
+    """ModelInfo with a default (CPU/GPU) and an NPU-only `q` variant."""
+    src = DownloadSource(format=ModelFormat.ONNX, url="https://e/m", filename="m")
+    default_variant = Variant(
+        source=src,
+        backends={ComputeUnit.CPU: {"model": "m"}, ComputeUnit.GPU: {"model": "m"}},
+    )
+    npu_only_variant = Variant(
+        source=src,
+        backends={ComputeUnit.NPU: {"model": "m"}},
+    )
+    return ModelInfo(
+        id=ModelID.DETECTRON2,
+        model_class=YOLOModel,
+        variants={DEFAULT_VARIANT_KEY: default_variant, "q": npu_only_variant},
+    )
+
+
+@pytest.mark.unit
+class TestEffectiveVariant:
+    """Tests for `_effective_variant` generic unit-support-based redirection."""
+
+    @pytest.mark.parametrize("unit", [ComputeUnit.CPU, ComputeUnit.GPU])
+    def test_redirects_unsupported_variant_to_default(self, unit: ComputeUnit) -> None:
+        """A variant unsupported on CPU/GPU redirects to `default` when default supports it."""
+        result = ModelManager._effective_variant(_variant_routing_info(), "q", unit)
+        assert result == DEFAULT_VARIANT_KEY
+
+    def test_keeps_variant_on_supported_unit(self) -> None:
+        """NPU keeps the requested variant when that variant supports NPU."""
+        assert ModelManager._effective_variant(_variant_routing_info(), "q", ComputeUnit.NPU) == "q"
+
+    def test_keeps_variant_when_unit_none(self) -> None:
+        """No unit disables redirection."""
+        assert ModelManager._effective_variant(_variant_routing_info(), "q", None) == "q"
+
+    def test_keeps_default_on_supported_unit(self) -> None:
+        """The default variant is unchanged when the unit is in its backends."""
+        info = _variant_routing_info()
+        assert (
+            ModelManager._effective_variant(info, DEFAULT_VARIANT_KEY, ComputeUnit.CPU)
+            == DEFAULT_VARIANT_KEY
+        )
+
+    def test_default_not_redirected_to_itself(self) -> None:
+        """`default` variant is returned unchanged even when it doesn't support the unit."""
+        src = DownloadSource(format=ModelFormat.ONNX, url="https://e/m", filename="m")
+        info = ModelInfo(
+            id=ModelID.DETECTRON2,
+            model_class=YOLOModel,
+            variants={
+                DEFAULT_VARIANT_KEY: Variant(
+                    source=src,
+                    backends={ComputeUnit.NPU: {"model": "m"}},
+                ),
+            },
+        )
+        # default doesn't support CPU; no other variant to fall back to.
+        assert (
+            ModelManager._effective_variant(info, DEFAULT_VARIANT_KEY, ComputeUnit.CPU)
+            == DEFAULT_VARIANT_KEY
+        )
+
+    def test_unknown_variant_returned_unchanged(self) -> None:
+        """An unregistered variant key is returned as-is (error deferred to _get_variant)."""
+        info = _variant_routing_info()
+        assert ModelManager._effective_variant(info, "ghost", ComputeUnit.CPU) == "ghost"
+
+
+@pytest.mark.unit
+class TestUnitRouting:
+    """Tests that `get_model`/`get_path` honour the unit-based redirect."""
+
+    @staticmethod
+    def _prefill_default(path_manager: PathManager) -> Path:
+        """Create the cached default-variant file and return its path."""
+        variant_dir = path_manager.cache.models.get_variant_dir("detectron2", DEFAULT_VARIANT_KEY)
+        variant_dir.mkdir(parents=True, exist_ok=True)
+        target = variant_dir / "m"
+        target.write_bytes(b"x")
+        return target
+
+    def test_get_model_redirects_on_cpu(
+        self, path_manager: PathManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """get_model(variant='q', unit=CPU) constructs the default variant."""
+        target = self._prefill_default(path_manager)
+        monkeypatch.setattr(
+            "moment_to_action.models._manager.resolve_model_source",
+            lambda *a, **k: target,  # noqa: ARG005
+        )
+        mgr = ModelManager(path_manager, registry={ModelID.DETECTRON2: _variant_routing_info()})
+        model = mgr.get_model(ModelID.DETECTRON2, variant="q", unit=ComputeUnit.CPU)
+        assert model._variant == DEFAULT_VARIANT_KEY
+
+    def test_get_path_redirects_on_cpu(
+        self, path_manager: PathManager, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """get_path(variant='q', unit=CPU) resolves the default variant path."""
+        target = self._prefill_default(path_manager)
+        monkeypatch.setattr(
+            "moment_to_action.models._manager.resolve_model_source",
+            lambda *a, **k: target,  # noqa: ARG005
+        )
+        mgr = ModelManager(path_manager, registry={ModelID.DETECTRON2: _variant_routing_info()})
+        assert mgr.get_path(ModelID.DETECTRON2, "q", unit=ComputeUnit.CPU) == target

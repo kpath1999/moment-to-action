@@ -39,7 +39,7 @@ def list(data: GlobalData, *, as_json: bool) -> None:  # noqa: A001
     for model_status in statuses:
         for variant_status in model_status.variants:
             source = MODEL_REGISTRY[variant_status.model_id].variants[variant_status.variant]
-            if isinstance(source, VendoredSource):
+            if isinstance(source.source, VendoredSource):
                 status_str = "vendored"
             elif variant_status.available:
                 status_str = "cached"
@@ -50,7 +50,7 @@ def list(data: GlobalData, *, as_json: bool) -> None:  # noqa: A001
                 {
                     "model_id": variant_status.model_id.value,
                     "variant": variant_status.variant,
-                    "format": source.format.name,
+                    "format": source.source.format.name,
                     "status": status_str,
                     "size_bytes": variant_status.size_bytes,
                     "path": str(variant_status.path) if variant_status.path else None,
