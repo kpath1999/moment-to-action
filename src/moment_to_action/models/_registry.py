@@ -10,6 +10,7 @@ from .image.detection.detectron2._model import Detectron2Model
 from .image.detection.rf_detr._model import RFDETRModel
 from .image.detection.rtmdet._model import RTMDetModel
 from .image.detection.yolo._model import YOLOModel
+from .llm.qwen2._model import Qwen2Model
 
 DEFAULT_KEY = "default"
 
@@ -232,6 +233,22 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     },
                 },
                 input_layout="NHWC",
+            ),
+        },
+    ),
+    ModelID.QWEN2_1_5B_INSTRUCT: ModelInfo(
+        id=ModelID.QWEN2_1_5B_INSTRUCT,
+        model_class=Qwen2Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    format=ModelFormat.GGUF,
+                    hf_repo_id="Qwen/Qwen2-1.5B-Instruct-GGUF",
+                    files=["qwen2-1_5b-instruct-q4_0.gguf"],
+                    revision="c62434db644497c0ee545c690bb66a67eba6eb3f",
+                ),
+                backends={ComputeUnit.CPU: {"model": "qwen2-1_5b-instruct-q4_0.gguf"}},
+                input_layout=None,
             ),
         },
     ),

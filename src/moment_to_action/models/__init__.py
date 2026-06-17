@@ -27,6 +27,8 @@ from .image.detection._types import BoundingBox, Detection
 from .image.detection.rf_detr._model import RFDETRModel
 from .image.detection.rtmdet._model import RTMDetModel
 from .image.detection.yolo._model import YOLOModel
+from .llm._base import LlamaGGUFModel
+from .llm.qwen2._model import Qwen2Model
 
 __all__ = [
     "DEFAULT_VARIANT_KEY",
@@ -40,12 +42,14 @@ __all__ = [
     "ImageClassificationModel",
     "ImageDetectionModel",
     "ImageModel",
+    "LlamaGGUFModel",
     "MobileNetV2Model",
     "ModelFormat",
     "ModelID",
     "ModelInfo",
     "ModelManager",
     "ModelSource",
+    "Qwen2Model",
     "RFDETRModel",
     "RTMDetModel",
     "UltralyticsSource",

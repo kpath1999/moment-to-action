@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -16,6 +16,8 @@ class AppConfig(BaseModel, frozen=True):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     qairt_sdk_version: str = "2.45.0"
     qairt_sdk_path: Path | None = None
+    llama_server_path: Path | None = Path("/opt/llm/llama-server")
+    llama_server_port: int = 8080
 
 
 def load_config(path: Path) -> AppConfig:

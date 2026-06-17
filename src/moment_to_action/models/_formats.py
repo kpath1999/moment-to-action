@@ -13,3 +13,4 @@ class ModelFormat(Enum):
     # but we can easily add more formats in the future as needed.
     ONNX = auto()
     DLC = auto()  # Used by QAIRT
+    GGUF = auto()  # Used by llama-server
