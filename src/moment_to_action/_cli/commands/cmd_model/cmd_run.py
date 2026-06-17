@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import attrs
 import cv2
@@ -14,6 +14,7 @@ from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.models import DEFAULT_VARIANT_KEY, ModelID, ModelManager
 from moment_to_action.models.image._base import ImageModel
 from moment_to_action.models.image.classification._base import ImageClassificationModel
+from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.utils.cli import GlobalData, pass_global_data
 
 if TYPE_CHECKING:
@@ -164,21 +165,21 @@ def run(
     try:
         prepared = model.prepare(frame)
         raw = model.run(prepared)
-        detections = model.post_proc(raw)
+        results = model.post_proc(raw)
     finally:
         model.unload()
 
     if output_format == "json":
-        click.echo(json.dumps([attrs.asdict(d) for d in detections], indent=2))
+        click.echo(json.dumps([attrs.asdict(d) for d in results], indent=2))
     elif isinstance(model, ImageClassificationModel):
         if output_path is None:
             output_path = input_path.with_stem(input_path.stem + "_classifications")
-        annotated = _overlay_classifications(frame, detections)  # type: ignore[arg-type]
+        annotated = _overlay_classifications(frame, cast("list[Classification]", results))
         cv2.imwrite(str(output_path), annotated)
         click.echo(f"Saved: {output_path}")
-    else:
+    elif isinstance(model, ImageDetectionModel):
         if output_path is None:
             output_path = input_path.with_stem(input_path.stem + "_detections")
-        annotated = _draw_detections(frame, detections)  # type: ignore[arg-type]
+        annotated = _draw_detections(frame, cast("list[Detection]", results))
         cv2.imwrite(str(output_path), annotated)
         click.echo(f"Saved: {output_path}")

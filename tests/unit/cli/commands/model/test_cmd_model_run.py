@@ -15,9 +15,9 @@ import pytest
 from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
-from moment_to_action.models.image._base import ImageModel
 from moment_to_action.models.image.classification._base import ImageClassificationModel
 from moment_to_action.models.image.classification._types import Classification
+from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
 
@@ -32,8 +32,8 @@ def _make_detection(label: str = "person", conf: float = 0.9) -> Detection:
 
 
 def _make_mock_model(detections: list[Detection] | None = None) -> MagicMock:
-    """Build an ImageModel mock with canned inference output."""
-    mock_model = MagicMock(spec=ImageModel)
+    """Build an ImageDetectionModel mock with canned inference output."""
+    mock_model = MagicMock(spec=ImageDetectionModel)
     mock_model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
     mock_model.run.return_value = [np.zeros((1, 5, 4))]
     mock_model.post_proc.return_value = detections if detections is not None else []
