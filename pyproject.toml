@@ -53,7 +53,7 @@ host = [
     "qairt-dev[onnx,torch]>=0.6.0",
     # QAIRT SDK deps
     "qairt-visualizer>=0.8.0",
-    "absl-py==2.1.0",
+    "absl-py==2.4.0",
     "aenum==3.1.15",
     "dash==2.12.1",
     "decorator==4.4.2",
