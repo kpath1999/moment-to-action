@@ -126,7 +126,10 @@ class TestLlamaGGUFModelLoad:
         ):
             model.load(mock_backend)
 
-        mock_client_cls.assert_called_once_with(base_url="http://127.0.0.1:7777")
+        mock_client_cls.assert_called_once_with(
+            base_url="http://127.0.0.1:7777",
+            timeout=httpx.Timeout(connect=5.0, read=None, write=5.0, pool=5.0),
+        )
 
     def test_load_calls_wait_for_server(self) -> None:
         """load() calls _wait_for_server with the httpx client."""

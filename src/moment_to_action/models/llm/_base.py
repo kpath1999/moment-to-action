@@ -72,6 +72,9 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         port: Port for llama-server to listen on (and for the client to connect).
         system_prompt: System message prepended to every chat request.
         max_tokens: Maximum tokens the model may generate per call.
+        inference_timeout: Read timeout (seconds) for ``/v1/chat/completions`` requests.
+            ``None`` (default) disables the timeout; httpx's 5 s default is too short
+            for generation on any real hardware.
     """
 
     def __init__(
@@ -86,6 +89,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         port: int = 8080,
         system_prompt: str = "",
         max_tokens: int = 128,
+        inference_timeout: float | None = None,
     ) -> None:
         """Initialise with registry metadata and server configuration.
 
@@ -100,6 +104,9 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             port: Port for the llama-server HTTP API.
             system_prompt: System message sent in every chat request.
             max_tokens: Maximum tokens to generate per completion.
+            inference_timeout: Read timeout in seconds for ``/v1/chat/completions``
+                requests.  ``None`` (default) disables the timeout entirely so
+                generation is never interrupted regardless of model size or hardware.
         """
         super().__init__(
             variant,
@@ -117,6 +124,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         self._port = port
         self._system_prompt = system_prompt
         self._max_tokens = max_tokens
+        self._inference_timeout = inference_timeout
         self._server_proc: subprocess.Popen[bytes] | None = None
         self._client: httpx.Client | None = None
 
@@ -146,7 +154,10 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        self._client = httpx.Client(base_url=f"http://127.0.0.1:{self._port}")
+        self._client = httpx.Client(
+            base_url=f"http://127.0.0.1:{self._port}",
+            timeout=httpx.Timeout(connect=5.0, read=self._inference_timeout, write=5.0, pool=5.0),
+        )
         _wait_for_server(self._client)
         self._backend = backend
         logger.info(

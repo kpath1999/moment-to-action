@@ -8,16 +8,13 @@
 # [tool.uv.sources]
 # moment-to-action = { path = "..", editable = true }
 # ///
-"""Benchmark LLM models on synthetic scene-description prompts.
+"""Benchmark LLM models on scene-reasoning prompts.
 
-Creates a fixed set of synthetic DetectionMessages (one per "scene"), runs
-each registered GGUF model for N_CYCLES inference cycles per scene, and
-reports per-scene latency plus a keyword-recall accuracy metric.
-
-Keyword recall measures how many of the scene's expected object labels appear
-verbatim in the model's response (case-insensitive). This is analogous to
-AP50 in the detector benchmark — a signal of whether the model correctly
-identifies what is in the scene.
+Creates a fixed set of synthetic scenes and asks each model a reasoning question
+that cannot be answered by repeating the input (e.g. "Is this safe? What should
+the person do?").  Accuracy is measured as keyword recall against action/context
+terms that a model can only produce by actually reasoning about the scene — not
+by echoing the object list.
 
 Usage:
     uv run python scripts/benchmark_llms.py [--n-cycles 3] [--output llm_benchmark_results.csv]
@@ -45,12 +42,11 @@ from rich.progress import (
 from rich.table import Table
 
 from moment_to_action.config import AppConfig, load_config
-from moment_to_action.messages import DetectionMessage
+from moment_to_action.hardware import ComputeBackend, ComputeUnit
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.paths import PathManager
-from moment_to_action.stages.llm._llama_server import LlamaServerStage
 
 console = Console()
 
@@ -64,9 +60,14 @@ _MODEL_CONFIGS: list[tuple[ModelID, str]] = [
 
 _N_CYCLES = 3
 
+# System prompt: steer toward recommendation, not description.
+_BENCHMARK_SYSTEM = (
+    "You are a scene analyst. Given detected objects, briefly describe what is "
+    "most likely happening and recommend one specific action. Respond in 1-2 sentences. "
+    "Do not just list the objects."
+)
 
-# Each scene is (display_name, DetectionMessage, expected_labels).
-# Keyword recall = fraction of expected_labels found in the model's response.
+
 def _bb(x1: int, y1: int, x2: int, y2: int) -> BoundingBox:
     """Shorthand BoundingBox constructor for scene definitions."""
     return BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
@@ -77,100 +78,140 @@ def _det(label: str, conf: float, x1: int, y1: int, x2: int, y2: int) -> Detecti
     return Detection(label=label, confidence=conf, bbox=_bb(x1, y1, x2, y2))
 
 
-def _msg(detections: list[Detection]) -> DetectionMessage:
-    """Build a synthetic DetectionMessage with timestamp=0."""
-    return DetectionMessage(timestamp=0.0, detections=detections)
+def _build_benchmark_prompt(detections: list[Detection]) -> str:
+    """Build a reasoning prompt from a detection list.
+
+    Presents only object labels (no raw pixel coordinates or confidence scores —
+    they add noise that small models cannot reason over) and asks for a situational
+    assessment + recommendation.
+
+    Args:
+        detections: Detections from a synthetic scene.
+
+    Returns:
+        Formatted prompt string.
+    """
+    top5 = sorted(detections, key=lambda d: d.confidence, reverse=True)[:5]
+    labels = ", ".join(d.label for d in top5)
+    return (
+        f"Objects detected: {labels}.\nWhat is most likely happening and what should the person do?"
+    )
 
 
-_SCENES: list[tuple[str, DetectionMessage, list[str]]] = [
+# Each scene: (name, detections, action_keywords).
+# action_keywords are terms a model should produce when reasoning correctly —
+# these cannot be satisfied by simply echoing the detection list.
+_SCENES: list[tuple[str, list[Detection], list[str]]] = [
     (
-        "kitchen",
-        _msg(
-            [
-                _det("person", 0.95, 50, 10, 200, 480),
-                _det("refrigerator", 0.88, 300, 0, 500, 480),
-                _det("cup", 0.72, 210, 200, 260, 250),
-                _det("bottle", 0.65, 270, 180, 310, 260),
-            ]
-        ),
-        ["person", "refrigerator", "cup", "bottle"],
+        "kitchen_prep",
+        [
+            _det("person", 0.95, 50, 10, 200, 480),
+            _det("refrigerator", 0.88, 300, 0, 500, 480),
+            _det("cup", 0.72, 210, 200, 260, 250),
+            _det("bottle", 0.65, 270, 180, 310, 260),
+        ],
+        # expect reasoning about food/drink preparation
+        ["cook", "prepare", "food", "drink", "eat", "kitchen", "meal", "water"],
     ),
     (
-        "street",
-        _msg(
-            [
-                _det("person", 0.93, 10, 50, 120, 480),
-                _det("car", 0.91, 200, 200, 600, 420),
-                _det("truck", 0.79, 620, 150, 900, 450),
-                _det("traffic light", 0.84, 350, 10, 390, 80),
-            ]
-        ),
-        ["person", "car", "truck"],
+        "street_traffic",
+        [
+            _det("person", 0.93, 10, 50, 120, 480),
+            _det("car", 0.91, 200, 200, 600, 420),
+            _det("truck", 0.79, 620, 150, 900, 450),
+            _det("traffic light", 0.84, 350, 10, 390, 80),
+        ],
+        # expect traffic-safety reasoning
+        ["wait", "cross", "look", "traffic", "caution", "safe", "signal", "road", "danger"],
     ),
     (
-        "office",
-        _msg(
-            [
-                _det("person", 0.97, 100, 0, 300, 480),
-                _det("laptop", 0.90, 310, 200, 540, 380),
-                _det("chair", 0.76, 80, 300, 200, 480),
-                _det("monitor", 0.82, 550, 100, 800, 350),
-            ]
-        ),
-        ["person", "laptop", "chair", "monitor"],
+        "office_work",
+        [
+            _det("person", 0.97, 100, 0, 300, 480),
+            _det("laptop", 0.90, 310, 200, 540, 380),
+            _det("chair", 0.76, 80, 300, 200, 480),
+            _det("monitor", 0.82, 550, 100, 800, 350),
+        ],
+        # expect work/desk reasoning
+        ["work", "sit", "type", "computer", "desk", "office", "screen", "task"],
     ),
     (
-        "living_room",
-        _msg(
-            [
-                _det("person", 0.89, 20, 100, 200, 480),
-                _det("couch", 0.92, 150, 280, 700, 480),
-                _det("tv", 0.85, 250, 50, 600, 270),
-                _det("remote", 0.61, 400, 300, 450, 330),
-            ]
-        ),
-        ["person", "couch", "tv"],
+        "relaxing_tv",
+        [
+            _det("person", 0.89, 20, 100, 200, 480),
+            _det("couch", 0.92, 150, 280, 700, 480),
+            _det("tv", 0.85, 250, 50, 600, 270),
+            _det("remote", 0.61, 400, 300, 450, 330),
+        ],
+        # expect leisure/relaxation reasoning
+        ["watch", "sit", "relax", "rest", "television", "couch", "channel", "leisure"],
     ),
     (
-        "outdoor",
-        _msg(
-            [
-                _det("dog", 0.94, 200, 300, 420, 480),
-                _det("bicycle", 0.87, 450, 200, 700, 480),
-                _det("backpack", 0.73, 10, 50, 120, 200),
-            ]
-        ),
-        ["dog", "bicycle", "backpack"],
+        "outdoor_activity",
+        [
+            _det("person", 0.93, 50, 20, 220, 480),
+            _det("bicycle", 0.87, 250, 150, 550, 480),
+            _det("backpack", 0.73, 10, 50, 120, 200),
+            _det("dog", 0.68, 560, 300, 720, 480),
+        ],
+        # expect cycling/outdoor activity reasoning
+        ["ride", "cycle", "exercise", "outdoor", "trail", "park", "sport", "walk"],
+    ),
+    (
+        "fall_emergency",
+        [
+            _det("person", 0.91, 50, 380, 500, 480),  # person near floor (y1 high = near bottom)
+            _det("cell phone", 0.78, 520, 420, 600, 480),
+            _det("chair", 0.65, 300, 100, 500, 380),
+        ],
+        # expect emergency/help reasoning — person near floor suggests a fall
+        ["help", "call", "emergency", "fallen", "assist", "911", "medical", "floor", "injured"],
+    ),
+    (
+        "crowded_transit",
+        [
+            _det("person", 0.96, 10, 0, 180, 480),
+            _det("person", 0.94, 200, 20, 380, 480),
+            _det("suitcase", 0.88, 390, 200, 600, 480),
+            _det("backpack", 0.82, 610, 100, 750, 380),
+            _det("person", 0.79, 760, 0, 900, 480),
+        ],
+        # expect travel/transit reasoning
+        ["travel", "airport", "station", "luggage", "crowd", "transit", "commute", "board"],
     ),
 ]
 
 
-def _recall(response: str, expected_labels: list[str]) -> float:
-    """Compute keyword recall: fraction of expected labels in the response.
+def _recall(response: str, expected_keywords: list[str]) -> float:
+    """Compute keyword recall: fraction of expected action/context keywords in the response.
 
     Args:
         response: Text generated by the model.
-        expected_labels: Expected object labels for this scene.
+        expected_keywords: Action or context terms expected from correct reasoning.
 
     Returns:
-        Fraction in [0, 1] of expected labels found (case-insensitive).
+        Fraction in [0, 1] of expected keywords found (case-insensitive).
     """
-    if not expected_labels:
+    if not expected_keywords:
         return 1.0
     resp_lower = response.lower()
-    found = sum(1 for label in expected_labels if label.lower() in resp_lower)
-    return found / len(expected_labels)
+    found = sum(1 for kw in expected_keywords if kw.lower() in resp_lower)
+    return found / len(expected_keywords)
 
 
 def _run_benchmark(
-    stage: LlamaServerStage,
+    model: object,
     model_name: str,
     metrics: MetricsCollector,
 ) -> list[dict]:
-    """Run all scenes x N_CYCLES through a loaded stage, return rows.
+    """Run all scenes x N_CYCLES through a loaded model, return rows.
+
+    Calls the model's prepare/run/post_proc interface directly rather than going
+    through LlamaServerStage so that the benchmark can use its own reasoning
+    prompt instead of the stage's description prompt.
 
     Args:
-        stage: Fully initialised LlamaServerStage (llama-server already running).
+        model: Loaded LlamaGGUFModel instance.
         model_name: Human-readable name for output rows.
         metrics: MetricsCollector for span timing.
 
@@ -179,20 +220,21 @@ def _run_benchmark(
     """
     rows: list[dict] = []
     for cycle in range(1, _N_CYCLES + 1):
-        for scene_idx, (scene_name, msg, expected_labels) in enumerate(_SCENES):
+        for scene_idx, (scene_name, detections, expected_kws) in enumerate(_SCENES):
+            prompt = _build_benchmark_prompt(detections)
             t_start = time.perf_counter_ns()
             try:
                 with metrics.start_trace():
-                    result = stage._process(msg, metrics)  # noqa: SLF001
+                    prepared = model.prepare(prompt)  # type: ignore[attr-defined]
+                    raw = model.run(prepared)  # type: ignore[attr-defined]
+                    response = model.post_proc(raw)[0]  # type: ignore[attr-defined]
             except Exception as exc:  # noqa: BLE001
                 console.print(
                     f"  [yellow]{model_name} scene={scene_name} cycle={cycle}: {exc}[/yellow]"
                 )
                 continue
             infer_ms = (time.perf_counter_ns() - t_start) / 1e6
-
-            response = result.response if result is not None else ""
-            recall = _recall(response, expected_labels)
+            recall = _recall(response, expected_kws)
 
             rows.append(
                 {
@@ -325,9 +367,7 @@ def _parse_args() -> argparse.Namespace:
     Returns:
         Parsed argument namespace.
     """
-    parser = argparse.ArgumentParser(
-        description="Benchmark LLM models on synthetic scene-description prompts."
-    )
+    parser = argparse.ArgumentParser(description="Benchmark LLM models on scene-reasoning prompts.")
     parser.add_argument(
         "--n-cycles",
         type=int,
@@ -374,7 +414,6 @@ def main() -> None:  # noqa: C901, PLR0915
     _N_CYCLES = args.n_cycles
     output_path = Path(args.output)
 
-    # Load config; allow CLI overrides for server path and port.
     path_manager = PathManager()
     config = load_config(path_manager.app_config_file)
     server_path = Path(args.server_path) if args.server_path else config.llama_server_path
@@ -433,7 +472,14 @@ def main() -> None:  # noqa: C901, PLR0915
             # --- load (start llama-server) ---
             t_load = time.perf_counter_ns()
             try:
-                stage = LlamaServerStage(manager, config, model_id=model_id)
+                model = manager.get_model(
+                    model_id,
+                    server_path=config.llama_server_path,
+                    port=config.llama_server_port,
+                    system_prompt=_BENCHMARK_SYSTEM,
+                    max_tokens=128,
+                )
+                model.load(ComputeBackend(preferred_unit=ComputeUnit.GPU))  # type: ignore[union-attr]
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                 progress.advance(model_task)
@@ -442,14 +488,16 @@ def main() -> None:  # noqa: C901, PLR0915
             console.print(f"  [dim]{model_name}: server started in {load_ms:.0f} ms[/dim]")
 
             metrics = MetricsCollector()
-            rows = _run_benchmark(stage, model_name, metrics)
+            rows = _run_benchmark(model, model_name, metrics)
 
             # --- unload (stop llama-server) ---
             t_unload = time.perf_counter_ns()
-            stage.close()
+            try:
+                model.unload()  # type: ignore[union-attr]
+            except Exception as exc:  # noqa: BLE001
+                console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
             unload_ms = (time.perf_counter_ns() - t_unload) / 1e6
 
-            # Backfill load/unload into all rows for this model.
             for row in rows:
                 row["load_ms"] = round(load_ms, 3)
                 row["unload_ms"] = round(unload_ms, 3)
@@ -459,7 +507,7 @@ def main() -> None:  # noqa: C901, PLR0915
                 avg_recall = np.mean([r["recall"] for r in rows])
                 console.print(
                     f"  [dim]{model_name}: {len(rows)} results — "
-                    f"avg infer {avg_infer:.0f} ms, recall {avg_recall:.2f}[/dim]"
+                    f"avg infer {avg_infer:.0f} ms, recall {avg_recall:.3f}[/dim]"
                 )
 
             all_rows.extend(rows)
