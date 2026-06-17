@@ -132,10 +132,10 @@ class TestSaveConfig:
 class TestLlamaServerConfig:
     """Tests for llama-server config fields."""
 
-    def test_llama_server_path_defaults_to_none(self) -> None:
-        """llama_server_path defaults to None."""
+    def test_llama_server_path_defaults_to_opt_llm(self) -> None:
+        """llama_server_path defaults to /opt/llm/llama-server."""
         config = AppConfig()
-        assert config.llama_server_path is None
+        assert config.llama_server_path == Path("/opt/llm/llama-server")
 
     def test_llama_server_port_defaults_to_8080(self) -> None:
         """llama_server_port defaults to 8080."""

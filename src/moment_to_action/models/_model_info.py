@@ -25,6 +25,9 @@ class ModelID(Enum):
     RTM_DET = "rtm_det"
     DETECTRON2 = "detectron2"
     QWEN2_1_5B_INSTRUCT = "qwen2_1_5b_instruct"
+    QWEN2_7B_INSTRUCT = "qwen2_7b_instruct"
+    QWEN3_4B = "qwen3_4b"
+    PHI35_MINI_INSTRUCT = "phi35_mini_instruct"
 
 
 @attrs.frozen

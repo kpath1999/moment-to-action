@@ -28,7 +28,9 @@ from .image.detection.rf_detr._model import RFDETRModel
 from .image.detection.rtmdet._model import RTMDetModel
 from .image.detection.yolo._model import YOLOModel
 from .llm._base import LlamaGGUFModel
+from .llm.phi35._model import Phi35Model
 from .llm.qwen2._model import Qwen2Model
+from .llm.qwen3._model import Qwen3Model
 
 __all__ = [
     "DEFAULT_VARIANT_KEY",
@@ -49,7 +51,9 @@ __all__ = [
     "ModelInfo",
     "ModelManager",
     "ModelSource",
+    "Phi35Model",
     "Qwen2Model",
+    "Qwen3Model",
     "RFDETRModel",
     "RTMDetModel",
     "UltralyticsSource",

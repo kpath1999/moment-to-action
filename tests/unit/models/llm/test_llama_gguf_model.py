@@ -15,7 +15,7 @@ from moment_to_action.models.llm._base import LlamaGGUFModel, _wait_for_server
 from moment_to_action.models.llm.qwen2._model import Qwen2Model
 
 _BACKENDS: dict[ComputeUnit, dict[str, str]] = {
-    ComputeUnit.CPU: {"model": "model.gguf"},
+    ComputeUnit.GPU: {"model": "model.gguf"},
 }
 _VARIANT_DIR = Path("/fake/variant")
 _SERVER_PATH = Path("/usr/bin/llama-server")
@@ -46,7 +46,7 @@ class TestLlamaGGUFModelConstruction:
     """Tests for LlamaGGUFModel.__init__ via Qwen2Model."""
 
     def test_gguf_path_resolved_from_backends(self) -> None:
-        """_gguf_path joins variant dir with CPU backend filename."""
+        """_gguf_path joins variant dir with the first backend's filename."""
         model = _make_model()
         assert model._gguf_path == _VARIANT_DIR / "model.gguf"
 

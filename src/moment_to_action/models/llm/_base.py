@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.models._base import BaseModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware._types import ComputeUnit
     from moment_to_action.models._formats import ModelFormat
 
 logger = logging.getLogger(__name__)
@@ -64,8 +64,9 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         variant: Registry variant key.
         path: Variant directory containing the GGUF file.
         model_format: File format (``ModelFormat.GGUF``).
-        backends: Compute-unit → artifact filename mapping; CPU entry must
-            contain ``"model"`` key naming the ``.gguf`` file.
+        backends: Compute-unit → artifact filename mapping; the first entry
+            must contain a ``"model"`` key naming the ``.gguf`` file.
+            Annotate as ``GPU`` since llama-server targets GPU internally.
         input_layout: Not applicable to LLMs; expected to be ``None``.
         server_path: Filesystem path to the ``llama-server`` executable.
         port: Port for llama-server to listen on (and for the client to connect).
@@ -91,7 +92,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         Args:
             variant: Registry variant key (e.g. ``"default"``).
             path: Variant directory; the GGUF file is at
-                ``path / backends[CPU]["model"]``.
+                ``path / next(iter(backends.values()))["model"]``.
             model_format: File format — should be ``ModelFormat.GGUF``.
             backends: Compute-unit → ``{component_name: filename}`` dict.
             input_layout: Unused for LLMs; pass ``None``.
@@ -107,7 +108,11 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             backends=backends,
             input_layout=input_layout,
         )
-        self._gguf_path = path / backends[ComputeUnit.CPU]["model"]
+        # llama-server manages its own GPU/CPU dispatch internally; the registry
+        # annotates the compute unit that the server actually targets.  We resolve
+        # the GGUF filename from whichever unit is listed first rather than
+        # hard-coding CPU so GPU-annotated entries work correctly.
+        self._gguf_path = path / next(iter(backends.values()))["model"]
         self._server_path = server_path
         self._port = port
         self._system_prompt = system_prompt

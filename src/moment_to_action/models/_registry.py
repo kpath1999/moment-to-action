@@ -10,7 +10,9 @@ from .image.detection.detectron2._model import Detectron2Model
 from .image.detection.rf_detr._model import RFDETRModel
 from .image.detection.rtmdet._model import RTMDetModel
 from .image.detection.yolo._model import YOLOModel
+from .llm.phi35._model import Phi35Model
 from .llm.qwen2._model import Qwen2Model
+from .llm.qwen3._model import Qwen3Model
 
 DEFAULT_KEY = "default"
 
@@ -247,7 +249,55 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     files=["qwen2-1_5b-instruct-q4_0.gguf"],
                     revision="c62434db644497c0ee545c690bb66a67eba6eb3f",
                 ),
-                backends={ComputeUnit.CPU: {"model": "qwen2-1_5b-instruct-q4_0.gguf"}},
+                backends={ComputeUnit.GPU: {"model": "qwen2-1_5b-instruct-q4_0.gguf"}},
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.QWEN2_7B_INSTRUCT: ModelInfo(
+        id=ModelID.QWEN2_7B_INSTRUCT,
+        model_class=Qwen2Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    format=ModelFormat.GGUF,
+                    hf_repo_id="Qwen/Qwen2-7B-Instruct-GGUF",
+                    files=["qwen2-7b-instruct-q4_k_m.gguf"],
+                    revision="c3024c6fff0a02d52119ecee024bbb93d4b4b8e4",
+                ),
+                backends={ComputeUnit.GPU: {"model": "qwen2-7b-instruct-q4_k_m.gguf"}},
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.QWEN3_4B: ModelInfo(
+        id=ModelID.QWEN3_4B,
+        model_class=Qwen3Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    format=ModelFormat.GGUF,
+                    hf_repo_id="Qwen/Qwen3-4B-GGUF",
+                    files=["Qwen3-4B-Q4_K_M.gguf"],
+                    revision="bc640142c66e1fdd12af0bd68f40445458f3869b",
+                ),
+                backends={ComputeUnit.GPU: {"model": "Qwen3-4B-Q4_K_M.gguf"}},
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.PHI35_MINI_INSTRUCT: ModelInfo(
+        id=ModelID.PHI35_MINI_INSTRUCT,
+        model_class=Phi35Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    format=ModelFormat.GGUF,
+                    hf_repo_id="bartowski/Phi-3.5-mini-instruct-GGUF",
+                    files=["Phi-3.5-mini-instruct-Q4_0.gguf"],
+                    revision="6d70da17e749a471ccb62ade694486011a75cda3",
+                ),
+                backends={ComputeUnit.GPU: {"model": "Phi-3.5-mini-instruct-Q4_0.gguf"}},
                 input_layout=None,
             ),
         },
