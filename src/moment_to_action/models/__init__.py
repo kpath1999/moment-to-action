@@ -31,6 +31,10 @@ from .llm._base import LlamaGGUFModel
 from .llm.phi35._model import Phi35Model
 from .llm.qwen2._model import Qwen2Model
 from .llm.qwen3._model import Qwen3Model
+from .vlm._base import LlamaVLModel
+from .vlm.ministral._model import MinistralVLModel
+from .vlm.qwen3_vl._model import Qwen3VLModel
+from .vlm.qwen25_vl._model import Qwen25VLModel
 
 __all__ = [
     "DEFAULT_VARIANT_KEY",
@@ -45,6 +49,8 @@ __all__ = [
     "ImageDetectionModel",
     "ImageModel",
     "LlamaGGUFModel",
+    "LlamaVLModel",
+    "MinistralVLModel",
     "MobileNetV2Model",
     "ModelFormat",
     "ModelID",
@@ -54,6 +60,8 @@ __all__ = [
     "Phi35Model",
     "Qwen2Model",
     "Qwen3Model",
+    "Qwen3VLModel",
+    "Qwen25VLModel",
     "RFDETRModel",
     "RTMDetModel",
     "UltralyticsSource",
