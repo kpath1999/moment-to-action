@@ -192,6 +192,8 @@ ignore = [
 # LlamaGGUFModel.__init__ takes 9 args — forced by get_model() positional convention
 # (variant, path, model_format from registry + 4 server kwargs).
 "src/moment_to_action/models/llm/_base.py" = ["PLR0913"]
+# LlamaVLModel.__init__ inherits the same signature as LlamaGGUFModel plus mmproj.
+"src/moment_to_action/models/vlm/_base.py" = ["PLR0913"]
 
 [tool.ruff.lint.pydocstyle]
 # Use Google-style docstrings.
