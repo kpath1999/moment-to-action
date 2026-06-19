@@ -171,22 +171,22 @@ ok "llama.cpp built"
 # ---------------------------------------------------------------------------
 # 6. Install binaries to $INSTALL_PREFIX
 # ---------------------------------------------------------------------------
-log "Installing binaries to $INSTALL_PREFIX/bin"
+log "Installing binaries to $INSTALL_PREFIX"
 BIN_SRC="$LLAMA_DIR/build/bin"
 if [[ ! -d "$BIN_SRC" ]]; then
     die "Expected bin dir not found: $BIN_SRC"
 fi
 
-sudo mkdir -p "$INSTALL_PREFIX/bin"
-sudo cp "$BIN_SRC"/llama-* "$INSTALL_PREFIX/bin/"
-ok "Copied $(ls "$BIN_SRC"/llama-* | wc -l) binaries → $INSTALL_PREFIX/bin"
+sudo mkdir -p "$INSTALL_PREFIX"
+sudo cp "$BIN_SRC"/llama-* "$INSTALL_PREFIX/"
+ok "Copied $(ls "$BIN_SRC"/llama-* | wc -l) binaries → $INSTALL_PREFIX"
 
 # ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 echo ""
 echo -e "${GREEN}${BOLD}All done.${RESET}"
-echo -e "  Binaries in: ${CYAN}$INSTALL_PREFIX/bin/${RESET}"
-if [[ ":$PATH:" != *":$INSTALL_PREFIX/bin:"* ]]; then
-    echo -e "  ${YELLOW}Note:${RESET} Add to PATH: export PATH=\"$INSTALL_PREFIX/bin:\$PATH\""
+echo -e "  Binaries in: ${CYAN}$INSTALL_PREFIX/${RESET}"
+if [[ ":$PATH:" != *":$INSTALL_PREFIX:"* ]]; then
+    echo -e "  ${YELLOW}Note:${RESET} Add to PATH: export PATH=\"$INSTALL_PREFIX:\$PATH\""
 fi
