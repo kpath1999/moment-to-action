@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -10,8 +11,6 @@ from pydantic import ValidationError
 from moment_to_action.config import AppConfig, load_config, save_config
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from moment_to_action.paths import PathManager
 
 
@@ -127,3 +126,42 @@ class TestSaveConfig:
         loaded = load_config(path)
         assert loaded.max_workers == original.max_workers
         assert loaded.log_level == original.log_level
+
+
+@pytest.mark.unit
+class TestLlamaServerConfig:
+    """Tests for llama-server config fields."""
+
+    def test_llama_server_path_defaults_to_opt_llm(self) -> None:
+        """llama_server_path defaults to /opt/llm/llama-server."""
+        config = AppConfig()
+        assert config.llama_server_path == Path("/opt/llm/llama-server")
+
+    def test_llama_server_port_defaults_to_8080(self) -> None:
+        """llama_server_port defaults to 8080."""
+        config = AppConfig()
+        assert config.llama_server_port == 8080
+
+    def test_llama_server_path_can_be_set(self) -> None:
+        """llama_server_path accepts a Path value."""
+        from pathlib import Path
+
+        config = AppConfig(llama_server_path=Path("/opt/llm/llama-server"))
+        assert config.llama_server_path == Path("/opt/llm/llama-server")
+
+    def test_llama_server_port_can_be_set(self) -> None:
+        """llama_server_port accepts a custom port."""
+        config = AppConfig(llama_server_port=9090)
+        assert config.llama_server_port == 9090
+
+    def test_llama_server_fields_roundtrip(self, tmp_path: Path) -> None:
+        """llama_server_path and llama_server_port round-trip through save/load."""
+        path = tmp_path / "cfg.json"
+        original = AppConfig(
+            llama_server_path=Path("/opt/llm/llama-server"),
+            llama_server_port=9999,
+        )
+        save_config(original, path)
+        loaded = load_config(path)
+        assert loaded.llama_server_path == original.llama_server_path
+        assert loaded.llama_server_port == original.llama_server_port

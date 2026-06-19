@@ -183,7 +183,15 @@ ignore = [
     "S106",
     # stdlib imports are OK at runtime in tests (no performance concern)
     "TC003",
+    # unused lambda args in mock side_effect are intentional (_)
+    "ARG005",
+    # variable-name `l` in comprehensions is not ambiguous in short test one-liners
+    "E741",
 ]
+
+# LlamaGGUFModel.__init__ takes 9 args — forced by get_model() positional convention
+# (variant, path, model_format from registry + 4 server kwargs).
+"src/moment_to_action/models/llm/_base.py" = ["PLR0913"]
 
 [tool.ruff.lint.pydocstyle]
 # Use Google-style docstrings.

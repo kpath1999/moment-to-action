@@ -579,7 +579,7 @@ class TestUnitRouting:
         target = self._prefill_default(path_manager)
         monkeypatch.setattr(
             "moment_to_action.models._manager.resolve_model_source",
-            lambda *a, **k: target,  # noqa: ARG005
+            lambda *a, **k: target,
         )
         mgr = ModelManager(path_manager, registry={ModelID.DETECTRON2: _variant_routing_info()})
         model = mgr.get_model(ModelID.DETECTRON2, variant="q", unit=ComputeUnit.CPU)
@@ -592,7 +592,7 @@ class TestUnitRouting:
         target = self._prefill_default(path_manager)
         monkeypatch.setattr(
             "moment_to_action.models._manager.resolve_model_source",
-            lambda *a, **k: target,  # noqa: ARG005
+            lambda *a, **k: target,
         )
         mgr = ModelManager(path_manager, registry={ModelID.DETECTRON2: _variant_routing_info()})
         assert mgr.get_path(ModelID.DETECTRON2, "q", unit=ComputeUnit.CPU) == target
