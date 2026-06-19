@@ -48,7 +48,9 @@ cmake_build_install() {
     local src="$1"; shift
     local build_dir="$src/build"
     mkdir -p "$build_dir"
-    cmake -S "$src" -B "$build_dir" -G Ninja "$@" 2>&1 | grep -v "^--"
+    # grep -v exits 1 when all lines match (cmake output is almost entirely "-- ..." lines)
+    # so suppress grep's exit code; pipefail would otherwise kill the script
+    cmake -S "$src" -B "$build_dir" -G Ninja "$@" 2>&1 | grep -v "^--" || true
     cmake --build "$build_dir" --target install -- -j"$JOBS"
 }
 
@@ -162,7 +164,7 @@ mkdir -p "$LLAMA_DIR/build"
 cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS=OFF \
-    -DGGML_OPENCL=ON 2>&1 | grep -v "^--"
+    -DGGML_OPENCL=ON 2>&1 | grep -v "^--" || true
 ninja -C "$LLAMA_DIR/build" -j"$JOBS"
 ok "llama.cpp built"
 
