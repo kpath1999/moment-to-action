@@ -66,11 +66,10 @@ console = Console()
 
 # (ModelID, display name)
 _MODEL_CONFIGS: list[tuple[ModelID, str]] = [
+    (ModelID.MOONDREAM2, "moondream2"),
     (ModelID.QWEN25_VL_3B_INSTRUCT, "qwen25_vl_3b"),
-    (ModelID.QWEN25_VL_7B_INSTRUCT, "qwen25_vl_7b"),
     (ModelID.QWEN3_VL_2B_INSTRUCT, "qwen3_vl_2b"),
     (ModelID.QWEN3_VL_4B_INSTRUCT, "qwen3_vl_4b"),
-    (ModelID.MINISTRAL_3B_INSTRUCT, "ministral_3b"),
 ]
 
 _N_CYCLES = 3
@@ -729,7 +728,7 @@ def _parse_args() -> argparse.Namespace:
         "--models",
         default=None,
         help="Comma-separated model display names to run (default: all). "
-        "E.g. --models qwen25_vl_3b,ministral_3b",
+        "E.g. --models moondream2,qwen25_vl_3b",
     )
     parser.add_argument(
         "--max-tokens",

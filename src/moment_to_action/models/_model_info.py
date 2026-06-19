@@ -29,10 +29,9 @@ class ModelID(Enum):
     QWEN3_4B = "qwen3_4b"
     PHI35_MINI_INSTRUCT = "phi35_mini_instruct"
     QWEN25_VL_3B_INSTRUCT = "qwen25_vl_3b_instruct"
-    QWEN25_VL_7B_INSTRUCT = "qwen25_vl_7b_instruct"
     QWEN3_VL_2B_INSTRUCT = "qwen3_vl_2b_instruct"
     QWEN3_VL_4B_INSTRUCT = "qwen3_vl_4b_instruct"
-    MINISTRAL_3B_INSTRUCT = "ministral_3b_instruct"
+    MOONDREAM2 = "moondream2"
 
 
 @attrs.frozen

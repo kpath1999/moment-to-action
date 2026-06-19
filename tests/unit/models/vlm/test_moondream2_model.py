@@ -1,4 +1,4 @@
-"""Unit tests for MinistralVLModel."""
+"""Unit tests for Moondream2Model."""
 
 from __future__ import annotations
 
@@ -9,20 +9,20 @@ import pytest
 from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.vlm._base import LlamaVLModel
-from moment_to_action.models.vlm.ministral._model import MinistralVLModel
+from moment_to_action.models.vlm.moondream2._model import Moondream2Model
 
 
 @pytest.mark.unit
-class TestMinistralVLModel:
-    """Tests for MinistralVLModel."""
+class TestMoondream2Model:
+    """Tests for Moondream2Model."""
 
     def test_is_subclass_of_llama_vl_model(self) -> None:
-        """MinistralVLModel is a LlamaVLModel subclass."""
-        assert issubclass(MinistralVLModel, LlamaVLModel)
+        """Moondream2Model is a LlamaVLModel subclass."""
+        assert issubclass(Moondream2Model, LlamaVLModel)
 
     def test_instantiates_without_error(self) -> None:
-        """MinistralVLModel can be instantiated with the expected constructor signature."""
-        model = MinistralVLModel(
+        """Moondream2Model can be instantiated with the expected constructor signature."""
+        model = Moondream2Model(
             "default",
             Path("/fake/dir"),
             ModelFormat.GGUF,

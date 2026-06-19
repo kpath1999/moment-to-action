@@ -13,7 +13,7 @@ from .image.detection.yolo._model import YOLOModel
 from .llm.phi35._model import Phi35Model
 from .llm.qwen2._model import Qwen2Model
 from .llm.qwen3._model import Qwen3Model
-from .vlm.ministral._model import MinistralVLModel
+from .vlm.moondream2._model import Moondream2Model
 from .vlm.qwen3_vl._model import Qwen3VLModel
 from .vlm.qwen25_vl._model import Qwen25VLModel
 
@@ -329,30 +329,6 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
             ),
         },
     ),
-    ModelID.QWEN25_VL_7B_INSTRUCT: ModelInfo(
-        id=ModelID.QWEN25_VL_7B_INSTRUCT,
-        model_class=Qwen25VLModel,
-        variants={
-            DEFAULT_KEY: Variant(
-                source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
-                    hf_repo_id="ggml-org/Qwen2.5-VL-7B-Instruct-GGUF",
-                    files=[
-                        "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
-                        "mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf",
-                    ],
-                    revision="508edd0afaa66bb9e9f40587acc2184f02daf1f6",
-                ),
-                backends={
-                    ComputeUnit.GPU: {
-                        "model": "Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
-                        "mmproj": "mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf",
-                    }
-                },
-                input_layout=None,
-            ),
-        },
-    ),
     ModelID.QWEN3_VL_2B_INSTRUCT: ModelInfo(
         id=ModelID.QWEN3_VL_2B_INSTRUCT,
         model_class=Qwen3VLModel,
@@ -401,24 +377,24 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
             ),
         },
     ),
-    ModelID.MINISTRAL_3B_INSTRUCT: ModelInfo(
-        id=ModelID.MINISTRAL_3B_INSTRUCT,
-        model_class=MinistralVLModel,
+    ModelID.MOONDREAM2: ModelInfo(
+        id=ModelID.MOONDREAM2,
+        model_class=Moondream2Model,
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
                     format=ModelFormat.GGUF,
-                    hf_repo_id="ggml-org/Ministral-3-3B-Instruct-2512-GGUF",
+                    hf_repo_id="moondream/moondream2-gguf",
                     files=[
-                        "Ministral-3-3B-Instruct-2512-Q8_0.gguf",
-                        "mmproj-Ministral-3-3B-Instruct-2512-Q8_0.gguf",
+                        "moondream2-text-model-f16.gguf",
+                        "moondream2-mmproj-f16.gguf",
                     ],
-                    revision="742ab8db17d5c8ee5dc8f5afb5acfc2da1c33b26",
+                    revision="66f21bff432b523f311e72d4e34cf1925ae75210",
                 ),
                 backends={
                     ComputeUnit.GPU: {
-                        "model": "Ministral-3-3B-Instruct-2512-Q8_0.gguf",
-                        "mmproj": "mmproj-Ministral-3-3B-Instruct-2512-Q8_0.gguf",
+                        "model": "moondream2-text-model-f16.gguf",
+                        "mmproj": "moondream2-mmproj-f16.gguf",
                     }
                 },
                 input_layout=None,
