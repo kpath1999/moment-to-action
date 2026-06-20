@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 from moment_to_action.config import load_config
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.paths import PathManager
@@ -338,7 +338,7 @@ def _run_benchmark(
     Each row covers one (model, backend, image_id, run) combination.  Models are
     resolved and downloaded (if necessary) through ``manager.get_model``.  Each
     load/infer/unload cycle is wrapped in its own metrics trace, with on-device
-    hardware sampling driven by the run's :class:`ComputeBackend`.
+    hardware sampling driven by the run's :class:`Platform`.
 
     Args:
         manager: ModelManager used to resolve/download/instantiate the model.
@@ -346,7 +346,7 @@ def _run_benchmark(
         variant: Registry variant key to load (qcs DLC variant on-device).
         model_name: Human-readable model name for output rows.
         backend_name: Backend name string for output rows.
-        unit: :class:`~moment_to_action.hardware.ComputeUnit` to use.
+        unit: Compute unit to benchmark.
         images: List of BGR uint8 frames.
         gt_by_image: List of GT box lists per image ``[[x1,y1,x2,y2], …]``.
 
@@ -356,17 +356,11 @@ def _run_benchmark(
     rows: list[dict] = []
 
     # --- construct backend; skip if this compute unit is unsupported on this device ---
-    try:
-        backend = ComputeBackend(unit)
-    except Exception as exc:  # noqa: BLE001
+    platform = Platform()
+    if unit not in platform.supported_units:
         console.print(
-            f"  [yellow]Skip {model_name}/{backend_name}: backend unavailable ({exc})[/yellow]"
-        )
-        return rows
-    if backend.active_unit != unit:
-        console.print(
-            f"  [yellow]Skip {model_name}/{backend_name}: {backend_name} not supported "
-            f"(fell back to {backend.active_unit.name.lower()}).[/yellow]"
+            f"  [yellow]Skip {model_name}/{backend_name}: {backend_name} not available "
+            f"on this platform.[/yellow]"
         )
         return rows
 
@@ -376,14 +370,15 @@ def _run_benchmark(
         console.print(f"  [yellow]Skip {model_name}/{backend_name} ({variant}): {exc}[/yellow]")
         return rows
 
-    metrics = MetricsCollector(backend if _HW_METRICS else None)
+    metrics = MetricsCollector(platform if _HW_METRICS else None)
 
     for cycle in range(1, _N_CYCLES + 1):
         # One trace per load/infer/unload cycle (drives hardware sampling).
         with metrics.start_trace():
             cycle_rows = _run_cycle(
                 model=model,
-                backend=backend,
+                platform=platform,
+                unit=unit,
                 model_name=model_name,
                 backend_name=backend_name,
                 cycle=cycle,
@@ -402,9 +397,10 @@ def _run_benchmark(
     return rows
 
 
-def _run_cycle(
+def _run_cycle(  # noqa: PLR0913
     model: object,
-    backend: ComputeBackend,
+    platform: Platform,
+    unit: ComputeUnit,
     model_name: str,
     backend_name: str,
     cycle: int,
@@ -416,7 +412,8 @@ def _run_cycle(
 
     Args:
         model: Unloaded detection model instance.
-        backend: ComputeBackend to load the model onto.
+        platform: Platform to load the model onto.
+        unit: Compute unit to use.
         model_name: Model name for output rows.
         backend_name: Backend name for output rows.
         cycle: Cycle index (1-based).
@@ -434,7 +431,7 @@ def _run_cycle(
             metrics.start_span(SpanType.MODEL_LOAD, f"{model_name}.{backend_name}.load"),
             _silence_native_output(),
         ):
-            model.load(backend)  # type: ignore[attr-defined]
+            model.load(platform, unit)  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(
             f"  [yellow]Load failed {model_name}/{backend_name} cycle {cycle}: {exc}[/yellow]"

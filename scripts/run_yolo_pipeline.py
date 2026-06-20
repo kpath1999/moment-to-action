@@ -17,7 +17,7 @@ import cv2
 from rich.console import Console
 from rich.logging import RichHandler
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.messages import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.models import ModelID, ModelManager
@@ -48,7 +48,7 @@ if frame is None:
     raise SystemExit(1)
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-compute_backend = ComputeBackend(preferred_unit=device)
+platform = Platform()
 manager = ModelManager(PathManager())
 
 # ── load model ─────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ model = manager.get_model(ModelID.YOLO_V8, confidence_threshold=args.conf)
 if not isinstance(model, ImageDetectionModel):
     err_msg = f"Expected ImageDetectionModel, got {type(model).__name__}"
     raise TypeError(err_msg)
-model.load(compute_backend)
+model.load(platform, device)
 
 # ── build and run pipeline ─────────────────────────────────────────────────
 stage = ImageDetectionStage(model=model)

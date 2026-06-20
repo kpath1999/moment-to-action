@@ -55,7 +55,7 @@ def _make_stage(
     mock_manager = MagicMock()
     mock_manager.get_model.return_value = mock_model
 
-    with patch("moment_to_action.stages.llm._llama_server.ComputeBackend"):
+    with patch("moment_to_action.stages.llm._llama_server.Platform"):
         return LlamaServerStage(
             mock_manager,
             config,
@@ -81,7 +81,7 @@ class TestLlamaServerStageInit:
         mock_manager = MagicMock()
         mock_manager.get_model.return_value = mock_model
 
-        with patch("moment_to_action.stages.llm._llama_server.ComputeBackend"):
+        with patch("moment_to_action.stages.llm._llama_server.Platform"):
             LlamaServerStage(
                 mock_manager,
                 config,
@@ -99,19 +99,21 @@ class TestLlamaServerStageInit:
         )
 
     def test_calls_model_load(self) -> None:
-        """__init__ calls model.load() with a ComputeBackend."""
+        """__init__ calls model.load() with a Platform and ComputeUnit."""
+        from moment_to_action.hardware._types import ComputeUnit
+
         mock_model = MagicMock()
         mock_manager = MagicMock()
         mock_manager.get_model.return_value = mock_model
 
-        mock_backend = MagicMock()
+        mock_platform = MagicMock()
         with patch(
-            "moment_to_action.stages.llm._llama_server.ComputeBackend",
-            return_value=mock_backend,
+            "moment_to_action.stages.llm._llama_server.Platform",
+            return_value=mock_platform,
         ):
             LlamaServerStage(mock_manager, _config())
 
-        mock_model.load.assert_called_once_with(mock_backend)
+        mock_model.load.assert_called_once_with(mock_platform, ComputeUnit.CPU)
 
     def test_stage_name(self) -> None:
         """Name property returns 'LlamaServerStage'."""
@@ -276,7 +278,7 @@ class TestLlamaServerStageClose:
         mock_manager = MagicMock()
         mock_manager.get_model.return_value = mock_model
 
-        with patch("moment_to_action.stages.llm._llama_server.ComputeBackend"):
+        with patch("moment_to_action.stages.llm._llama_server.Platform"):
             stage = LlamaServerStage(mock_manager, _config())
 
         return stage, mock_model

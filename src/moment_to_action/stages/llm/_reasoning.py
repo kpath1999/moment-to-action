@@ -11,16 +11,42 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, LoadedModel, Platform
 from moment_to_action.messages import DetectionMessage, ReasoningMessage
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
+    import os
+
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
     from moment_to_action.models import ModelID, ModelManager
 
 logger = logging.getLogger(__name__)
+
+
+def _load_by_extension(platform: Platform, path: os.PathLike[str]) -> LoadedModel:
+    """Dispatch to the appropriate platform load method by file extension.
+
+    Args:
+        platform: The hardware platform to load on.
+        path: Path to the model file.
+
+    Returns:
+        A :class:`~moment_to_action.hardware.LoadedModel` for this model.
+
+    Raises:
+        ValueError: If the file extension is not recognised.
+    """
+    p = str(path).lower()
+    if p.endswith(".tflite"):
+        return platform.load_tflite(ComputeUnit.CPU, path)
+    if p.endswith(".onnx"):
+        return platform.load_onnx(ComputeUnit.CPU, path)
+    if p.endswith(".dlc"):
+        return platform.load_dlc(ComputeUnit.CPU, path)
+    msg = f"Unknown model format for ReasoningStage: {path!r}"
+    raise ValueError(msg)
 
 
 class ReasoningStage(Stage):
@@ -30,8 +56,8 @@ class ReasoningStage(Stage):
     Output: ReasoningMessage
     """
 
-    _backend: ComputeBackend | None
-    _handle: object | None
+    _platform: Platform | None
+    _handle: LoadedModel | None
 
     def __init__(
         self,
@@ -48,11 +74,11 @@ class ReasoningStage(Stage):
                 raise ValueError(msg)
 
             model_path = manager.get_path(model_id)
-            self._backend = ComputeBackend(preferred_unit=ComputeUnit.CPU)
-            self._handle = self._backend.load_model(model_path)
+            self._platform = Platform()
+            self._handle = _load_by_extension(self._platform, model_path)
             logger.info("ReasoningStage: loaded %s", model_path)
         else:
-            self._backend = None
+            self._platform = None
             logger.info("ReasoningStage: running in stub mode (no model loaded)")
         self._system_prompt = system_prompt or (
             "You are analyzing detections from a wearable device. "
@@ -96,6 +122,6 @@ class ReasoningStage(Stage):
 
     def _run_llm(self, prompt: str) -> str:
         # NOTE(kausar): integrate with Kausar's LLM arch. LLM is a stage that
-        # ingests the message, performs inference dispatched via ComputeBackend.
+        # ingests the message, performs inference dispatched via Platform.
         # For now return the prompt so the pipeline is runnable end-to-end.
         return f"[LLM stub] Received prompt with {len(prompt)} chars."

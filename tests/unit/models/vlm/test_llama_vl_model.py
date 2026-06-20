@@ -112,7 +112,7 @@ class TestLlamaVLModelLoad:
             mock_proc.pid = 12345
             mock_popen.return_value = mock_proc
 
-            model.load(mock_backend)
+            model.load(mock_backend, ComputeUnit.CPU)
 
         mock_popen.assert_called_once_with(
             [
@@ -140,7 +140,7 @@ class TestLlamaVLModelLoad:
             patch("moment_to_action.models.vlm._base._wait_for_server"),
             patch("moment_to_action.models.vlm._base.httpx.Client") as mock_client_cls,
         ):
-            model.load(mock_backend)
+            model.load(mock_backend, ComputeUnit.CPU)
 
         mock_client_cls.assert_called_once_with(
             base_url="http://127.0.0.1:7777",
@@ -159,7 +159,7 @@ class TestLlamaVLModelLoad:
         ):
             mock_client_instance = MagicMock()
             mock_client_cls.return_value = mock_client_instance
-            model.load(mock_backend)
+            model.load(mock_backend, ComputeUnit.CPU)
 
         mock_wait.assert_called_once_with(mock_client_instance)
 
@@ -171,7 +171,7 @@ class TestLlamaVLModelLoad:
             patch("moment_to_action.models.vlm._base.subprocess.Popen"),
             patch("moment_to_action.models.vlm._base._wait_for_server"),
         ):
-            model.load(MagicMock())
+            model.load(MagicMock(), ComputeUnit.CPU)
 
         assert model.is_loaded
 
@@ -183,9 +183,9 @@ class TestLlamaVLModelLoad:
             patch("moment_to_action.models.vlm._base.subprocess.Popen"),
             patch("moment_to_action.models.vlm._base._wait_for_server"),
         ):
-            model.load(MagicMock())
+            model.load(MagicMock(), ComputeUnit.CPU)
             with pytest.raises(RuntimeError, match="already loaded"):
-                model.load(MagicMock())
+                model.load(MagicMock(), ComputeUnit.CPU)
 
 
 @pytest.mark.unit

@@ -4,22 +4,35 @@ Public API::
 
     from moment_to_action.hardware import (
         BenchmarkResult,
-        ComputeBackend,
         ComputeUnit,
-        PowerSample,
-        TorchExecutionPolicy,
+        DataType,
+        LoadedModel,
+        ModelType,
+        Platform,
+        PlatformType,
     )
 """
 
 from __future__ import annotations
 
-from ._backend import BenchmarkResult, ComputeBackend
-from ._types import ComputeUnit, ComputeUnitUsageSample, TorchExecutionPolicy
+from ._loaded_model import LoadedModel
+from ._platform import Platform
+from ._types import (
+    BenchmarkResult,
+    ComputeUnit,
+    ComputeUnitUsageSample,
+    DataType,
+    ModelType,
+    PlatformType,
+)
 
 __all__ = [
     "BenchmarkResult",
-    "ComputeBackend",
     "ComputeUnit",
     "ComputeUnitUsageSample",
-    "TorchExecutionPolicy",
+    "DataType",
+    "LoadedModel",
+    "ModelType",
+    "Platform",
+    "PlatformType",
 ]

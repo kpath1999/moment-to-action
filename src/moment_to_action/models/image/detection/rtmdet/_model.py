@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import cv2
 import numpy as np
@@ -14,7 +14,7 @@ from moment_to_action.models.image.detection._types import BoundingBox, Detectio
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware import LoadedModel, Platform
     from moment_to_action.hardware._types import ComputeUnit
 
 _RTMDET_INPUT_SIZE = 640
@@ -138,13 +138,13 @@ class RTMDetModel(ImageDetectionModel):
             confidence_threshold: Detections below this score are discarded.
             backends: Compute unit → ``{"model": filename}`` mapping.  Keys
                 present are the supported units; ``load()`` indexes this with
-                ``backend.preferred_unit``.
+                the explicit ``unit`` argument.
             input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
                 use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
         """
         super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
         self._confidence_threshold = confidence_threshold
-        self._handle: object = None
+        self._handle: LoadedModel | None = None
         self._last_original_size: tuple[int, int] | None = None
 
     @property
@@ -157,37 +157,36 @@ class RTMDetModel(ImageDetectionModel):
         """Input tensor layout: ``"NCHW"`` or ``"NHWC"`` (set at construction from the Variant)."""
         return self._input_layout or "NCHW"
 
-    def load(self, backend: ComputeBackend) -> None:
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load model weights onto the backend.
 
         Selects the artifact filename from the per-unit ``backends`` table
-        using ``backend.preferred_unit``.
+        using ``unit``.
 
         Args:
-            backend: Hardware backend to load the model onto.
+            platform: Hardware platform to load the model onto.
+            unit: Compute unit to target.
 
         Raises:
             RuntimeError: If the model is already loaded.
-            KeyError: If ``backend.preferred_unit`` is not supported by this variant.
+            KeyError: If ``unit`` is not supported by this variant.
+            ValueError: If ``unit`` is not available on ``platform``.
         """
-        if self._backend is not None:
+        if self._platform is not None:
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
-        arts = self._backends[backend.preferred_unit]
+        arts = self._backends[unit]
         if self._format is ModelFormat.ONNX:
-            self._handle = backend.load_model(self._artifact_path(arts["model"]))
+            self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]))
         else:
-            self._handle = backend.load_model_dlc(self._artifact_path(arts["model"]))
-        self._backend = backend
+            self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]))
+        self._platform = platform
 
     def unload(self) -> None:
         """Release backend resources and reset internal state."""
-        if self._backend is not None:
-            if self._format is ModelFormat.ONNX:
-                self._backend.unload_model(self._handle)
-            else:
-                self._backend.unload_dlc(self._handle)
-        self._backend = None
+        if self._handle is not None:
+            self._handle.unload()
+        self._platform = None
         self._handle = None
 
     def prepare(self, frame: np.ndarray) -> np.ndarray:
@@ -223,12 +222,12 @@ class RTMDetModel(ImageDetectionModel):
         Raises:
             RuntimeError: If the model has not been loaded.
         """
-        if self._backend is None:
+        if self._handle is None:
             msg = "RTMDetModel.load() must be called before run()"
             raise RuntimeError(msg)
         if self._format is ModelFormat.ONNX:
-            return self._backend.run(self._handle, prepared)
-        dlc_out = self._backend.infer_dlc(self._handle, prepared)
+            return cast("list[np.ndarray]", self._handle.run(prepared))
+        dlc_out = cast("dict[str, np.ndarray]", self._handle.run(prepared))
         return [dlc_out["boxes"], dlc_out["scores"], dlc_out["class_idx"]]
 
     def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:

@@ -1,4 +1,4 @@
-"""Compute dispatch — routes preprocessing operations to CPU or DSP."""
+"""Compute dispatch — routes preprocessing operations to CPU or NPU."""
 
 from __future__ import annotations
 
@@ -19,43 +19,44 @@ _R = TypeVar("_R")
 class ComputeDispatcher:
     """Routes preprocessing operations to the right compute unit.
 
-    When ``compute_unit == DSP``: attempts DSP dispatch, falls back to CPU.
     When ``compute_unit == CPU``: runs directly.
+    When ``compute_unit == NPU``: NPU-accelerated dispatch is not yet
+    implemented and falls back to CPU transparently.
 
     Preprocessors call ``self._dispatch(fn, *args)`` instead of ``fn(*args)``
-    so that DSP acceleration can be added without changing call sites.
+    so that hardware-accelerated paths can be added without changing call sites.
     """
 
     def __init__(self, compute_unit: ComputeUnit = ComputeUnit.CPU) -> None:
-        self._unit = compute_unit
-        self._dsp_available = self._probe_dsp()
+        """Initialize the dispatcher with the target compute unit.
 
-    def _probe_dsp(self) -> bool:
-        """Check whether a DSP backend is actually available."""
-        # NOTE(nvm): probe Qualcomm Hexagon SDK availability
-        # DSP backend not yet implemented
-        return False
+        Args:
+            compute_unit: The compute unit to target (defaults to CPU).
+        """
+        self._unit = compute_unit
 
     def dispatch(self, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
         """Run ``fn(*args)`` on the configured compute unit.
 
-        Falls back to CPU if the requested unit is unavailable.
-        """
-        if self._unit == ComputeUnit.DSP and self._dsp_available:
-            return self._dispatch_dsp(fn, *args, **kwargs)
-        return fn(*args, **kwargs)  # CPU path — direct call
+        Falls back to CPU for any unit without a native implementation.
 
-    def _dispatch_dsp(self, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
-        """DSP dispatch path (currently falls through to CPU).
+        Args:
+            fn: Function to dispatch.
+            *args: Positional arguments forwarded to ``fn``.
+            **kwargs: Keyword arguments forwarded to ``fn``.
 
-        TODO: wrap fn in a Hexagon SDK call via ctypes/cffi.
+        Returns:
+            Return value of ``fn(*args, **kwargs)``.
         """
-        logger.debug("DSP dispatch requested for %s — falling back to CPU", fn.__name__)
+        if self._unit != ComputeUnit.CPU:
+            logger.debug("Non-CPU dispatch requested for %s — falling back to CPU", fn.__name__)
         return fn(*args, **kwargs)
 
     @property
     def active_unit(self) -> ComputeUnit:
-        """Return the currently active compute unit."""
-        if self._unit == ComputeUnit.DSP and self._dsp_available:
-            return ComputeUnit.DSP
+        """Return the currently active compute unit (always CPU for now).
+
+        Returns:
+            ``ComputeUnit.CPU`` — all dispatch paths currently run on CPU.
+        """
         return ComputeUnit.CPU

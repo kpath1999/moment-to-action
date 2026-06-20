@@ -10,7 +10,7 @@ Output: ClassificationMessage
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import open_clip
@@ -22,7 +22,8 @@ from moment_to_action.stages._base import Stage
 from moment_to_action.utils.ml import cosine_similarity, softmax
 
 if TYPE_CHECKING:
-    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware import LoadedModel, Platform
+    from moment_to_action.hardware._types import ComputeUnit
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
 
@@ -43,17 +44,31 @@ class MobileCLIPStage(Stage):
     the application without reloading the model.
     """
 
+    _handle: LoadedModel
+
     def __init__(
         self,
         text_prompts: list[str],
-        backend: ComputeBackend,
+        platform: Platform,
+        unit: ComputeUnit,
         manager: ModelManager,
     ) -> None:
+        """Initialize and load MobileCLIP onto the given compute unit.
+
+        Args:
+            text_prompts: Labels/phrases to score against each frame.
+            platform: Hardware platform used to load the model.
+            unit: Compute unit to run inference on.
+            manager: Model manager for resolving the MobileCLIP model path.
+        """
         super().__init__()
-        self._backend = backend
         # Resolve the MobileCLIP model path through the manager — downloads/caches as needed.
         model_path = manager.get_path(ModelID.MOBILECLIP_S2)
-        self._handle = self._backend.load_model(model_path)
+        p = str(model_path).lower()
+        if p.endswith(".onnx"):
+            self._handle = platform.load_onnx(unit, model_path)
+        else:
+            self._handle = platform.load_tflite(unit, model_path)
         self._text_prompts = text_prompts
         self._text_tokens = self._tokenize(text_prompts)
         logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))
@@ -69,12 +84,14 @@ class MobileCLIPStage(Stage):
         for tokens in self._text_tokens:
             token_tensor = tokens[np.newaxis, ...].astype(np.int64)  # [1, 77]
             with metrics.start_span(SpanType.MODEL_INFERENCE, "MobileCLIP text inference"):
-                outputs = self._backend.run(
-                    self._handle,
-                    {
-                        "serving_default_args_0:0": msg.tensor,  # [1, 3, 256, 256]
-                        "serving_default_args_1:0": token_tensor,  # [1, 77]
-                    },
+                outputs = cast(
+                    "list[np.ndarray]",
+                    self._handle.run(
+                        {
+                            "serving_default_args_0:0": msg.tensor,  # [1, 3, 256, 256]
+                            "serving_default_args_1:0": token_tensor,  # [1, 77]
+                        }
+                    ),
                 )
             image_emb = outputs[1][0]  # [512]
             text_emb = outputs[0][0]  # [512]

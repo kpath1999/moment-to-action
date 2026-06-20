@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import rich_click as click
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models import ModelID
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image._base import ImageModel
@@ -221,8 +221,8 @@ def _capture_reference_outputs(
     prepared = [model.prepare(img) for img in raw_imgs]
     calib = np.vstack(prepared).astype(np.float32)
 
-    backend = ComputeBackend(ComputeUnit.CPU)
-    model.load(backend)
+    platform = Platform()
+    model.load(platform, ComputeUnit.CPU)
     all_raw: list[list[np.ndarray]] = [model.run(calib[i : i + 1]) for i in range(len(calib))]
     model.unload()
 

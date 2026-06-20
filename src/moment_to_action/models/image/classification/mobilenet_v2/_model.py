@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import cv2
 import numpy as np
@@ -14,7 +14,7 @@ from moment_to_action.models.image.classification._types import Classification
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware import LoadedModel, Platform
     from moment_to_action.hardware._types import ComputeUnit
 
 _MNV2_INPUT_SIZE = 224
@@ -71,13 +71,13 @@ class MobileNetV2Model(ImageClassificationModel):
             top_k: Number of top predictions to return from :meth:`post_proc`.
             backends: Compute unit → ``{"model": filename}`` mapping.  Keys
                 present are the supported units; ``load()`` indexes this with
-                ``backend.preferred_unit``.
+                the explicit ``unit`` argument.
             input_layout: Input tensor layout (unused by MobileNet V2, which
                 always preprocesses to NCHW; accepted for interface uniformity).
         """
         super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
         self._top_k = top_k
-        self._handle: object = None
+        self._handle: LoadedModel | None = None
 
     @property
     def top_k(self) -> int:
@@ -108,37 +108,36 @@ class MobileNetV2Model(ImageClassificationModel):
             return cls.IMAGENET_LABELS[class_id]
         return f"class_{class_id}"
 
-    def load(self, backend: ComputeBackend) -> None:
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load model weights onto the backend.
 
         Selects the artifact filename from the per-unit ``backends`` table
-        using ``backend.preferred_unit``.
+        using ``unit``.
 
         Args:
-            backend: Hardware backend to load the model onto.
+            platform: Hardware platform to load the model onto.
+            unit: Compute unit to target.
 
         Raises:
             RuntimeError: If the model is already loaded.
-            KeyError: If ``backend.preferred_unit`` is not supported by this variant.
+            KeyError: If ``unit`` is not supported by this variant.
+            ValueError: If ``unit`` is not available on ``platform``.
         """
-        if self._backend is not None:
+        if self._platform is not None:
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
-        arts = self._backends[backend.preferred_unit]
+        arts = self._backends[unit]
         if self._format is ModelFormat.ONNX:
-            self._handle = backend.load_model(self._artifact_path(arts["model"]))
+            self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]))
         else:
-            self._handle = backend.load_model_dlc(self._artifact_path(arts["model"]))
-        self._backend = backend
+            self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]))
+        self._platform = platform
 
     def unload(self) -> None:
         """Release backend resources and reset internal state."""
-        if self._backend is not None:
-            if self._format is ModelFormat.ONNX:
-                self._backend.unload_model(self._handle)
-            else:
-                self._backend.unload_dlc(self._handle)
-        self._backend = None
+        if self._handle is not None:
+            self._handle.unload()
+        self._platform = None
         self._handle = None
 
     def prepare(self, frame: np.ndarray) -> np.ndarray:
@@ -170,12 +169,12 @@ class MobileNetV2Model(ImageClassificationModel):
         Raises:
             RuntimeError: If the model has not been loaded.
         """
-        if self._backend is None:
+        if self._handle is None:
             msg = "MobileNetV2Model.load() must be called before run()"
             raise RuntimeError(msg)
         if self._format is ModelFormat.ONNX:
-            return self._backend.run(self._handle, prepared)
-        dlc_out = self._backend.infer_dlc(self._handle, prepared)
+            return cast("list[np.ndarray]", self._handle.run(prepared))
+        dlc_out = cast("dict[str, np.ndarray]", self._handle.run(prepared))
         return [next(iter(dlc_out.values()))]
 
     def post_proc(self, raw: list[np.ndarray]) -> list[Classification]:

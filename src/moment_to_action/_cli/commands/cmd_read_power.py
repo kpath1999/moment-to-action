@@ -7,7 +7,7 @@ import json
 import attrs
 import rich_click as click
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 
 
 @click.command(aliases=["rdpwr"])
@@ -16,8 +16,8 @@ from moment_to_action.hardware import ComputeBackend, ComputeUnit
 @click.pass_context
 def read_power(ctx: click.Context, *, device: ComputeUnit, json_output: bool) -> None:  # noqa: ARG001
     """Read power of a device."""
-    backend = ComputeBackend(device)
-    resource_mon = backend.resource_monitor
+    platform = Platform()
+    resource_mon = platform.resource_monitor
 
     sample = resource_mon.sample(device)
     if json_output:

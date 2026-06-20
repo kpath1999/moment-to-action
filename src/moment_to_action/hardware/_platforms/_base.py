@@ -17,7 +17,11 @@ if TYPE_CHECKING:
     import os
     from pathlib import Path
 
-    from moment_to_action.hardware import ComputeUnit, ComputeUnitUsageSample, TorchExecutionPolicy
+    from moment_to_action.hardware._types import (
+        ComputeUnit,
+        ComputeUnitUsageSample,
+        TorchExecutionPolicy,
+    )
 
 # Type alias: single tensor (most models) or named dict (multi-input models).
 ModelInput = np.ndarray | dict[str, np.ndarray]

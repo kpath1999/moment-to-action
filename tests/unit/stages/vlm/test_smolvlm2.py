@@ -20,12 +20,6 @@ class TestSmolVLM2StageInit:
 
     def test_init_uses_model_manager_for_model_path(self) -> None:
         """Stage init should resolve model directory via ModelManager."""
-        backend = mock.MagicMock()
-        policy = mock.MagicMock()
-        policy.device = torch.device("cpu")
-        policy.dtype = torch.float32
-        backend.resolve_torch_policy.return_value = policy
-
         manager = mock.MagicMock(spec=ModelManager)
         model_dir = Path("/tmp/smolvlm2")
         manager.get_path.return_value = model_dir
@@ -40,7 +34,7 @@ class TestSmolVLM2StageInit:
                 return_value=model,
             ) as mock_model_from_pretrained,
         ):
-            SmolVLM2Stage(backend=backend, manager=manager)
+            SmolVLM2Stage(manager=manager)
 
         manager.get_path.assert_called_once_with(ModelID.SMOLVLM2_2_2B)
         mock_model_from_pretrained.assert_called_once_with(
@@ -51,12 +45,6 @@ class TestSmolVLM2StageInit:
 
     def test_init_loads_processor_from_resolved_model_directory(self) -> None:
         """Stage init should load processor from manager-resolved directory."""
-        backend = mock.MagicMock()
-        policy = mock.MagicMock()
-        policy.device = torch.device("cpu")
-        policy.dtype = torch.bfloat16
-        backend.resolve_torch_policy.return_value = policy
-
         manager = mock.MagicMock(spec=ModelManager)
         model_dir = Path("/tmp/smolvlm2")
         manager.get_path.return_value = model_dir
@@ -73,22 +61,21 @@ class TestSmolVLM2StageInit:
                 return_value=model,
             ),
         ):
-            SmolVLM2Stage(backend=backend, manager=manager)
+            SmolVLM2Stage(manager=manager)
 
         mock_processor_from_pretrained.assert_called_once_with(
             model_dir,
             trust_remote_code=True,
         )
 
-    def test_init_requires_backend_and_manager(self) -> None:
-        """SmolVLM2Stage requires backend and manager as positional args."""
+    def test_init_requires_manager(self) -> None:
+        """SmolVLM2Stage requires manager as a positional arg; backend is no longer a param."""
         import inspect
 
         sig = inspect.signature(SmolVLM2Stage.__init__)
         params = list(sig.parameters.keys())
-        assert "backend" in params
         assert "manager" in params
-        assert sig.parameters["backend"].default is inspect.Parameter.empty
+        assert "backend" not in params
         assert sig.parameters["manager"].default is inspect.Parameter.empty
 
 
@@ -146,12 +133,6 @@ class TestSmolVLM2StageProcess:
     @staticmethod
     def _make_stage() -> SmolVLM2Stage:
         """Build a SmolVLM2Stage with fully mocked internals."""
-        backend = mock.MagicMock()
-        policy = mock.MagicMock()
-        policy.device = torch.device("cpu")
-        policy.dtype = torch.float32
-        backend.resolve_torch_policy.return_value = policy
-
         manager = mock.MagicMock(spec=ModelManager)
         manager.get_path.return_value = Path("/tmp/smolvlm2")
 
@@ -166,7 +147,7 @@ class TestSmolVLM2StageProcess:
                 return_value=model,
             ),
         ):
-            return SmolVLM2Stage(backend=backend, manager=manager)
+            return SmolVLM2Stage(manager=manager)
 
     def test_wrong_message_type_raises(self) -> None:
         """Passing non-VideoClipMessage raises TypeError."""
@@ -261,3 +242,38 @@ class TestSmolVLM2CleanGeneration:
         """Empty input returns empty string."""
         result = SmolVLM2Stage._clean_generation("")
         assert result == ""
+
+
+@pytest.mark.unit
+class TestResolveDeviceDtype:
+    """Tests for _resolve_torch_device_dtype."""
+
+    def test_explicit_device_used_directly(self) -> None:
+        """Non-'auto' requested device is used as-is."""
+        from moment_to_action.stages.vlm._smolvlm2 import _resolve_torch_device_dtype
+
+        device, _ = _resolve_torch_device_dtype("cpu")
+        assert device.type == "cpu"
+
+    def test_auto_cuda_available(self) -> None:
+        """'auto' selects cuda when cuda is available."""
+        from moment_to_action.stages.vlm._smolvlm2 import _resolve_torch_device_dtype
+
+        with (
+            mock.patch("torch.cuda.is_available", return_value=True),
+        ):
+            device, dtype = _resolve_torch_device_dtype("auto")
+        assert device.type == "cuda"
+        assert dtype == torch.bfloat16
+
+    def test_auto_mps_available(self) -> None:
+        """'auto' selects mps when cuda is absent but mps is available."""
+        from moment_to_action.stages.vlm._smolvlm2 import _resolve_torch_device_dtype
+
+        with (
+            mock.patch("torch.cuda.is_available", return_value=False),
+            mock.patch("torch.backends.mps.is_available", return_value=True),
+        ):
+            device, dtype = _resolve_torch_device_dtype("auto")
+        assert device.type == "mps"
+        assert dtype == torch.float16

@@ -832,7 +832,7 @@ class TestResourceSampling:
 
         # Use a very short sample interval so we get at least one sample during the trace
         collector = MetricsCollector(
-            compute_backend=mock_backend,
+            compute_platform=mock_backend,
             session_id="test-resource-sampling",
             resource_sample_interval=timedelta(milliseconds=10),
         )
@@ -854,7 +854,7 @@ class TestResourceSampling:
         This covers the early-return at line 124 of _collector.py.
         """
         collector = MetricsCollector(
-            compute_backend=None,
+            compute_platform=None,
             session_id="test-no-backend",
             resource_sample_interval=timedelta(milliseconds=10),
         )

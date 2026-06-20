@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from moment_to_action.hardware import ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.classification.mobilenet_v2._model import (
     MobileNetV2Model,
@@ -37,13 +37,12 @@ def dlc_model() -> MobileNetV2Model:
 
 
 @pytest.fixture
-def mock_backend() -> MagicMock:
-    """Return a mock ComputeBackend."""
-    backend = MagicMock()
-    backend.preferred_unit = ComputeUnit.CPU
-    backend.load_model.return_value = MagicMock()
-    backend.load_model_dlc.return_value = MagicMock()
-    return backend
+def mock_platform() -> MagicMock:
+    """Return a mock Platform."""
+    platform = MagicMock(spec=Platform)
+    platform.load_onnx.return_value = MagicMock()
+    platform.load_dlc.return_value = MagicMock()
+    return platform
 
 
 @pytest.mark.unit
@@ -119,23 +118,25 @@ class TestMobileNetV2ModelRun:
     """Tests for MobileNetV2Model.run()."""
 
     def test_onnx_calls_backend_run(
-        self, onnx_model: MobileNetV2Model, mock_backend: MagicMock
+        self, onnx_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
-        """ONNX run() delegates to backend.run()."""
-        onnx_model.load(mock_backend)
+        """ONNX run() delegates to handle.run()."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         prepared = np.zeros((1, 3, 224, 224), dtype=np.float32)
         onnx_model.run(prepared)
-        mock_backend.run.assert_called_once_with(mock_backend.load_model.return_value, prepared)
+        mock_platform.load_onnx.return_value.run.assert_called_once_with(prepared)
 
     def test_dlc_calls_backend_infer_dlc(
-        self, dlc_model: MobileNetV2Model, mock_backend: MagicMock
+        self, dlc_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
-        """DLC run() delegates to backend.infer_dlc() and returns list."""
-        mock_backend.infer_dlc.return_value = {"output": np.zeros((1, 1000), dtype=np.float32)}
-        dlc_model.load(mock_backend)
+        """DLC run() delegates to handle.run() and returns list."""
+        mock_platform.load_dlc.return_value.run.return_value = {
+            "output": np.zeros((1, 1000), dtype=np.float32)
+        }
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         prepared = np.zeros((1, 3, 224, 224), dtype=np.float32)
         result = dlc_model.run(prepared)
-        mock_backend.infer_dlc.assert_called_once()
+        mock_platform.load_dlc.return_value.run.assert_called_once()
         assert isinstance(result, list)
         assert len(result) == 1
 
@@ -150,57 +151,61 @@ class TestMobileNetV2ModelLoadUnload:
     """Tests for MobileNetV2Model.load() and unload()."""
 
     def test_onnx_load_calls_load_model(
-        self, onnx_model: MobileNetV2Model, mock_backend: MagicMock
+        self, onnx_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
-        """ONNX load() calls backend.load_model with model.onnx path."""
-        onnx_model.load(mock_backend)
-        mock_backend.load_model.assert_called_once_with(onnx_model.path / "model.onnx")
+        """ONNX load() calls platform.load_onnx with model.onnx path."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
+        mock_platform.load_onnx.assert_called_once_with(
+            ComputeUnit.CPU, onnx_model.path / "model.onnx"
+        )
 
     def test_dlc_load_calls_load_model_dlc(
-        self, dlc_model: MobileNetV2Model, mock_backend: MagicMock
+        self, dlc_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
-        """DLC load() calls backend.load_model_dlc with model.dlc path."""
-        dlc_model.load(mock_backend)
-        mock_backend.load_model_dlc.assert_called_once_with(dlc_model.path / "model.dlc")
+        """DLC load() calls platform.load_dlc with model.dlc path."""
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
+        mock_platform.load_dlc.assert_called_once_with(
+            ComputeUnit.CPU, dlc_model.path / "model.dlc"
+        )
 
     def test_load_sets_is_loaded(
-        self, onnx_model: MobileNetV2Model, mock_backend: MagicMock
+        self, onnx_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
         """After load(), is_loaded is True."""
-        onnx_model.load(mock_backend)
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         assert onnx_model.is_loaded is True
 
     def test_double_load_raises(
-        self, onnx_model: MobileNetV2Model, mock_backend: MagicMock
+        self, onnx_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
         """Loading an already-loaded model raises RuntimeError."""
-        onnx_model.load(mock_backend)
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         with pytest.raises(RuntimeError, match="already loaded"):
-            onnx_model.load(mock_backend)
+            onnx_model.load(mock_platform, ComputeUnit.CPU)
 
     def test_unload_clears_state(
-        self, onnx_model: MobileNetV2Model, mock_backend: MagicMock
+        self, onnx_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
         """After unload(), is_loaded is False."""
-        onnx_model.load(mock_backend)
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         onnx_model.unload()
         assert onnx_model.is_loaded is False
 
-    def test_onnx_unload_calls_unload_model(
-        self, onnx_model: MobileNetV2Model, mock_backend: MagicMock
+    def test_onnx_unload_calls_unload(
+        self, onnx_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
-        """ONNX unload() calls backend.unload_model."""
-        onnx_model.load(mock_backend)
+        """ONNX unload() calls handle.unload()."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         onnx_model.unload()
-        mock_backend.unload_model.assert_called_once()
+        mock_platform.load_onnx.return_value.unload.assert_called_once()
 
-    def test_dlc_unload_calls_unload_dlc(
-        self, dlc_model: MobileNetV2Model, mock_backend: MagicMock
+    def test_dlc_unload_calls_unload(
+        self, dlc_model: MobileNetV2Model, mock_platform: MagicMock
     ) -> None:
-        """DLC unload() calls backend.unload_dlc."""
-        dlc_model.load(mock_backend)
+        """DLC unload() calls handle.unload()."""
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         dlc_model.unload()
-        mock_backend.unload_dlc.assert_called_once()
+        mock_platform.load_dlc.return_value.unload.assert_called_once()
 
     def test_unload_when_not_loaded_is_noop(self, onnx_model: MobileNetV2Model) -> None:
         """unload() when not loaded does not raise."""

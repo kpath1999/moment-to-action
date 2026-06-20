@@ -10,7 +10,6 @@ _QAIRT_BACKEND_MAP: dict[ComputeUnit, str] = {
     ComputeUnit.CPU: "CPU",
     ComputeUnit.GPU: "GPU",
     ComputeUnit.NPU: "HTP",
-    ComputeUnit.DSP: "HTP",
 }
 
 

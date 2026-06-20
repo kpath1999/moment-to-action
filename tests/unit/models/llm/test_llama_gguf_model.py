@@ -98,7 +98,7 @@ class TestLlamaGGUFModelLoad:
             mock_proc.pid = 12345
             mock_popen.return_value = mock_proc
 
-            model.load(mock_backend)
+            model.load(mock_backend, ComputeUnit.CPU)
 
         mock_popen.assert_called_once_with(
             [
@@ -124,7 +124,7 @@ class TestLlamaGGUFModelLoad:
             patch("moment_to_action.models.llm._base._wait_for_server"),
             patch("moment_to_action.models.llm._base.httpx.Client") as mock_client_cls,
         ):
-            model.load(mock_backend)
+            model.load(mock_backend, ComputeUnit.CPU)
 
         mock_client_cls.assert_called_once_with(
             base_url="http://127.0.0.1:7777",
@@ -143,7 +143,7 @@ class TestLlamaGGUFModelLoad:
         ):
             mock_client_instance = MagicMock()
             mock_client_cls.return_value = mock_client_instance
-            model.load(mock_backend)
+            model.load(mock_backend, ComputeUnit.CPU)
 
         mock_wait.assert_called_once_with(mock_client_instance)
 
@@ -155,7 +155,7 @@ class TestLlamaGGUFModelLoad:
             patch("moment_to_action.models.llm._base.subprocess.Popen"),
             patch("moment_to_action.models.llm._base._wait_for_server"),
         ):
-            model.load(MagicMock())
+            model.load(MagicMock(), ComputeUnit.CPU)
 
         assert model.is_loaded
 
@@ -167,9 +167,9 @@ class TestLlamaGGUFModelLoad:
             patch("moment_to_action.models.llm._base.subprocess.Popen"),
             patch("moment_to_action.models.llm._base._wait_for_server"),
         ):
-            model.load(MagicMock())
+            model.load(MagicMock(), ComputeUnit.CPU)
             with pytest.raises(RuntimeError, match="already loaded"):
-                model.load(MagicMock())
+                model.load(MagicMock(), ComputeUnit.CPU)
 
 
 @pytest.mark.unit
@@ -187,7 +187,7 @@ class TestLlamaGGUFModelUnload:
             ),
             patch("moment_to_action.models.llm._base._wait_for_server"),
         ):
-            model.load(MagicMock())
+            model.load(MagicMock(), ComputeUnit.CPU)
         return mock_proc
 
     def test_unload_terminates_subprocess(self) -> None:
@@ -210,7 +210,7 @@ class TestLlamaGGUFModelUnload:
             patch("moment_to_action.models.llm._base._wait_for_server"),
             patch("moment_to_action.models.llm._base.httpx.Client", return_value=mock_client),
         ):
-            model.load(MagicMock())
+            model.load(MagicMock(), ComputeUnit.CPU)
 
         model.unload()
         mock_client.close.assert_called_once()
@@ -291,7 +291,7 @@ class TestLlamaGGUFModelRun:
             patch("moment_to_action.models.llm._base._wait_for_server"),
             patch("moment_to_action.models.llm._base.httpx.Client", return_value=mock_client),
         ):
-            model.load(MagicMock())
+            model.load(MagicMock(), ComputeUnit.CPU)
 
         payload = {"messages": [], "max_tokens": 10}
         result = model.run(payload)
@@ -313,7 +313,7 @@ class TestLlamaGGUFModelRun:
             patch("moment_to_action.models.llm._base._wait_for_server"),
             patch("moment_to_action.models.llm._base.httpx.Client", return_value=mock_client),
         ):
-            model.load(MagicMock())
+            model.load(MagicMock(), ComputeUnit.CPU)
 
         model.run({"messages": [], "max_tokens": 10})
         mock_resp.raise_for_status.assert_called_once()

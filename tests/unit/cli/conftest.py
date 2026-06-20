@@ -9,7 +9,7 @@ import pytest
 
 @pytest.fixture
 def mock_backend() -> MagicMock:
-    """Return a MagicMock ComputeBackend with a usable power monitor."""
+    """Return a MagicMock Platform with a usable power monitor."""
     sample = MagicMock()
     sample.power_mw = 100
     sample.usage_pct = 10

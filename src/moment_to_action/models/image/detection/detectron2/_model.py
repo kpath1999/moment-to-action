@@ -19,7 +19,7 @@ reason this detector supports the NPU where RF-DETR / RTMDet do not.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import cv2
 import numpy as np
@@ -35,7 +35,7 @@ from moment_to_action.models.image.detection._types import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware import LoadedModel, Platform
     from moment_to_action.hardware._types import ComputeUnit
 
 _INPUT_SIZE = 800
@@ -116,8 +116,8 @@ class Detectron2Model(ImageDetectionModel):
         # end-to-end model.onnx that runs RPN + ROI head + NMS internally.  DLC
         # is the two-component AI Hub split (proposal generator + ROI head).
         self._single_graph_onnx = model_format is ModelFormat.ONNX
-        self._handle_pg: object = None
-        self._handle_roi: object = None
+        self._handle_pg: LoadedModel | None = None
+        self._handle_roi: LoadedModel | None = None
         # Whether the loaded ROI-head artifact declares its `features` input as
         # channel-last (NHWC).  Only the HTP context binary (.npu.bin) does; the
         # portable float .dlc keeps NCHW.  Set in load(); gates the transpose in
@@ -135,7 +135,7 @@ class Detectron2Model(ImageDetectionModel):
         """Input tensor layout: ``"NCHW"`` or ``"NHWC"`` (set at construction from the Variant)."""
         return self._input_layout or "NCHW"
 
-    def load(self, backend: ComputeBackend) -> None:
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load the model graph(s) onto the backend.
 
         For the single-graph ONNX variant, loads ``model.onnx`` resolved via
@@ -143,38 +143,38 @@ class Detectron2Model(ImageDetectionModel):
         ``proposal_generator`` and ``roi_head`` artifacts from the table.
 
         Args:
-            backend: Hardware backend to load the model onto.
+            platform: Hardware platform to load the model onto.
+            unit: Compute unit to target.
 
         Raises:
             RuntimeError: If the model is already loaded.
-            KeyError: If ``backend.preferred_unit`` is not supported by this variant.
+            KeyError: If ``unit`` is not supported by this variant.
+            ValueError: If ``unit`` is not available on ``platform``.
         """
-        if self._backend is not None:
+        if self._platform is not None:
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
-        arts = self._backends[backend.preferred_unit]
+        arts = self._backends[unit]
         if self._single_graph_onnx:
             # Single end-to-end graph; reuse _handle_pg as the sole handle.
-            self._handle_pg = backend.load_model(self._artifact_path(arts["model"]))
+            self._handle_pg = platform.load_onnx(unit, self._artifact_path(arts["model"]))
         else:
             pg = self._artifact_path(arts["proposal_generator"])
             roi = self._artifact_path(arts["roi_head"])
             # Only the HTP context binary lays `features` out channel-last; the
             # float .dlc keeps NCHW, so the transpose in run() is binary-only.
             self._roi_channel_last = roi.name.endswith(".npu.bin")
-            self._handle_pg = backend.load_model_dlc(pg)
-            self._handle_roi = backend.load_model_dlc(roi)
-        self._backend = backend
+            self._handle_pg = platform.load_dlc(unit, pg)
+            self._handle_roi = platform.load_dlc(unit, roi)
+        self._platform = platform
 
     def unload(self) -> None:
         """Release backend resources for the loaded graph(s) and reset state."""
-        if self._backend is not None:
-            if self._single_graph_onnx:
-                self._backend.unload_model(self._handle_pg)
-            else:
-                self._backend.unload_dlc(self._handle_pg)
-                self._backend.unload_dlc(self._handle_roi)
-        self._backend = None
+        if self._handle_pg is not None:
+            self._handle_pg.unload()
+        if self._handle_roi is not None:
+            self._handle_roi.unload()
+        self._platform = None
         self._handle_pg = None
         self._handle_roi = None
 
@@ -235,7 +235,7 @@ class Detectron2Model(ImageDetectionModel):
         Raises:
             RuntimeError: If the model has not been loaded.
         """
-        if self._backend is None:
+        if self._handle_pg is None:
             msg = "Detectron2Model.load() must be called before run()"
             raise RuntimeError(msg)
 
@@ -243,25 +243,27 @@ class Detectron2Model(ImageDetectionModel):
             # Traced GeneralizedRCNN outputs (in order): boxes [N,4], classes
             # [N] int64, scores [N], image_size [2].  Reorder to [boxes, scores,
             # classes] and add the batch dim _decode expects.
-            outs = self._backend.run(self._handle_pg, prepared)
+            outs = cast("list[np.ndarray]", self._handle_pg.run(prepared))
             boxes, classes, scores = outs[0], outs[1], outs[2]
             return [boxes[np.newaxis], scores[np.newaxis], classes[np.newaxis]]
 
-        out1 = self._backend.infer_dlc(self._handle_pg, prepared)
+        out1 = cast("dict[str, np.ndarray]", self._handle_pg.run(prepared))
         padded = self._filter_proposals(out1["proposals"], out1["score"])
         # The proposal generator emits `feature` as NCHW.  Only the HTP context
         # binary declares the ROI head's `features` input as channel-last
         # (get_channel_last_inputs=["features"]) -- qai_hub's on-device wrapper
-        # auto-transposes there, infer_dlc does not, so we transpose NCHW ->
-        # NHWC for the binary.  The portable float .dlc keeps NCHW; transposing
-        # it would pool garbage features.
+        # auto-transposes there, but LoadedModel.run() does not, so we transpose
+        # NCHW -> NHWC for the binary.  The portable float .dlc keeps NCHW.
         if self._roi_channel_last:
             feat = np.ascontiguousarray(np.transpose(out1["feature"], (0, 2, 3, 1)))
         else:
             feat = np.ascontiguousarray(out1["feature"])
-        out2 = self._backend.infer_dlc(
-            self._handle_roi,
-            {"features": feat, "proposals_boxes": padded},
+        if self._handle_roi is None:
+            msg = "Detectron2Model: roi_head handle is None after successful load"
+            raise RuntimeError(msg)
+        out2 = cast(
+            "dict[str, np.ndarray]",
+            self._handle_roi.run({"features": feat, "proposals_boxes": padded}),
         )
         boxes, scores, classes = out2["boxes"], out2["scores"], out2["classes"]
         return [boxes, scores, classes]

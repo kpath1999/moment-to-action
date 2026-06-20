@@ -75,12 +75,6 @@ def _make_pipeline(
     The model weights are never downloaded: AutoProcessor and
     AutoModelForImageTextToText are replaced by mocks that return a fixed caption.
     """
-    backend = mock.MagicMock()
-    policy = mock.MagicMock()
-    policy.device = torch.device("cpu")
-    policy.dtype = torch.float32
-    backend.resolve_torch_policy.return_value = policy
-
     manager = mock.MagicMock(spec=ModelManager)
     manager.get_path.return_value = Path("/tmp/smolvlm2_mock")
 
@@ -106,7 +100,7 @@ def _make_pipeline(
             return_value=mock_model,
         ),
     ):
-        stage = SmolVLM2Stage(backend=backend, manager=manager, prompt=prompt)
+        stage = SmolVLM2Stage(manager=manager, prompt=prompt)
 
     stage._processor = mock_processor
     stage._model = mock_model

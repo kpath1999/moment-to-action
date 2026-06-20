@@ -902,7 +902,6 @@ class TestResourceUsageSampleJson:
             cpu_usage=_make_compute_sample(ComputeUnit.CPU),
             gpu_usage=_make_compute_sample(ComputeUnit.GPU),
             npu_usage=_make_compute_sample(ComputeUnit.NPU),
-            dsp_usage=_make_compute_sample(ComputeUnit.DSP),
             proc_cpu_usage=3.5,
             mem_usage=_make_memory_sample(),
         )
@@ -913,7 +912,6 @@ class TestResourceUsageSampleJson:
         assert result["cpu_usage"]["device"] == ComputeUnit.CPU
         assert result["gpu_usage"]["device"] == ComputeUnit.GPU
         assert result["npu_usage"]["device"] == ComputeUnit.NPU
-        assert result["dsp_usage"]["device"] == ComputeUnit.DSP
         assert result["mem_usage"]["rss_bytes"] == 1
 
 
@@ -928,7 +926,6 @@ class TestTraceSummaryWithResourceSamples:
             cpu_usage=_make_compute_sample(),
             gpu_usage=_make_compute_sample(ComputeUnit.GPU),
             npu_usage=_make_compute_sample(ComputeUnit.NPU),
-            dsp_usage=_make_compute_sample(ComputeUnit.DSP),
             proc_cpu_usage=0.0,
             mem_usage=_make_memory_sample(),
         )
@@ -950,7 +947,6 @@ class TestTraceSummaryWithResourceSamples:
         assert "CPU:" in result
         assert "GPU:" in result
         assert "NPU:" in result
-        assert "DSP:" in result
         assert "proc CPU:" in result
         assert "RSS:" in result
 

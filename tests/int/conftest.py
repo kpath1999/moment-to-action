@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from moment_to_action.hardware import ComputeBackend
+from moment_to_action.hardware import Platform
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,9 @@ def test_image_path() -> Path:
 
 
 @pytest.fixture(scope="session")
-def compute_backend() -> ComputeBackend:
-    """Return a ComputeBackend instance for inference.
+def compute_platform() -> Platform:
+    """Return a Platform instance for inference.
 
-    Session-scoped so the same backend is reused across all tests.
+    Session-scoped so the same platform is reused across all tests.
     """
-    return ComputeBackend()
+    return Platform()

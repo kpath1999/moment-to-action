@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from moment_to_action.hardware import ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.models.image.detection.rf_detr._model import RFDETRModel
@@ -44,13 +44,12 @@ def dlc_model_nchw() -> RFDETRModel:
 
 
 @pytest.fixture
-def mock_backend() -> MagicMock:
-    """Return a mock ComputeBackend."""
-    backend = MagicMock()
-    backend.preferred_unit = ComputeUnit.CPU
-    backend.load_model.return_value = MagicMock()
-    backend.load_model_dlc.return_value = MagicMock()
-    return backend
+def mock_platform() -> MagicMock:
+    """Return a mock Platform."""
+    platform = MagicMock(spec=Platform)
+    platform.load_onnx.return_value = MagicMock()
+    platform.load_dlc.return_value = MagicMock()
+    return platform
 
 
 def _make_outputs(
@@ -152,38 +151,42 @@ class TestRFDETRModelLoadUnload:
     """Tests for RFDETRModel.load() and unload()."""
 
     def test_load_onnx_calls_load_model(
-        self, onnx_model: RFDETRModel, mock_backend: MagicMock
+        self, onnx_model: RFDETRModel, mock_platform: MagicMock
     ) -> None:
-        """load() with ONNX format calls backend.load_model."""
-        onnx_model.load(mock_backend)
-        mock_backend.load_model.assert_called_once()
+        """load() with ONNX format calls platform.load_onnx."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
+        mock_platform.load_onnx.assert_called_once()
 
     def test_load_dlc_calls_load_model_dlc(
-        self, dlc_model: RFDETRModel, mock_backend: MagicMock
+        self, dlc_model: RFDETRModel, mock_platform: MagicMock
     ) -> None:
-        """load() with DLC format calls backend.load_model_dlc."""
-        dlc_model.load(mock_backend)
-        mock_backend.load_model_dlc.assert_called_once_with(Path("/fake/qcs6490/model.dlc"))
+        """load() with DLC format calls platform.load_dlc."""
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
+        mock_platform.load_dlc.assert_called_once_with(
+            ComputeUnit.CPU, Path("/fake/qcs6490/model.dlc")
+        )
 
-    def test_load_twice_raises(self, onnx_model: RFDETRModel, mock_backend: MagicMock) -> None:
+    def test_load_twice_raises(self, onnx_model: RFDETRModel, mock_platform: MagicMock) -> None:
         """Loading an already-loaded model raises RuntimeError."""
-        onnx_model.load(mock_backend)
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         with pytest.raises(RuntimeError, match="already loaded"):
-            onnx_model.load(mock_backend)
+            onnx_model.load(mock_platform, ComputeUnit.CPU)
 
-    def test_unload_onnx_calls_unload_model(
-        self, onnx_model: RFDETRModel, mock_backend: MagicMock
+    def test_unload_onnx_calls_unload(
+        self, onnx_model: RFDETRModel, mock_platform: MagicMock
     ) -> None:
-        """unload() with ONNX format calls backend.unload_model."""
-        onnx_model.load(mock_backend)
+        """unload() with ONNX format calls handle.unload()."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         onnx_model.unload()
-        mock_backend.unload_model.assert_called_once()
+        mock_platform.load_onnx.return_value.unload.assert_called_once()
 
-    def test_unload_clears_backend(self, onnx_model: RFDETRModel, mock_backend: MagicMock) -> None:
-        """unload() sets _backend to None."""
-        onnx_model.load(mock_backend)
+    def test_unload_clears_platform(
+        self, onnx_model: RFDETRModel, mock_platform: MagicMock
+    ) -> None:
+        """unload() sets _platform to None."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         onnx_model.unload()
-        assert onnx_model._backend is None
+        assert onnx_model._platform is None
 
     def test_unload_without_load_is_noop(self, onnx_model: RFDETRModel) -> None:
         """unload() without prior load() does not raise."""
@@ -203,30 +206,30 @@ class TestRFDETRModelRun:
             onnx_model.run(prepared)
 
     def test_run_onnx_calls_backend_run(
-        self, onnx_model: RFDETRModel, mock_backend: MagicMock, sample_image_array: np.ndarray
+        self, onnx_model: RFDETRModel, mock_platform: MagicMock, sample_image_array: np.ndarray
     ) -> None:
-        """run() with ONNX format delegates to backend.run."""
+        """run() with ONNX format delegates to handle.run."""
         outputs = _make_outputs([[10, 10, 100, 100]], [0.9], [0])
-        mock_backend.run.return_value = outputs
-        onnx_model.load(mock_backend)
+        mock_platform.load_onnx.return_value.run.return_value = outputs
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         prepared = onnx_model.prepare(sample_image_array)
         result = onnx_model.run(prepared)
-        mock_backend.run.assert_called_once()
+        mock_platform.load_onnx.return_value.run.assert_called_once()
         assert result is outputs
 
     def test_run_dlc_returns_tensor_list(
-        self, dlc_model: RFDETRModel, mock_backend: MagicMock, sample_image_array: np.ndarray
+        self, dlc_model: RFDETRModel, mock_platform: MagicMock, sample_image_array: np.ndarray
     ) -> None:
-        """run() with DLC format returns [boxes, logits, classes] remapped from infer_dlc."""
+        """run() with DLC format returns [boxes, logits, classes] remapped from handle.run."""
         boxes = np.array([[[10, 10, 100, 100]]], dtype=np.float32)
         logits = np.array([[0.9]], dtype=np.float32)
         classes = np.array([[0]], dtype=np.int32)
-        mock_backend.infer_dlc.return_value = {
+        mock_platform.load_dlc.return_value.run.return_value = {
             "boxes": boxes,
             "logits": logits,
             "classes": classes,
         }
-        dlc_model.load(mock_backend)
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         prepared = dlc_model.prepare(sample_image_array)
         result = dlc_model.run(prepared)
         assert len(result) == 3

@@ -29,7 +29,6 @@ from moment_to_action.stages._base import Stage
 from moment_to_action.utils.video import sample_frames, to_pil_rgb
 
 if TYPE_CHECKING:
-    from moment_to_action.hardware import ComputeBackend
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
 
@@ -47,6 +46,36 @@ _DEFAULT_MAX_IMAGES = 8
 _DEFAULT_MAX_NEW_TOKENS = 96
 
 
+def _resolve_torch_device_dtype(
+    requested: str = "auto",
+) -> tuple[torch.device, torch.dtype]:
+    """Resolve torch device and dtype for the requested execution target.
+
+    Args:
+        requested: ``"auto"`` or any string accepted by ``torch.device``.
+
+    Returns:
+        Tuple of ``(device, dtype)``.
+    """
+    if requested != "auto":
+        device = torch.device(requested)
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+
+    if device.type == "cuda":
+        dtype = torch.bfloat16
+    elif device.type == "mps":
+        dtype = torch.float16
+    else:
+        dtype = torch.float32
+
+    return device, dtype
+
+
 class SmolVLM2Stage(Stage):
     """Run SmolVLM2 on sampled video-clip frames and produce a scene description.
 
@@ -56,7 +85,6 @@ class SmolVLM2Stage(Stage):
     through the SmolVLM2 chat template.
 
     Args:
-        backend: Compute backend used to resolve torch policy.
         manager: Model manager used for model resolution and caching.
         torch_device: ``"auto"``, ``"cpu"``, ``"cuda"``, or ``"mps"``.
         prompt: User prompt describing what to look for.
@@ -70,7 +98,6 @@ class SmolVLM2Stage(Stage):
 
     def __init__(
         self,
-        backend: ComputeBackend,
         manager: ModelManager,
         torch_device: str = "auto",
         prompt: str = _DEFAULT_PROMPT,
@@ -79,16 +106,13 @@ class SmolVLM2Stage(Stage):
         max_new_tokens: int = _DEFAULT_MAX_NEW_TOKENS,
     ) -> None:
         super().__init__()
-        self._backend = backend
         self._manager = manager
         self._prompt = prompt
         self._system_prompt = system_prompt
         self._max_images = max(1, max_images)
         self._max_new_tokens = max_new_tokens
 
-        policy = self._backend.resolve_torch_policy(torch_device)
-        device = policy.device
-        dtype = policy.dtype
+        device, dtype = _resolve_torch_device_dtype(torch_device)
 
         model_path = self._manager.get_path(ModelID.SMOLVLM2_2_2B)
 

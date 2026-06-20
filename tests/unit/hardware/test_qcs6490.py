@@ -561,11 +561,6 @@ class TestQCS6490ResourceMonitor:
         util = QCS6490ResourceMonitor._read_utilization(ComputeUnit.NPU)
         assert util == 0.0
 
-    def test_qcs6490_power_monitor_read_utilization_dsp_returns_zero(self) -> None:
-        """Test _read_utilization returns 0.0 for DSP (no sysfs interface)."""
-        util = QCS6490ResourceMonitor._read_utilization(ComputeUnit.DSP)
-        assert util == 0.0
-
     def test_qcs6490_power_monitor_multiple_samples_npu(self) -> None:
         """Test ResourceMonitor returns consistent samples for NPU."""
         mock_sysfs_root = MagicMock()

@@ -12,6 +12,7 @@ from unittest import mock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.messages.video import FrameTensorMessage
 from moment_to_action.messages.vlm import ClassificationMessage
 from moment_to_action.models import ModelID, ModelManager
@@ -23,11 +24,9 @@ class TestMobileCLIPStage:
     """Tests for MobileCLIPStage."""
 
     @pytest.fixture
-    def mock_backend(self) -> mock.MagicMock:
-        """Create a mocked ComputeBackend."""
-        backend = mock.MagicMock()
-        backend.load_model.return_value = "mock_model_handle"
-        return backend
+    def mock_platform(self) -> mock.MagicMock:
+        """Create a mocked Platform."""
+        return mock.MagicMock()
 
     @pytest.fixture
     def mock_manager(self) -> mock.MagicMock:
@@ -67,7 +66,7 @@ class TestMobileCLIPStage:
 
     def test_mobileclip_stage_initialization(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         text_prompts: list[str],
         mock_manager: mock.MagicMock,
@@ -80,7 +79,8 @@ class TestMobileCLIPStage:
 
             stage = MobileCLIPStage(
                 text_prompts=text_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
@@ -88,11 +88,13 @@ class TestMobileCLIPStage:
             assert len(stage._text_tokens) == len(text_prompts)
             assert stage._text_tokens.dtype == np.int64
             mock_manager.get_path.assert_called_once_with(ModelID.MOBILECLIP_S2)
-            mock_backend.load_model.assert_called_once_with(mock_manager.get_path.return_value)
+            mock_platform.load_tflite.assert_called_once_with(
+                ComputeUnit.CPU, mock_manager.get_path.return_value
+            )
 
     def test_mobileclip_zero_shot_classification(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
@@ -106,7 +108,8 @@ class TestMobileCLIPStage:
 
             stage = MobileCLIPStage(
                 text_prompts=text_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
@@ -117,7 +120,7 @@ class TestMobileCLIPStage:
             text_emb = text_emb / np.linalg.norm(text_emb)
 
             # Return embeddings for each prompt
-            mock_backend.run.side_effect = [
+            mock_platform.load_tflite.return_value.run.side_effect = [
                 [text_emb, image_emb],  # First prompt
                 [text_emb, image_emb],  # Second prompt
                 [text_emb, image_emb],  # Third prompt
@@ -133,7 +136,7 @@ class TestMobileCLIPStage:
 
     def test_mobileclip_backend_called_correctly(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
@@ -147,7 +150,8 @@ class TestMobileCLIPStage:
 
             stage = MobileCLIPStage(
                 text_prompts=text_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
@@ -159,16 +163,16 @@ class TestMobileCLIPStage:
                 ]
                 for _ in text_prompts
             ]
-            mock_backend.run.side_effect = embeddings
+            mock_platform.load_tflite.return_value.run.side_effect = embeddings
 
             stage.process(sample_frame_tensor)
 
             # Verify backend.run() was called once per prompt
-            assert mock_backend.run.call_count == len(text_prompts)
+            assert mock_platform.load_tflite.return_value.run.call_count == len(text_prompts)
 
             # Verify input tensors in calls
-            for call in mock_backend.run.call_args_list:
-                inputs_dict = call[0][1]
+            for call in mock_platform.load_tflite.return_value.run.call_args_list:
+                inputs_dict = call[0][0]
                 assert "serving_default_args_0:0" in inputs_dict  # image tensor
                 assert "serving_default_args_1:0" in inputs_dict  # token tensor
 
@@ -179,7 +183,7 @@ class TestMobileCLIPStage:
 
     def test_update_prompts_swaps_without_reloading(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         mock_manager: mock.MagicMock,
     ) -> None:
@@ -192,12 +196,13 @@ class TestMobileCLIPStage:
             initial_prompts = ["person", "hand"]
             stage = MobileCLIPStage(
                 text_prompts=initial_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
             # Verify model was loaded once
-            initial_load_count = mock_backend.load_model.call_count
+            initial_load_count = mock_platform.load_tflite.call_count
             assert initial_load_count == 1
 
             # Update prompts
@@ -205,7 +210,7 @@ class TestMobileCLIPStage:
             stage.update_prompts(new_prompts)
 
             # Verify model was not reloaded
-            assert mock_backend.load_model.call_count == initial_load_count
+            assert mock_platform.load_tflite.call_count == initial_load_count
 
             # Verify prompts were swapped
             assert stage._text_prompts == new_prompts
@@ -216,7 +221,7 @@ class TestMobileCLIPStage:
 
     def test_classification_message_output_format(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
@@ -230,7 +235,8 @@ class TestMobileCLIPStage:
 
             stage = MobileCLIPStage(
                 text_prompts=text_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
@@ -254,7 +260,7 @@ class TestMobileCLIPStage:
                 text_emb = text_emb / np.linalg.norm(text_emb)
                 embeddings_list.append([text_emb, image_emb])
 
-            mock_backend.run.side_effect = embeddings_list
+            mock_platform.load_tflite.return_value.run.side_effect = embeddings_list
 
             result = stage.process(sample_frame_tensor)
 
@@ -282,7 +288,7 @@ class TestMobileCLIPStage:
 
     def test_mobileclip_rejects_non_frame_tensor_message(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         text_prompts: list[str],
         mock_manager: mock.MagicMock,
@@ -297,7 +303,8 @@ class TestMobileCLIPStage:
 
             stage = MobileCLIPStage(
                 text_prompts=text_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
@@ -314,7 +321,7 @@ class TestMobileCLIPStage:
 
     def test_mobileclip_preserves_timestamp(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
@@ -328,7 +335,8 @@ class TestMobileCLIPStage:
 
             stage = MobileCLIPStage(
                 text_prompts=text_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
@@ -340,7 +348,7 @@ class TestMobileCLIPStage:
                 ]
                 for _ in text_prompts
             ]
-            mock_backend.run.side_effect = embeddings
+            mock_platform.load_tflite.return_value.run.side_effect = embeddings
 
             result = stage.process(sample_frame_tensor)
 
@@ -350,7 +358,7 @@ class TestMobileCLIPStage:
 
     def test_mobileclip_high_confidence_prediction(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         sample_frame_tensor: FrameTensorMessage,
         text_prompts: list[str],
@@ -364,7 +372,8 @@ class TestMobileCLIPStage:
 
             stage = MobileCLIPStage(
                 text_prompts=text_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
@@ -377,7 +386,7 @@ class TestMobileCLIPStage:
                 [np.zeros(512, dtype=np.float32), image_emb],  # No match
                 [np.zeros(512, dtype=np.float32), image_emb],  # No match
             ]
-            mock_backend.run.side_effect = embeddings_list
+            mock_platform.load_tflite.return_value.run.side_effect = embeddings_list
 
             result = stage.process(sample_frame_tensor)
 
@@ -388,7 +397,7 @@ class TestMobileCLIPStage:
 
     def test_mobileclip_stage_name(
         self,
-        mock_backend: mock.MagicMock,
+        mock_platform: mock.MagicMock,
         mock_tokenizer: mock.MagicMock,
         text_prompts: list[str],
         mock_manager: mock.MagicMock,
@@ -401,8 +410,35 @@ class TestMobileCLIPStage:
 
             stage = MobileCLIPStage(
                 text_prompts=text_prompts,
-                backend=mock_backend,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
                 manager=mock_manager,
             )
 
             assert stage.name == "MobileCLIPStage"
+
+    def test_mobileclip_stage_onnx_path_calls_load_onnx(
+        self,
+        mock_platform: mock.MagicMock,
+        mock_tokenizer: mock.MagicMock,
+        text_prompts: list[str],
+        mock_manager: mock.MagicMock,
+    ) -> None:
+        """MobileCLIPStage calls load_onnx when model path ends in .onnx."""
+        mock_manager.get_path.return_value = Path("/fake/mobileclip.onnx")
+
+        with mock.patch(
+            "moment_to_action.stages.vlm._mobileclip.open_clip.get_tokenizer"
+        ) as mock_get_tokenizer:
+            mock_get_tokenizer.return_value = mock_tokenizer
+
+            MobileCLIPStage(
+                text_prompts=text_prompts,
+                platform=mock_platform,
+                unit=ComputeUnit.CPU,
+                manager=mock_manager,
+            )
+
+            mock_platform.load_onnx.assert_called_once_with(
+                ComputeUnit.CPU, mock_manager.get_path.return_value
+            )

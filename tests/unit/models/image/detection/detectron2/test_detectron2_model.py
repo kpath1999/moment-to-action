@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from moment_to_action.hardware import ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image.detection.detectron2._model import Detectron2Model
 
@@ -57,13 +57,12 @@ def dlc_model_nchw() -> Detectron2Model:
 
 
 @pytest.fixture
-def mock_backend() -> MagicMock:
-    """Return a mock ComputeBackend with two-graph handles."""
-    backend = MagicMock()
-    backend.preferred_unit = ComputeUnit.CPU
-    backend.load_model.return_value = MagicMock()
-    backend.load_model_dlc.return_value = MagicMock()
-    return backend
+def mock_platform() -> MagicMock:
+    """Return a mock Platform with two-graph handles."""
+    platform = MagicMock(spec=Platform)
+    platform.load_onnx.return_value = MagicMock()
+    platform.load_dlc.return_value = MagicMock()
+    return platform
 
 
 def _roi_outputs(
@@ -185,61 +184,61 @@ class TestLoadUnload:
     """Tests for load()/unload() of both component graphs."""
 
     def test_load_onnx_single_graph(
-        self, onnx_model: Detectron2Model, mock_backend: MagicMock
+        self, onnx_model: Detectron2Model, mock_platform: MagicMock
     ) -> None:
         """ONNX load() loads the single end-to-end graph and leaves ROI handle unset."""
-        onnx_model.load(mock_backend)
-        assert mock_backend.load_model.call_count == 1
-        assert mock_backend.load_model.call_args.args[0] == Path("/fake/d2/model.onnx")
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
+        assert mock_platform.load_onnx.call_count == 1
+        assert mock_platform.load_onnx.call_args.args[1] == Path("/fake/d2/model.onnx")
         assert onnx_model._handle_roi is None
 
     def test_load_dlc_loads_both_components(
-        self, dlc_model: Detectron2Model, mock_backend: MagicMock
+        self, dlc_model: Detectron2Model, mock_platform: MagicMock
     ) -> None:
         """DLC load() loads both proposal_generator and roi_head from backends table."""
-        dlc_model.load(mock_backend)
-        assert mock_backend.load_model_dlc.call_count == 2
-        loaded_names = {c.args[0].name for c in mock_backend.load_model_dlc.call_args_list}
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
+        assert mock_platform.load_dlc.call_count == 2
+        loaded_names = {c.args[1].name for c in mock_platform.load_dlc.call_args_list}
         assert loaded_names == {"model.proposal_generator.npu.bin", "model.roi_head.npu.bin"}
 
     def test_load_dlc_roi_channel_last_set_for_npu_bin(
-        self, dlc_model: Detectron2Model, mock_backend: MagicMock
+        self, dlc_model: Detectron2Model, mock_platform: MagicMock
     ) -> None:
         """DLC load() sets _roi_channel_last=True when roi artifact ends with .npu.bin."""
-        dlc_model.load(mock_backend)
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         assert dlc_model._roi_channel_last is True
 
     def test_load_dlc_roi_channel_last_false_for_float_dlc(
-        self, dlc_model_nchw: Detectron2Model, mock_backend: MagicMock
+        self, dlc_model_nchw: Detectron2Model, mock_platform: MagicMock
     ) -> None:
         """DLC load() sets _roi_channel_last=False when roi artifact ends with .dlc."""
-        dlc_model_nchw.load(mock_backend)
+        dlc_model_nchw.load(mock_platform, ComputeUnit.CPU)
         assert dlc_model_nchw._roi_channel_last is False
 
-    def test_load_twice_raises(self, onnx_model: Detectron2Model, mock_backend: MagicMock) -> None:
+    def test_load_twice_raises(self, onnx_model: Detectron2Model, mock_platform: MagicMock) -> None:
         """Loading twice raises RuntimeError."""
-        onnx_model.load(mock_backend)
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         with pytest.raises(RuntimeError, match="already loaded"):
-            onnx_model.load(mock_backend)
+            onnx_model.load(mock_platform, ComputeUnit.CPU)
 
     def test_unload_onnx_single_graph(
-        self, onnx_model: Detectron2Model, mock_backend: MagicMock
+        self, onnx_model: Detectron2Model, mock_platform: MagicMock
     ) -> None:
         """ONNX unload() releases the single graph and clears state."""
-        onnx_model.load(mock_backend)
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         onnx_model.unload()
-        assert mock_backend.unload_model.call_count == 1
-        assert onnx_model._backend is None
+        mock_platform.load_onnx.return_value.unload.assert_called_once()
+        assert onnx_model._platform is None
         assert onnx_model._handle_pg is None
         assert onnx_model._handle_roi is None
 
     def test_unload_dlc_unloads_both(
-        self, dlc_model: Detectron2Model, mock_backend: MagicMock
+        self, dlc_model: Detectron2Model, mock_platform: MagicMock
     ) -> None:
-        """DLC unload() calls unload_dlc for both graphs."""
-        dlc_model.load(mock_backend)
+        """DLC unload() calls handle.unload() for both graphs."""
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         dlc_model.unload()
-        assert mock_backend.unload_dlc.call_count == 2
+        assert mock_platform.load_dlc.return_value.unload.call_count == 2
 
     def test_unload_without_load_noop(self, onnx_model: Detectron2Model) -> None:
         """unload() before load() does nothing."""
@@ -259,47 +258,50 @@ class TestRun:
             onnx_model.run(prepared)
 
     def test_run_onnx_single_graph(
-        self, onnx_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
+        self, onnx_model: Detectron2Model, mock_platform: MagicMock, sample_image_array: np.ndarray
     ) -> None:
         """ONNX run() runs once and reorders [boxes, classes, scores] -> batched triple."""
-        mock_backend.run.return_value = _onnx_outputs(
+        mock_platform.load_onnx.return_value.run.return_value = _onnx_outputs(
             [[0, 0, 100, 100], [10, 10, 50, 50]], [1, 2], [0.9, 0.8]
         )
-        onnx_model.load(mock_backend)
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         result = onnx_model.run(onnx_model.prepare(sample_image_array))
-        assert mock_backend.run.call_count == 1
+        assert mock_platform.load_onnx.return_value.run.call_count == 1
         assert result[0].shape == (1, 2, 4)  # boxes batched
         np.testing.assert_allclose(result[1][0], [0.9, 0.8], rtol=1e-6)  # scores
         np.testing.assert_array_equal(result[2][0], [1, 2])  # classes
 
     def test_run_dlc_two_stage(
-        self, dlc_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
+        self, dlc_model: Detectron2Model, mock_platform: MagicMock, sample_image_array: np.ndarray
     ) -> None:
-        """DLC run() chains both infer_dlc calls and remaps the dict outputs."""
+        """DLC run() chains both handle.run calls and remaps the dict outputs."""
         feature = np.zeros((1, 4, 5, 5), dtype=np.float32)
         proposals = np.array([[[0, 0, 100, 100]]], dtype=np.float32)
         score = np.array([[0.9]], dtype=np.float32)
         boxes = np.array([[[1, 2, 3, 4]]], dtype=np.float32)
         scores = np.array([[0.7]], dtype=np.float32)
         classes = np.array([[2]], dtype=np.int64)
-        mock_backend.infer_dlc.side_effect = [
+        # load_dlc is called twice (pg then roi), but returns the same mock.
+        # Use side_effect on handle.run to return different values per call.
+        handle = mock_platform.load_dlc.return_value
+        handle.run.side_effect = [
             {"feature": feature, "proposals": proposals, "score": score},
             {"boxes": boxes, "scores": scores, "classes": classes},
         ]
-        dlc_model.load(mock_backend)
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         prepared = dlc_model.prepare(sample_image_array)
         result = dlc_model.run(prepared)
         np.testing.assert_array_equal(result[0], boxes)
         np.testing.assert_array_equal(result[1], scores)
         np.testing.assert_array_equal(result[2], classes)
-        roi_inputs = mock_backend.infer_dlc.call_args_list[1].args[1]
+        roi_inputs = handle.run.call_args_list[1].args[0]
         assert set(roi_inputs) == {"features", "proposals_boxes"}
 
     @staticmethod
-    def _setup_dlc_run(backend: MagicMock, feature_shape: tuple[int, ...]) -> None:
-        """Configure infer_dlc side_effect for a two-stage DLC run."""
+    def _setup_dlc_run(platform: MagicMock, feature_shape: tuple[int, ...]) -> None:
+        """Configure handle.run side_effect for a two-stage DLC run."""
         feature = np.zeros(feature_shape, dtype=np.float32)
-        backend.infer_dlc.side_effect = [
+        platform.load_dlc.return_value.run.side_effect = [
             {
                 "feature": feature,
                 "proposals": np.array([[[0, 0, 100, 100]]], dtype=np.float32),
@@ -313,28 +315,30 @@ class TestRun:
         ]
 
     def test_dlc_bin_transposes_feature_to_nhwc(
-        self, dlc_model: Detectron2Model, mock_backend: MagicMock, sample_image_array: np.ndarray
+        self, dlc_model: Detectron2Model, mock_platform: MagicMock, sample_image_array: np.ndarray
     ) -> None:
         """The HTP context binary (.npu.bin) gets the feature transposed to NHWC."""
-        self._setup_dlc_run(mock_backend, (1, 1024, 50, 50))
-        dlc_model.load(mock_backend)
+        self._setup_dlc_run(mock_platform, (1, 1024, 50, 50))
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         assert dlc_model._roi_channel_last is True
         dlc_model.run(dlc_model.prepare(sample_image_array))
-        roi_feat = mock_backend.infer_dlc.call_args_list[1].args[1]["features"]
+        handle = mock_platform.load_dlc.return_value
+        roi_feat = handle.run.call_args_list[1].args[0]["features"]
         assert roi_feat.shape == (1, 50, 50, 1024)  # NHWC
 
     def test_dlc_keeps_feature_nchw(
         self,
         dlc_model_nchw: Detectron2Model,
-        mock_backend: MagicMock,
+        mock_platform: MagicMock,
         sample_image_array: np.ndarray,
     ) -> None:
         """The float .dlc keeps the feature NCHW (no transpose)."""
-        self._setup_dlc_run(mock_backend, (1, 1024, 50, 50))
-        dlc_model_nchw.load(mock_backend)
+        self._setup_dlc_run(mock_platform, (1, 1024, 50, 50))
+        dlc_model_nchw.load(mock_platform, ComputeUnit.CPU)
         assert dlc_model_nchw._roi_channel_last is False
         dlc_model_nchw.run(dlc_model_nchw.prepare(sample_image_array))
-        roi_feat = mock_backend.infer_dlc.call_args_list[1].args[1]["features"]
+        handle = mock_platform.load_dlc.return_value
+        roi_feat = handle.run.call_args_list[1].args[0]["features"]
         assert roi_feat.shape == (1, 1024, 50, 50)  # NCHW
 
 

@@ -183,6 +183,8 @@ ignore = [
     "S106",
     # stdlib imports are OK at runtime in tests (no performance concern)
     "TC003",
+    # first-party imports used as annotations in test stubs don't need TYPE_CHECKING
+    "TC001",
     # unused lambda args in mock side_effect are intentional (_)
     "ARG005",
     # variable-name `l` in comprehensions is not ambiguous in short test one-liners

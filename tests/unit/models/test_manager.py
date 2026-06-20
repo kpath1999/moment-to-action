@@ -419,10 +419,10 @@ class TestGetModel:
         assert isinstance(model, YOLOModel)
 
     def test_model_not_loaded(self, path_manager: PathManager) -> None:
-        """Returned model is unloaded (_backend is None)."""
+        """Returned model is unloaded (_platform is None)."""
         mgr = ModelManager(path_manager)
         model = mgr.get_model(ModelID.YOLO_V8)
-        assert model._backend is None
+        assert model._platform is None
 
     def test_model_variant_is_default(self, path_manager: PathManager) -> None:
         """get_model() sets _variant to the requested variant key."""

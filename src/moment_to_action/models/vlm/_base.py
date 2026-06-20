@@ -12,7 +12,7 @@ from moment_to_action.models.llm._base import LlamaGGUFModel, _wait_for_server
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware import Platform
     from moment_to_action.hardware._types import ComputeUnit
     from moment_to_action.models._formats import ModelFormat
 
@@ -95,11 +95,12 @@ class LlamaVLModel(LlamaGGUFModel):
         first_unit_backends = next(iter(backends.values()))
         self._mmproj_path = path / first_unit_backends["mmproj"]
 
-    def load(self, backend: ComputeBackend) -> None:
+    def load(self, _platform: Platform, _unit: ComputeUnit) -> None:
         """Start llama-server with the vision encoder projection file and wait for health.
 
         Args:
-            backend: Unused — llama-server runs independently of ComputeBackend.
+            _backend: Unused — llama-server runs independently of Platform.
+            _unit: Unused — llama-server manages its own dispatch.
 
         Raises:
             RuntimeError: If the model is already loaded.
@@ -128,7 +129,7 @@ class LlamaVLModel(LlamaGGUFModel):
             timeout=httpx.Timeout(connect=5.0, read=self._inference_timeout, write=5.0, pool=5.0),
         )
         _wait_for_server(self._client)
-        self._backend = backend
+        self._platform = _platform
 
     def prepare(self, inputs: tuple[str, list[str]]) -> dict:  # type: ignore[override]
         """Format a prompt and base64-encoded images into a multimodal chat request.

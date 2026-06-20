@@ -16,7 +16,7 @@ import cv2
 from rich.console import Console
 from rich.logging import RichHandler
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models import ModelID, ModelManager, YOLOModel
 from moment_to_action.paths import PathManager
 
@@ -43,7 +43,7 @@ if frame is None:
     raise SystemExit(1)
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-compute_backend = ComputeBackend(preferred_unit=device)
+platform = Platform()
 manager = ModelManager(PathManager())
 
 # ── load model ─────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ model = manager.get_model(ModelID.YOLO_V8, confidence_threshold=args.conf)
 if not isinstance(model, YOLOModel):
     err_msg = f"Expected YOLOModel, got {type(model).__name__}"
     raise TypeError(err_msg)
-model.load(compute_backend)
+model.load(platform, device)
 
 # ── run inference ──────────────────────────────────────────────────────────
 prepared = model.prepare(frame)

@@ -14,7 +14,7 @@ from moment_to_action.models._base import BaseModel
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware import Platform
     from moment_to_action.hardware._types import ComputeUnit
     from moment_to_action.models._formats import ModelFormat
 
@@ -128,11 +128,12 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         self._server_proc: subprocess.Popen[bytes] | None = None
         self._client: httpx.Client | None = None
 
-    def load(self, backend: ComputeBackend) -> None:
+    def load(self, _platform: Platform, _unit: ComputeUnit) -> None:
         """Start llama-server and wait for it to become healthy.
 
         Args:
-            backend: Unused — llama-server runs independently of ComputeBackend.
+            _backend: Unused — llama-server runs independently of Platform.
+            _unit: Unused — llama-server manages its own dispatch.
 
         Raises:
             RuntimeError: If the model is already loaded.
@@ -159,7 +160,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             timeout=httpx.Timeout(connect=5.0, read=self._inference_timeout, write=5.0, pool=5.0),
         )
         _wait_for_server(self._client)
-        self._backend = backend
+        self._platform = _platform
         logger.info(
             "%s: llama-server started (pid=%d, port=%d, model=%s)",
             type(self).__name__,
@@ -180,7 +181,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         if self._client is not None:
             self._client.close()
             self._client = None
-        self._backend = None
+        self._platform = None
 
     def prepare(self, inputs: str) -> dict:
         """Format a user prompt into a chat completion request body.

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware import Platform
     from moment_to_action.hardware._types import ComputeUnit
     from moment_to_action.models._formats import ModelFormat
 
@@ -70,7 +70,7 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
                 etc.).  ``None`` for model types that do not use a format field.
             backends: Mapping of compute unit to component filename dicts.
                 Keys present are the supported units; ``load()`` indexes this
-                with ``backend.preferred_unit`` to pick the artifact filenames.
+                with the explicit ``unit`` arg to ``load()`` to pick the artifact filenames.
             input_layout: Input tensor memory layout, ``"NCHW"`` or ``"NHWC"``,
                 or ``None`` for model types that do not require a spatial layout
                 (e.g. language models).
@@ -80,7 +80,7 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         self._format = model_format
         self._backends = backends
         self._input_layout = input_layout
-        self._backend: ComputeBackend | None = None
+        self._platform: Platform | None = None
 
     @property
     def path(self) -> Path:
@@ -107,7 +107,7 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
     @property
     def is_loaded(self) -> bool:
         """True if the model has been loaded onto a backend, False otherwise."""
-        return self._backend is not None
+        return self._platform is not None
 
     def prepare_for_conversion(self, onnx_path: Path) -> Path:
         """Return an ONNX path ready for DLC conversion.
@@ -192,14 +192,16 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         ...
 
     @abstractmethod
-    def load(self, backend: ComputeBackend) -> None:
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load model weights and prepare for inference.
 
         Args:
-            backend: The hardware backend to load the model onto.
+            platform: The hardware platform to load the model onto.
+            unit: The compute unit to target (e.g. ``ComputeUnit.CPU``).
 
         Raises:
             RuntimeError: If the model is already loaded.
+            ValueError: If *unit* is not available on *backend*.
         """
         ...
 
@@ -212,20 +214,21 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         ...
 
     @contextlib.contextmanager
-    def loaded(self, backend: ComputeBackend) -> Iterator[Self]:
+    def loaded(self, platform: Platform, unit: ComputeUnit) -> Iterator[Self]:
         """Context manager: load, yield self, then unload — even on exception.
 
         Args:
-            backend: The hardware backend to load onto.
+            platform: The hardware platform to load onto.
+            unit: The compute unit to target.
 
         Yields:
             This model instance, ready for inference.
 
         Example:
-            >>> with model.loaded(backend) as m:
+            >>> with model.loaded(platform, ComputeUnit.CPU) as m:
             ...     result = m.post_proc(m.run(m.prepare(frame)))
         """
-        self.load(backend)
+        self.load(platform, unit)
         try:
             yield self
         finally:

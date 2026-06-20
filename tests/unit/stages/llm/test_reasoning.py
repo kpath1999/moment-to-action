@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pytest
 
+from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.messages import DetectionMessage
 from moment_to_action.messages.llm import ReasoningMessage
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
@@ -61,7 +62,7 @@ class TestReasoningStage:
         """Test ReasoningStage in stub mode: initialization and processing."""
         stage = ReasoningStage()
 
-        assert stage._backend is None
+        assert stage._platform is None
         assert stage._handle is None
 
         result = stage.process(sample_detection_message)
@@ -379,17 +380,80 @@ class TestReasoningStage:
         mock_manager = MagicMock()
         mock_manager.get_path.return_value = fake_path
 
-        mock_backend = MagicMock()
+        mock_platform = MagicMock()
         mock_handle = MagicMock()
-        mock_backend.load_model.return_value = mock_handle
+        mock_platform.load_onnx.return_value = mock_handle
 
         with patch(
-            "moment_to_action.stages.llm._reasoning.ComputeBackend",
-            return_value=mock_backend,
+            "moment_to_action.stages.llm._reasoning.Platform",
+            return_value=mock_platform,
         ):
             stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
 
-        assert stage._backend is mock_backend
+        assert stage._platform is mock_platform
         assert stage._handle is mock_handle
         mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
-        mock_backend.load_model.assert_called_once_with(fake_path)
+        mock_platform.load_onnx.assert_called_once_with(ComputeUnit.CPU, fake_path)
+
+    def test_reasoning_stage_with_tflite_model_id(self) -> None:
+        """ReasoningStage with a .tflite path calls platform.load_tflite."""
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+
+        from moment_to_action.models import ModelID
+
+        fake_path = Path("/fake/model.tflite")
+        mock_manager = MagicMock()
+        mock_manager.get_path.return_value = fake_path
+
+        mock_platform = MagicMock()
+        mock_handle = MagicMock()
+        mock_platform.load_tflite.return_value = mock_handle
+
+        with patch(
+            "moment_to_action.stages.llm._reasoning.Platform",
+            return_value=mock_platform,
+        ):
+            stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
+
+        assert stage._handle is mock_handle
+        mock_platform.load_tflite.assert_called_once_with(ComputeUnit.CPU, fake_path)
+
+    def test_reasoning_stage_with_dlc_model_id(self) -> None:
+        """ReasoningStage with a .dlc path calls platform.load_dlc."""
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+
+        from moment_to_action.models import ModelID
+
+        fake_path = Path("/fake/model.dlc")
+        mock_manager = MagicMock()
+        mock_manager.get_path.return_value = fake_path
+
+        mock_platform = MagicMock()
+        mock_handle = MagicMock()
+        mock_platform.load_dlc.return_value = mock_handle
+
+        with patch(
+            "moment_to_action.stages.llm._reasoning.Platform",
+            return_value=mock_platform,
+        ):
+            stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
+
+        assert stage._handle is mock_handle
+        mock_platform.load_dlc.assert_called_once_with(ComputeUnit.CPU, fake_path)
+
+    def test_reasoning_stage_unknown_extension_raises(self) -> None:
+        """ReasoningStage raises ValueError for unknown model file extension."""
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+
+        from moment_to_action.models import ModelID
+
+        fake_path = Path("/fake/model.pb")
+        mock_manager = MagicMock()
+        mock_manager.get_path.return_value = fake_path
+
+        with patch("moment_to_action.stages.llm._reasoning.Platform"):
+            with pytest.raises(ValueError, match="Unknown model format"):
+                ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)

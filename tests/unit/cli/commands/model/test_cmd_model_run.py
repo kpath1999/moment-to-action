@@ -73,7 +73,7 @@ def _invoke(
                     return_value=mock_mgr,
                 ):
                     with patch(
-                        "moment_to_action._cli.commands.cmd_model.cmd_run.ComputeBackend",
+                        "moment_to_action._cli.commands.cmd_model.cmd_run.Platform",
                         return_value=be,
                     ):
                         return CliRunner().invoke(cli, ["model", "run", *args])
@@ -191,8 +191,8 @@ class TestModelRunCommand:
         _, kwargs = mgr.get_model.call_args
         assert kwargs["confidence_threshold"] == pytest.approx(0.1)
 
-    def test_backend_option_forwarded_to_compute_backend(self, tmp_path: Path) -> None:
-        """--backend CPU passes ComputeUnit.CPU to ComputeBackend."""
+    def test_backend_option_forwarded_to_model_load(self, tmp_path: Path) -> None:
+        """--backend CPU passes ComputeUnit.CPU to model.load()."""
         from moment_to_action.hardware import ComputeUnit
 
         img_path = tmp_path / "img.jpg"
@@ -201,7 +201,7 @@ class TestModelRunCommand:
         mgr = MagicMock()
         mgr.get_model.return_value = mock_model
 
-        mock_backend = MagicMock()
+        mock_platform = MagicMock()
         with patch("moment_to_action._cli.init_logging"):
             with patch("moment_to_action._cli.PathManager", return_value=_patched_pm(tmp_path)):
                 with patch("moment_to_action._cli.load_config", return_value=AppConfig()):
@@ -210,15 +210,15 @@ class TestModelRunCommand:
                         return_value=mgr,
                     ):
                         with patch(
-                            "moment_to_action._cli.commands.cmd_model.cmd_run.ComputeBackend",
-                            return_value=mock_backend,
-                        ) as cb_cls:
+                            "moment_to_action._cli.commands.cmd_model.cmd_run.Platform",
+                            return_value=mock_platform,
+                        ):
                             from moment_to_action._cli import cli
 
                             CliRunner().invoke(
                                 cli, ["model", "run", "yolo_v8", str(img_path), "--backend", "CPU"]
                             )
-                            cb_cls.assert_called_once_with(preferred_unit=ComputeUnit.CPU)
+                            mock_model.load.assert_called_once_with(mock_platform, ComputeUnit.CPU)
 
     def test_model_unloaded_even_on_error(self, tmp_path: Path) -> None:
         """model.unload() is called even when inference raises."""

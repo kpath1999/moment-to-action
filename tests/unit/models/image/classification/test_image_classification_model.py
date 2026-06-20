@@ -21,13 +21,13 @@ class _ConcreteClassificationModel(ImageClassificationModel):
         self._classifications = classifications or []
         self._run_output: list[np.ndarray] = []
 
-    def load(self, backend: object) -> None:
+    def load(self, platform: object, unit: object) -> None:  # type: ignore[override]
         """Load."""
-        self._backend = backend  # type: ignore[assignment]
+        self._platform = platform  # type: ignore[assignment]
 
     def unload(self) -> None:
         """Unload."""
-        self._backend = None
+        self._platform = None
 
     def prepare(self, inputs: np.ndarray) -> np.ndarray:  # type: ignore[override]
         """Prepare."""
@@ -55,7 +55,7 @@ class TestImageClassificationModel:
         """Subclasses missing post_proc cannot be instantiated."""
 
         class _Incomplete(ImageClassificationModel):
-            def load(self, backend: object) -> None:
+            def load(self, backend: object, unit: object = None) -> None:  # type: ignore[override]
                 """Load."""
 
             def unload(self) -> None:
@@ -91,7 +91,7 @@ class TestVerifyOutputs:
         inputs, ref_outputs = _make_ref_outputs()
         model = _ConcreteClassificationModel(classifications=[Classification("cat", 0.9, 281)])
         model._run_output = [np.zeros((1, 10), dtype=np.float32)]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is True
         assert reason == ""
@@ -101,7 +101,7 @@ class TestVerifyOutputs:
         inputs, ref_outputs = _make_ref_outputs()
         model = _ConcreteClassificationModel(classifications=[Classification("cat", 0.9, 281)])
         model._run_output = [np.ones((1, 10), dtype=np.float32) * 999.0]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is False
         assert "max_err" in reason
@@ -111,7 +111,7 @@ class TestVerifyOutputs:
         inputs, ref_outputs = _make_ref_outputs()
         model = _ConcreteClassificationModel(classifications=[Classification("cat", 0.9, 281)])
         model._run_output = [np.ones((1, 10), dtype=np.float32) * 999.0]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, _ = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=True)
         assert passed is True
 
@@ -131,7 +131,7 @@ class TestVerifyOutputs:
 
         model = _Alternating()
         model._run_output = [np.zeros((1, 10), dtype=np.float32)]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is False
         assert "top-1 mismatch" in reason
@@ -141,7 +141,7 @@ class TestVerifyOutputs:
         inputs = np.zeros((0, 3, 4, 4), dtype=np.float32)
         ref_outputs = [np.zeros((0, 10), dtype=np.float32)]
         model = _ConcreteClassificationModel()
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is True
         assert reason == ""
@@ -162,7 +162,7 @@ class TestVerifyOutputs:
 
         model = _Empty()
         model._run_output = [np.zeros((1, 10), dtype=np.float32)]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is False
         assert "top-1 mismatch" in reason

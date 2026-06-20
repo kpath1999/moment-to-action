@@ -1,16 +1,11 @@
-"""x86_64 platform package.
-
-Public API:
-    ``X86_64Backend``          — unified inference backend (routes .tflite / .onnx)
-    ``X86_64ResourceMonitor``  — resource monitoring via Intel RAPL sysfs + psutil
-"""
+"""x86_64 platform backend and resource monitor."""
 
 from __future__ import annotations
 
-from ._backend import X86_64Backend
+from ._cpu_backend import X86_64CPUBackend
 from ._resources import X86_64ResourceMonitor
 
 __all__ = [
-    "X86_64Backend",
+    "X86_64CPUBackend",
     "X86_64ResourceMonitor",
 ]

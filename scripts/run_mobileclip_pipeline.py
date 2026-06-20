@@ -19,7 +19,7 @@ import rich
 from rich.console import Console
 from rich.logging import RichHandler
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.messages import ClassificationMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import ModelManager
@@ -54,8 +54,8 @@ PROMPTS = [
 ]
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-compute_backend = ComputeBackend(preferred_unit=device)
-metrics = MetricsCollector(compute_backend=compute_backend)
+platform = Platform()
+metrics = MetricsCollector(compute_platform=platform)
 manager = ModelManager(PathManager())
 
 pipeline = Pipeline(
@@ -69,7 +69,8 @@ pipeline = Pipeline(
         # Stage resolves the MobileCLIP model path via ModelManager.
         MobileCLIPStage(
             text_prompts=PROMPTS,
-            backend=compute_backend,
+            platform=platform,
+            unit=device,
             manager=manager,
         ),
     ],

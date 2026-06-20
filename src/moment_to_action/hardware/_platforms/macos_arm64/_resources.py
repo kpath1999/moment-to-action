@@ -17,7 +17,7 @@ from typing import ClassVar
 
 import psutil
 
-from moment_to_action.hardware._platforms._base import ResourceMonitor
+from moment_to_action.hardware._resource_monitor import ResourceMonitor
 from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 logger = logging.getLogger(__name__)

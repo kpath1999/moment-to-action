@@ -43,7 +43,7 @@ def _invoke(
                         return_value=mock_qairt_mgr,
                     ):
                         with patch(
-                            "moment_to_action._cli.commands.cmd_model.cmd_convert.ComputeBackend",
+                            "moment_to_action._cli.commands.cmd_model.cmd_convert.Platform",
                             return_value=backend_cls,
                         ):
                             return CliRunner().invoke(cli, ["model", "convert", *args])

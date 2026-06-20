@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 import cv2
 import rich
 
-from moment_to_action.hardware import ComputeBackend
+from moment_to_action.hardware import Platform
 from moment_to_action.messages import ClassificationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.metrics import MetricsCollector
@@ -296,15 +296,14 @@ def main() -> int:  # noqa: C901, PLR0915
     logger.info("Metrics JSON: %s", metrics_path)
 
     manager = ModelManager(PathManager())
-    backend = ComputeBackend()
-    metrics = MetricsCollector(compute_backend=backend, session_id=run_id)
+    platform = Platform()
+    metrics = MetricsCollector(compute_platform=platform, session_id=run_id)
 
     # Build the pipeline: ClipBufferStage → SmolVLM2Stage
     pipeline = Pipeline(
         stages=[
             ClipBufferStage(clip_len=args.clip_len, stride=args.stride),
             SmolVLM2Stage(
-                backend=backend,
                 manager=manager,
                 torch_device=args.torch_device,
                 prompt=args.prompt,

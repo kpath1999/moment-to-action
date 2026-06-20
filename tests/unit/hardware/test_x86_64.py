@@ -5,301 +5,139 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
-from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64ResourceMonitor
-from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
+from moment_to_action.hardware._platforms.x86_64 import X86_64CPUBackend, X86_64ResourceMonitor
+from moment_to_action.hardware._platforms.x86_64._models import (
+    X86_64DLCModel,
+    X86_64ONNXModel,
+    X86_64TfliteModel,
+)
+from moment_to_action.hardware._types import (
+    ComputeUnit,
+    ComputeUnitUsageSample,
+    DataType,
+    ModelType,
+)
 
 
 @pytest.mark.unit
-class TestX86_64Backend:  # noqa: N801
-    """Test X86_64Backend construction and routing."""
+class TestX86_64CPUBackend:  # noqa: N801
+    """Tests for X86_64CPUBackend properties and load methods."""
 
-    def test_x86_64_backend_construction(self) -> None:
-        """Test X86_64Backend construction."""
-        mock_litert = MagicMock()
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
+    def test_construction(self) -> None:
+        """X86_64CPUBackend constructs without error."""
+        backend = X86_64CPUBackend()
+        assert backend is not None
+
+    def test_unit_property(self) -> None:
+        """Unit property returns CPU."""
+        assert X86_64CPUBackend().unit == ComputeUnit.CPU
+
+    def test_supported_dtypes(self) -> None:
+        """supported_dtypes returns {FP32}."""
+        assert X86_64CPUBackend().supported_dtypes == {DataType.FP32}
+
+    def test_supported_formats(self) -> None:
+        """supported_formats includes TFLITE, ONNX, and DLC."""
+        fmts = X86_64CPUBackend().supported_formats
+        assert ModelType.TFLITE in fmts
+        assert ModelType.ONNX in fmts
+        assert ModelType.DLC in fmts
+
+    def test_load_tflite_returns_tflite_model(self) -> None:
+        """load_tflite returns an X86_64TfliteModel."""
+        mock_interp = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.x86_64._cpu_backend._load_litert_interpreter",
+            return_value=mock_interp,
         ):
-            backend = X86_64Backend()
-            assert backend is not None
+            backend = X86_64CPUBackend()
+            model = backend.load_tflite("/tmp/model.tflite")
 
-    def test_x86_64_get_supported_unit_returns_cpu(self) -> None:
-        """Test X86_64Backend.get_supported_unit returns CPU."""
-        mock_litert = MagicMock()
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
+        assert isinstance(model, X86_64TfliteModel)
+
+    def test_load_tflite_caches_interpreter(self) -> None:
+        """load_tflite with the same path reuses the cached interpreter."""
+        mock_interp = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.x86_64._cpu_backend._load_litert_interpreter",
+            return_value=mock_interp,
+        ) as mock_load:
+            backend = X86_64CPUBackend()
+            backend.load_tflite("/tmp/model.tflite")
+            backend.load_tflite("/tmp/model.tflite")
+
+        assert mock_load.call_count == 1
+
+    def test_load_onnx_returns_onnx_model(self) -> None:
+        """load_onnx returns an X86_64ONNXModel."""
+        mock_session = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.x86_64._cpu_backend.ort.InferenceSession",
+            return_value=mock_session,
         ):
-            backend = X86_64Backend()
-            assert backend.get_supported_unit() == ComputeUnit.CPU
+            backend = X86_64CPUBackend()
+            model = backend.load_onnx("/tmp/model.onnx")
 
-    def test_x86_64_load_tflite_routes_correctly(self) -> None:
-        """Test X86_64Backend.load_model routes .tflite to LiteRT."""
-        mock_litert = MagicMock()
-        mock_litert.load_model.return_value = "mock_litert_handle"
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-        ):
-            backend = X86_64Backend()
-            handle = backend.load_model("/tmp/model.tflite")
+        assert isinstance(model, X86_64ONNXModel)
 
-            mock_litert.load_model.assert_called_once_with("/tmp/model.tflite")
-            assert handle is not None
+    def test_load_onnx_caches_session(self) -> None:
+        """load_onnx with the same path reuses the cached session."""
+        mock_session = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.x86_64._cpu_backend.ort.InferenceSession",
+            return_value=mock_session,
+        ) as mock_cls:
+            backend = X86_64CPUBackend()
+            backend.load_onnx("/tmp/model.onnx")
+            backend.load_onnx("/tmp/model.onnx")
 
-    def test_x86_64_load_onnx_routes_correctly(self) -> None:
-        """Test X86_64Backend.load_model routes .onnx to ONNX."""
-        mock_litert = MagicMock()
-        mock_onnx = MagicMock()
-        mock_onnx.load_model.return_value = "mock_onnx_handle"
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-        ):
-            backend = X86_64Backend()
-            handle = backend.load_model("/tmp/model.onnx")
+        assert mock_cls.call_count == 1
 
-            mock_onnx.load_model.assert_called_once_with("/tmp/model.onnx")
-            assert handle is not None
+    def test_load_torch_raises_not_implemented(self) -> None:
+        """load_torch raises NotImplementedError (not in supported_formats)."""
+        with pytest.raises(NotImplementedError):
+            X86_64CPUBackend().load_torch("/tmp/model.pt")
 
-    def test_x86_64_load_unsupported_format_raises(self) -> None:
-        """Test X86_64Backend.load_model raises ValueError for unsupported format."""
-        mock_litert = MagicMock()
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-        ):
-            backend = X86_64Backend()
-            with pytest.raises(ValueError, match="Unsupported model format"):
-                backend.load_model("/tmp/model.pt")
-
-    def test_x86_64_run_delegates_to_backend(self) -> None:
-        """Test X86_64Backend.run delegates to the appropriate sub-backend."""
-        mock_litert = MagicMock()
-        mock_litert.load_model.return_value = "mock_handle"
-        output_tensor = np.array([1.0, 2.0])
-        mock_litert.run.return_value = [output_tensor]
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-        ):
-            backend = X86_64Backend()
-            handle = backend.load_model("/tmp/model.tflite")
-
-            input_tensor = np.zeros((1, 224, 224, 3), dtype=np.float32)
-            outputs = backend.run(handle, input_tensor)
-
-            mock_litert.run.assert_called_once()
-            assert len(outputs) == 1
-
-    def test_x86_64_get_input_details_delegates(self) -> None:
-        """Test X86_64Backend.get_input_details delegates correctly."""
-        mock_litert = MagicMock()
-        mock_litert.load_model.return_value = "mock_handle"
-        input_details = [{"name": "input", "shape": (1, 224, 224, 3)}]
-        mock_litert.get_input_details.return_value = input_details
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-        ):
-            backend = X86_64Backend()
-            handle = backend.load_model("/tmp/model.tflite")
-            details = backend.get_input_details(handle)
-
-            assert details == input_details
-
-    def test_x86_64_get_output_details_delegates(self) -> None:
-        """Test X86_64Backend.get_output_details delegates correctly."""
-        mock_litert = MagicMock()
-        mock_litert.load_model.return_value = "mock_handle"
-        output_details = [{"name": "output", "shape": (1, 1000)}]
-        mock_litert.get_output_details.return_value = output_details
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-        ):
-            backend = X86_64Backend()
-            handle = backend.load_model("/tmp/model.tflite")
-            details = backend.get_output_details(handle)
-
-            assert details == output_details
-
-    def test_x86_64_resolve_torch_policy_delegates_to_helper(self) -> None:
-        """Test x86_64 torch policy is resolved by shared helper."""
-        mock_litert = MagicMock()
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.resolve_torch_execution_policy"
-            ) as mock_resolve,
-        ):
-            mock_resolve.return_value.device = "cpu"
-            mock_resolve.return_value.dtype = "float32"
-            backend = X86_64Backend()
-            policy = backend.resolve_torch_policy("auto")
-
-            mock_resolve.assert_called_once_with("auto")
-            assert policy.device == "cpu"
-            assert policy.dtype == "float32"
+    def test_load_llama_cpp_raises_not_implemented(self) -> None:
+        """load_llama_cpp raises NotImplementedError (not in supported_formats)."""
+        with pytest.raises(NotImplementedError):
+            X86_64CPUBackend().load_llama_cpp("/tmp/model.gguf")
 
 
 @pytest.mark.unit
 class TestX86_64DLCMethods:  # noqa: N801
-    """Tests for X86_64Backend DLC methods using the QAIRT CPU backend."""
+    """Tests for X86_64CPUBackend DLC support via QAIRT CPU backend."""
 
-    def _make_backend(self, preferred_unit: ComputeUnit = ComputeUnit.CPU) -> X86_64Backend:
-        """Return an X86_64Backend with sub-backends mocked out."""
-        mock_litert = MagicMock()
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-        ):
-            return X86_64Backend(preferred_unit=preferred_unit)
-
-    def test_load_model_dlc_cpu_unit_initializes_cpu(self) -> None:
-        """CPU preferred_unit → raw.initialize(backend='CPU')."""
+    def test_load_dlc_returns_dlc_model(self) -> None:
+        """load_dlc returns an X86_64DLCModel when qairt is available."""
         import sys
         from pathlib import Path
 
         mock_raw = MagicMock()
         mock_qairt = MagicMock()
         mock_qairt.load.return_value = mock_raw
-        backend = self._make_backend(ComputeUnit.CPU)
+        backend = X86_64CPUBackend()
         path = Path("/fake/model.dlc")
         with patch.dict(sys.modules, {"qairt": mock_qairt}):
-            handle = backend.load_model_dlc(path)
+            model = backend.load_dlc(path)
 
         mock_qairt.load.assert_called_once_with(str(path))
         mock_raw.initialize.assert_called_once_with(backend="CPU")
-        assert handle is mock_raw
+        assert isinstance(model, X86_64DLCModel)
 
-    def test_non_cpu_unit_raises_at_construction(self) -> None:
-        """X86_64Backend raises ValueError for any non-CPU preferred_unit."""
-        mock_litert = MagicMock()
-        mock_onnx = MagicMock()
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch(
-                "moment_to_action.hardware._platforms.x86_64._backend.X86_64ONNXBackend",
-                return_value=mock_onnx,
-            ),
-            pytest.raises(ValueError, match="only supports CPU"),
-        ):
-            X86_64Backend(preferred_unit=ComputeUnit.NPU)
-
-    def test_load_model_dlc_raises_if_qairt_unavailable(self) -> None:
-        """load_model_dlc() raises RuntimeError when the QAIRT SDK cannot be imported."""
+    def test_load_dlc_raises_if_qairt_unavailable(self) -> None:
+        """load_dlc raises RuntimeError when the QAIRT SDK cannot be imported."""
         import sys
         from pathlib import Path
 
-        backend = self._make_backend()
-        with patch.dict(sys.modules, {"qairt": None}):  # type: ignore[dict-item]
-            with pytest.raises(RuntimeError, match="QAIRT SDK is not available"):
-                backend.load_model_dlc(Path("/fake/model.dlc"))
-
-    def test_infer_dlc_calls_handle_and_returns_output(self) -> None:
-        """infer_dlc() calls handle(inputs=...) and returns the full output dict."""
-        boxes = np.zeros((1, 8400, 4), dtype=np.float32)
-        scores = np.zeros((1, 8400), dtype=np.float32)
-        class_idx = np.zeros((1, 8400), dtype=np.float32)
-        fake_output = {"boxes": boxes, "scores": scores, "class_idx": class_idx}
-        mock_result = MagicMock()
-        mock_result.data = fake_output
-        mock_handle = MagicMock()
-        mock_handle.return_value = mock_result
-        backend = self._make_backend()
-
-        result = backend.infer_dlc(mock_handle, np.zeros((1, 3, 640, 640), dtype=np.float32))
-
-        mock_handle.assert_called_once()
-        assert result.keys() == fake_output.keys()
-        for k, v in fake_output.items():
-            np.testing.assert_array_equal(result[k], v)
-
-    def test_unload_dlc_calls_handle_destroy(self) -> None:
-        """unload_dlc() calls handle.destroy()."""
-        backend = self._make_backend()
-        mock_handle = MagicMock()
-
-        backend.unload_dlc(mock_handle)
-
-        mock_handle.destroy.assert_called_once_with()
+        backend = X86_64CPUBackend()
+        with (
+            patch.dict(sys.modules, {"qairt": None}),  # type: ignore[dict-item]
+            pytest.raises(RuntimeError, match="QAIRT SDK is not available"),
+        ):
+            backend.load_dlc(Path("/fake/model.dlc"))
 
 
 @pytest.mark.unit

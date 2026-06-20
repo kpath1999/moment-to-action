@@ -52,7 +52,7 @@ class TestCliCommand:
 
         with patch("moment_to_action._cli.init_logging") as mock_init:
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=self._mock_backend(),
             ):
                 result = CliRunner().invoke(cli, ["--verbose", "read-power", "CPU"])
@@ -65,7 +65,7 @@ class TestCliCommand:
 
         with patch("moment_to_action._cli.init_logging") as mock_init:
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=self._mock_backend(),
             ):
                 result = CliRunner().invoke(cli, ["read-power", "CPU"])
@@ -78,7 +78,7 @@ class TestCliCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=self._mock_backend(),
             ):
                 result = CliRunner().invoke(cli, ["--seed", "0x2a", "read-power", "CPU"])

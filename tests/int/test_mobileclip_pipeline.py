@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from moment_to_action.hardware import ComputeBackend
+from moment_to_action.hardware import Platform
+from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.models import ModelManager
 from moment_to_action.paths import PathManager
@@ -70,11 +71,12 @@ def test_mobileclip_pipeline(
         "a cat sleeping",
         "an outdoor scene",
     ]
-    backend = ComputeBackend()
+    platform = Platform()
     manager = ModelManager(PathManager())
     mobileclip_stage = MobileCLIPStage(
         text_prompts=text_prompts,
-        backend=backend,
+        platform=platform,
+        unit=ComputeUnit.CPU,
         manager=manager,
     )
     classification_msg = mobileclip_stage.process(tensor_msg)
@@ -147,11 +149,12 @@ def test_mobileclip_swappable_prompts(
 
     # First classification — stage resolves its own model path via ModelManager.
     initial_prompts = ["a person", "an animal", "a landscape"]
-    backend = ComputeBackend()
+    platform = Platform()
     manager = ModelManager(PathManager())
     mobileclip_stage = MobileCLIPStage(
         text_prompts=initial_prompts,
-        backend=backend,
+        platform=platform,
+        unit=ComputeUnit.CPU,
         manager=manager,
     )
     result1 = mobileclip_stage.process(tensor_msg)

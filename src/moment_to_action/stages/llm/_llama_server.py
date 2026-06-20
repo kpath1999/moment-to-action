@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.messages import DetectionMessage, ReasoningMessage
 from moment_to_action.metrics._types import SpanType
 from moment_to_action.models._model_info import ModelID
@@ -90,7 +90,7 @@ class LlamaServerStage(Stage):
             system_prompt=system_prompt,
             max_tokens=max_tokens,
         )
-        self._model.load(ComputeBackend(preferred_unit=ComputeUnit.CPU))
+        self._model.load(Platform(), ComputeUnit.CPU)
         self._closed = False  # fully initialised — __del__ may now clean up
         logger.info("LlamaServerStage: llama-server started for model %s", model_id.value)
 
