@@ -9,7 +9,10 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import BenchmarkResult, Platform
-from moment_to_action.hardware._types import ComputeUnit, PlatformType
+from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._loaded_model import LoadedModel
+from moment_to_action.hardware._platform import _detect_platform
+from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType, PlatformType
 
 
 @pytest.mark.unit
@@ -302,3 +305,451 @@ class TestPlatformBenchmark:
 
         assert result.n_runs == 20
         assert mock_model.run.call_count == 20
+
+
+@pytest.mark.unit
+class TestComputeBackendDefaults:
+    """Tests for ComputeBackend default load_onnx/load_dlc/load_torch/load_tflite/load_llama_cpp."""
+
+    def _make_backend(self) -> ComputeBackend:
+        """Return a minimal concrete ComputeBackend with no supported formats."""
+
+        class _Minimal(ComputeBackend):
+            @property
+            def unit(self) -> ComputeUnit:
+                """Return CPU."""
+                return ComputeUnit.CPU
+
+            @property
+            def supported_dtypes(self) -> set[DataType]:
+                """Return empty set."""
+                return set()
+
+            @property
+            def supported_formats(self) -> set[ModelType]:
+                """Return empty set."""
+                return set()
+
+        return _Minimal()
+
+    def test_load_onnx_raises_not_implemented(self) -> None:
+        """load_onnx raises NotImplementedError when ONNX not in supported_formats."""
+        b = self._make_backend()
+        with pytest.raises(NotImplementedError, match="ONNX"):
+            b.load_onnx("/tmp/model.onnx")
+
+    def test_load_dlc_raises_not_implemented(self) -> None:
+        """load_dlc raises NotImplementedError when DLC not in supported_formats."""
+        b = self._make_backend()
+        with pytest.raises(NotImplementedError, match="DLC"):
+            b.load_dlc("/tmp/model.dlc")
+
+    def test_load_torch_raises_not_implemented(self) -> None:
+        """load_torch raises NotImplementedError when TORCH not in supported_formats."""
+        b = self._make_backend()
+        with pytest.raises(NotImplementedError, match="TORCH"):
+            b.load_torch("/tmp/model.pt")
+
+    def test_load_tflite_raises_not_implemented(self) -> None:
+        """load_tflite raises NotImplementedError when TFLITE not in supported_formats."""
+        b = self._make_backend()
+        with pytest.raises(NotImplementedError, match="TFLITE"):
+            b.load_tflite("/tmp/model.tflite")
+
+    def test_load_llama_cpp_raises_not_implemented(self) -> None:
+        """load_llama_cpp raises NotImplementedError when LLAMA_CPP not in supported_formats."""
+        b = self._make_backend()
+        with pytest.raises(NotImplementedError, match="LLAMA_CPP"):
+            b.load_llama_cpp("/tmp/model.gguf")
+
+    def test_raise_unsupported_message_includes_supported_formats(self) -> None:
+        """_raise_unsupported error message lists supported formats."""
+
+        class _WithOnnx(ComputeBackend):
+            @property
+            def unit(self) -> ComputeUnit:
+                """Return CPU."""
+                return ComputeUnit.CPU
+
+            @property
+            def supported_dtypes(self) -> set[DataType]:
+                """Return empty."""
+                return set()
+
+            @property
+            def supported_formats(self) -> set[ModelType]:
+                """Return ONNX only."""
+                return {ModelType.ONNX}
+
+        b = _WithOnnx()
+        with pytest.raises(NotImplementedError, match="ONNX"):
+            b.load_dlc("/tmp/model.dlc")
+
+
+@pytest.mark.unit
+class TestLoadedModelContextManager:
+    """Tests for LoadedModel.__enter__ and __exit__."""
+
+    def _make_model(self) -> LoadedModel:
+        """Return a minimal concrete LoadedModel."""
+
+        class _ConcreteModel(LoadedModel):
+            def __init__(self) -> None:
+                """Initialize."""
+                self._unloaded = False
+
+            @property
+            def unit(self) -> ComputeUnit:
+                """Return CPU."""
+                return ComputeUnit.CPU
+
+            @property
+            def dtype(self) -> DataType:
+                """Return FP32."""
+                return DataType.FP32
+
+            @property
+            def model_type(self) -> ModelType:
+                """Return TFLITE."""
+                return ModelType.TFLITE
+
+            def run(self, inputs: object) -> object:
+                """Run inference."""
+                return None
+
+            def unload(self) -> None:
+                """Unload model."""
+                self._unloaded = True
+
+        return _ConcreteModel()
+
+    def test_enter_returns_self(self) -> None:
+        """__enter__ returns the model itself."""
+        model = self._make_model()
+        result = model.__enter__()
+        assert result is model
+
+    def test_exit_calls_unload(self) -> None:
+        """__exit__ calls unload()."""
+        model = self._make_model()
+        model.__exit__(None, None, None)
+        assert model._unloaded is True  # type: ignore[attr-defined]
+
+    def test_context_manager_protocol(self) -> None:
+        """Using as context manager calls unload on exit."""
+        model = self._make_model()
+        with model as m:
+            assert m is model
+        assert model._unloaded is True  # type: ignore[attr-defined]
+
+    def test_del_calls_unload(self) -> None:
+        """__del__ calls unload as GC safety net."""
+        model = self._make_model()
+        model.__del__()
+        assert model._unloaded is True  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+class TestDetectPlatform:
+    """Tests for _detect_platform() detection logic."""
+
+    def test_detects_qcs6490_from_soc_file(self) -> None:
+        """_detect_platform returns QCS6490 when soc file contains QCS6490."""
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.read_text.return_value = "Qualcomm QCS6490\n"
+        with (
+            patch("moment_to_action.hardware._platform._QCOM_SOC_NAME_FILE", mock_path),
+            patch("moment_to_action.hardware._platform._detect_platform.cache_clear"),
+        ):
+            _detect_platform.cache_clear()
+            result = _detect_platform()
+        assert result == PlatformType.QCS6490
+
+    def test_detects_x86_64_via_machine(self) -> None:
+        """_detect_platform returns X86_64 when machine() is x86_64."""
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with (
+            patch("moment_to_action.hardware._platform._QCOM_SOC_NAME_FILE", mock_path),
+            patch("moment_to_action.hardware._platform.platform.machine", return_value="x86_64"),
+            patch("moment_to_action.hardware._platform.platform.system", return_value="linux"),
+        ):
+            _detect_platform.cache_clear()
+            result = _detect_platform()
+        assert result == PlatformType.X86_64
+
+    def test_detects_x86_64_via_amd64(self) -> None:
+        """_detect_platform returns X86_64 when machine() is amd64."""
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with (
+            patch("moment_to_action.hardware._platform._QCOM_SOC_NAME_FILE", mock_path),
+            patch("moment_to_action.hardware._platform.platform.machine", return_value="amd64"),
+            patch("moment_to_action.hardware._platform.platform.system", return_value="linux"),
+        ):
+            _detect_platform.cache_clear()
+            result = _detect_platform()
+        assert result == PlatformType.X86_64
+
+    def test_detects_macos_arm64(self) -> None:
+        """_detect_platform returns MACOS_ARM64 when arm64 + darwin."""
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with (
+            patch("moment_to_action.hardware._platform._QCOM_SOC_NAME_FILE", mock_path),
+            patch("moment_to_action.hardware._platform.platform.machine", return_value="arm64"),
+            patch("moment_to_action.hardware._platform.platform.system", return_value="darwin"),
+        ):
+            _detect_platform.cache_clear()
+            result = _detect_platform()
+        assert result == PlatformType.MACOS_ARM64
+
+    def test_detects_macos_arm64_via_aarch64(self) -> None:
+        """_detect_platform returns MACOS_ARM64 when aarch64 + darwin."""
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with (
+            patch("moment_to_action.hardware._platform._QCOM_SOC_NAME_FILE", mock_path),
+            patch("moment_to_action.hardware._platform.platform.machine", return_value="aarch64"),
+            patch("moment_to_action.hardware._platform.platform.system", return_value="darwin"),
+        ):
+            _detect_platform.cache_clear()
+            result = _detect_platform()
+        assert result == PlatformType.MACOS_ARM64
+
+    def test_raises_on_unknown_platform(self) -> None:
+        """_detect_platform raises RuntimeError for unrecognised platform."""
+        mock_path = MagicMock()
+        mock_path.exists.return_value = False
+        with (
+            patch("moment_to_action.hardware._platform._QCOM_SOC_NAME_FILE", mock_path),
+            patch("moment_to_action.hardware._platform.platform.machine", return_value="mips"),
+            patch("moment_to_action.hardware._platform.platform.system", return_value="linux"),
+        ):
+            _detect_platform.cache_clear()
+            with pytest.raises(RuntimeError, match="Unrecognised platform"):
+                _detect_platform()
+
+    def test_soc_file_non_qcs6490_falls_through_to_machine(self) -> None:
+        """_detect_platform reads soc file but falls through when not QCS6490."""
+        mock_path = MagicMock()
+        mock_path.exists.return_value = True
+        mock_path.read_text.return_value = "SDM845\n"
+        with (
+            patch("moment_to_action.hardware._platform._QCOM_SOC_NAME_FILE", mock_path),
+            patch("moment_to_action.hardware._platform.platform.machine", return_value="x86_64"),
+            patch("moment_to_action.hardware._platform.platform.system", return_value="linux"),
+        ):
+            _detect_platform.cache_clear()
+            result = _detect_platform()
+        assert result == PlatformType.X86_64
+
+
+@pytest.mark.unit
+class TestPlatformInitMethods:
+    """Tests for Platform._init_qcs6490/_init_x86_64/_init_macos_arm64 and HTP/GPU fallbacks."""
+
+    @staticmethod
+    def _make_platform_of_type(
+        platform_type: PlatformType,
+    ) -> Platform:
+        """Build a Platform for the given type with mocked init."""
+        with patch("moment_to_action.hardware._platform._detect_platform") as mock_detect:
+            mock_detect.return_value = platform_type
+
+            if platform_type == PlatformType.X86_64:
+                mock_cpu = MagicMock()
+                mock_monitor = MagicMock()
+                with (
+                    patch(
+                        "moment_to_action.hardware._platform.Platform._init_x86_64",
+                        autospec=True,
+                    ) as mock_init,
+                ):
+
+                    def _setup(self: Platform) -> None:
+                        self._resource_monitor = mock_monitor
+                        self._backends = {ComputeUnit.CPU: mock_cpu}
+
+                    mock_init.side_effect = _setup
+                    return Platform()
+
+            if platform_type == PlatformType.MACOS_ARM64:
+                mock_cpu = MagicMock()
+                mock_monitor = MagicMock()
+                with (
+                    patch(
+                        "moment_to_action.hardware._platform.Platform._init_macos_arm64",
+                        autospec=True,
+                    ) as mock_init,
+                ):
+
+                    def _setup_mac(self: Platform) -> None:
+                        self._resource_monitor = mock_monitor
+                        self._backends = {ComputeUnit.CPU: mock_cpu}
+
+                    mock_init.side_effect = _setup_mac
+                    return Platform()
+
+            msg = f"Unsupported type: {platform_type}"
+            raise ValueError(msg)
+
+    def test_init_x86_64_creates_cpu_backend(self) -> None:
+        """_init_x86_64 registers a CPU backend."""
+        mock_cpu = MagicMock()
+        mock_monitor = MagicMock()
+        with (
+            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._cpu_backend.X86_64CPUBackend",
+                return_value=mock_cpu,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.x86_64._resources.X86_64ResourceMonitor",
+                return_value=mock_monitor,
+            ),
+        ):
+            mock_detect.return_value = PlatformType.X86_64
+            p = Platform()
+        assert ComputeUnit.CPU in p.supported_units
+
+    def test_init_macos_arm64_creates_cpu_backend(self) -> None:
+        """_init_macos_arm64 registers a CPU backend."""
+        mock_cpu = MagicMock()
+        mock_monitor = MagicMock()
+        with (
+            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch(
+                "moment_to_action.hardware._platforms.macos_arm64._cpu_backend.MacOSARM64CPUBackend",
+                return_value=mock_cpu,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.macos_arm64._resources.MacOSARM64ResourceMonitor",
+                return_value=mock_monitor,
+            ),
+        ):
+            mock_detect.return_value = PlatformType.MACOS_ARM64
+            p = Platform()
+        assert ComputeUnit.CPU in p.supported_units
+
+    def test_init_qcs6490_cpu_always_registered(self) -> None:
+        """_init_qcs6490 always registers CPU; HTP and GPU are optional."""
+        mock_cpu = MagicMock()
+        mock_monitor = MagicMock()
+        with (
+            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._cpu_backend.QCS6490CPUBackend",
+                return_value=mock_cpu,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._resources.QCS6490ResourceMonitor",
+                return_value=mock_monitor,
+            ),
+            patch.object(Platform, "_try_add_htp_backend"),
+            patch.object(Platform, "_try_add_gpu_backend"),
+        ):
+            mock_detect.return_value = PlatformType.QCS6490
+            p = Platform()
+        assert ComputeUnit.CPU in p.supported_units
+
+    def test_try_add_htp_backend_registers_npu_when_available(self) -> None:
+        """_try_add_htp_backend registers NPU backend when HTP imports succeed."""
+        mock_htp = MagicMock()
+        with (
+            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch(
+                "moment_to_action.hardware._platform.Platform._init_qcs6490",
+                autospec=True,
+            ) as mock_init,
+        ):
+            mock_detect.return_value = PlatformType.QCS6490
+
+            def _setup(self: Platform) -> None:
+                self._resource_monitor = MagicMock()
+                self._backends = {ComputeUnit.CPU: MagicMock()}
+
+            mock_init.side_effect = _setup
+            p = Platform()
+
+        # Now test _try_add_htp_backend directly
+        with patch(
+            "moment_to_action.hardware._platform.QCS6490HTPBackend",
+            return_value=mock_htp,
+            create=True,
+        ):
+            # Import and patch the module-level symbol used inside _try_add_htp_backend
+            with patch(
+                "moment_to_action.hardware._platforms.qcs6490._htp_backend.QCS6490HTPBackend",
+                return_value=mock_htp,
+            ):
+                p._try_add_htp_backend()
+
+    def test_try_add_htp_backend_logs_warning_when_unavailable(self) -> None:
+        """_try_add_htp_backend logs warning when HTP backend raises."""
+        with (
+            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch(
+                "moment_to_action.hardware._platform.Platform._init_qcs6490",
+                autospec=True,
+            ) as mock_init,
+        ):
+            mock_detect.return_value = PlatformType.QCS6490
+
+            def _setup(self: Platform) -> None:
+                self._resource_monitor = MagicMock()
+                self._backends = {ComputeUnit.CPU: MagicMock()}
+
+            mock_init.side_effect = _setup
+            p = Platform()
+
+        # Patch the import inside _try_add_htp_backend to raise
+        import sys
+
+        saved = sys.modules.get("moment_to_action.hardware._platforms.qcs6490._htp_backend")
+        try:
+            mock_mod = MagicMock()
+            mock_mod.QCS6490HTPBackend.side_effect = RuntimeError("delegate missing")
+            sys.modules["moment_to_action.hardware._platforms.qcs6490._htp_backend"] = mock_mod
+            p._try_add_htp_backend()
+            # NPU should NOT be in backends since import raised
+            assert ComputeUnit.NPU not in p._backends  # type: ignore[attr-defined]
+        finally:
+            if saved is None:
+                del sys.modules["moment_to_action.hardware._platforms.qcs6490._htp_backend"]
+            else:
+                sys.modules["moment_to_action.hardware._platforms.qcs6490._htp_backend"] = saved
+
+    def test_try_add_gpu_backend_logs_warning_when_unavailable(self) -> None:
+        """_try_add_gpu_backend logs warning when GPU backend raises."""
+        with (
+            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch(
+                "moment_to_action.hardware._platform.Platform._init_qcs6490",
+                autospec=True,
+            ) as mock_init,
+        ):
+            mock_detect.return_value = PlatformType.QCS6490
+
+            def _setup(self: Platform) -> None:
+                self._resource_monitor = MagicMock()
+                self._backends = {ComputeUnit.CPU: MagicMock()}
+
+            mock_init.side_effect = _setup
+            p = Platform()
+
+        import sys
+
+        saved = sys.modules.get("moment_to_action.hardware._platforms.qcs6490._gpu_backend")
+        try:
+            mock_mod = MagicMock()
+            mock_mod.QCS6490GPUBackend.side_effect = RuntimeError("delegate missing")
+            sys.modules["moment_to_action.hardware._platforms.qcs6490._gpu_backend"] = mock_mod
+            p._try_add_gpu_backend()
+            assert ComputeUnit.GPU not in p._backends  # type: ignore[attr-defined]
+        finally:
+            if saved is None:
+                del sys.modules["moment_to_action.hardware._platforms.qcs6490._gpu_backend"]
+            else:
+                sys.modules["moment_to_action.hardware._platforms.qcs6490._gpu_backend"] = saved

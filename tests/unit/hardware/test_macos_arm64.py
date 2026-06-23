@@ -174,3 +174,167 @@ class TestMacOSARM64ResourceMonitor:
             monitor = MacOSARM64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
         assert sample.usage_pct == 42.0
+
+
+@pytest.mark.unit
+class TestMacOSARM64TfliteModel:
+    """Tests for MacOSARM64TfliteModel properties and run/unload."""
+
+    def _make_model(self) -> MacOSARM64TfliteModel:
+        """Return a TfliteModel with a mock interpreter."""
+        import numpy as np
+
+        mock_interp = MagicMock()
+        mock_interp.get_input_details.return_value = [
+            {"index": 0, "name": "input", "dtype": np.float32}
+        ]
+        mock_interp.get_output_details.return_value = [{"index": 0}]
+        mock_interp.get_tensor.return_value = np.zeros((1, 10))
+        return MacOSARM64TfliteModel(interp=mock_interp)
+
+    def test_unit_property(self) -> None:
+        """Unit is always CPU."""
+        assert self._make_model().unit == ComputeUnit.CPU
+
+    def test_dtype_property_default(self) -> None:
+        """Default dtype is FP32."""
+        assert self._make_model().dtype == DataType.FP32
+
+    def test_model_type_property(self) -> None:
+        """model_type is TFLITE."""
+        assert self._make_model().model_type == ModelType.TFLITE
+
+    def test_run_with_ndarray(self) -> None:
+        """run() accepts np.ndarray."""
+        import numpy as np
+
+        model = self._make_model()
+        result = model.run(np.zeros((1, 3, 224, 224), dtype=np.float32))
+        assert isinstance(result, list)
+
+    def test_run_with_dict(self) -> None:
+        """run() accepts dict[str, np.ndarray]."""
+        import numpy as np
+
+        model = self._make_model()
+        result = model.run({"input": np.zeros((1, 3, 224, 224), dtype=np.float32)})
+        assert isinstance(result, list)
+
+    def test_unload_clears_interp(self) -> None:
+        """unload() clears the interpreter handle."""
+        model = self._make_model()
+        model.unload()
+        assert model._interp is None
+        assert model._unloaded is True
+
+    def test_unload_idempotent(self) -> None:
+        """Calling unload() twice is safe."""
+        model = self._make_model()
+        model.unload()
+        model.unload()
+
+
+@pytest.mark.unit
+class TestMacOSARM64ONNXModel:
+    """Tests for MacOSARM64ONNXModel properties and run/unload."""
+
+    def _make_model(self) -> MacOSARM64ONNXModel:
+        """Return an ONNXModel with a mock session."""
+        import numpy as np
+
+        mock_session = MagicMock()
+        mock_input = MagicMock()
+        mock_input.name = "input"
+        mock_session.get_inputs.return_value = [mock_input]
+        mock_session.run.return_value = [np.zeros((1, 10))]
+        return MacOSARM64ONNXModel(session=mock_session)
+
+    def test_unit_property(self) -> None:
+        """Unit is always CPU."""
+        assert self._make_model().unit == ComputeUnit.CPU
+
+    def test_dtype_property_default(self) -> None:
+        """Default dtype is FP32."""
+        assert self._make_model().dtype == DataType.FP32
+
+    def test_model_type_property(self) -> None:
+        """model_type is ONNX."""
+        assert self._make_model().model_type == ModelType.ONNX
+
+    def test_run_with_ndarray(self) -> None:
+        """run() with ndarray passes it by first input name."""
+        import numpy as np
+
+        model = self._make_model()
+        result = model.run(np.zeros((1, 3, 224, 224), dtype=np.float32))
+        assert isinstance(result, list)
+
+    def test_run_with_dict(self) -> None:
+        """run() with dict passes it directly."""
+        import numpy as np
+
+        model = self._make_model()
+        result = model.run({"input": np.zeros((1, 3, 224, 224), dtype=np.float32)})
+        assert isinstance(result, list)
+
+    def test_unload_clears_session(self) -> None:
+        """unload() clears the session handle."""
+        model = self._make_model()
+        model.unload()
+        assert model._session is None
+        assert model._unloaded is True
+
+    def test_unload_idempotent(self) -> None:
+        """Calling unload() twice is safe."""
+        model = self._make_model()
+        model.unload()
+        model.unload()
+
+
+@pytest.mark.unit
+class TestMacOSARM64TfliteSetInputs:
+    """Tests for _tflite_set_inputs in macos_arm64._models (KeyError/TypeError paths)."""
+
+    def test_missing_key_raises_key_error(self) -> None:
+        """KeyError when input name not found in model."""
+        import numpy as np
+
+        from moment_to_action.hardware._platforms.macos_arm64._models import _tflite_set_inputs
+
+        interp = MagicMock()
+        interp.get_input_details.return_value = [{"index": 0, "name": "img", "dtype": np.float32}]
+        with pytest.raises(KeyError, match="wrong"):
+            _tflite_set_inputs(interp, {"wrong": np.zeros((1,), dtype=np.float32)})
+
+    def test_dtype_mismatch_raises_type_error(self) -> None:
+        """TypeError when tensor dtype does not match model's expected dtype."""
+        import numpy as np
+
+        from moment_to_action.hardware._platforms.macos_arm64._models import _tflite_set_inputs
+
+        interp = MagicMock()
+        interp.get_input_details.return_value = [{"index": 0, "name": "img", "dtype": np.float32}]
+        with pytest.raises(TypeError, match="dtype mismatch"):
+            _tflite_set_inputs(interp, {"img": np.zeros((1,), dtype=np.int32)})
+
+
+@pytest.mark.unit
+class TestMacOSARM64LoadLiteRTInterpreter:
+    """Tests for _load_litert_interpreter in macos_arm64._cpu_backend."""
+
+    def test_loads_and_allocates_interpreter(self) -> None:
+        """_load_litert_interpreter calls Interpreter and allocate_tensors."""
+        from moment_to_action.hardware._platforms.macos_arm64._cpu_backend import (
+            _load_litert_interpreter,
+        )
+
+        mock_interp = MagicMock()
+        with patch(
+            "ai_edge_litert.interpreter.Interpreter",
+            return_value=mock_interp,
+        ) as mock_cls:
+            result = _load_litert_interpreter("/tmp/model.tflite")
+
+        mock_cls.assert_called_once_with(model_path="/tmp/model.tflite", experimental_delegates=[])
+        mock_interp.allocate_tensors.assert_called_once()
+        assert result is mock_interp

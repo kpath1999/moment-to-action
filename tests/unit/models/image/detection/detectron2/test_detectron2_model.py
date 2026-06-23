@@ -471,3 +471,33 @@ class TestPostProc:
         raw = _roi_outputs([[0, 0, 800, 800]], [0.9], [0])
         out = onnx_model.decode(raw, original_size=(400, 400))
         assert out[0].bbox.x2 == pytest.approx(400.0)
+
+
+@pytest.mark.unit
+class TestROIHandleNoneGuard:
+    """Tests for the RuntimeError guard when roi_head handle is None."""
+
+    def test_run_dlc_raises_if_roi_handle_is_none(
+        self,
+        dlc_model: Detectron2Model,
+        mock_platform: MagicMock,
+        sample_image_array: np.ndarray,
+    ) -> None:
+        """run() raises RuntimeError if _handle_roi is None after load."""
+        feature = np.zeros((1, 4, 5, 5), dtype=np.float32)
+        proposals = np.array([[[0, 0, 100, 100]]], dtype=np.float32)
+        score = np.array([[0.9]], dtype=np.float32)
+
+        handle = mock_platform.load_dlc.return_value
+        handle.run.return_value = {
+            "feature": feature,
+            "proposals": proposals,
+            "score": score,
+        }
+
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
+        # Force the roi handle to None to trigger the guard at lines 261-263
+        dlc_model._handle_roi = None
+
+        with pytest.raises(RuntimeError, match="roi_head handle is None"):
+            dlc_model.run(dlc_model.prepare(sample_image_array))
