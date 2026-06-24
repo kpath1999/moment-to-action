@@ -8,7 +8,7 @@ import attrs
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.hardware._types import ComputeUnit
+    from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
     from ._base import BaseModel
     from ._sources import ModelSource
@@ -49,6 +49,8 @@ class Variant:
             Component key is ``"model"`` for single-graph models;
             ``"proposal_generator"``/``"roi_head"`` for two-component Detectron2.
             Filenames are relative to the variant directory.
+        model_type: Model file format (ONNX, DLC, LLAMA_CPP, etc.).
+        data_type: Quantization type; default FP32 for most, W8A8 for DLC variants.
         input_layout: Input tensor layout — ``"NCHW"``, ``"NHWC"``, or ``None``
             for model types that do not require a spatial layout (e.g. LLMs).
             Image model constructors default to ``"NCHW"`` when ``None`` is passed.
@@ -59,6 +61,12 @@ class Variant:
 
     backends: dict[ComputeUnit, dict[str, str]]
     """Compute unit → component filename mapping; keys = supported units."""
+
+    model_type: ModelType
+    """Model file format (ONNX, DLC, LLAMA_CPP, etc.)."""
+
+    data_type: DataType
+    """Quantization type (e.g. FP32 for ONNX, W8A8 or W8A16 for DLC, FP32 for LLAMA_CPP)."""
 
     input_layout: str | None = None
     """Input tensor layout: ``"NCHW"``, ``"NHWC"``, or ``None`` (not applicable)."""

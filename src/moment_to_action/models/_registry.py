@@ -1,8 +1,7 @@
 """Model registry for moment-to-action."""
 
-from moment_to_action.hardware._types import ComputeUnit
+from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
-from ._formats import ModelFormat
 from ._model_info import ModelID, ModelInfo, Variant
 from ._sources import HuggingFaceSource, UltralyticsSource
 from .image.classification.mobilenet_v2._model import MobileNetV2Model
@@ -26,7 +25,6 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.ONNX,
                     hf_repo_id="llamas-lab/m2a-models",
                     hf_subdir="mobilenet_v2_onnx",
                     files=["model.onnx"],
@@ -36,10 +34,11 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     ComputeUnit.CPU: {"model": "model.onnx"},
                     ComputeUnit.GPU: {"model": "model.onnx"},
                 },
+                model_type=ModelType.ONNX,
+                data_type=DataType.FP32,
             ),
             "qcs6490": Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.DLC,
                     hf_repo_id="llamas-lab/m2a-models",
                     hf_subdir="mobilenet_v2_qcs",
                     files=[
@@ -54,6 +53,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     ComputeUnit.GPU: {"model": "model.dlc"},
                     ComputeUnit.NPU: {"model": "model.dlc"},
                 },
+                model_type=ModelType.DLC,
+                data_type=DataType.W8A8,
             ),
         },
     ),
@@ -63,17 +64,17 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=UltralyticsSource(
-                    format=ModelFormat.ONNX,
                     name="yolov8n",
                 ),
                 backends={
                     ComputeUnit.CPU: {"model": "model.onnx"},
                     ComputeUnit.GPU: {"model": "model.onnx"},
                 },
+                model_type=ModelType.ONNX,
+                data_type=DataType.FP32,
             ),
             "qcs6490": Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.DLC,
                     hf_repo_id="llamas-lab/m2a-models",
                     hf_subdir="yolo_qcs",
                     files=[
@@ -93,6 +94,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     ComputeUnit.GPU: {"model": "model.dlc"},
                     ComputeUnit.NPU: {"model": "model.npu.bin"},
                 },
+                model_type=ModelType.DLC,
+                data_type=DataType.W8A8,
                 input_layout="NHWC",
             ),
         },
@@ -103,18 +106,18 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=UltralyticsSource(
-                    format=ModelFormat.ONNX,
                     name="rf_detr",
                 ),
                 backends={
                     ComputeUnit.CPU: {"model": "model.onnx"},
                     ComputeUnit.GPU: {"model": "model.onnx"},
                 },
+                model_type=ModelType.ONNX,
+                data_type=DataType.FP32,
             ),
             # DLC only — float-only model; v68 NPU context binary not feasible.
             "qcs6490": Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.DLC,
                     hf_repo_id="llamas-lab/m2a-models",
                     hf_subdir="rf_detr_qcs",
                     files=[
@@ -131,6 +134,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     ComputeUnit.CPU: {"model": "model.dlc"},
                     ComputeUnit.GPU: {"model": "model.dlc"},
                 },
+                model_type=ModelType.DLC,
+                data_type=DataType.W8A8,
                 input_layout="NHWC",
             ),
         },
@@ -141,18 +146,18 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=UltralyticsSource(
-                    format=ModelFormat.ONNX,
                     name="rtmdet",
                 ),
                 backends={
                     ComputeUnit.CPU: {"model": "model.onnx"},
                     ComputeUnit.GPU: {"model": "model.onnx"},
                 },
+                model_type=ModelType.ONNX,
+                data_type=DataType.FP32,
             ),
             # DLC only — float decode head; v68 NPU context binary not feasible.
             "qcs6490": Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.DLC,
                     hf_repo_id="llamas-lab/m2a-models",
                     hf_subdir="rtmdet_qcs",
                     files=[
@@ -170,6 +175,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     ComputeUnit.CPU: {"model": "model.dlc"},
                     ComputeUnit.GPU: {"model": "model.dlc"},
                 },
+                model_type=ModelType.DLC,
+                data_type=DataType.W8A8,
                 input_layout="NHWC",
             ),
         },
@@ -180,7 +187,6 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.ONNX,
                     hf_repo_id="llamas-lab/m2a-models",
                     hf_subdir="detectron2_float_onnx",
                     files=["model.onnx"],
@@ -190,10 +196,11 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     ComputeUnit.CPU: {"model": "model.onnx"},
                     ComputeUnit.GPU: {"model": "model.onnx"},
                 },
+                model_type=ModelType.ONNX,
+                data_type=DataType.FP32,
             ),
             "qcs6490_w8a16": Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.DLC,
                     hf_repo_id="llamas-lab/m2a-models",
                     hf_subdir="detectron2_qcs_w8a16",
                     files=[
@@ -213,11 +220,12 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                         "roi_head": "model.roi_head.npu.bin",
                     },
                 },
+                model_type=ModelType.DLC,
+                data_type=DataType.W8A16,
                 input_layout="NHWC",
             ),
             "qcs6490_w8a8": Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.DLC,
                     hf_repo_id="llamas-lab/m2a-models",
                     hf_subdir="detectron2_qcs_w8a8",
                     files=[
@@ -237,6 +245,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                         "roi_head": "model.roi_head.npu.bin",
                     },
                 },
+                model_type=ModelType.DLC,
+                data_type=DataType.W8A8,
                 input_layout="NHWC",
             ),
         },
@@ -247,12 +257,13 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
                     hf_repo_id="Qwen/Qwen2-1.5B-Instruct-GGUF",
                     files=["qwen2-1_5b-instruct-q4_0.gguf"],
                     revision="c62434db644497c0ee545c690bb66a67eba6eb3f",
                 ),
                 backends={ComputeUnit.GPU: {"model": "qwen2-1_5b-instruct-q4_0.gguf"}},
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
                 input_layout=None,
             ),
         },
@@ -263,12 +274,13 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
                     hf_repo_id="Qwen/Qwen2-7B-Instruct-GGUF",
                     files=["qwen2-7b-instruct-q4_k_m.gguf"],
                     revision="c3024c6fff0a02d52119ecee024bbb93d4b4b8e4",
                 ),
                 backends={ComputeUnit.GPU: {"model": "qwen2-7b-instruct-q4_k_m.gguf"}},
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
                 input_layout=None,
             ),
         },
@@ -279,12 +291,13 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
                     hf_repo_id="Qwen/Qwen3-4B-GGUF",
                     files=["Qwen3-4B-Q4_K_M.gguf"],
                     revision="bc640142c66e1fdd12af0bd68f40445458f3869b",
                 ),
                 backends={ComputeUnit.GPU: {"model": "Qwen3-4B-Q4_K_M.gguf"}},
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
                 input_layout=None,
             ),
         },
@@ -295,12 +308,13 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
                     hf_repo_id="bartowski/Phi-3.5-mini-instruct-GGUF",
                     files=["Phi-3.5-mini-instruct-Q4_0.gguf"],
                     revision="6d70da17e749a471ccb62ade694486011a75cda3",
                 ),
                 backends={ComputeUnit.GPU: {"model": "Phi-3.5-mini-instruct-Q4_0.gguf"}},
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
                 input_layout=None,
             ),
         },
@@ -311,7 +325,6 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
                     hf_repo_id="ggml-org/Qwen2.5-VL-3B-Instruct-GGUF",
                     files=[
                         "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
@@ -325,6 +338,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                         "mmproj": "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
                     }
                 },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
                 input_layout=None,
             ),
         },
@@ -335,7 +350,6 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
                     hf_repo_id="Qwen/Qwen3-VL-2B-Instruct-GGUF",
                     files=[
                         "Qwen3VL-2B-Instruct-Q4_K_M.gguf",
@@ -349,6 +363,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                         "mmproj": "mmproj-Qwen3VL-2B-Instruct-F16.gguf",
                     }
                 },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
                 input_layout=None,
             ),
         },
@@ -359,7 +375,6 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
                     hf_repo_id="lmstudio-community/Qwen3-VL-4B-Instruct-GGUF",
                     files=[
                         "Qwen3-VL-4B-Instruct-Q4_K_M.gguf",
@@ -373,6 +388,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                         "mmproj": "mmproj-Qwen3-VL-4B-Instruct-F16.gguf",
                     }
                 },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
                 input_layout=None,
             ),
         },
@@ -383,7 +400,6 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
         variants={
             DEFAULT_KEY: Variant(
                 source=HuggingFaceSource(
-                    format=ModelFormat.GGUF,
                     hf_repo_id="moondream/moondream2-gguf",
                     files=[
                         "moondream2-text-model-f16.gguf",
@@ -397,6 +413,8 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                         "mmproj": "moondream2-mmproj-f16.gguf",
                     }
                 },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
                 input_layout=None,
             ),
         },

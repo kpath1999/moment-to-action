@@ -833,8 +833,9 @@ class TestQCS6490Models:
 
         model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock())
         raw = model._raw
+        assert raw is not None
         model.unload()
-        raw.destroy.assert_called_once()
+        raw.destroy.assert_called_once()  # type: ignore[union-attr]
         assert model._raw is None
         assert model._unloaded is True
 

@@ -15,8 +15,8 @@ from moment_to_action.hardware import ComputeUnit, Platform
 
 if TYPE_CHECKING:
     from moment_to_action.config import AppConfig
+from moment_to_action.hardware._types import ModelType
 from moment_to_action.models import ModelID
-from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image._base import ImageModel
 from moment_to_action.models.image.detection.detectron2._model import Detectron2Model
 from moment_to_action.models.image.detection.rf_detr._model import RFDETRModel
@@ -155,7 +155,7 @@ def _build_dlc_model(model_id: ModelID, variant_dir: Path) -> ImageModel:
         return YOLOModel(
             variant="qcs6490",
             path=variant_dir,
-            model_format=ModelFormat.DLC,
+            model_type=ModelType.DLC,
             backends=_cpu_single,
             input_layout="NHWC",
         )
@@ -163,7 +163,7 @@ def _build_dlc_model(model_id: ModelID, variant_dir: Path) -> ImageModel:
         return RFDETRModel(
             variant="qcs6490",
             path=variant_dir,
-            model_format=ModelFormat.DLC,
+            model_type=ModelType.DLC,
             backends=_cpu_single,
             input_layout="NHWC",
         )
@@ -171,7 +171,7 @@ def _build_dlc_model(model_id: ModelID, variant_dir: Path) -> ImageModel:
         return RTMDetModel(
             variant="qcs6490",
             path=variant_dir,
-            model_format=ModelFormat.DLC,
+            model_type=ModelType.DLC,
             backends=_cpu_single,
             input_layout="NHWC",
         )
@@ -179,7 +179,7 @@ def _build_dlc_model(model_id: ModelID, variant_dir: Path) -> ImageModel:
         return Detectron2Model(
             variant="qcs6490",
             path=variant_dir,
-            model_format=ModelFormat.DLC,
+            model_type=ModelType.DLC,
             backends=_cpu_det2,
             input_layout="NHWC",
         )

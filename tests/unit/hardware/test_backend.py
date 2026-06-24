@@ -511,6 +511,93 @@ class TestDetectPlatform:
             result = _detect_platform()
         assert result == PlatformType.MACOS_ARM64
 
+
+@pytest.mark.unit
+class TestPlatformSupports:
+    """Tests for Platform.supports()."""
+
+    def _make_platform_with_backends(
+        self,
+        cpu_formats: set[ModelType],
+        cpu_dtypes: set[DataType],
+    ) -> Platform:
+        """Build a Platform with a single CPU backend advertising specific formats and dtypes.
+
+        Args:
+            cpu_formats: Formats the mock CPU backend claims to support.
+            cpu_dtypes: Data types the mock CPU backend claims to support.
+
+        Returns:
+            Constructed Platform.
+        """
+        with (
+            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch.object(Platform, "_init_x86_64", autospec=True) as mock_init,
+        ):
+            mock_detect.return_value = PlatformType.X86_64
+            mock_cpu = MagicMock()
+            mock_cpu.supported_formats = cpu_formats
+            mock_cpu.supported_dtypes = cpu_dtypes
+
+            def _setup(self: Platform) -> None:
+                self._resource_monitor = MagicMock()
+                self._backends = {ComputeUnit.CPU: mock_cpu}
+
+            mock_init.side_effect = _setup
+            return Platform(AppConfig())
+
+    def test_returns_true_when_format_supported(self) -> None:
+        """Returns True when backend supports the requested model_type."""
+        p = self._make_platform_with_backends(
+            cpu_formats={ModelType.ONNX},
+            cpu_dtypes={DataType.FP32},
+        )
+        assert p.supports(ComputeUnit.CPU, model_type=ModelType.ONNX) is True
+
+    def test_returns_false_when_format_not_supported(self) -> None:
+        """Returns False when backend does not support the requested model_type."""
+        p = self._make_platform_with_backends(
+            cpu_formats={ModelType.ONNX},
+            cpu_dtypes={DataType.FP32},
+        )
+        assert p.supports(ComputeUnit.CPU, model_type=ModelType.DLC) is False
+
+    def test_returns_false_for_unknown_unit(self) -> None:
+        """Returns False when no backend is registered for the unit."""
+        p = self._make_platform_with_backends(
+            cpu_formats={ModelType.ONNX},
+            cpu_dtypes={DataType.FP32},
+        )
+        assert p.supports(ComputeUnit.NPU, model_type=ModelType.DLC) is False
+
+    def test_returns_true_when_format_and_dtype_both_supported(self) -> None:
+        """Returns True when both model_type and data_type are supported."""
+        p = self._make_platform_with_backends(
+            cpu_formats={ModelType.ONNX},
+            cpu_dtypes={DataType.FP32},
+        )
+        assert (
+            p.supports(ComputeUnit.CPU, model_type=ModelType.ONNX, data_type=DataType.FP32) is True
+        )
+
+    def test_returns_false_when_dtype_not_supported(self) -> None:
+        """Returns False when model_type is supported but data_type is not."""
+        p = self._make_platform_with_backends(
+            cpu_formats={ModelType.DLC},
+            cpu_dtypes={DataType.W8A8},
+        )
+        assert (
+            p.supports(ComputeUnit.CPU, model_type=ModelType.DLC, data_type=DataType.W8A16) is False
+        )
+
+    def test_data_type_none_skips_dtype_check(self) -> None:
+        """Passing data_type=None (default) does not check dtype."""
+        p = self._make_platform_with_backends(
+            cpu_formats={ModelType.ONNX},
+            cpu_dtypes=set(),
+        )
+        assert p.supports(ComputeUnit.CPU, model_type=ModelType.ONNX) is True
+
     def test_detects_macos_arm64_via_aarch64(self) -> None:
         """_detect_platform returns MACOS_ARM64 when aarch64 + darwin."""
         mock_path = MagicMock()

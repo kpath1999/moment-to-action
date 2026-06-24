@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ModelType
 from moment_to_action.models.image.detection.detectron2._model import Detectron2Model
 
 _ONNX_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "model.onnx"}}
@@ -30,7 +30,7 @@ _DLC_FLOAT_BACKENDS: dict[ComputeUnit, dict[str, str]] = {
 @pytest.fixture
 def onnx_model() -> Detectron2Model:
     """Return an unloaded Detectron2Model in single-graph ONNX format."""
-    return Detectron2Model("default", Path("/fake/d2"), ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+    return Detectron2Model("default", Path("/fake/d2"), ModelType.ONNX, backends=_ONNX_BACKENDS)
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def dlc_model() -> Detectron2Model:
     return Detectron2Model(
         "qcs6490_w8a16",
         Path("/fake/d2_qcs"),
-        ModelFormat.DLC,
+        ModelType.DLC,
         input_layout="NHWC",
         backends=_DLC_NPU_BACKENDS,
     )
@@ -51,7 +51,7 @@ def dlc_model_nchw() -> Detectron2Model:
     return Detectron2Model(
         "other",
         Path("/fake/d2_other"),
-        ModelFormat.DLC,
+        ModelType.DLC,
         backends=_DLC_FLOAT_BACKENDS,
     )
 
@@ -148,7 +148,7 @@ class TestProperties:
         m = Detectron2Model(
             "default",
             Path("/f"),
-            ModelFormat.ONNX,
+            ModelType.ONNX,
             confidence_threshold=0.2,
             backends=_ONNX_BACKENDS,
         )
@@ -172,7 +172,7 @@ class TestProperties:
         m = Detectron2Model(
             variant,
             Path("/fake"),
-            ModelFormat.DLC,
+            ModelType.DLC,
             input_layout="NHWC",
             backends=_DLC_NPU_BACKENDS,
         )

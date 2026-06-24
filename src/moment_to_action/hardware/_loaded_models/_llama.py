@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 import time
@@ -16,7 +17,6 @@ from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 from moment_to_action.utils.web import pick_free_port
 
 if TYPE_CHECKING:
-    import os
     from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
@@ -38,15 +38,17 @@ def __find_llama_server(explicit: str | os.PathLike[str] | None) -> str:
     Raises:
         RuntimeError: If no binary can be located.
     """
+    # Check explicit path
     if explicit is not None:
-        import os as _os  # noqa: PLC0415
+        return os.fspath(explicit)
 
-        return _os.fspath(explicit)
-    found = shutil.which("llama-server")
-    if found is None:
-        msg = "llama-server not found. Install it or set llama_server_path in AppConfig."
-        raise RuntimeError(msg)
-    return found
+    # Check $PATH env var
+    if found := shutil.which("llama-server"):
+        return found
+
+    # Oh no
+    msg = "llama-server not found. Install it or set llama_server_path in AppConfig."
+    raise RuntimeError(msg)
 
 
 def _start_llama_model(
@@ -77,9 +79,11 @@ def _start_llama_model(
         RuntimeError: If ``llama-server`` cannot be found.
         RuntimeError: If the server does not become healthy within 30 seconds.
     """
+    # Get server and port
     resolved_server = __find_llama_server(server_path)
     resolved_port = port if port is not None else pick_free_port()
 
+    # Build arguments
     args = [
         resolved_server,
         "-m",
@@ -94,32 +98,46 @@ def _start_llama_model(
     if mmproj is not None:
         args += ["--mmproj", mmproj]
 
+    # Start server
     proc = subprocess.Popen(  # noqa: S603
         args,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+    # Create client for interacting with server
+    # Disable read timeout as LLMs have long response times (due to text generation)
     client = httpx.Client(
         base_url=f"http://127.0.0.1:{resolved_port}",
         timeout=httpx.Timeout(connect=5.0, read=None, write=5.0, pool=5.0),
     )
 
+    # Spin until server is heathly
     deadline = time.monotonic() + _HEALTH_TIMEOUT_S
+
     while time.monotonic() < deadline:
         try:
+            # Check status
             resp = client.get("/health")
             if resp.status_code == _HTTP_OK:
                 break
         except httpx.ConnectError:
             pass
+
+        # Busy loop
         time.sleep(_HEALTH_POLL_S)
     else:
+        # Server failed
         proc.terminate()
         proc.wait()
+
         client.close()
+
+        # Raise error
         msg = f"llama-server did not become healthy within {_HEALTH_TIMEOUT_S}s"
         raise RuntimeError(msg)
 
+    # Build model class
     model = LlamaModel(
         path=path,
         mmproj=mmproj,
@@ -129,6 +147,7 @@ def _start_llama_model(
         proc=proc,
         client=client,
     )
+
     logger.info(
         "LlamaModel: started llama-server (pid=%d, port=%d, model=%s, cpu_only=%s)",
         proc.pid,

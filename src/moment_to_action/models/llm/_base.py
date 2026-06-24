@@ -12,8 +12,7 @@ if TYPE_CHECKING:
 
     from moment_to_action.hardware import Platform
     from moment_to_action.hardware._loaded_model import LoadedModel
-    from moment_to_action.hardware._types import ComputeUnit
-    from moment_to_action.models._formats import ModelFormat
+    from moment_to_action.hardware._types import ComputeUnit, ModelType
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
     Args:
         variant: Registry variant key.
         path: Variant directory containing the GGUF file.
-        model_format: File format (``ModelFormat.GGUF``).
+        model_type: File format (``ModelType.LLAMA_CPP``).
         backends: Compute-unit → artifact filename mapping; the first entry
             must contain a ``"model"`` key naming the ``.gguf`` file.
         input_layout: Not applicable to LLMs; expected to be ``None``.
@@ -47,7 +46,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         self,
         variant: str,
         path: Path,
-        model_format: ModelFormat | None = None,
+        model_type: ModelType | None = None,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
@@ -60,7 +59,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             variant: Registry variant key (e.g. ``"default"``).
             path: Variant directory; the GGUF file is at
                 ``path / next(iter(backends.values()))["model"]``.
-            model_format: File format — should be ``ModelFormat.GGUF``.
+            model_type: File format — should be ``ModelType.LLAMA_CPP``.
             backends: Compute-unit → ``{component_name: filename}`` dict.
             input_layout: Unused for LLMs; pass ``None``.
             system_prompt: System message prepended to every completion prompt.
@@ -69,7 +68,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         super().__init__(
             variant,
             path,
-            model_format,
+            model_type,
             backends=backends,
             input_layout=input_layout,
         )

@@ -9,10 +9,10 @@ from unittest import mock
 import pytest
 
 from moment_to_action.hardware import ComputeUnit
+from moment_to_action.hardware._types import DataType, ModelType
 from moment_to_action.models import (
     DEFAULT_VARIANT_KEY,
     DownloadSource,
-    ModelFormat,
     ModelID,
     ModelInfo,
     ModelManager,
@@ -34,13 +34,14 @@ def _make_variant(units: list[ComputeUnit] | None = None) -> Variant:
     if units is None:
         units = [ComputeUnit.CPU, ComputeUnit.GPU]
     src = DownloadSource(
-        format=ModelFormat.ONNX,
         url="https://example.com/model.bin",
         filename="model.bin",
     )
     return Variant(
         source=src,
         backends={u: {"model": "model.bin"} for u in units},
+        model_type=ModelType.ONNX,
+        data_type=DataType.FP32,
     )
 
 
@@ -430,12 +431,12 @@ class TestGetModel:
         model = mgr.get_model(ModelID.YOLO_V8)
         assert model._variant == DEFAULT_VARIANT_KEY
 
-    def test_model_format_matches_source(self, path_manager: PathManager) -> None:
-        """get_model() passes source.format to the model constructor."""
+    def test_model_type_matches_variant(self, path_manager: PathManager) -> None:
+        """get_model() passes variant.model_type to the model constructor."""
         mgr = ModelManager(path_manager)
         model = mgr.get_model(ModelID.YOLO_V8)
         assert isinstance(model, YOLOModel)
-        assert model._format == ModelFormat.ONNX
+        assert model._model_type is ModelType.ONNX
 
     def test_model_path_exists(self, path_manager: PathManager) -> None:
         """get_model() resolves path to an existing file."""
@@ -492,14 +493,18 @@ class TestUltralyticsFlow:
 
 def _variant_routing_info() -> ModelInfo:
     """ModelInfo with a default (CPU/GPU) and an NPU-only `q` variant."""
-    src = DownloadSource(format=ModelFormat.ONNX, url="https://e/m", filename="m")
+    src = DownloadSource(url="https://e/m", filename="m")
     default_variant = Variant(
         source=src,
         backends={ComputeUnit.CPU: {"model": "m"}, ComputeUnit.GPU: {"model": "m"}},
+        model_type=ModelType.ONNX,
+        data_type=DataType.FP32,
     )
     npu_only_variant = Variant(
         source=src,
         backends={ComputeUnit.NPU: {"model": "m"}},
+        model_type=ModelType.DLC,
+        data_type=DataType.W8A8,
     )
     return ModelInfo(
         id=ModelID.DETECTRON2,
@@ -536,7 +541,7 @@ class TestEffectiveVariant:
 
     def test_default_not_redirected_to_itself(self) -> None:
         """`default` variant is returned unchanged even when it doesn't support the unit."""
-        src = DownloadSource(format=ModelFormat.ONNX, url="https://e/m", filename="m")
+        src = DownloadSource(url="https://e/m", filename="m")
         info = ModelInfo(
             id=ModelID.DETECTRON2,
             model_class=YOLOModel,
@@ -544,6 +549,8 @@ class TestEffectiveVariant:
                 DEFAULT_VARIANT_KEY: Variant(
                     source=src,
                     backends={ComputeUnit.NPU: {"model": "m"}},
+                    model_type=ModelType.DLC,
+                    data_type=DataType.W8A8,
                 ),
             },
         )

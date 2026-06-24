@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ModelType
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.models.image.detection.rtmdet._model import RTMDetModel
 
@@ -20,9 +20,7 @@ _DLC_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "
 @pytest.fixture
 def onnx_model() -> RTMDetModel:
     """Return an unloaded RTMDetModel in ONNX format."""
-    return RTMDetModel(
-        "default", Path("/fake/model.onnx"), ModelFormat.ONNX, backends=_ONNX_BACKENDS
-    )
+    return RTMDetModel("default", Path("/fake/model.onnx"), ModelType.ONNX, backends=_ONNX_BACKENDS)
 
 
 @pytest.fixture
@@ -31,7 +29,7 @@ def dlc_model() -> RTMDetModel:
     return RTMDetModel(
         "qcs6490",
         Path("/fake/qcs6490"),
-        ModelFormat.DLC,
+        ModelType.DLC,
         input_layout="NHWC",
         backends=_DLC_BACKENDS,
     )
@@ -40,7 +38,7 @@ def dlc_model() -> RTMDetModel:
 @pytest.fixture
 def dlc_model_nchw() -> RTMDetModel:
     """Return an unloaded RTMDetModel in DLC format with NCHW layout."""
-    return RTMDetModel("other", Path("/fake/other"), ModelFormat.DLC, backends=_DLC_BACKENDS)
+    return RTMDetModel("other", Path("/fake/other"), ModelType.DLC, backends=_DLC_BACKENDS)
 
 
 @pytest.fixture
@@ -127,7 +125,7 @@ class TestRTMDetModelProperties:
         model = RTMDetModel(
             "default",
             Path("/f"),
-            ModelFormat.ONNX,
+            ModelType.ONNX,
             confidence_threshold=0.3,
             backends=_ONNX_BACKENDS,
         )

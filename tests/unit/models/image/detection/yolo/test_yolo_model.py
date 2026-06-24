@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ModelType
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.models.image.detection.yolo._model import YOLOModel
 
@@ -28,7 +28,7 @@ _DLC_CPU_ONLY: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "
 @pytest.fixture
 def onnx_model() -> YOLOModel:
     """Return an unloaded YOLOModel in ONNX format."""
-    return YOLOModel("default", Path("/fake/model.onnx"), ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+    return YOLOModel("default", Path("/fake/model.onnx"), ModelType.ONNX, backends=_ONNX_BACKENDS)
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def dlc_model() -> YOLOModel:
     return YOLOModel(
         "qcs6490",
         Path("/fake/qcs6490"),
-        ModelFormat.DLC,
+        ModelType.DLC,
         input_layout="NHWC",
         backends=_DLC_BACKENDS,
     )
@@ -46,7 +46,7 @@ def dlc_model() -> YOLOModel:
 @pytest.fixture
 def dlc_model_nchw() -> YOLOModel:
     """Return an unloaded YOLOModel in DLC format with NCHW layout."""
-    return YOLOModel("other", Path("/fake/other"), ModelFormat.DLC, backends=_DLC_CPU_ONLY)
+    return YOLOModel("other", Path("/fake/other"), ModelType.DLC, backends=_DLC_CPU_ONLY)
 
 
 @pytest.fixture
@@ -330,7 +330,7 @@ class TestYOLOModelDecode:
         model = YOLOModel(
             "default",
             Path("/x"),
-            ModelFormat.ONNX,
+            ModelType.ONNX,
             confidence_threshold=0.8,
             backends=_ONNX_BACKENDS,
         )
@@ -471,7 +471,7 @@ class TestYOLOModelProperties:
     def test_confidence_threshold_custom(self) -> None:
         """Custom confidence_threshold is stored."""
         model = YOLOModel(
-            "v", Path("/x"), ModelFormat.ONNX, confidence_threshold=0.75, backends=_ONNX_BACKENDS
+            "v", Path("/x"), ModelType.ONNX, confidence_threshold=0.75, backends=_ONNX_BACKENDS
         )
         assert model.confidence_threshold == pytest.approx(0.75)
 
@@ -490,7 +490,7 @@ class TestYOLOModelProperties:
     def test_input_layout_explicit_override(self) -> None:
         """Explicit input_layout is stored correctly."""
         model = YOLOModel(
-            "qcs6490", Path("/x"), ModelFormat.DLC, input_layout="NCHW", backends=_DLC_CPU_ONLY
+            "qcs6490", Path("/x"), ModelType.DLC, input_layout="NCHW", backends=_DLC_CPU_ONLY
         )
         assert model.input_layout == "NCHW"
 
@@ -553,7 +553,7 @@ class TestYOLOModelPrepareForConversion:
         """prepare_for_conversion() returns onnx_path unchanged when outputs are already split."""
         onnx_path = tmp_path / "split.onnx"
         _make_yolo_onnx_already_split(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         assert result == onnx_path
 
@@ -561,7 +561,7 @@ class TestYOLOModelPrepareForConversion:
         """prepare_for_conversion() returns a new temp path for a mixed-range ONNX."""
         onnx_path = tmp_path / "raw.onnx"
         _make_yolo_onnx_with_concat(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         try:
             assert result != onnx_path
@@ -576,7 +576,7 @@ class TestYOLOModelPrepareForConversion:
 
         onnx_path = tmp_path / "raw.onnx"
         _make_yolo_onnx_with_concat(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))
@@ -595,7 +595,7 @@ class TestYOLOModelPrepareForConversion:
 
         onnx_path = tmp_path / "raw.onnx"
         _make_yolo_onnx_with_concat(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))
@@ -609,7 +609,7 @@ class TestYOLOModelPrepareForConversion:
         """prepare_for_conversion() returns onnx_path when output0 has no Concat feeding it."""
         onnx_path = tmp_path / "no_concat.onnx"
         _make_yolo_onnx_output0_no_concat(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         assert result == onnx_path
 
@@ -619,7 +619,7 @@ class TestYOLOModelPrepareForConversion:
 
         onnx_path = tmp_path / "opset18.onnx"
         _make_yolo_onnx_with_concat(onnx_path, opset=18)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         try:
             assert result != onnx_path
@@ -687,7 +687,7 @@ class TestYOLOModelStripQDQ:
         """An ONNX with Q→DQ nodes produces a new temp path."""
         onnx_path = tmp_path / "qdq.onnx"
         _make_yolo_onnx_with_qdq(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         try:
             assert result != onnx_path
@@ -702,7 +702,7 @@ class TestYOLOModelStripQDQ:
 
         onnx_path = tmp_path / "qdq.onnx"
         _make_yolo_onnx_with_qdq(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))
@@ -719,7 +719,7 @@ class TestYOLOModelStripQDQ:
 
         onnx_path = tmp_path / "qdq.onnx"
         _make_yolo_onnx_with_qdq(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))
@@ -737,7 +737,7 @@ class TestYOLOModelStripQDQ:
 
         onnx_path = tmp_path / "qdq_out.onnx"
         _make_yolo_onnx_with_qdq_output(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel("default", onnx_path, ModelType.ONNX, backends=_ONNX_BACKENDS)
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))

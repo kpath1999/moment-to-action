@@ -266,7 +266,7 @@ class ModelManager:
         return info.model_class(  # type: ignore[call-arg]
             variant,
             path,
-            variant_obj.source.format,
+            variant_obj.model_type,
             backends=variant_obj.backends,
             input_layout=variant_obj.input_layout,
             **model_kwargs,

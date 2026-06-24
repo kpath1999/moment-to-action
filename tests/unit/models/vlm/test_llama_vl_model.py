@@ -7,8 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from moment_to_action.hardware._types import ComputeUnit
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ComputeUnit, ModelType
 from moment_to_action.models.llm._base import LlamaGGUFModel
 from moment_to_action.models.vlm._base import LlamaVLModel
 from moment_to_action.models.vlm.qwen25_vl._model import Qwen25VLModel
@@ -31,7 +30,7 @@ def _make_model(
     return Qwen25VLModel(
         "default",
         _VARIANT_DIR,
-        ModelFormat.GGUF,
+        ModelType.LLAMA_CPP,
         backends=_BACKENDS,
         input_layout=None,
         system_prompt=system_prompt,

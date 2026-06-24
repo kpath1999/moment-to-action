@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import cv2
 import numpy as np
 
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ModelType
 from moment_to_action.models.image.classification._base import ImageClassificationModel
 from moment_to_action.models.image.classification._types import Classification
 
@@ -45,7 +45,7 @@ class MobileNetV2Model(ImageClassificationModel):
     Args:
         variant: Registry variant key used to identify this instance.
         path: Path to the model directory (contains ``model.onnx`` or ``model.dlc``).
-        model_format: Model file format — determines which backend methods to call.
+        model_type: Model file format — determines which backend methods to call.
         top_k: Number of top predictions returned by :meth:`post_proc`.
     """
 
@@ -56,7 +56,7 @@ class MobileNetV2Model(ImageClassificationModel):
         self,
         variant: str,
         path: Path,
-        model_format: ModelFormat,
+        model_type: ModelType,
         top_k: int = 5,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
@@ -67,7 +67,7 @@ class MobileNetV2Model(ImageClassificationModel):
         Args:
             variant: Registry variant key.
             path: Path to the model directory containing ``model.onnx`` or ``model.dlc``.
-            model_format: ``ModelFormat.ONNX`` or ``ModelFormat.DLC``.
+            model_type: ``ModelType.ONNX`` or ``ModelType.DLC``.
             top_k: Number of top predictions to return from :meth:`post_proc`.
             backends: Compute unit → ``{"model": filename}`` mapping.  Keys
                 present are the supported units; ``load()`` indexes this with
@@ -75,7 +75,7 @@ class MobileNetV2Model(ImageClassificationModel):
             input_layout: Input tensor layout (unused by MobileNet V2, which
                 always preprocesses to NCHW; accepted for interface uniformity).
         """
-        super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
+        super().__init__(variant, path, model_type, backends=backends, input_layout=input_layout)
         self._top_k = top_k
         self._handle: LoadedModel | None = None
 
@@ -127,7 +127,7 @@ class MobileNetV2Model(ImageClassificationModel):
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
         arts = self._backends[unit]
-        if self._format is ModelFormat.ONNX:
+        if self._model_type is ModelType.ONNX:
             self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]))
         else:
             self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]))
@@ -172,7 +172,7 @@ class MobileNetV2Model(ImageClassificationModel):
         if self._handle is None:
             msg = "MobileNetV2Model.load() must be called before run()"
             raise RuntimeError(msg)
-        if self._format is ModelFormat.ONNX:
+        if self._model_type is ModelType.ONNX:
             return cast("list[np.ndarray]", self._handle.run(prepared))
         dlc_out = cast("dict[str, np.ndarray]", self._handle.run(prepared))
         return [next(iter(dlc_out.values()))]

@@ -1,16 +1,13 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 import attrs
-
-from moment_to_action.models._formats import ModelFormat
 
 
 @attrs.frozen
 class VendoredSource:
     """Model files included directly in the repository."""
-
-    format: ModelFormat
-    """Format of the model file (e.g. ONNX, TFLite)."""
 
     path: Path
     """Path to the model (file or directory) within the _vendored/ directory."""

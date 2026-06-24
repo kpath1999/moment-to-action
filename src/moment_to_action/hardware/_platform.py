@@ -30,6 +30,8 @@ import numpy as np
 from moment_to_action.hardware._types import (
     BenchmarkResult,
     ComputeUnit,
+    DataType,
+    ModelType,
     PlatformType,
 )
 
@@ -287,6 +289,31 @@ class Platform:
             )
             raise ValueError(msg)
         return backend
+
+    def supports(
+        self,
+        unit: ComputeUnit,
+        *,
+        model_type: ModelType,
+        data_type: DataType | None = None,
+    ) -> bool:
+        """Return True if ``unit`` has a backend supporting ``model_type`` (and ``data_type``).
+
+        Args:
+            unit: Compute unit to check.
+            model_type: The model format to test (e.g. ``ModelType.DLC``).
+            data_type: Optional quantization type to also validate.
+
+        Returns:
+            True if the platform can load this combination on ``unit``, False otherwise.
+        """
+        try:
+            backend = self._backend_for(unit)
+        except ValueError:
+            return False
+        if model_type not in backend.supported_formats:
+            return False
+        return data_type is None or data_type in backend.supported_dtypes
 
     def load_tflite(self, unit: ComputeUnit, path: str | os.PathLike[str]) -> LoadedModel:
         """Load a TFLite model on the specified compute unit.

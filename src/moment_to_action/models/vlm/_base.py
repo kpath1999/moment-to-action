@@ -10,8 +10,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import Platform
-    from moment_to_action.hardware._types import ComputeUnit
-    from moment_to_action.models._formats import ModelFormat
+    from moment_to_action.hardware._types import ComputeUnit, ModelType
 
 
 class LlamaVLModel(LlamaGGUFModel):
@@ -35,7 +34,7 @@ class LlamaVLModel(LlamaGGUFModel):
     Args:
         variant: Registry variant key.
         path: Variant directory containing both the GGUF and mmproj files.
-        model_format: File format (``ModelFormat.GGUF``).
+        model_type: File format (``ModelType.LLAMA_CPP``).
         backends: Compute-unit → artifact filename mapping; the first entry
             must contain both a ``"model"`` key (text GGUF) and an ``"mmproj"`` key
             (vision encoder GGUF).
@@ -48,7 +47,7 @@ class LlamaVLModel(LlamaGGUFModel):
         self,
         variant: str,
         path: Path,
-        model_format: ModelFormat | None = None,
+        model_type: ModelType | None = None,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
@@ -61,7 +60,7 @@ class LlamaVLModel(LlamaGGUFModel):
             variant: Registry variant key (e.g. ``"default"``).
             path: Variant directory; both the GGUF and mmproj files are resolved
                 relative to this path.
-            model_format: File format — should be ``ModelFormat.GGUF``.
+            model_type: File format — should be ``ModelType.LLAMA_CPP``.
             backends: Compute-unit → ``{component_name: filename}`` dict.  Must
                 contain at least ``"model"`` and ``"mmproj"`` keys in the first entry.
             input_layout: Unused for VLMs; pass ``None``.
@@ -71,7 +70,7 @@ class LlamaVLModel(LlamaGGUFModel):
         super().__init__(
             variant,
             path,
-            model_format,
+            model_type,
             backends=backends,
             input_layout=input_layout,
             system_prompt=system_prompt,

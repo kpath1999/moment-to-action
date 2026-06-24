@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from moment_to_action.hardware._types import ComputeUnit
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ComputeUnit, ModelType
 from moment_to_action.models.vlm._base import LlamaVLModel
 from moment_to_action.models.vlm.qwen3_vl._model import Qwen3VLModel
 
@@ -25,7 +24,7 @@ class TestQwen3VLModel:
         model = Qwen3VLModel(
             "default",
             Path("/fake/dir"),
-            ModelFormat.GGUF,
+            ModelType.LLAMA_CPP,
             backends={ComputeUnit.GPU: {"model": "model.gguf", "mmproj": "mmproj.gguf"}},
             input_layout=None,
             system_prompt="Be concise.",

@@ -10,7 +10,6 @@ import pytest
 from moment_to_action.models import (
     DownloadSource,
     HuggingFaceSource,
-    ModelFormat,
     UltralyticsSource,
     VendoredSource,
     resolve_download_source,
@@ -30,7 +29,7 @@ class TestResolveVendored:
 
     def test_returns_absolute_path_under_vendored(self) -> None:
         """The resolved path lives under `<models>/_vendored/<source.path>`."""
-        s = VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx"))
+        s = VendoredSource(path=Path("yolo/model.onnx"))
         resolved = resolve_vendored_source(s)
         assert resolved.is_absolute()
         assert resolved.parts[-3:] == ("_vendored", "yolo", "model.onnx")
@@ -47,7 +46,6 @@ class TestResolveDownload:
 
     def _source(self) -> DownloadSource:
         return DownloadSource(
-            format=ModelFormat.ONNX,
             url="https://example.com/m.bin",
             filename="m.bin",
         )
@@ -107,7 +105,6 @@ class TestResolveHuggingFace:
 
     def _source(self) -> HuggingFaceSource:
         return HuggingFaceSource(
-            format=ModelFormat.ONNX,
             hf_repo_id="org/repo",
             files=["a.bin", "b.bin"],
             revision="rev",
@@ -185,7 +182,6 @@ class TestResolveHuggingFace:
     def test_hf_subdir_prefixes_download_url(self, tmp_path: Path) -> None:
         """When hf_subdir is set, hf_hub_url receives the subdir-prefixed path."""
         s = HuggingFaceSource(
-            format=ModelFormat.ONNX,
             hf_repo_id="org/repo",
             hf_subdir="mydir",
             files=["model.bin"],
@@ -223,7 +219,6 @@ class TestResolveHuggingFace:
     def test_hf_subdir_preserves_local_structure(self, tmp_path: Path) -> None:
         """Nested files under hf_subdir are stored with relative structure in variant_dir."""
         s = HuggingFaceSource(
-            format=ModelFormat.ONNX,
             hf_repo_id="org/repo",
             hf_subdir="mydir",
             files=["model.bin", "ref/out.bin"],
@@ -253,14 +248,14 @@ class TestResolveModelSourceDispatch:
 
     def test_dispatches_to_vendored(self) -> None:
         """A VendoredSource is routed through resolve_vendored_source."""
-        s = VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx"))
+        s = VendoredSource(path=Path("yolo/model.onnx"))
         result = resolve_model_source(s, Path("/unused"))
         assert result is not None
         assert result.name == "model.onnx"
 
     def test_dispatches_to_download(self, tmp_path: Path) -> None:
         """A DownloadSource is routed through resolve_download_source."""
-        s = DownloadSource(format=ModelFormat.ONNX, url="http://x", filename="m.bin")
+        s = DownloadSource(url="http://x", filename="m.bin")
         (tmp_path / "m.bin").write_text("ok")
         result = resolve_model_source(s, tmp_path)
         assert result == tmp_path / "m.bin"
@@ -268,7 +263,6 @@ class TestResolveModelSourceDispatch:
     def test_dispatches_to_hugging_face(self, tmp_path: Path) -> None:
         """A HuggingFaceSource is routed through resolve_hugging_face_source."""
         s = HuggingFaceSource(
-            format=ModelFormat.ONNX,
             hf_repo_id="org/repo",
             files=["a"],
             revision="r",
@@ -279,7 +273,7 @@ class TestResolveModelSourceDispatch:
 
     def test_dispatches_to_ultralytics(self, tmp_path: Path) -> None:
         """An UltralyticsSource is routed through resolve_ultralytics_source."""
-        s = UltralyticsSource(format=ModelFormat.ONNX, name="yolov8n")
+        s = UltralyticsSource(name="yolov8n")
         (tmp_path / "model.onnx").write_text("ok")
         result = resolve_model_source(s, tmp_path)
         assert result == tmp_path / "model.onnx"

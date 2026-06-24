@@ -16,8 +16,7 @@ if TYPE_CHECKING:
     import numpy as np
 
     from moment_to_action.hardware import Platform
-    from moment_to_action.hardware._types import ComputeUnit
-    from moment_to_action.models._formats import ModelFormat
+    from moment_to_action.hardware._types import ComputeUnit, ModelType
 
 _InputT = TypeVar("_InputT")
 _PreparedT = TypeVar("_PreparedT")
@@ -56,17 +55,17 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         self,
         variant: str,
         path: Path,
-        model_format: ModelFormat | None = None,
+        model_type: ModelType | None = None,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
     ) -> None:
-        """Initialize with variant name, path, format, backend table, and input layout.
+        """Initialize with variant name, path, model type, backend table, and input layout.
 
         Args:
             variant: Registry variant key (e.g. ``"default"``, ``"qcs6490"``).
             path: Path to the model weights file or variant directory.
-            model_format: File format (``ModelFormat.ONNX``, ``ModelFormat.DLC``,
+            model_type: File format (``ModelType.ONNX``, ``ModelType.DLC``,
                 etc.).  ``None`` for model types that do not use a format field.
             backends: Mapping of compute unit to component filename dicts.
                 Keys present are the supported units; ``load()`` indexes this
@@ -77,7 +76,7 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         """
         self._variant = variant
         self._path = path
-        self._format = model_format
+        self._model_type = model_type
         self._backends = backends
         self._input_layout = input_layout
         self._platform: Platform | None = None

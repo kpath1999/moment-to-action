@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import cv2
 import numpy as np
 
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ModelType
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import (
     COCO_LABELS,
@@ -80,7 +80,7 @@ class Detectron2Model(ImageDetectionModel):
     Args:
         variant: Registry variant key used to identify this instance.
         path: Directory containing the component artifacts.
-        model_format: Model file format — determines which backend methods to call.
+        model_type: Model file format — determines which backend methods to call.
         confidence_threshold: Minimum confidence score to keep a detection.
     """
 
@@ -90,7 +90,7 @@ class Detectron2Model(ImageDetectionModel):
         self,
         variant: str,
         path: Path,
-        model_format: ModelFormat,
+        model_type: ModelType,
         confidence_threshold: float = 0.5,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
@@ -102,7 +102,7 @@ class Detectron2Model(ImageDetectionModel):
             variant: Registry variant key.
             path: Directory holding ``model.proposal_generator.*`` and
                 ``model.roi_head.*`` artifacts.
-            model_format: ``ModelFormat.ONNX`` or ``ModelFormat.DLC``.
+            model_type: ``ModelType.ONNX`` or ``ModelType.DLC``.
             confidence_threshold: Detections below this score are discarded.
             backends: Compute unit → component filename mapping.  For ONNX,
                 key ``"model"``; for DLC, keys ``"proposal_generator"`` and
@@ -110,12 +110,12 @@ class Detectron2Model(ImageDetectionModel):
             input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
                 use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
         """
-        super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
+        super().__init__(variant, path, model_type, backends=backends, input_layout=input_layout)
         self._confidence_threshold = confidence_threshold
         # ONNX is the single-graph float export (detectron2 tracing): one
         # end-to-end model.onnx that runs RPN + ROI head + NMS internally.  DLC
         # is the two-component AI Hub split (proposal generator + ROI head).
-        self._single_graph_onnx = model_format is ModelFormat.ONNX
+        self._single_graph_onnx = model_type is ModelType.ONNX
         self._handle_pg: LoadedModel | None = None
         self._handle_roi: LoadedModel | None = None
         # Whether the loaded ROI-head artifact declares its `features` input as

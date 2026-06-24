@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import cv2
 import numpy as np
 
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ModelType
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
@@ -32,7 +32,7 @@ class RTMDetModel(ImageDetectionModel):
     Args:
         variant: Registry variant key used to identify this instance.
         path: Path to the model weights file (``.onnx`` or ``.dlc``).
-        model_format: Model file format — determines which backend methods to call.
+        model_type: Model file format — determines which backend methods to call.
         confidence_threshold: Minimum confidence score to keep a detection.
     """
 
@@ -123,7 +123,7 @@ class RTMDetModel(ImageDetectionModel):
         self,
         variant: str,
         path: Path,
-        model_format: ModelFormat,
+        model_type: ModelType,
         confidence_threshold: float = 0.5,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
@@ -134,7 +134,7 @@ class RTMDetModel(ImageDetectionModel):
         Args:
             variant: Registry variant key.
             path: Path to the model weights file or variant directory.
-            model_format: ``ModelFormat.ONNX`` or ``ModelFormat.DLC``.
+            model_type: ``ModelType.ONNX`` or ``ModelType.DLC``.
             confidence_threshold: Detections below this score are discarded.
             backends: Compute unit → ``{"model": filename}`` mapping.  Keys
                 present are the supported units; ``load()`` indexes this with
@@ -142,7 +142,7 @@ class RTMDetModel(ImageDetectionModel):
             input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
                 use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
         """
-        super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
+        super().__init__(variant, path, model_type, backends=backends, input_layout=input_layout)
         self._confidence_threshold = confidence_threshold
         self._handle: LoadedModel | None = None
         self._last_original_size: tuple[int, int] | None = None
@@ -176,7 +176,7 @@ class RTMDetModel(ImageDetectionModel):
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
         arts = self._backends[unit]
-        if self._format is ModelFormat.ONNX:
+        if self._model_type is ModelType.ONNX:
             self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]))
         else:
             self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]))
@@ -225,7 +225,7 @@ class RTMDetModel(ImageDetectionModel):
         if self._handle is None:
             msg = "RTMDetModel.load() must be called before run()"
             raise RuntimeError(msg)
-        if self._format is ModelFormat.ONNX:
+        if self._model_type is ModelType.ONNX:
             return cast("list[np.ndarray]", self._handle.run(prepared))
         dlc_out = cast("dict[str, np.ndarray]", self._handle.run(prepared))
         return [dlc_out["boxes"], dlc_out["scores"], dlc_out["class_idx"]]

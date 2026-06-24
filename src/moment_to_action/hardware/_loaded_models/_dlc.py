@@ -38,7 +38,7 @@ class DlcModel(LoadedModel):
             dtype: Quantization type — defaults to W8A8.
         """
         self._unit = unit
-        self._raw = raw
+        self._raw: Model | None = raw
         self._dtype = dtype
         self._unloaded = False
 
@@ -66,14 +66,22 @@ class DlcModel(LoadedModel):
 
         Returns:
             ``dict[str, np.ndarray]`` — output tensor name to array mapping.
+
+        Raises:
+            RuntimeError: If :meth:`unload` has already been called.
         """
-        result = self._raw(inputs=inputs)
+        if self._unloaded:
+            msg = "DlcModel has been unloaded"
+            raise RuntimeError(msg)
+        result = self._raw(inputs=inputs)  # type: ignore[misc]
         return dict(result.data)
 
     def unload(self) -> None:
         """Destroy the QAIRT model handle and release resources."""
         if not self._unloaded:
-            with contextlib.suppress(Exception):
-                self._raw.destroy()
+            raw = self._raw
+            if raw is not None:
+                with contextlib.suppress(Exception):
+                    raw.destroy()
             self._raw = None
             self._unloaded = True

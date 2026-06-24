@@ -50,7 +50,7 @@ def list(data: GlobalData, *, as_json: bool) -> None:  # noqa: A001
                 {
                     "model_id": variant_status.model_id.value,
                     "variant": variant_status.variant,
-                    "format": source.source.format.name,
+                    "format": source.model_type.value,
                     "status": status_str,
                     "size_bytes": variant_status.size_bytes,
                     "path": str(variant_status.path) if variant_status.path else None,

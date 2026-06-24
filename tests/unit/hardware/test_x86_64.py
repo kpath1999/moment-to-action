@@ -470,8 +470,9 @@ class TestX86_64DLCModel:  # noqa: N801
         """unload() calls raw.destroy() and clears the handle."""
         model = self._make_model()
         raw = model._raw
+        assert raw is not None
         model.unload()
-        raw.destroy.assert_called_once()
+        raw.destroy.assert_called_once()  # type: ignore[union-attr]
         assert model._raw is None
         assert model._unloaded is True
 
@@ -484,9 +485,18 @@ class TestX86_64DLCModel:  # noqa: N801
     def test_unload_suppress_destroy_exception(self) -> None:
         """unload() suppresses exceptions from destroy()."""
         model = self._make_model()
-        model._raw.destroy.side_effect = RuntimeError("device gone")  # type: ignore[attr-defined]
+        raw = model._raw
+        assert raw is not None
+        raw.destroy.side_effect = RuntimeError("device gone")  # type: ignore[union-attr]
         model.unload()  # should not raise
         assert model._unloaded is True
+
+    def test_run_raises_after_unload(self) -> None:
+        """run() raises RuntimeError after unload() has been called."""
+        model = self._make_model()
+        model.unload()
+        with pytest.raises(RuntimeError, match="unloaded"):
+            model.run({})
 
 
 @pytest.mark.unit
