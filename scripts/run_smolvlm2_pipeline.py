@@ -296,8 +296,10 @@ def main() -> int:  # noqa: C901, PLR0915
     logger.info("Markdown report: %s", report_path)
     logger.info("Metrics JSON: %s", metrics_path)
 
-    manager = ModelManager(PathManager())
-    platform = Platform(AppConfig())
+    path_manager = PathManager()
+    config = load_config(path_manager.app_config_file)
+    platform = Platform(config)
+    manager = ModelManager(path_manager)
     metrics = MetricsCollector(compute_platform=platform, session_id=run_id)
 
     # Build the pipeline: ClipBufferStage → SmolVLM2Stage

@@ -55,9 +55,11 @@ PROMPTS = [
 ]
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-platform = Platform(AppConfig())
+path_manager = PathManager()
+config = load_config(path_manager.app_config_file)
+platform = Platform(config)
+manager = ModelManager(path_manager)
 metrics = MetricsCollector(compute_platform=platform)
-manager = ModelManager(PathManager())
 
 pipeline = Pipeline(
     stages=[

@@ -49,8 +49,10 @@ if frame is None:
     raise SystemExit(1)
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-platform = Platform(AppConfig())
-manager = ModelManager(PathManager())
+path_manager = PathManager()
+config = load_config(path_manager.app_config_file)
+platform = Platform(config)
+manager = ModelManager(path_manager)
 
 # ── load model ─────────────────────────────────────────────────────────────
 model = manager.get_model(ModelID.YOLO_V8, confidence_threshold=args.conf)

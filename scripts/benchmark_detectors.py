@@ -323,7 +323,7 @@ def _ap50(
 # ---------------------------------------------------------------------------
 
 
-def _run_benchmark(
+def _run_benchmark(  # noqa: PLR0913
     manager: ModelManager,
     model_id: ModelID,
     variant: str,
@@ -332,6 +332,7 @@ def _run_benchmark(
     unit: ComputeUnit,
     images: list[np.ndarray],
     gt_by_image: list[list[list[float]]],
+    config: AppConfig,
 ) -> list[dict]:
     """Run one (model, backend, N_CYCLES) benchmark and return per-row results.
 
@@ -349,6 +350,7 @@ def _run_benchmark(
         unit: Compute unit to benchmark.
         images: List of BGR uint8 frames.
         gt_by_image: List of GT box lists per image ``[[x1,y1,x2,y2], …]``.
+        config: Application config passed to :class:`Platform`.
 
     Returns:
         List of dicts, each representing one CSV row.
@@ -356,7 +358,7 @@ def _run_benchmark(
     rows: list[dict] = []
 
     # --- construct backend; skip if this compute unit is unsupported on this device ---
-    platform = Platform(AppConfig())
+    platform = Platform(config)
     if unit not in platform.supported_units:
         console.print(
             f"  [yellow]Skip {model_name}/{backend_name}: {backend_name} not available "
@@ -826,6 +828,8 @@ def main() -> None:  # noqa: PLR0915
         console.print("[red]No model/backend selected by filters. Exiting.[/red]")
         sys.exit(1)
 
+    path_manager = PathManager()
+    config = load_config(path_manager.app_config_file)
     _configure_qairt()
 
     images, gt_boxes_list = _load_coco_images(n_images)
@@ -881,6 +885,7 @@ def main() -> None:  # noqa: PLR0915
                         unit=unit,
                         images=images,
                         gt_by_image=gt_boxes_list,
+                        config=config,
                     )
                     all_rows.extend(rows)
                 except Exception as exc:  # noqa: BLE001

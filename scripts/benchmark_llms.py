@@ -815,12 +815,10 @@ def main() -> None:  # noqa: C901, PLR0915
             try:
                 model = manager.get_model(
                     model_id,
-                    server_path=config.llama_server_path,
-                    port=config.llama_server_port,
                     system_prompt=_BENCHMARK_SYSTEM,
                     max_tokens=_MAX_TOKENS,
                 )
-                model.load(Platform(AppConfig()), ComputeUnit.GPU)  # type: ignore[union-attr]
+                model.load(Platform(config), ComputeUnit.GPU)  # type: ignore[union-attr]
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                 progress.advance(model_task)
