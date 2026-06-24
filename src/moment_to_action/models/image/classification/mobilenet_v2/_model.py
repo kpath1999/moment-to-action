@@ -131,6 +131,8 @@ class MobileNetV2Model(ImageClassificationModel):
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
         arts = self._backends[unit]
+
+        # Do the load
         if self._model_type is ModelType.ONNX:
             dtype = self._data_type
             self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]), dtype=dtype)

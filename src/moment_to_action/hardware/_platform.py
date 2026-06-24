@@ -46,8 +46,8 @@ _QCOM_SOC_NAME_FILE = Path("/sys/devices/soc0/machine")
 
 
 @functools.cache
-def _detect_platform() -> PlatformType:
-    """Detect the current hardware platform (internal, cached).
+def detect_platform() -> PlatformType:
+    """Detect the current hardware platform (cached).
 
     Reads ``/sys/devices/soc0/machine`` for Qualcomm SoCs, then falls back
     to ``platform.machine()`` + ``platform.system()``.
@@ -108,7 +108,7 @@ class Platform:
             config: Application configuration.
         """
         self._config = config
-        self._platform_type = _detect_platform()
+        self._platform_type = detect_platform()
         self._backends: dict[ComputeUnit, ComputeBackend]
         self._resource_monitor: ResourceMonitor
 

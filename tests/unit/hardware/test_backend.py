@@ -11,7 +11,7 @@ from moment_to_action.config import AppConfig
 from moment_to_action.hardware import Platform
 from moment_to_action.hardware._backend import ComputeBackend
 from moment_to_action.hardware._loaded_model import LoadedModel
-from moment_to_action.hardware._platform import _detect_platform
+from moment_to_action.hardware._platform import detect_platform
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType, PlatformType
 
 
@@ -22,7 +22,7 @@ class TestPlatformProperties:
     def _make_platform(self) -> Platform:
         """Build a Platform with mocked x86_64 backends."""
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch(
                 "moment_to_action.hardware._platform.Platform._init_x86_64",
                 autospec=True,
@@ -67,7 +67,7 @@ class TestPlatformDetection:
 
     def test_init_x86_64_called_on_x86(self) -> None:
         """Platform calls _init_x86_64 when _detect_platform returns X86_64."""
-        with patch("moment_to_action.hardware._platform._detect_platform") as mock_detect:
+        with patch("moment_to_action.hardware._platform.detect_platform") as mock_detect:
             mock_detect.return_value = PlatformType.X86_64
             with patch.object(
                 Platform, "_init_x86_64", autospec=True, side_effect=self._stub_init
@@ -77,7 +77,7 @@ class TestPlatformDetection:
 
     def test_init_qcs6490_called_on_qcs6490(self) -> None:
         """Platform calls _init_qcs6490 when _detect_platform returns QCS6490."""
-        with patch("moment_to_action.hardware._platform._detect_platform") as mock_detect:
+        with patch("moment_to_action.hardware._platform.detect_platform") as mock_detect:
             mock_detect.return_value = PlatformType.QCS6490
             with patch.object(
                 Platform, "_init_qcs6490", autospec=True, side_effect=self._stub_init
@@ -87,7 +87,7 @@ class TestPlatformDetection:
 
     def test_init_macos_arm64_called_on_macos(self) -> None:
         """Platform calls _init_macos_arm64 when _detect_platform returns MACOS_ARM64."""
-        with patch("moment_to_action.hardware._platform._detect_platform") as mock_detect:
+        with patch("moment_to_action.hardware._platform.detect_platform") as mock_detect:
             mock_detect.return_value = PlatformType.MACOS_ARM64
             with patch.object(
                 Platform, "_init_macos_arm64", autospec=True, side_effect=self._stub_init
@@ -103,7 +103,7 @@ class TestPlatformLoadDelegation:
     def _make_platform_with_mock_cpu(self) -> tuple[Platform, MagicMock]:
         """Return (Platform, mock_cpu_backend) with a single mocked CPU backend."""
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch.object(Platform, "_init_x86_64", autospec=True) as mock_init,
         ):
             mock_detect.return_value = PlatformType.X86_64
@@ -380,10 +380,10 @@ class TestDetectPlatform:
         mock_path.read_text.return_value = "Qualcomm QCS6490\n"
         with (
             patch("moment_to_action.hardware._platform._QCOM_SOC_NAME_FILE", mock_path),
-            patch("moment_to_action.hardware._platform._detect_platform.cache_clear"),
+            patch("moment_to_action.hardware._platform.detect_platform.cache_clear"),
         ):
-            _detect_platform.cache_clear()
-            result = _detect_platform()
+            detect_platform.cache_clear()
+            result = detect_platform()
         assert result == PlatformType.QCS6490
 
     def test_detects_x86_64_via_machine(self) -> None:
@@ -395,8 +395,8 @@ class TestDetectPlatform:
             patch("moment_to_action.hardware._platform.platform.machine", return_value="x86_64"),
             patch("moment_to_action.hardware._platform.platform.system", return_value="linux"),
         ):
-            _detect_platform.cache_clear()
-            result = _detect_platform()
+            detect_platform.cache_clear()
+            result = detect_platform()
         assert result == PlatformType.X86_64
 
     def test_detects_x86_64_via_amd64(self) -> None:
@@ -408,8 +408,8 @@ class TestDetectPlatform:
             patch("moment_to_action.hardware._platform.platform.machine", return_value="amd64"),
             patch("moment_to_action.hardware._platform.platform.system", return_value="linux"),
         ):
-            _detect_platform.cache_clear()
-            result = _detect_platform()
+            detect_platform.cache_clear()
+            result = detect_platform()
         assert result == PlatformType.X86_64
 
     def test_detects_macos_arm64(self) -> None:
@@ -421,8 +421,8 @@ class TestDetectPlatform:
             patch("moment_to_action.hardware._platform.platform.machine", return_value="arm64"),
             patch("moment_to_action.hardware._platform.platform.system", return_value="darwin"),
         ):
-            _detect_platform.cache_clear()
-            result = _detect_platform()
+            detect_platform.cache_clear()
+            result = detect_platform()
         assert result == PlatformType.MACOS_ARM64
 
 
@@ -445,7 +445,7 @@ class TestPlatformSupports:
             Constructed Platform.
         """
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch.object(Platform, "_init_x86_64", autospec=True) as mock_init,
         ):
             mock_detect.return_value = PlatformType.X86_64
@@ -521,8 +521,8 @@ class TestPlatformSupports:
             patch("moment_to_action.hardware._platform.platform.machine", return_value="aarch64"),
             patch("moment_to_action.hardware._platform.platform.system", return_value="darwin"),
         ):
-            _detect_platform.cache_clear()
-            result = _detect_platform()
+            detect_platform.cache_clear()
+            result = detect_platform()
         assert result == PlatformType.MACOS_ARM64
 
     def test_raises_on_unknown_platform(self) -> None:
@@ -534,9 +534,9 @@ class TestPlatformSupports:
             patch("moment_to_action.hardware._platform.platform.machine", return_value="mips"),
             patch("moment_to_action.hardware._platform.platform.system", return_value="linux"),
         ):
-            _detect_platform.cache_clear()
+            detect_platform.cache_clear()
             with pytest.raises(RuntimeError, match="Unrecognised platform"):
-                _detect_platform()
+                detect_platform()
 
     def test_soc_file_non_qcs6490_falls_through_to_machine(self) -> None:
         """_detect_platform reads soc file but falls through when not QCS6490."""
@@ -548,8 +548,8 @@ class TestPlatformSupports:
             patch("moment_to_action.hardware._platform.platform.machine", return_value="x86_64"),
             patch("moment_to_action.hardware._platform.platform.system", return_value="linux"),
         ):
-            _detect_platform.cache_clear()
-            result = _detect_platform()
+            detect_platform.cache_clear()
+            result = detect_platform()
         assert result == PlatformType.X86_64
 
 
@@ -562,7 +562,7 @@ class TestPlatformInitMethods:
         platform_type: PlatformType,
     ) -> Platform:
         """Build a Platform for the given type with mocked init."""
-        with patch("moment_to_action.hardware._platform._detect_platform") as mock_detect:
+        with patch("moment_to_action.hardware._platform.detect_platform") as mock_detect:
             mock_detect.return_value = platform_type
 
             if platform_type == PlatformType.X86_64:
@@ -607,7 +607,7 @@ class TestPlatformInitMethods:
         mock_cpu = MagicMock()
         mock_monitor = MagicMock()
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch(
                 "moment_to_action.hardware._platforms.x86_64._cpu_backend.X86_64CPUBackend",
                 return_value=mock_cpu,
@@ -626,7 +626,7 @@ class TestPlatformInitMethods:
         mock_cpu = MagicMock()
         mock_monitor = MagicMock()
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch(
                 "moment_to_action.hardware._platforms.macos_arm64._cpu_backend.MacOSARM64CPUBackend",
                 return_value=mock_cpu,
@@ -645,7 +645,7 @@ class TestPlatformInitMethods:
         mock_cpu = MagicMock()
         mock_monitor = MagicMock()
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch(
                 "moment_to_action.hardware._platforms.qcs6490._cpu_backend.QCS6490CPUBackend",
                 return_value=mock_cpu,
@@ -665,7 +665,7 @@ class TestPlatformInitMethods:
         """_try_add_htp_backend registers NPU backend when HTP imports succeed."""
         mock_htp = MagicMock()
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch(
                 "moment_to_action.hardware._platform.Platform._init_qcs6490",
                 autospec=True,
@@ -696,7 +696,7 @@ class TestPlatformInitMethods:
     def test_try_add_htp_backend_logs_warning_when_unavailable(self) -> None:
         """_try_add_htp_backend logs warning when HTP backend raises."""
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch(
                 "moment_to_action.hardware._platform.Platform._init_qcs6490",
                 autospec=True,
@@ -731,7 +731,7 @@ class TestPlatformInitMethods:
     def test_try_add_qcs6490_gpu_backend_logs_warning_when_unavailable(self) -> None:
         """_try_add_qcs6490_gpu_backend logs warning when GPU backend raises."""
         with (
-            patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
+            patch("moment_to_action.hardware._platform.detect_platform") as mock_detect,
             patch(
                 "moment_to_action.hardware._platform.Platform._init_qcs6490",
                 autospec=True,

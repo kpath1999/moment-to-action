@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ._loaded_model import LoadedModel, LoadedStreamableModel
-from ._platform import Platform
+from ._platform import Platform, detect_platform
 from ._types import (
     ComputeUnit,
     ComputeUnitUsageSample,
@@ -21,4 +21,5 @@ __all__ = [
     "ModelType",
     "Platform",
     "PlatformType",
+    "detect_platform",
 ]
