@@ -42,8 +42,6 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
 
     def __init__(self) -> None:
         """Initialize the x86_64 CPU backend."""
-        self._interp_cache: dict[str, object] = {}
-        self._session_cache: dict[str, object] = {}
         logger.info("X86_64CPUBackend: initialized (LiteRT + ONNX Runtime + DLC debug)")
 
     @property
@@ -71,10 +69,9 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
             An :class:`~_models.X86_64TfliteModel` backed by XNNPACK.
         """
         p = os.fspath(path)
-        if p not in self._interp_cache:
-            self._interp_cache[p] = _load_litert_interpreter(p)
-            logger.info("X86_64CPUBackend: loaded %s on CPU", p)
-        return X86_64TfliteModel(interp=self._interp_cache[p])
+        interp = _load_litert_interpreter(p)
+        logger.info("X86_64CPUBackend: loaded %s on CPU", p)
+        return X86_64TfliteModel(interp=interp)
 
     def load_onnx(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load an ONNX model on CPU via ONNX Runtime.
@@ -86,11 +83,9 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
             An :class:`~_models.X86_64ONNXModel` backed by CPU EP.
         """
         p = os.fspath(path)
-        if p not in self._session_cache:
-            session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
-            self._session_cache[p] = session
-            logger.info("X86_64CPUBackend: loaded %s via onnxruntime", p)
-        return X86_64ONNXModel(session=self._session_cache[p])
+        session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
+        logger.info("X86_64CPUBackend: loaded %s via onnxruntime", p)
+        return X86_64ONNXModel(session=session)
 
     def load_dlc(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load a DLC model via QAIRT CPU backend (debug path).

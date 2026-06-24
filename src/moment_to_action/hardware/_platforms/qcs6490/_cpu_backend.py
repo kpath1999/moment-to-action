@@ -35,8 +35,6 @@ class QCS6490CPUBackend(ComputeBackend):
 
     def __init__(self) -> None:
         """Initialize the QCS6490 CPU backend."""
-        self._interp_cache: dict[str, object] = {}
-        self._session_cache: dict[str, object] = {}
         logger.info("QCS6490CPUBackend: initialized (LiteRT + ONNX Runtime)")
 
     @property
@@ -64,10 +62,9 @@ class QCS6490CPUBackend(ComputeBackend):
             A :class:`~_models.QCS6490TfliteModel` backed by XNNPACK.
         """
         p = os.fspath(path)
-        if p not in self._interp_cache:
-            self._interp_cache[p] = _load_litert_interpreter(p)
-            logger.info("QCS6490CPUBackend: loaded %s on CPU", p)
-        return QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=self._interp_cache[p])
+        interp = _load_litert_interpreter(p)
+        logger.info("QCS6490CPUBackend: loaded %s on CPU", p)
+        return QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=interp)
 
     def load_onnx(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load an ONNX model on CPU via ONNX Runtime.
@@ -79,8 +76,6 @@ class QCS6490CPUBackend(ComputeBackend):
             A :class:`~_models.QCS6490ONNXModel` backed by CPU EP.
         """
         p = os.fspath(path)
-        if p not in self._session_cache:
-            session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
-            self._session_cache[p] = session
-            logger.info("QCS6490CPUBackend: loaded %s via onnxruntime", p)
-        return QCS6490ONNXModel(session=self._session_cache[p])
+        session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
+        logger.info("QCS6490CPUBackend: loaded %s via onnxruntime", p)
+        return QCS6490ONNXModel(session=session)

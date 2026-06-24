@@ -264,22 +264,6 @@ class TestQCS6490CPUBackend:
             model = QCS6490CPUBackend().load_tflite("/tmp/model.tflite")
         assert isinstance(model, QCS6490TfliteModel)
 
-    def test_load_tflite_caches_interpreter(self) -> None:
-        """load_tflite with the same path reuses the cached interpreter."""
-        from unittest.mock import MagicMock, patch
-
-        from moment_to_action.hardware._platforms.qcs6490._cpu_backend import QCS6490CPUBackend
-
-        mock_interp = MagicMock()
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._cpu_backend._load_litert_interpreter",
-            return_value=mock_interp,
-        ) as mock_load:
-            backend = QCS6490CPUBackend()
-            backend.load_tflite("/tmp/model.tflite")
-            backend.load_tflite("/tmp/model.tflite")
-        assert mock_load.call_count == 1
-
     def test_load_onnx_returns_onnx_model(self) -> None:
         """load_onnx returns a QCS6490ONNXModel."""
         from unittest.mock import MagicMock, patch
@@ -293,21 +277,6 @@ class TestQCS6490CPUBackend:
         with patch.object(ort, "InferenceSession", return_value=mock_session):
             model = QCS6490CPUBackend().load_onnx("/tmp/model.onnx")
         assert isinstance(model, QCS6490ONNXModel)
-
-    def test_load_onnx_caches_session(self) -> None:
-        """load_onnx with the same path reuses cached session."""
-        from unittest.mock import MagicMock, patch
-
-        import onnxruntime as ort
-
-        from moment_to_action.hardware._platforms.qcs6490._cpu_backend import QCS6490CPUBackend
-
-        mock_session = MagicMock()
-        with patch.object(ort, "InferenceSession", return_value=mock_session) as mock_cls:
-            backend = QCS6490CPUBackend()
-            backend.load_onnx("/tmp/model.onnx")
-            backend.load_onnx("/tmp/model.onnx")
-        assert mock_cls.call_count == 1
 
     def test_load_litert_interpreter_allocates(self) -> None:
         """_load_litert_interpreter calls Interpreter and allocate_tensors."""
@@ -374,22 +343,6 @@ class TestQCS6490GPUBackend:
             model = QCS6490GPUBackend().load_tflite("/tmp/model.tflite")
         assert isinstance(model, QCS6490TfliteModel)
         assert model.unit == ComputeUnit.GPU
-
-    def test_load_tflite_caches_interpreter(self) -> None:
-        """load_tflite with the same path reuses cached interpreter."""
-        from unittest.mock import MagicMock, patch
-
-        from moment_to_action.hardware._platforms.qcs6490._gpu_backend import QCS6490GPUBackend
-
-        mock_interp = MagicMock()
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._gpu_backend._load_litert_interpreter",
-            return_value=mock_interp,
-        ) as mock_load:
-            backend = QCS6490GPUBackend()
-            backend.load_tflite("/tmp/model.tflite")
-            backend.load_tflite("/tmp/model.tflite")
-        assert mock_load.call_count == 1
 
     def test_load_litert_interpreter_allocates(self) -> None:
         """_load_litert_interpreter calls Interpreter with delegates."""
@@ -489,27 +442,6 @@ class TestQCS6490HTPBackend:
             model = backend.load_tflite("/tmp/model.tflite")
         assert isinstance(model, QCS6490TfliteModel)
         assert model.unit == ComputeUnit.NPU
-
-    def test_load_tflite_caches_interpreter(self) -> None:
-        """load_tflite with the same path reuses cached interpreter."""
-        from unittest.mock import MagicMock, patch
-
-        from moment_to_action.hardware._platforms.qcs6490._htp_backend import QCS6490HTPBackend
-
-        mock_delegate = MagicMock()
-        mock_interp = MagicMock()
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._htp_backend._load_litert_delegate",
-            return_value=[mock_delegate],
-        ):
-            backend = QCS6490HTPBackend()
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._htp_backend._load_litert_interpreter",
-            return_value=mock_interp,
-        ) as mock_load:
-            backend.load_tflite("/tmp/model.tflite")
-            backend.load_tflite("/tmp/model.tflite")
-        assert mock_load.call_count == 1
 
     def test_load_dlc_returns_dlc_model(self) -> None:
         """load_dlc returns a QCS6490DLCModel initialized on HTP."""

@@ -57,19 +57,6 @@ class TestX86_64CPUBackend:  # noqa: N801
 
         assert isinstance(model, X86_64TfliteModel)
 
-    def test_load_tflite_caches_interpreter(self) -> None:
-        """load_tflite with the same path reuses the cached interpreter."""
-        mock_interp = MagicMock()
-        with patch(
-            "moment_to_action.hardware._platforms.x86_64._cpu_backend._load_litert_interpreter",
-            return_value=mock_interp,
-        ) as mock_load:
-            backend = X86_64CPUBackend()
-            backend.load_tflite("/tmp/model.tflite")
-            backend.load_tflite("/tmp/model.tflite")
-
-        assert mock_load.call_count == 1
-
     def test_load_onnx_returns_onnx_model(self) -> None:
         """load_onnx returns an X86_64ONNXModel."""
         mock_session = MagicMock()
@@ -81,19 +68,6 @@ class TestX86_64CPUBackend:  # noqa: N801
             model = backend.load_onnx("/tmp/model.onnx")
 
         assert isinstance(model, X86_64ONNXModel)
-
-    def test_load_onnx_caches_session(self) -> None:
-        """load_onnx with the same path reuses the cached session."""
-        mock_session = MagicMock()
-        with patch(
-            "moment_to_action.hardware._platforms.x86_64._cpu_backend.ort.InferenceSession",
-            return_value=mock_session,
-        ) as mock_cls:
-            backend = X86_64CPUBackend()
-            backend.load_onnx("/tmp/model.onnx")
-            backend.load_onnx("/tmp/model.onnx")
-
-        assert mock_cls.call_count == 1
 
     def test_load_torch_raises_not_implemented(self) -> None:
         """load_torch raises NotImplementedError (not in supported_formats)."""

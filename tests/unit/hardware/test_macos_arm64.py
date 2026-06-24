@@ -57,19 +57,6 @@ class TestMacOSARM64CPUBackend:
 
         assert isinstance(model, MacOSARM64TfliteModel)
 
-    def test_load_tflite_caches_interpreter(self) -> None:
-        """load_tflite with the same path reuses the cached interpreter."""
-        mock_interp = MagicMock()
-        with patch(
-            "moment_to_action.hardware._platforms.macos_arm64._cpu_backend._load_litert_interpreter",
-            return_value=mock_interp,
-        ) as mock_load:
-            backend = MacOSARM64CPUBackend()
-            backend.load_tflite("/tmp/model.tflite")
-            backend.load_tflite("/tmp/model.tflite")
-
-        assert mock_load.call_count == 1
-
     def test_load_onnx_returns_onnx_model(self) -> None:
         """load_onnx returns a MacOSARM64ONNXModel."""
         mock_session = MagicMock()
@@ -80,19 +67,6 @@ class TestMacOSARM64CPUBackend:
             model = MacOSARM64CPUBackend().load_onnx("/tmp/model.onnx")
 
         assert isinstance(model, MacOSARM64ONNXModel)
-
-    def test_load_onnx_caches_session(self) -> None:
-        """load_onnx with the same path reuses the cached session."""
-        mock_session = MagicMock()
-        with patch(
-            "moment_to_action.hardware._platforms.macos_arm64._cpu_backend.ort.InferenceSession",
-            return_value=mock_session,
-        ) as mock_cls:
-            backend = MacOSARM64CPUBackend()
-            backend.load_onnx("/tmp/model.onnx")
-            backend.load_onnx("/tmp/model.onnx")
-
-        assert mock_cls.call_count == 1
 
     def test_load_dlc_raises_not_implemented(self) -> None:
         """load_dlc raises NotImplementedError (not in supported_formats)."""

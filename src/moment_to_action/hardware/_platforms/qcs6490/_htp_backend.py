@@ -73,7 +73,6 @@ class QCS6490HTPBackend(ComputeBackend):
             RuntimeError: If the QNN TFLite delegate cannot be loaded.
         """
         self._delegates = _load_litert_delegate()
-        self._interp_cache: dict[str, object] = {}
         logger.info("QCS6490HTPBackend: initialized (QNN delegate loaded)")
 
     @property
@@ -104,10 +103,9 @@ class QCS6490HTPBackend(ComputeBackend):
             RuntimeError: If the delegate fails to apply to this model.
         """
         p = os.fspath(path)
-        if p not in self._interp_cache:
-            self._interp_cache[p] = _load_litert_interpreter(p, self._delegates)
-            logger.info("QCS6490HTPBackend: loaded %s on NPU", p)
-        return QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=self._interp_cache[p])
+        interp = _load_litert_interpreter(p, self._delegates)
+        logger.info("QCS6490HTPBackend: loaded %s on NPU", p)
+        return QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=interp)
 
     def load_dlc(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load a DLC model and initialize it on the Hexagon HTP via QAIRT.

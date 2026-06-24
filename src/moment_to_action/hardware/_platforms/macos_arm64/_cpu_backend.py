@@ -34,8 +34,6 @@ class MacOSARM64CPUBackend(ComputeBackend):
 
     def __init__(self) -> None:
         """Initialize the macOS arm64 CPU backend."""
-        self._interp_cache: dict[str, object] = {}
-        self._session_cache: dict[str, object] = {}
         logger.info("MacOSARM64CPUBackend: initialized (LiteRT + ONNX Runtime)")
 
     @property
@@ -63,10 +61,9 @@ class MacOSARM64CPUBackend(ComputeBackend):
             A :class:`~_models.MacOSARM64TfliteModel` backed by LiteRT.
         """
         p = os.fspath(path)
-        if p not in self._interp_cache:
-            self._interp_cache[p] = _load_litert_interpreter(p)
-            logger.info("MacOSARM64CPUBackend: loaded %s on CPU", p)
-        return MacOSARM64TfliteModel(interp=self._interp_cache[p])
+        interp = _load_litert_interpreter(p)
+        logger.info("MacOSARM64CPUBackend: loaded %s on CPU", p)
+        return MacOSARM64TfliteModel(interp=interp)
 
     def load_onnx(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load an ONNX model on CPU via ONNX Runtime.
@@ -78,8 +75,6 @@ class MacOSARM64CPUBackend(ComputeBackend):
             A :class:`~_models.MacOSARM64ONNXModel` backed by CPU EP.
         """
         p = os.fspath(path)
-        if p not in self._session_cache:
-            session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
-            self._session_cache[p] = session
-            logger.info("MacOSARM64CPUBackend: loaded %s via onnxruntime", p)
-        return MacOSARM64ONNXModel(session=self._session_cache[p])
+        session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
+        logger.info("MacOSARM64CPUBackend: loaded %s via onnxruntime", p)
+        return MacOSARM64ONNXModel(session=session)

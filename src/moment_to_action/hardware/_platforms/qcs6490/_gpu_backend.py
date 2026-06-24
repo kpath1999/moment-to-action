@@ -31,7 +31,6 @@ class QCS6490GPUBackend(ComputeBackend):
 
     def __init__(self) -> None:
         """Initialize the GPU backend (no delegate loaded currently)."""
-        self._interp_cache: dict[str, object] = {}
         logger.info(
             "QCS6490GPUBackend: initialized (GPU delegate not yet available, using CPU fallback)"
         )
@@ -64,7 +63,6 @@ class QCS6490GPUBackend(ComputeBackend):
             A :class:`~_models.QCS6490TfliteModel` running on GPU (currently CPU).
         """
         p = os.fspath(path)
-        if p not in self._interp_cache:
-            self._interp_cache[p] = _load_litert_interpreter(p)
-            logger.info("QCS6490GPUBackend: loaded %s (CPU fallback)", p)
-        return QCS6490TfliteModel(unit=ComputeUnit.GPU, interp=self._interp_cache[p])
+        interp = _load_litert_interpreter(p)
+        logger.info("QCS6490GPUBackend: loaded %s (CPU fallback)", p)
+        return QCS6490TfliteModel(unit=ComputeUnit.GPU, interp=interp)
