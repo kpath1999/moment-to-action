@@ -153,6 +153,7 @@ class TestProperties:
             "default",
             Path("/f"),
             ModelType.ONNX,
+            DataType.FP32,
             confidence_threshold=0.2,
             backends=_ONNX_BACKENDS,
         )
@@ -177,6 +178,7 @@ class TestProperties:
             variant,
             Path("/fake"),
             ModelType.DLC,
+            DataType.W8A8 if variant == "qcs6490_w8a8" else DataType.W8A16,
             input_layout="NHWC",
             backends=_DLC_NPU_BACKENDS,
         )
@@ -218,22 +220,6 @@ class TestLoadUnload:
         """DLC load() sets _roi_channel_last=False when roi artifact ends with .dlc."""
         dlc_model_nchw.load(mock_platform, ComputeUnit.CPU)
         assert dlc_model_nchw._roi_channel_last is False
-
-    def test_load_dlc_none_data_type_raises(self, mock_platform: MagicMock) -> None:
-        """DLC load() raises RuntimeError when data_type is None."""
-        model = Detectron2Model(
-            "qcs6490", Path("/fake/qcs6490"), ModelType.DLC, backends=_DLC_NPU_BACKENDS
-        )
-        with pytest.raises(RuntimeError, match="data_type"):
-            model.load(mock_platform, ComputeUnit.CPU)
-
-    def test_load_onnx_none_data_type_raises(self, mock_platform: MagicMock) -> None:
-        """ONNX load() raises RuntimeError when data_type is None."""
-        model = Detectron2Model(
-            "default", Path("/fake/d2"), ModelType.ONNX, backends=_ONNX_BACKENDS
-        )
-        with pytest.raises(RuntimeError, match="data_type"):
-            model.load(mock_platform, ComputeUnit.CPU)
 
     def test_load_twice_raises(self, onnx_model: Detectron2Model, mock_platform: MagicMock) -> None:
         """Loading twice raises RuntimeError."""

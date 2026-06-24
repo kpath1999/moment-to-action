@@ -131,6 +131,7 @@ class TestRFDETRModelProperties:
             "default",
             Path("/f"),
             ModelType.ONNX,
+            DataType.FP32,
             confidence_threshold=0.3,
             backends=_ONNX_BACKENDS,
         )
@@ -168,20 +169,6 @@ class TestRFDETRModelLoadUnload:
         mock_platform.load_dlc.assert_called_once_with(
             ComputeUnit.CPU, Path("/fake/qcs6490/model.dlc"), dtype=DataType.W8A8
         )
-
-    def test_load_dlc_none_data_type_raises(self, mock_platform: MagicMock) -> None:
-        """DLC load() raises RuntimeError when data_type is None."""
-        model = RFDETRModel("qcs6490", Path("/fake/qcs6490"), ModelType.DLC, backends=_DLC_BACKENDS)
-        with pytest.raises(RuntimeError, match="data_type"):
-            model.load(mock_platform, ComputeUnit.CPU)
-
-    def test_load_onnx_none_data_type_raises(self, mock_platform: MagicMock) -> None:
-        """ONNX load() raises RuntimeError when data_type is None."""
-        model = RFDETRModel(
-            "default", Path("/fake/model.onnx"), ModelType.ONNX, backends=_ONNX_BACKENDS
-        )
-        with pytest.raises(RuntimeError, match="data_type"):
-            model.load(mock_platform, ComputeUnit.CPU)
 
     def test_load_twice_raises(self, onnx_model: RFDETRModel, mock_platform: MagicMock) -> None:
         """Loading an already-loaded model raises RuntimeError."""

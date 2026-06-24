@@ -21,7 +21,6 @@ class DlcModel(LoadedModel):
         _unit: The compute unit this model runs on.
         _raw: The QAIRT model handle.
         _dtype: Quantization type.
-        _unloaded: Whether :meth:`unload` has already been called.
     """
 
     def __init__(
@@ -40,7 +39,6 @@ class DlcModel(LoadedModel):
         self._unit = unit
         self._raw: Model | None = raw
         self._dtype = dtype
-        self._unloaded = False
 
     @property
     def unit(self) -> ComputeUnit:
@@ -70,18 +68,25 @@ class DlcModel(LoadedModel):
         Raises:
             RuntimeError: If :meth:`unload` has already been called.
         """
-        if self._unloaded:
+        if self._raw is None:
             msg = "DlcModel has been unloaded"
             raise RuntimeError(msg)
-        result = self._raw(inputs=inputs)  # type: ignore[misc]
+
+        result = self._raw(inputs=inputs)
         return dict(result.data)
 
     def unload(self) -> None:
         """Destroy the QAIRT model handle and release resources."""
-        if not self._unloaded:
-            raw = self._raw
-            if raw is not None:
-                with contextlib.suppress(Exception):
-                    raw.destroy()
-            self._raw = None
-            self._unloaded = True
+        if self._raw is None:
+            # Nothing to do, already unloaded
+            return
+
+        # Do the unload
+        with contextlib.suppress(Exception):
+            self._raw.destroy()
+        self._raw = None
+
+    @property
+    def _unloaded(self) -> bool:
+        """Check if this model has already been unloaded."""
+        return self._raw is None

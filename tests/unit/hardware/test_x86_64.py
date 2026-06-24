@@ -88,7 +88,7 @@ class TestX86_64CPUBackend:  # noqa: N801
         """load_llama_cpp calls _start_llama_model with cpu_only=True."""
         mock_model = MagicMock()
         with patch(
-            "moment_to_action.hardware._loaded_models._llama._start_llama_model",
+            "moment_to_action.hardware._platforms.x86_64._cpu_backend._start_llama_model",
             return_value=mock_model,
         ) as mock_start:
             result = X86_64CPUBackend().load_llama_cpp(
@@ -139,7 +139,7 @@ class TestX86_64DLCMethods:  # noqa: N801
 
         backend = X86_64CPUBackend()
         with (
-            patch.dict(sys.modules, {"qairt": None}),  # type: ignore[dict-item]
+            patch.dict(sys.modules, {"qairt": None}),
             pytest.raises(RuntimeError, match="QAIRT SDK is not available"),
         ):
             backend.load_dlc(Path("/fake/model.dlc"), dtype=DataType.W8A8)
@@ -494,7 +494,7 @@ class TestX86_64DLCModel:  # noqa: N801
         raw = model._raw
         assert raw is not None
         model.unload()
-        raw.destroy.assert_called_once()  # type: ignore[union-attr]
+        raw.destroy.assert_called_once()
         assert model._raw is None
         assert model._unloaded is True
 
@@ -509,7 +509,7 @@ class TestX86_64DLCModel:  # noqa: N801
         model = self._make_model()
         raw = model._raw
         assert raw is not None
-        raw.destroy.side_effect = RuntimeError("device gone")  # type: ignore[union-attr]
+        raw.destroy.side_effect = RuntimeError("device gone")
         model.unload()  # should not raise
         assert model._unloaded is True
 

@@ -50,6 +50,7 @@ from rich.progress import (
     MofNCompleteColumn,
     Progress,
     SpinnerColumn,
+    TaskID,
     TaskProgressColumn,
     TextColumn,
 )
@@ -58,7 +59,7 @@ from rich.table import Table
 from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.metrics import MetricsCollector
-from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
+from moment_to_action.models import MODEL_REGISTRY, BaseModel, ModelID, ModelManager
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.paths import PathManager
 
@@ -494,14 +495,14 @@ def _recall(response: str, keywords: list[str]) -> float:
 
 
 def _run_benchmark(
-    model: object,
+    model: BaseModel,
     model_name: str,
     metrics: MetricsCollector,
     n_cycles: int,
     n_frames: int,
     video_dir: Path | None,
     progress: Progress,
-    scene_task_id: object,
+    scene_task_id: TaskID,
 ) -> list[dict]:
     """Run all scenes x n_cycles through a loaded VLM model, return result rows.
 
@@ -519,26 +520,27 @@ def _run_benchmark(
         List of result dicts, one per (scene, cycle).
     """
     total_steps = len(_SCENES) * n_cycles
-    progress.reset(scene_task_id, total=total_steps)  # type: ignore[arg-type]
+    progress.reset(scene_task_id, total=total_steps)
+
     rows: list[dict] = []
     for cycle in range(1, n_cycles + 1):
         for scene_idx, scene in enumerate(_SCENES):
             progress.update(
-                scene_task_id,  # type: ignore[arg-type]
+                scene_task_id,
                 description=f"  {scene.name} [{cycle}/{n_cycles}]",
             )
             b64_frames, is_real = _get_frames(scene, video_dir, n_frames)
             t_start = time.perf_counter_ns()
             try:
                 with metrics.start_trace():
-                    prepared = model.prepare((scene.task, b64_frames))  # type: ignore[attr-defined]
-                    raw = model.run(prepared)  # type: ignore[attr-defined]
-                    response = model.post_proc(raw)[0]  # type: ignore[attr-defined]
+                    prepared = model.prepare((scene.task, b64_frames))
+                    raw = model.run(prepared)
+                    response = model.post_proc(raw)[0]
             except Exception as exc:  # noqa: BLE001
                 console.print(
                     f"  [yellow]{model_name} scene={scene.name} cycle={cycle}: {exc}[/yellow]"
                 )
-                progress.advance(scene_task_id)  # type: ignore[arg-type]
+                progress.advance(scene_task_id)
                 continue
             infer_ms = (time.perf_counter_ns() - t_start) / 1e6
             recall = _recall(response, scene.recall_keywords)
@@ -558,7 +560,7 @@ def _run_benchmark(
                     "recall": round(recall, 4),
                 }
             )
-            progress.advance(scene_task_id)  # type: ignore[arg-type]
+            progress.advance(scene_task_id)
     return rows
 
 
@@ -850,7 +852,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     system_prompt=_BENCHMARK_SYSTEM,
                     max_tokens=_MAX_TOKENS,
                 )
-                model.load(Platform(config), ComputeUnit.GPU)  # type: ignore[union-attr]
+                model.load(Platform(config), ComputeUnit.GPU)
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                 progress.advance(model_task)
@@ -872,7 +874,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
             t_unload = time.perf_counter_ns()
             try:
-                model.unload()  # type: ignore[union-attr]
+                model.unload()
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
             unload_ms = (time.perf_counter_ns() - t_unload) / 1e6

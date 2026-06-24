@@ -8,6 +8,8 @@ import pytest
 
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
+_MOD = "moment_to_action.hardware._platforms.macos_arm64._gpu_backend"
+
 
 @pytest.mark.unit
 class TestMacOSARM64GPUBackend:
@@ -15,28 +17,22 @@ class TestMacOSARM64GPUBackend:
 
     def _make_backend(self) -> object:
         """Return a MacOSARM64GPUBackend with MPS mocked as available."""
-        import sys
+        from moment_to_action.hardware._platforms.macos_arm64._gpu_backend import (
+            MacOSARM64GPUBackend,
+        )
 
-        mock_torch = MagicMock()
-        mock_torch.backends.mps.is_available.return_value = True
-        with patch.dict(sys.modules, {"torch": mock_torch}):
-            from moment_to_action.hardware._platforms.macos_arm64._gpu_backend import (
-                MacOSARM64GPUBackend,
-            )
-
+        with patch(f"{_MOD}.torch") as mock_torch:
+            mock_torch.backends.mps.is_available.return_value = True
             return MacOSARM64GPUBackend()
 
     def test_raises_when_mps_unavailable(self) -> None:
         """MacOSARM64GPUBackend raises RuntimeError when MPS is not available."""
-        import sys
+        from moment_to_action.hardware._platforms.macos_arm64._gpu_backend import (
+            MacOSARM64GPUBackend,
+        )
 
-        mock_torch = MagicMock()
-        mock_torch.backends.mps.is_available.return_value = False
-        with patch.dict(sys.modules, {"torch": mock_torch}):
-            from moment_to_action.hardware._platforms.macos_arm64._gpu_backend import (
-                MacOSARM64GPUBackend,
-            )
-
+        with patch(f"{_MOD}.torch") as mock_torch:
+            mock_torch.backends.mps.is_available.return_value = False
             with pytest.raises(RuntimeError, match="MPS not available"):
                 MacOSARM64GPUBackend()
 
@@ -78,11 +74,16 @@ class TestMacOSARM64GPUBackend:
     def test_load_torch_returns_model(self) -> None:
         """load_torch returns a TorchModel with GPU unit."""
         from moment_to_action.hardware._loaded_models import TorchModel
+        from moment_to_action.hardware._platforms.macos_arm64._gpu_backend import (
+            MacOSARM64GPUBackend,
+        )
 
-        backend = self._make_backend()
         mock_module = MagicMock()
-        with patch("torch.load", return_value=mock_module):
-            model = backend.load_torch("/tmp/model.pt", dtype=DataType.FP32)  # type: ignore[attr-defined]
+        with patch(f"{_MOD}.torch") as mock_torch:
+            mock_torch.backends.mps.is_available.return_value = True
+            backend = MacOSARM64GPUBackend()
+            mock_torch.load.return_value = mock_module
+            model = backend.load_torch("/tmp/model.pt", dtype=DataType.FP32)
 
         assert isinstance(model, TorchModel)
         assert model.unit == ComputeUnit.GPU
@@ -92,7 +93,7 @@ class TestMacOSARM64GPUBackend:
         mock_model = MagicMock()
         backend = self._make_backend()
         with patch(
-            "moment_to_action.hardware._loaded_models._llama._start_llama_model",
+            f"{_MOD}._start_llama_model",
             return_value=mock_model,
         ) as mock_start:
             result = backend.load_llama_cpp(  # type: ignore[attr-defined]

@@ -80,12 +80,12 @@ class QCS6490HTPBackend(ComputeBackend):
 
     @property
     def supported_dtypes(self) -> set[DataType]:
-        """Supported data types: W8A8 and W8A16."""
+        """Supported data types."""
         return set(self._SUPPORTED_DTYPES)
 
     @property
     def supported_formats(self) -> set[ModelType]:
-        """Supported formats: DLC and TFLITE."""
+        """Supported formats."""
         return set(self._SUPPORTED_FORMATS)
 
     def load_tflite(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
@@ -122,11 +122,13 @@ class QCS6490HTPBackend(ComputeBackend):
             RuntimeError: If the QAIRT SDK is not available on this device.
         """
         self._check_dtype(dtype)
+
         try:
             import qairt  # noqa: PLC0415
         except Exception as exc:
             msg = "QAIRT SDK is not available; load_dlc requires a QCS6490 device"
             raise RuntimeError(msg) from exc
+
         raw = qairt.load(os.fspath(path))
         raw.initialize(backend=_QAIRT_HTP_BACKEND)
         logger.info("QCS6490HTPBackend: loaded DLC %s on HTP", path)

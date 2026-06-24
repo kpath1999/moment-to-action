@@ -317,7 +317,7 @@ class TestQCS6490CPUBackend:
 
         mock_model = MagicMock()
         with patch(
-            "moment_to_action.hardware._loaded_models._llama._start_llama_model",
+            "moment_to_action.hardware._platforms.qcs6490._cpu_backend._start_llama_model",
             return_value=mock_model,
         ) as mock_start:
             result = QCS6490CPUBackend().load_llama_cpp(
@@ -407,6 +407,13 @@ class TestQCS6490GPUBackend:
 
         assert ModelType.LLAMA_CPP in QCS6490GPUBackend().supported_formats
 
+    def test_supported_formats_includes_dlc(self) -> None:
+        """supported_formats contains DLC (Adreno GPU via QAIRT)."""
+        from moment_to_action.hardware._platforms.qcs6490._gpu_backend import QCS6490GPUBackend
+        from moment_to_action.hardware._types import ModelType
+
+        assert ModelType.DLC in QCS6490GPUBackend().supported_formats
+
     def test_supported_formats_excludes_tflite(self) -> None:
         """supported_formats does NOT include TFLITE — no silent CPU fallback."""
         from moment_to_action.hardware._platforms.qcs6490._gpu_backend import QCS6490GPUBackend
@@ -422,6 +429,44 @@ class TestQCS6490GPUBackend:
         with pytest.raises(NotImplementedError):
             QCS6490GPUBackend().load_tflite("/tmp/model.tflite", dtype=DataType.FP16)
 
+    def test_load_dlc_returns_model(self) -> None:
+        """load_dlc calls qairt.load + initialize(GPU) and returns DlcModel."""
+        from unittest.mock import MagicMock, patch
+
+        from moment_to_action.hardware._loaded_models._dlc import DlcModel
+        from moment_to_action.hardware._platforms.qcs6490._gpu_backend import QCS6490GPUBackend
+        from moment_to_action.hardware._types import ComputeUnit, DataType
+
+        mock_raw = MagicMock()
+        mock_qairt = MagicMock()
+        mock_qairt.load.return_value = mock_raw
+        with patch.dict("sys.modules", {"qairt": mock_qairt}):
+            result = QCS6490GPUBackend().load_dlc("/tmp/model.dlc", dtype=DataType.FP32)
+        mock_qairt.load.assert_called_once_with("/tmp/model.dlc")
+        mock_raw.initialize.assert_called_once_with(backend="GPU")
+        assert isinstance(result, DlcModel)
+        assert result.unit == ComputeUnit.GPU
+        assert result.dtype == DataType.FP32
+
+    def test_load_dlc_unsupported_dtype_raises(self) -> None:
+        """load_dlc raises ValueError for dtypes not in supported_dtypes."""
+        from moment_to_action.hardware._platforms.qcs6490._gpu_backend import QCS6490GPUBackend
+        from moment_to_action.hardware._types import DataType
+
+        with pytest.raises(ValueError, match="does not support dtype"):
+            QCS6490GPUBackend().load_dlc("/tmp/model.dlc", dtype=DataType.W8A8)
+
+    def test_load_dlc_no_qairt_raises(self) -> None:
+        """load_dlc raises RuntimeError when qairt is not installed."""
+        from unittest.mock import patch
+
+        from moment_to_action.hardware._platforms.qcs6490._gpu_backend import QCS6490GPUBackend
+        from moment_to_action.hardware._types import DataType
+
+        with patch.dict("sys.modules", {"qairt": None}):
+            with pytest.raises(RuntimeError, match="QAIRT SDK"):
+                QCS6490GPUBackend().load_dlc("/tmp/model.dlc", dtype=DataType.FP32)
+
     def test_load_llama_cpp_returns_model(self) -> None:
         """load_llama_cpp delegates to _start_llama_model with cpu_only=False."""
         from unittest.mock import MagicMock, patch
@@ -431,7 +476,7 @@ class TestQCS6490GPUBackend:
 
         mock_model = MagicMock()
         with patch(
-            "moment_to_action.hardware._loaded_models._llama._start_llama_model",
+            "moment_to_action.hardware._platforms.qcs6490._gpu_backend._start_llama_model",
             return_value=mock_model,
         ) as mock_start:
             result = QCS6490GPUBackend().load_llama_cpp(
@@ -580,7 +625,7 @@ class TestQCS6490HTPBackend:
 
         from moment_to_action.hardware._types import DataType
 
-        with patch.dict(sys.modules, {"qairt": None}):  # type: ignore[dict-item]
+        with patch.dict(sys.modules, {"qairt": None}):
             with pytest.raises(RuntimeError, match="QAIRT SDK is not available"):
                 backend.load_dlc(Path("/fake/model.dlc"), dtype=DataType.W8A8)
 
@@ -884,7 +929,7 @@ class TestQCS6490Models:
         raw = model._raw
         assert raw is not None
         model.unload()
-        raw.destroy.assert_called_once()  # type: ignore[union-attr]
+        raw.destroy.assert_called_once()
         assert model._raw is None
         assert model._unloaded is True
 

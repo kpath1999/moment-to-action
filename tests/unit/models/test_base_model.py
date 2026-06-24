@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from moment_to_action.hardware import Platform
+from moment_to_action.hardware import DataType, ModelType, Platform
 from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.models._base import BaseModel
 
@@ -18,11 +18,11 @@ class _ConcreteModel(BaseModel[object, object, object, object]):
 
     def __init__(self, variant: str = "default", path: Path = Path("/x")) -> None:
         """Initialize with no backend table (testing-only shortcut)."""
-        super().__init__(variant, path, backends={})
+        super().__init__(variant, path, ModelType.DLC, DataType.W8A16, backends={})
 
     def load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load the model."""
-        self._platform = platform  # type: ignore[assignment]
+        self._platform = platform
 
     def unload(self) -> None:
         """Unload the model."""
@@ -59,7 +59,7 @@ class TestBaseModel:
     def test_cannot_instantiate_abstract(self) -> None:
         """BaseModel cannot be instantiated directly."""
         with pytest.raises(TypeError):
-            BaseModel("default", Path("/x"))  # type: ignore[abstract, call-arg]
+            BaseModel("default", Path("/x"), ModelType.DLC, DataType.W8A16, backends={})  # type: ignore[abstract]
 
     def test_missing_abstracts_prevent_instantiation(self) -> None:
         """Subclass missing prepare/run/post_proc/verify_outputs cannot be instantiated."""
@@ -72,7 +72,7 @@ class TestBaseModel:
                 """Unload."""
 
         with pytest.raises(TypeError):
-            _Incomplete("v", Path("/x"))  # type: ignore[abstract, call-arg]
+            _Incomplete("v", Path("/x"), ModelType.DLC, DataType.W8A16, backends={})  # type: ignore[abstract]
 
     def test_init_stores_variant_and_path(self) -> None:
         """__init__ stores _variant and _path."""
@@ -101,7 +101,7 @@ class TestBaseModel:
     def test_unload_clears_platform(self) -> None:
         """unload() clears _platform."""
         model = _ConcreteModel("default", Path("/x"))
-        model._platform = MagicMock()  # type: ignore[assignment]
+        model._platform = MagicMock()
         model.unload()
         assert model._platform is None
 
@@ -213,11 +213,11 @@ class TestBaseModelDel:
         class _FailingModel(BaseModel[object, object, object, object]):
             def __init__(self) -> None:
                 """Initialize."""
-                super().__init__("default", Path("/x"), backends={})
+                super().__init__("default", Path("/x"), ModelType.DLC, DataType.W8A16, backends={})
 
             def load(self, platform: Platform, unit: ComputeUnit) -> None:
                 """Load."""
-                self._platform = platform  # type: ignore[assignment]
+                self._platform = platform
 
             def unload(self) -> None:
                 """Always raises."""

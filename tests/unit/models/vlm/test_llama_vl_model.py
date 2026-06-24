@@ -119,20 +119,6 @@ class TestLlamaVLModelLoad:
         with pytest.raises(RuntimeError, match="already loaded"):
             model.load(mock_platform, ComputeUnit.CPU)
 
-    def test_load_raises_if_data_type_is_none(self) -> None:
-        """load() raises RuntimeError when data_type is None (missing registry entry)."""
-        model = Qwen25VLModel(
-            "default",
-            _VARIANT_DIR,
-            ModelType.LLAMA_CPP,
-            None,
-            backends=_BACKENDS,
-            input_layout=None,
-        )
-        mock_platform = MagicMock()
-        with pytest.raises(RuntimeError, match="data_type is required"):
-            model.load(mock_platform, ComputeUnit.CPU)
-
 
 @pytest.mark.unit
 class TestLlamaVLModelPrepare:

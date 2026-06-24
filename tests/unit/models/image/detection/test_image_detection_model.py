@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import DataType, ModelType
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
@@ -17,11 +18,11 @@ class _ConcreteDetectionModel(ImageDetectionModel):
 
     def __init__(self, detections: list[Detection] | None = None) -> None:
         """Initialize with canned detections."""
-        super().__init__("default", Path("/x"), backends={})
+        super().__init__("default", Path("/x"), ModelType.ONNX, DataType.FP32, backends={})
         self._detections = detections or []
         self._run_output: list[np.ndarray] = []
 
-    def load(self, platform: object, unit: object) -> None:  # type: ignore[override]
+    def load(self, platform: object, unit: object) -> None:
         """Load."""
         self._platform = platform  # type: ignore[assignment]
 
@@ -29,7 +30,7 @@ class _ConcreteDetectionModel(ImageDetectionModel):
         """Unload."""
         self._platform = None
 
-    def prepare(self, inputs: np.ndarray) -> np.ndarray:  # type: ignore[override]
+    def prepare(self, inputs: np.ndarray) -> np.ndarray:
         """Prepare."""
         return inputs
 
@@ -55,13 +56,13 @@ class TestImageDetectionModel:
         """Subclasses missing abstract methods cannot be instantiated."""
 
         class _Incomplete(ImageDetectionModel):
-            def load(self, backend: object, unit: object = None) -> None:  # type: ignore[override]
+            def load(self, backend: object, unit: object = None) -> None:
                 """Load."""
 
             def unload(self) -> None:
                 """Unload."""
 
-            def prepare(self, inputs: np.ndarray) -> np.ndarray:  # type: ignore[override]
+            def prepare(self, inputs: np.ndarray) -> np.ndarray:
                 """Prepare."""
                 return inputs
 

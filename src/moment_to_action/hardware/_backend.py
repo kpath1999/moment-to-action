@@ -9,6 +9,8 @@ One concrete subclass per compute unit per platform:
 
 Not exported from ``hardware/__init__.py`` — callers use :class:`Platform`.
 """
+# Ignore unused args since these are abstract classes
+# ruff: noqa: ARG002
 
 from __future__ import annotations
 
@@ -60,11 +62,11 @@ class ComputeBackend(ABC):
         """
         ...
 
-    def load_onnx(self, _path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:  # noqa: ARG002
+    def load_onnx(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load an ONNX model.
 
         Args:
-            _path: Path to the ``.onnx`` file.
+            path: Path to the ``.onnx`` file.
             dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
@@ -75,11 +77,11 @@ class ComputeBackend(ABC):
         """
         self._raise_unsupported("ONNX")
 
-    def load_dlc(self, _path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:  # noqa: ARG002
+    def load_dlc(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load a DLC model.
 
         Args:
-            _path: Path to the ``.dlc`` file.
+            path: Path to the ``.dlc`` file.
             dtype: Quantization type of the model (e.g. ``DataType.W8A8``).
 
         Returns:
@@ -90,11 +92,11 @@ class ComputeBackend(ABC):
         """
         self._raise_unsupported("DLC")
 
-    def load_torch(self, _path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:  # noqa: ARG002
+    def load_torch(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load a PyTorch model.
 
         Args:
-            _path: Path to the saved model file.
+            path: Path to the saved model file.
             dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
@@ -105,11 +107,11 @@ class ComputeBackend(ABC):
         """
         self._raise_unsupported("TORCH")
 
-    def load_tflite(self, _path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:  # noqa: ARG002
+    def load_tflite(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load a TFLite model.
 
         Args:
-            _path: Path to the ``.tflite`` file.
+            path: Path to the ``.tflite`` file.
             dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
@@ -122,12 +124,12 @@ class ComputeBackend(ABC):
 
     def load_llama_cpp(
         self,
-        path: str | os.PathLike[str],  # noqa: ARG002
+        path: str | os.PathLike[str],
         *,
-        mmproj: str | os.PathLike[str] | None = None,  # noqa: ARG002
-        server_path: str | os.PathLike[str] | None = None,  # noqa: ARG002
-        port: int | None = None,  # noqa: ARG002
-        dtype: DataType,  # noqa: ARG002
+        mmproj: str | os.PathLike[str] | None = None,
+        server_path: str | os.PathLike[str] | None = None,
+        port: int | None = None,
+        dtype: DataType,
     ) -> LoadedModel:
         """Load a llama.cpp GGUF model.
 

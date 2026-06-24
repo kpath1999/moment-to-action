@@ -8,6 +8,8 @@ import pytest
 
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
+_MOD = "moment_to_action.hardware._platforms.x86_64._gpu_backend"
+
 
 @pytest.mark.unit
 class TestX86_64GPUBackend:  # noqa: N801
@@ -15,24 +17,16 @@ class TestX86_64GPUBackend:  # noqa: N801
 
     def _make_backend(self) -> object:
         """Return an X86_64GPUBackend with CUDA mocked as available."""
-        import sys
+        from moment_to_action.hardware._platforms.x86_64._gpu_backend import X86_64GPUBackend
 
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = True
-        with patch.dict(sys.modules, {"torch": mock_torch}):
-            from moment_to_action.hardware._platforms.x86_64._gpu_backend import X86_64GPUBackend
-
+        with patch("torch.cuda.is_available", return_value=True):
             return X86_64GPUBackend()
 
     def test_raises_when_cuda_unavailable(self) -> None:
         """X86_64GPUBackend raises RuntimeError when CUDA is not available."""
-        import sys
+        from moment_to_action.hardware._platforms.x86_64._gpu_backend import X86_64GPUBackend
 
-        mock_torch = MagicMock()
-        mock_torch.cuda.is_available.return_value = False
-        with patch.dict(sys.modules, {"torch": mock_torch}):
-            from moment_to_action.hardware._platforms.x86_64._gpu_backend import X86_64GPUBackend
-
+        with patch("torch.cuda.is_available", return_value=False):
             with pytest.raises(RuntimeError, match="CUDA not available"):
                 X86_64GPUBackend()
 
@@ -77,7 +71,8 @@ class TestX86_64GPUBackend:  # noqa: N801
 
         backend = self._make_backend()
         mock_module = MagicMock()
-        with patch("torch.load", return_value=mock_module):
+        with patch(f"{_MOD}.torch") as mock_torch:
+            mock_torch.load.return_value = mock_module
             model = backend.load_torch("/tmp/model.pt", dtype=DataType.FP32)  # type: ignore[attr-defined]
 
         assert isinstance(model, TorchModel)
@@ -88,7 +83,7 @@ class TestX86_64GPUBackend:  # noqa: N801
         mock_model = MagicMock()
         backend = self._make_backend()
         with patch(
-            "moment_to_action.hardware._loaded_models._llama._start_llama_model",
+            f"{_MOD}._start_llama_model",
             return_value=mock_model,
         ) as mock_start:
             result = backend.load_llama_cpp(  # type: ignore[attr-defined]

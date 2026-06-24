@@ -7,10 +7,13 @@ import os
 from typing import TYPE_CHECKING
 
 import onnxruntime as ort
+import torch
 
 from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._loaded_models._llama import _start_llama_model
 from moment_to_action.hardware._loaded_models._onnx import OnnxModel
 from moment_to_action.hardware._loaded_models._tflite import TfliteModel
+from moment_to_action.hardware._loaded_models._torch import TorchModel
 from moment_to_action.hardware._platforms._shared import _load_litert_interpreter
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
@@ -39,17 +42,17 @@ class MacOSARM64CPUBackend(ComputeBackend):
 
     @property
     def unit(self) -> ComputeUnit:
-        """The compute unit — always CPU."""
+        """The compute unit: always CPU."""
         return ComputeUnit.CPU
 
     @property
     def supported_dtypes(self) -> set[DataType]:
-        """Supported data types: FP32."""
+        """Supported data types."""
         return set(self._SUPPORTED_DTYPES)
 
     @property
     def supported_formats(self) -> set[ModelType]:
-        """Supported formats: TFLITE, ONNX, TORCH, and LLAMA_CPP."""
+        """Supported formats."""
         return set(self._SUPPORTED_FORMATS)
 
     def load_tflite(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
@@ -98,10 +101,6 @@ class MacOSARM64CPUBackend(ComputeBackend):
             running on CPU.
         """
         self._check_dtype(dtype)
-        import torch  # noqa: PLC0415
-
-        from moment_to_action.hardware._loaded_models._torch import TorchModel  # noqa: PLC0415
-
         p = os.fspath(path)
         model = torch.load(p, map_location="cpu", weights_only=False)
         logger.info("MacOSARM64CPUBackend: loaded %s via PyTorch on CPU", p)
@@ -130,10 +129,6 @@ class MacOSARM64CPUBackend(ComputeBackend):
             running on CPU.
         """
         self._check_dtype(dtype)
-        from moment_to_action.hardware._loaded_models._llama import (  # noqa: PLC0415
-            _start_llama_model,
-        )
-
         p = os.fspath(path)
         mp = os.fspath(mmproj) if mmproj is not None else None
         sp = os.fspath(server_path) if server_path is not None else None

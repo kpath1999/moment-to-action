@@ -55,8 +55,8 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         self,
         variant: str,
         path: Path,
-        model_type: ModelType | None = None,
-        data_type: DataType | None = None,
+        model_type: ModelType,
+        data_type: DataType,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
@@ -66,10 +66,8 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         Args:
             variant: Registry variant key (e.g. ``"default"``, ``"qcs6490"``).
             path: Path to the model weights file or variant directory.
-            model_type: File format (``ModelType.ONNX``, ``ModelType.DLC``,
-                etc.).  ``None`` for model types that do not use a format field.
-            data_type: Quantization type (e.g. ``DataType.W8A8``).  ``None`` for
-                model types that do not require a quantization type (e.g. ONNX).
+            model_type: File format (``ModelType.ONNX``, ``ModelType.DLC``, etc.).
+            data_type: Quantization type (e.g. ``DataType.W8A8``).
             backends: Mapping of compute unit to component filename dicts.
                 Keys present are the supported units; ``load()`` indexes this
                 with the explicit ``unit`` arg to ``load()`` to pick the artifact filenames.

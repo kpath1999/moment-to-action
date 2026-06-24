@@ -91,7 +91,7 @@ class Detectron2Model(ImageDetectionModel):
         variant: str,
         path: Path,
         model_type: ModelType,
-        data_type: DataType | None = None,
+        data_type: DataType,
         confidence_threshold: float = 0.5,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
@@ -162,17 +162,11 @@ class Detectron2Model(ImageDetectionModel):
         if self._single_graph_onnx:
             # Single end-to-end graph; reuse _handle_pg as the sole handle.
             dtype = self._data_type
-            if dtype is None:
-                msg = "ONNX model missing data_type; check registry entry"
-                raise RuntimeError(msg)
             self._handle_pg = platform.load_onnx(
                 unit, self._artifact_path(arts["model"]), dtype=dtype
             )
         else:
             dtype = self._data_type
-            if dtype is None:
-                msg = "DLC model missing data_type; check registry entry"
-                raise RuntimeError(msg)
             pg = self._artifact_path(arts["proposal_generator"])
             roi = self._artifact_path(arts["roi_head"])
             # Only the HTP context binary lays `features` out channel-last; the

@@ -21,14 +21,10 @@ from __future__ import annotations
 import functools
 import logging
 import platform
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import numpy as np
-
 from moment_to_action.hardware._types import (
-    BenchmarkResult,
     ComputeUnit,
     DataType,
     ModelType,
@@ -426,41 +422,4 @@ class Platform:
         effective_port = port or self._config.llama_server_port
         return self._backend_for(unit).load_llama_cpp(
             path, mmproj=mmproj, server_path=effective_server, port=effective_port, dtype=dtype
-        )
-
-    # ------------------------------------------------------------------
-    # Benchmarking
-    # ------------------------------------------------------------------
-
-    def benchmark(
-        self,
-        model: LoadedModel,
-        inputs: object,
-        n_runs: int = 20,
-    ) -> BenchmarkResult:
-        """Run inference *n_runs* times and return latency statistics.
-
-        Args:
-            model: A loaded model returned by one of the ``load_*`` methods.
-            inputs: Inputs to pass on each run.
-            n_runs: Number of inference repetitions.
-
-        Returns:
-            A :class:`BenchmarkResult` with latency percentiles and metadata.
-        """
-        latencies = np.empty(n_runs, dtype=np.float64)
-        for i in range(n_runs):
-            t = time.perf_counter()
-            model.run(inputs)
-            latencies[i] = (time.perf_counter() - t) * 1000.0
-
-        return BenchmarkResult(
-            mean_ms=float(np.mean(latencies)),
-            p50_ms=float(np.percentile(latencies, 50)),
-            p95_ms=float(np.percentile(latencies, 95)),
-            p99_ms=float(np.percentile(latencies, 99)),
-            min_ms=float(np.min(latencies)),
-            max_ms=float(np.max(latencies)),
-            compute_unit=model.unit.name,
-            n_runs=n_runs,
         )

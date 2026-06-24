@@ -85,7 +85,7 @@ class TestMacOSARM64CPUBackend:
         """load_llama_cpp calls _start_llama_model with cpu_only=True."""
         mock_model = MagicMock()
         with patch(
-            "moment_to_action.hardware._loaded_models._llama._start_llama_model",
+            "moment_to_action.hardware._platforms.macos_arm64._cpu_backend._start_llama_model",
             return_value=mock_model,
         ) as mock_start:
             result = MacOSARM64CPUBackend().load_llama_cpp(

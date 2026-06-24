@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import DataType, ModelType
 from moment_to_action.models.image.classification._base import ImageClassificationModel
 from moment_to_action.models.image.classification._types import Classification
 
@@ -17,11 +18,11 @@ class _ConcreteClassificationModel(ImageClassificationModel):
 
     def __init__(self, classifications: list[Classification] | None = None) -> None:
         """Initialize with canned classifications."""
-        super().__init__("default", Path("/x"), backends={})
+        super().__init__("default", Path("/x"), ModelType.ONNX, DataType.FP32, backends={})
         self._classifications = classifications or []
         self._run_output: list[np.ndarray] = []
 
-    def load(self, platform: object, unit: object) -> None:  # type: ignore[override]
+    def load(self, platform: object, unit: object) -> None:
         """Load."""
         self._platform = platform  # type: ignore[assignment]
 
@@ -29,7 +30,7 @@ class _ConcreteClassificationModel(ImageClassificationModel):
         """Unload."""
         self._platform = None
 
-    def prepare(self, inputs: np.ndarray) -> np.ndarray:  # type: ignore[override]
+    def prepare(self, inputs: np.ndarray) -> np.ndarray:
         """Prepare."""
         return inputs
 
@@ -55,13 +56,13 @@ class TestImageClassificationModel:
         """Subclasses missing post_proc cannot be instantiated."""
 
         class _Incomplete(ImageClassificationModel):
-            def load(self, backend: object, unit: object = None) -> None:  # type: ignore[override]
+            def load(self, backend: object, unit: object = None) -> None:
                 """Load."""
 
             def unload(self) -> None:
                 """Unload."""
 
-            def prepare(self, inputs: np.ndarray) -> np.ndarray:  # type: ignore[override]
+            def prepare(self, inputs: np.ndarray) -> np.ndarray:
                 """Prepare."""
                 return inputs
 

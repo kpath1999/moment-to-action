@@ -44,7 +44,7 @@ class TestImageModel:
         """Subclass missing verify_outputs cannot be instantiated."""
 
         class _NoVerify(ImageModel[object, object]):
-            def load(self, backend: object, unit: object = None) -> None:  # type: ignore[override]
+            def load(self, backend: object, unit: object = None) -> None:
                 """Load."""
 
             def unload(self) -> None:

@@ -6,7 +6,11 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+import torch
+
 from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._loaded_models._llama import _start_llama_model
+from moment_to_action.hardware._loaded_models._torch import TorchModel
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 if TYPE_CHECKING:
@@ -34,8 +38,6 @@ class MacOSARM64GPUBackend(ComputeBackend):
         Raises:
             RuntimeError: If MPS is not available.
         """
-        import torch  # noqa: PLC0415
-
         if not torch.backends.mps.is_available():
             msg = "MPS not available; macOS arm64 GPU backend requires Apple Silicon with Metal"
             raise RuntimeError(msg)
@@ -48,12 +50,12 @@ class MacOSARM64GPUBackend(ComputeBackend):
 
     @property
     def supported_dtypes(self) -> set[DataType]:
-        """Supported data types: FP16 and FP32."""
+        """Supported data types."""
         return set(self._SUPPORTED_DTYPES)
 
     @property
     def supported_formats(self) -> set[ModelType]:
-        """Supported formats: TORCH and LLAMA_CPP."""
+        """Supported formats."""
         return set(self._SUPPORTED_FORMATS)
 
     def load_torch(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
@@ -68,9 +70,6 @@ class MacOSARM64GPUBackend(ComputeBackend):
             running on MPS.
         """
         self._check_dtype(dtype)
-        import torch  # noqa: PLC0415
-
-        from moment_to_action.hardware._loaded_models._torch import TorchModel  # noqa: PLC0415
 
         p = os.fspath(path)
         model = torch.load(p, map_location="mps", weights_only=False)
@@ -100,9 +99,6 @@ class MacOSARM64GPUBackend(ComputeBackend):
             running on GPU.
         """
         self._check_dtype(dtype)
-        from moment_to_action.hardware._loaded_models._llama import (  # noqa: PLC0415
-            _start_llama_model,
-        )
 
         p = os.fspath(path)
         mp = os.fspath(mmproj) if mmproj is not None else None

@@ -16,7 +16,7 @@ import cv2
 from rich.console import Console
 from rich.logging import RichHandler
 
-from moment_to_action.config import AppConfig, load_config
+from moment_to_action.config import load_config
 from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models import ModelID, ModelManager, YOLOModel
 from moment_to_action.paths import PathManager

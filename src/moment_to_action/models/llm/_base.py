@@ -47,8 +47,8 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         self,
         variant: str,
         path: Path,
-        model_type: ModelType | None = None,
-        data_type: DataType | None = None,
+        model_type: ModelType,
+        data_type: DataType,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
@@ -90,15 +90,11 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
 
         Raises:
             RuntimeError: If the model is already loaded.
-            RuntimeError: If ``data_type`` was not set in the registry entry.
         """
         if self.is_loaded:
             msg = f"{type(self).__name__} is already loaded"
             raise RuntimeError(msg)
         dtype = self._data_type
-        if dtype is None:
-            msg = "data_type is required for llama.cpp models; check registry entry"
-            raise RuntimeError(msg)
         self._loaded_model = platform.load_llama_cpp(unit, self._gguf_path, dtype=dtype)
         self._platform = platform
         logger.info(

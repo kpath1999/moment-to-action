@@ -29,7 +29,7 @@ class TestToPilRgb:
         bgr = np.zeros((1, 1, 3), dtype=np.uint8)
         bgr[0, 0, 0] = 255  # Blue channel in BGR
         img = to_pil_rgb(bgr)
-        r, g, b = img.getpixel((0, 0))  # type: ignore[misc]
+        r, g, b = img.getpixel((0, 0))
         assert r == 0
         assert g == 0
         assert b == 255
@@ -39,7 +39,7 @@ class TestToPilRgb:
         bgr = np.zeros((1, 1, 3), dtype=np.uint8)
         bgr[0, 0, 2] = 255  # Red channel in BGR
         img = to_pil_rgb(bgr)
-        r, g, b = img.getpixel((0, 0))  # type: ignore[misc]
+        r, g, b = img.getpixel((0, 0))
         assert r == 255
         assert g == 0
         assert b == 0
