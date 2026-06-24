@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import contextlib
-from typing import Any
+from typing import TYPE_CHECKING
 
 from moment_to_action.hardware._loaded_model import LoadedModel
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
+
+if TYPE_CHECKING:
+    from qairt import Model
 
 
 class DlcModel(LoadedModel):
@@ -24,7 +27,7 @@ class DlcModel(LoadedModel):
     def __init__(
         self,
         unit: ComputeUnit,
-        raw: Any,
+        raw: Model,
         dtype: DataType = DataType.W8A8,
     ) -> None:
         """Initialize a DlcModel.
@@ -64,13 +67,13 @@ class DlcModel(LoadedModel):
         Returns:
             ``dict[str, np.ndarray]`` — output tensor name to array mapping.
         """
-        result = self._raw(inputs=inputs)  # type: ignore[operator]
-        return dict(result.data)  # type: ignore[attr-defined]
+        result = self._raw(inputs=inputs)
+        return dict(result.data)
 
     def unload(self) -> None:
         """Destroy the QAIRT model handle and release resources."""
         if not self._unloaded:
             with contextlib.suppress(Exception):
-                self._raw.destroy()  # type: ignore[attr-defined]
+                self._raw.destroy()
             self._raw = None
             self._unloaded = True
