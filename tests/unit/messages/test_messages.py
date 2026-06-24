@@ -173,7 +173,7 @@ class TestDetectionMessage:
         from moment_to_action.messages import Message
 
         msg = DetectionMessage(timestamp=time.time(), detections=[])
-        assert isinstance(msg, Message.__args__)  # type: ignore[attr-defined]
+        assert isinstance(msg, Message.__args__)
 
     def test_has_latency_ms(self) -> None:
         """DetectionMessage inherits latency_ms from BaseMessage."""

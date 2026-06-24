@@ -1,313 +1,189 @@
-"""Hardware Abstraction Layer — public entry point.
+"""ComputeBackend — abstract per-unit inference backend (internal).
 
-``ComputeBackend`` is the **only** class the rest of the codebase imports.
-It is intentionally thin — three private fields and pure delegation:
+One concrete subclass per compute unit per platform:
+  hardware/_platforms/qcs6490/_htp_backend.py  — QCS6490 NPU (DLC + TFLite/QNN)
+  hardware/_platforms/qcs6490/_gpu_backend.py  — QCS6490 GPU (TFLite/delegate)
+  hardware/_platforms/qcs6490/_cpu_backend.py  — QCS6490 CPU (TFLite + ONNX)
+  hardware/_platforms/x86_64/_cpu_backend.py   — x86_64 CPU (TFLite + ONNX + DLC)
+  hardware/_platforms/macos_arm64/_cpu_backend.py — macOS arm64 CPU
 
-    _preferred_unit     the unit the caller asked for
-    _resource_monitor   platform-appropriate resource monitor
-    _backend            platform-appropriate unified inference backend
-
-All format routing (``.tflite`` vs ``.onnx``), sub-backend management,
-and accelerator → CPU fallback logic live inside the platform backend
-(e.g. :class:`QCS6490Backend`).  ``ComputeBackend`` just picks the right
-platform at construction time and forwards every call.
+Not exported from ``hardware/__init__.py`` — callers use :class:`Platform`.
 """
+# Ignore unused args since these are abstract classes
+# ruff: noqa: ARG002
 
 from __future__ import annotations
 
-import logging
-import time
-from typing import TYPE_CHECKING
-
-import attrs
-import numpy as np
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, NoReturn
 
 if TYPE_CHECKING:
     import os
-    from pathlib import Path
 
-    from moment_to_action.hardware._platforms._base import (
-        InferenceBackend,
-        ModelInput,
-        ResourceMonitor,
-    )
-    from moment_to_action.hardware._types import TorchExecutionPolicy
-
-from moment_to_action.hardware._platforms._detection import Platform, detect_platform
-from moment_to_action.hardware._platforms.macos_arm64 import (
-    MacOSARM64Backend,
-    MacOSARM64ResourceMonitor,
-)
-from moment_to_action.hardware._platforms.qcs6490 import QCS6490Backend, QCS6490ResourceMonitor
-from moment_to_action.hardware._platforms.x86_64 import X86_64Backend, X86_64ResourceMonitor
-from moment_to_action.hardware._types import ComputeUnit
-
-logger = logging.getLogger(__name__)
+    from moment_to_action.hardware._loaded_model import LoadedModel
+    from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 
-# ---------------------------------------------------------------------------
-# Result types
-# ---------------------------------------------------------------------------
+class ComputeBackend(ABC):
+    """Abstract per-unit inference backend.
 
-
-@attrs.frozen
-class BenchmarkResult:
-    """Latency statistics from a :meth:`ComputeBackend.benchmark` run.
-
-    All times are in milliseconds.
+    Each subclass targets exactly one :class:`~moment_to_action.hardware.ComputeUnit`.
+    Only the formats listed in :attr:`supported_formats` are implemented;
+    all others raise :class:`NotImplementedError` via the default method bodies.
     """
 
-    mean_ms: float
-    """Mean inference latency across all runs."""
+    @property
+    @abstractmethod
+    def unit(self) -> ComputeUnit:
+        """The compute unit this backend targets.
 
-    p50_ms: float
-    """Median (50th percentile) latency."""
-
-    p95_ms: float
-    """95th percentile latency."""
-
-    p99_ms: float
-    """99th percentile latency."""
-
-    min_ms: float
-    """Minimum observed latency."""
-
-    max_ms: float
-    """Maximum observed latency."""
-
-    compute_unit: str
-    """Name of the compute unit used (e.g. ``"CPU"``, ``"NPU"``)."""
-
-    n_runs: int
-    """Number of inference runs performed."""
-
-
-# ---------------------------------------------------------------------------
-# Platform-aware factory helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_resource_monitor() -> ResourceMonitor:
-    """Return the resource monitor appropriate for the detected platform."""
-    match detect_platform():
-        case Platform.QCS6490:
-            return QCS6490ResourceMonitor()
-        case Platform.X86_64:
-            return X86_64ResourceMonitor()
-        case Platform.MACOS_ARM64:
-            return MacOSARM64ResourceMonitor()
-
-
-def _make_backend(preferred_unit: ComputeUnit) -> InferenceBackend:
-    """Return the platform backend for the detected platform."""
-    match detect_platform():
-        case Platform.QCS6490:
-            return QCS6490Backend(preferred_unit=preferred_unit)
-        case Platform.X86_64:
-            return X86_64Backend()
-        case Platform.MACOS_ARM64:
-            return MacOSARM64Backend()
-
-
-# ---------------------------------------------------------------------------
-# ComputeBackend — public API
-# ---------------------------------------------------------------------------
-
-
-class ComputeBackend:
-    """Hardware Abstraction Layer entry point.
-
-    Models call this class — never LiteRT, ONNX, or SNPE directly.
-
-    Usage::
-
-        backend = ComputeBackend(preferred_unit=ComputeUnit.NPU)
-        handle  = backend.load_model("mobileclip.tflite")
-        outputs = backend.run(handle, {
-            'serving_default_args_0:0': image_tensor,
-            'serving_default_args_1:0': token_tensor,
-        })
-
-    Attributes:
-        preferred_unit: The compute unit requested at construction time.
-        resource_monitor: Platform resource monitor instance (read-only).
-    """
-
-    def __init__(self, preferred_unit: ComputeUnit = ComputeUnit.NPU) -> None:
-        self._preferred_unit = preferred_unit
-        self._resource_monitor: ResourceMonitor = _make_resource_monitor()
-        self._backend: InferenceBackend = _make_backend(preferred_unit)
-
-        logger.info(
-            "ComputeBackend: preferred=%s active=%s", preferred_unit.name, self.active_unit.name
-        )
-
-        # Log a warning if we didn't get our prefered backend
-        if self.active_unit != self._preferred_unit:
-            logger.warning(
-                "Preferred compute backend unit %s not available, falling back to %s",
-                preferred_unit.name,
-                self.active_unit.name,
-            )
-
-    # ------------------------------------------------------------------
-    # Public properties
-    # ------------------------------------------------------------------
+        Returns:
+            The ``ComputeUnit`` this backend runs on.
+        """
+        ...
 
     @property
-    def preferred_unit(self) -> ComputeUnit:
-        """The compute unit originally requested."""
-        return self._preferred_unit
+    @abstractmethod
+    def supported_dtypes(self) -> set[DataType]:
+        """Data types this backend can handle.
+
+        Returns:
+            Set of supported ``DataType`` members.
+        """
+        ...
 
     @property
-    def resource_monitor(self) -> ResourceMonitor:
-        """The platform resource monitor."""
-        return self._resource_monitor
-
-    @property
-    def active_unit(self) -> ComputeUnit:
-        """The compute unit actually in use (may differ from preferred after fallback)."""
-        return self._backend.get_supported_unit()
-
-    # ------------------------------------------------------------------
-    # Delegation — every call forwards to the platform backend
-    # ------------------------------------------------------------------
-
-    def load_model(self, model_path: str | os.PathLike[str]) -> object:
-        """Load a model (delegates to the platform backend).
-
-        Args:
-            model_path: Path to a ``.tflite`` or ``.onnx`` file.
+    @abstractmethod
+    def supported_formats(self) -> set[ModelType]:
+        """Model formats this backend can load.
 
         Returns:
-            An opaque model handle — pass it back to :meth:`run`.
+            Set of supported ``ModelType`` members.
         """
-        return self._backend.load_model(model_path)
+        ...
 
-    def run(self, model_handle: object, inputs: ModelInput) -> list[np.ndarray]:
-        """Run inference (delegates to the platform backend).
+    def load_onnx(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
+        """Load an ONNX model.
 
         Args:
-            model_handle: Handle returned by :meth:`load_model`.
-            inputs: Single ndarray or name→tensor dict.
+            path: Path to the ``.onnx`` file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
-            List of output tensors.
-        """
-        return self._backend.run(model_handle, inputs)
-
-    def get_input_details(self, model_handle: object) -> list[dict]:
-        """Inspect model input slots (delegates to the platform backend).
-
-        Args:
-            model_handle: Handle returned by :meth:`load_model`.
-        """
-        return self._backend.get_input_details(model_handle)
-
-    def get_output_details(self, model_handle: object) -> list[dict]:
-        """Inspect model output slots (delegates to the platform backend).
-
-        Args:
-            model_handle: Handle returned by :meth:`load_model`.
-        """
-        return self._backend.get_output_details(model_handle)
-
-    def load_model_dlc(self, path: Path) -> object:
-        """Load a DLC model via the platform backend (QCS6490 only).
-
-        Args:
-            path: Path to the ``.dlc`` model file.
-
-        Returns:
-            An opaque DLC model handle — pass it back to :meth:`infer_dlc`.
+            A :class:`~moment_to_action.hardware.LoadedModel` for this model.
 
         Raises:
-            NotImplementedError: On platforms that do not support DLC.
+            NotImplementedError: If ONNX is not in :attr:`supported_formats`.
         """
-        return self._backend.load_model_dlc(path)
+        self._raise_unsupported("ONNX")
 
-    def infer_dlc(self, handle: object, inputs: ModelInput) -> dict[str, np.ndarray]:
-        """Run inference on a loaded DLC model (delegates to platform backend).
+    def load_dlc(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
+        """Load a DLC model.
 
         Args:
-            handle: Handle returned by :meth:`load_model_dlc`.
-            inputs: Single input tensor, or a name→tensor dict for multi-input
-                graphs (e.g. the Detectron2 ROI head's ``features`` +
-                ``proposals_boxes``).
+            path: Path to the ``.dlc`` file.
+            dtype: Quantization type of the model (e.g. ``DataType.W8A8``).
 
         Returns:
-            Mapping of output tensor names to arrays.
+            A :class:`~moment_to_action.hardware.LoadedModel` for this model.
 
         Raises:
-            NotImplementedError: On platforms that do not support DLC.
+            NotImplementedError: If DLC is not in :attr:`supported_formats`.
         """
-        return self._backend.infer_dlc(handle, inputs)
+        self._raise_unsupported("DLC")
 
-    def unload_dlc(self, handle: object) -> None:
-        """Release DLC model resources (delegates to platform backend).
+    def load_torch(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
+        """Load a PyTorch model.
 
         Args:
-            handle: Handle returned by :meth:`load_model_dlc`.
-
-        Raises:
-            NotImplementedError: On platforms that do not support DLC.
-        """
-        self._backend.unload_dlc(handle)
-
-    def unload_model(self, handle: object) -> None:
-        """Release resources for a model loaded via :meth:`load_model`.
-
-        Default is a no-op for ONNX/LiteRT (GC handles them).
-
-        Args:
-            handle: Handle returned by :meth:`load_model`.
-        """
-        self._backend.unload_model(handle)
-
-    def resolve_torch_policy(self, requested: str = "auto") -> TorchExecutionPolicy:
-        """Resolve torch device/dtype policy via the active platform backend.
-
-        Args:
-            requested: ``"auto"`` or a string accepted by ``torch.device``.
+            path: Path to the saved model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
-            A resolved torch execution policy.
+            A :class:`~moment_to_action.hardware.LoadedModel` for this model.
+
+        Raises:
+            NotImplementedError: If TORCH is not in :attr:`supported_formats`.
         """
-        return self._backend.resolve_torch_policy(requested)
+        self._raise_unsupported("TORCH")
 
-    # ------------------------------------------------------------------
-    # Benchmarking
-    # ------------------------------------------------------------------
+    def load_tflite(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
+        """Load a TFLite model.
 
-    def benchmark(
+        Args:
+            path: Path to the ``.tflite`` file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
+
+        Returns:
+            A :class:`~moment_to_action.hardware.LoadedModel` for this model.
+
+        Raises:
+            NotImplementedError: If TFLITE is not in :attr:`supported_formats`.
+        """
+        self._raise_unsupported("TFLITE")
+
+    def load_llama_cpp(
         self,
-        model_handle: object,
-        inputs: ModelInput,
-        n_runs: int = 20,
-    ) -> BenchmarkResult:
-        """Run inference *n_runs* times and return latency statistics.
+        path: str | os.PathLike[str],
+        *,
+        mmproj: str | os.PathLike[str] | None = None,
+        server_path: str | os.PathLike[str] | None = None,
+        port: int | None = None,
+        dtype: DataType,
+    ) -> LoadedModel:
+        """Load a llama.cpp GGUF model.
 
         Args:
-            model_handle: Handle returned by :meth:`load_model`.
-            inputs: Inputs to pass on each run.
-            n_runs: Number of inference repetitions.
+            path: Path to the ``.gguf`` model file.
+            mmproj: Optional path to the multimodal projector file.
+            server_path: Path to the ``llama-server`` binary. If ``None``,
+                resolved by the backend from AppConfig or PATH.
+            port: Port for llama-server. If ``None``, a free port is assigned.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
-            A :class:`BenchmarkResult` with latency percentiles and metadata.
-        """
-        latencies = np.empty(n_runs, dtype=np.float64)
-        for i in range(n_runs):
-            t = time.perf_counter()
-            self._backend.run(model_handle, inputs)
-            latencies[i] = (time.perf_counter() - t) * 1000.0
+            A :class:`~moment_to_action.hardware.LoadedModel` for this model.
 
-        return BenchmarkResult(
-            mean_ms=float(np.mean(latencies)),
-            p50_ms=float(np.percentile(latencies, 50)),
-            p95_ms=float(np.percentile(latencies, 95)),
-            p99_ms=float(np.percentile(latencies, 99)),
-            min_ms=float(np.min(latencies)),
-            max_ms=float(np.max(latencies)),
-            compute_unit=self.active_unit.name,
-            n_runs=n_runs,
+        Raises:
+            NotImplementedError: If LLAMA_CPP is not in :attr:`supported_formats`.
+        """
+        self._raise_unsupported("LLAMA_CPP")
+
+    def _check_dtype(self, dtype: DataType) -> None:
+        """Raise ValueError if *dtype* is not in :attr:`supported_dtypes`.
+
+        Call this at the start of every concrete ``load_*`` implementation to
+        catch unsupported dtype requests early rather than failing inside the
+        runtime.
+
+        Args:
+            dtype: Requested quantization / precision type.
+
+        Raises:
+            ValueError: If *dtype* is not in :attr:`supported_dtypes`.
+        """
+        if dtype not in self.supported_dtypes:
+            supported = ", ".join(
+                d.name for d in sorted(self.supported_dtypes, key=lambda d: d.name)
+            )
+            msg = (
+                f"{type(self).__name__} ({self.unit.name}) does not support dtype {dtype.name}. "
+                f"Supported dtypes: {supported or 'none'}"
+            )
+            raise ValueError(msg)
+
+    def _raise_unsupported(self, fmt: str) -> NoReturn:
+        """Raise NotImplementedError for an unsupported format.
+
+        Args:
+            fmt: Human-readable format name (e.g. ``"ONNX"``).
+
+        Raises:
+            NotImplementedError: Always.
+        """
+        supported = ", ".join(f.value for f in self.supported_formats)
+        msg = (
+            f"{type(self).__name__} ({self.unit.name}) does not support {fmt} models. "
+            f"Supported formats: {supported or 'none'}"
         )
+        raise NotImplementedError(msg)

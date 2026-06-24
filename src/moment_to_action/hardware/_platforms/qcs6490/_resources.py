@@ -18,7 +18,7 @@ from typing import ClassVar
 
 import psutil
 
-from moment_to_action.hardware._platforms._base import ResourceMonitor
+from moment_to_action.hardware._resource_monitor import ResourceMonitor
 from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,6 @@ class QCS6490ResourceMonitor(ResourceMonitor):
     _ESTIMATES: ClassVar[dict[ComputeUnit, float]] = {
         ComputeUnit.NPU: 500.0,
         ComputeUnit.GPU: 800.0,
-        ComputeUnit.DSP: 150.0,
         ComputeUnit.CPU: 300.0,
     }
 

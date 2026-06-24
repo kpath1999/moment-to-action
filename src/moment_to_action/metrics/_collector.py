@@ -46,7 +46,7 @@ from ._types import (
 )
 
 if TYPE_CHECKING:
-    from moment_to_action.hardware import ComputeBackend
+    from moment_to_action.hardware import Platform
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class MetricsCollector:
 
     def __init__(
         self,
-        compute_backend: ComputeBackend | None = None,
+        compute_platform: Platform | None = None,
         session_id: str | None = None,
         latency_budget: timedelta = timedelta(seconds=5),
         resource_sample_interval: timedelta = timedelta(seconds=0.1),
@@ -87,8 +87,8 @@ class MetricsCollector:
         """Create a new metrics collector.
 
         Args:
-            compute_backend:
-                The compute backend to collect hardware metrics from (power, frequency, etc.).
+            compute_platform:
+                The compute platform to collect hardware metrics from (power, frequency, etc.).
                 If None, hardware resource sampling is disabled but all timing metrics still work.
             session_id:
                 Session name. If not provided, one will be auto-generated.
@@ -114,11 +114,11 @@ class MetricsCollector:
         self._span_stack: list[Span] = []
 
         # Sampling stuff
-        self._compute_backend = compute_backend
+        self._compute_platform = compute_platform
         self._process = psutil.Process()  # current process
 
-        if not self._compute_backend:
-            logger.warning("No compute backend provided - hardware resource sampling disabled!")
+        if not self._compute_platform:
+            logger.warning("No compute platform provided - hardware resource sampling disabled!")
 
         # Other state
         self._lock = Lock()  # For thread safety, protects all state (One Big Lock)
@@ -131,12 +131,12 @@ class MetricsCollector:
         if self._current_trace is None:  # pragma: no cover
             return  # No active trace, nothing to sample
 
-        if self._compute_backend is None:
-            return  # No backend configured; hardware sampling disabled
+        if self._compute_platform is None:
+            return  # No platform configured; hardware sampling disabled
 
         proc_mem_info = self._process.memory_info()
 
-        pwr_mon = self._compute_backend.resource_monitor
+        pwr_mon = self._compute_platform.resource_monitor
 
         sample = ResourceUsageSample(
             timestamp=datetime.now(tz=timezone.utc),
@@ -144,7 +144,6 @@ class MetricsCollector:
             cpu_usage=pwr_mon.sample(ComputeUnit.CPU),
             gpu_usage=pwr_mon.sample(ComputeUnit.GPU),
             npu_usage=pwr_mon.sample(ComputeUnit.NPU),
-            dsp_usage=pwr_mon.sample(ComputeUnit.DSP),
             proc_cpu_usage=self._process.cpu_percent(interval=None),
             mem_usage=MemoryUsageSample(
                 rss_bytes=proc_mem_info.rss,
@@ -382,10 +381,10 @@ class MetricsCollector:
 class NullMetricsCollector(MetricsCollector):
     """A no-op metrics collector that ignores all spans and traces."""
 
-    def __init__(self, compute_backend: ComputeBackend | None = None) -> None:  # noqa: ARG002
+    def __init__(self, compute_platform: Platform | None = None) -> None:  # noqa: ARG002
         """Initialize a null metrics collector.
 
-        The compute_backend is accepted for API compatibility but is never used —
+        The compute_platform is accepted for API compatibility but is never used —
         NullMetricsCollector is a no-op that never samples hardware metrics.
         """
         # Bypass MetricsCollector.__init__ entirely; we only need the minimal

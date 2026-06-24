@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 from moment_to_action.hardware import ComputeUnit
+from moment_to_action.hardware._types import DataType, ModelType
 from moment_to_action.models import (
     DownloadSource,
     HuggingFaceSource,
-    ModelFormat,
     ModelID,
     ModelInfo,
     Variant,
@@ -44,18 +44,22 @@ class TestModelID:
 
 
 # ---------------------------------------------------------------------------
-# ModelFormat
+# ModelType
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestModelFormat:
-    """Tests for ModelFormat enum."""
+class TestModelType:
+    """Tests for ModelType enum."""
 
     def test_has_onnx_and_dlc(self) -> None:
-        """ModelFormat has at least ONNX and DLC members."""
-        assert ModelFormat.ONNX is not None
-        assert ModelFormat.DLC is not None
+        """ModelType has at least ONNX and DLC members."""
+        assert ModelType.ONNX is not None
+        assert ModelType.DLC is not None
+
+    def test_has_llama_cpp(self) -> None:
+        """ModelType has a LLAMA_CPP member."""
+        assert ModelType.LLAMA_CPP is not None
 
 
 # ---------------------------------------------------------------------------
@@ -67,28 +71,27 @@ class TestModelFormat:
 class TestVendoredSource:
     """Tests for VendoredSource."""
 
-    def test_requires_format_and_path(self) -> None:
-        """Both `format` and `path` are required."""
+    def test_requires_path(self) -> None:
+        """``path`` is required."""
         with pytest.raises(TypeError):
             VendoredSource()  # type: ignore[call-arg]
 
-    def test_stores_fields(self) -> None:
-        """Constructor stores `format` and `path`."""
-        s = VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx"))
-        assert s.format is ModelFormat.ONNX
+    def test_stores_path(self) -> None:
+        """Constructor stores ``path``."""
+        s = VendoredSource(path=Path("yolo/model.onnx"))
         assert s.path == Path("yolo/model.onnx")
 
     def test_is_frozen(self) -> None:
         """VendoredSource is frozen."""
-        s = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
+        s = VendoredSource(path=Path("a"))
         with pytest.raises(AttributeError):
             s.path = Path("b")  # type: ignore[misc]
 
     def test_equality(self) -> None:
         """Equal-fields VendoredSources compare equal."""
-        a = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
-        b = VendoredSource(format=ModelFormat.ONNX, path=Path("a"))
-        c = VendoredSource(format=ModelFormat.DLC, path=Path("a"))
+        a = VendoredSource(path=Path("a"))
+        b = VendoredSource(path=Path("a"))
+        c = VendoredSource(path=Path("b"))
         assert a == b
         assert a != c
 
@@ -103,24 +106,22 @@ class TestDownloadSource:
     """Tests for DownloadSource."""
 
     def test_requires_all_fields(self) -> None:
-        """`format`, `url`, and `filename` are all required."""
+        """``url`` and ``filename`` are required."""
         with pytest.raises(TypeError):
             DownloadSource()  # type: ignore[call-arg]
 
     def test_stores_fields(self) -> None:
-        """Constructor stores all three fields."""
+        """Constructor stores all fields."""
         s = DownloadSource(
-            format=ModelFormat.ONNX,
             url="https://example.com/m.onnx",
             filename="m.onnx",
         )
-        assert s.format is ModelFormat.ONNX
         assert s.url == "https://example.com/m.onnx"
         assert s.filename == "m.onnx"
 
     def test_is_frozen(self) -> None:
         """DownloadSource is frozen."""
-        s = DownloadSource(format=ModelFormat.ONNX, url="u", filename="f")
+        s = DownloadSource(url="u", filename="f")
         with pytest.raises(AttributeError):
             s.url = "other"  # type: ignore[misc]
 
@@ -135,14 +136,13 @@ class TestHuggingFaceSource:
     """Tests for HuggingFaceSource."""
 
     def test_requires_all_fields(self) -> None:
-        """`format`, `hf_repo_id`, `files`, and `revision` are all required."""
+        """``hf_repo_id``, ``files``, and ``revision`` are all required."""
         with pytest.raises(TypeError):
             HuggingFaceSource()  # type: ignore[call-arg]
 
     def test_stores_fields(self) -> None:
         """Constructor stores all fields; hf_subdir defaults to None."""
         s = HuggingFaceSource(
-            format=ModelFormat.ONNX,
             hf_repo_id="org/repo",
             files=["a", "b"],
             revision="abc123",
@@ -155,7 +155,6 @@ class TestHuggingFaceSource:
     def test_hf_subdir_stored(self) -> None:
         """hf_subdir is stored when provided."""
         s = HuggingFaceSource(
-            format=ModelFormat.ONNX,
             hf_repo_id="org/repo",
             files=["model.bin"],
             revision="abc123",
@@ -173,8 +172,13 @@ def _make_vendored_variant(units: list[ComputeUnit] | None = None) -> Variant:
     """Build a Variant with a VendoredSource for testing."""
     if units is None:
         units = [ComputeUnit.CPU]
-    src = VendoredSource(format=ModelFormat.ONNX, path=Path("model.onnx"))
-    return Variant(source=src, backends={u: {"model": "model.onnx"} for u in units})
+    src = VendoredSource(path=Path("model.onnx"))
+    return Variant(
+        source=src,
+        backends={u: {"model": "model.onnx"} for u in units},
+        model_type=ModelType.ONNX,
+        data_type=DataType.FP32,
+    )
 
 
 @pytest.mark.unit
@@ -188,6 +192,12 @@ class TestVariant:
         assert ComputeUnit.CPU in v.backends
         assert ComputeUnit.GPU in v.backends
 
+    def test_stores_model_type_and_data_type(self) -> None:
+        """model_type and data_type are stored."""
+        v = _make_vendored_variant()
+        assert v.model_type is ModelType.ONNX
+        assert v.data_type is DataType.FP32
+
     def test_default_input_layout_is_none(self) -> None:
         """input_layout defaults to None (not applicable for non-image models)."""
         v = _make_vendored_variant()
@@ -195,8 +205,14 @@ class TestVariant:
 
     def test_custom_input_layout(self) -> None:
         """input_layout can be overridden."""
-        src = VendoredSource(format=ModelFormat.ONNX, path=Path("x"))
-        v = Variant(source=src, backends={ComputeUnit.NPU: {"model": "x"}}, input_layout="NHWC")
+        src = VendoredSource(path=Path("x"))
+        v = Variant(
+            source=src,
+            backends={ComputeUnit.NPU: {"model": "x"}},
+            model_type=ModelType.DLC,
+            data_type=DataType.W8A8,
+            input_layout="NHWC",
+        )
         assert v.input_layout == "NHWC"
 
     def test_is_frozen(self) -> None:
@@ -293,8 +309,10 @@ class TestModelStatus:
 
     def _info(self) -> ModelInfo:
         v = Variant(
-            source=VendoredSource(format=ModelFormat.ONNX, path=Path("yolo/model.onnx")),
+            source=VendoredSource(path=Path("yolo/model.onnx")),
             backends={ComputeUnit.CPU: {"model": "model.onnx"}},
+            model_type=ModelType.ONNX,
+            data_type=DataType.FP32,
         )
         return ModelInfo(id=ModelID.YOLO_V8, model_class=YOLOModel, variants={DEFAULT_KEY: v})
 
@@ -362,7 +380,7 @@ class TestModelRegistry:
         assert isinstance(default, Variant)
         assert isinstance(default.source, UltralyticsSource)
         assert default.source.name == "yolov8n"
-        assert default.source.format is ModelFormat.ONNX
+        assert default.model_type is ModelType.ONNX
 
     def test_yolo_v8_has_model_class(self) -> None:
         """YOLO_V8 registry entry has YOLOModel as its model_class."""
@@ -376,5 +394,5 @@ class TestModelRegistry:
         qcs = info.variants["qcs6490"]
         assert isinstance(qcs, Variant)
         assert isinstance(qcs.source, HuggingFaceSource)
-        assert qcs.source.format is ModelFormat.DLC
+        assert qcs.model_type is ModelType.DLC
         assert ComputeUnit.NPU in qcs.backends

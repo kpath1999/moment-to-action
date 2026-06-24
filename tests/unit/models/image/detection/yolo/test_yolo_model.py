@@ -12,8 +12,8 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from moment_to_action.hardware import ComputeUnit
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware import ComputeUnit, Platform
+from moment_to_action.hardware._types import DataType, ModelType
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.models.image.detection.yolo._model import YOLOModel
 
@@ -28,7 +28,9 @@ _DLC_CPU_ONLY: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "
 @pytest.fixture
 def onnx_model() -> YOLOModel:
     """Return an unloaded YOLOModel in ONNX format."""
-    return YOLOModel("default", Path("/fake/model.onnx"), ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+    return YOLOModel(
+        "default", Path("/fake/model.onnx"), ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+    )
 
 
 @pytest.fixture
@@ -37,7 +39,8 @@ def dlc_model() -> YOLOModel:
     return YOLOModel(
         "qcs6490",
         Path("/fake/qcs6490"),
-        ModelFormat.DLC,
+        ModelType.DLC,
+        DataType.W8A8,
         input_layout="NHWC",
         backends=_DLC_BACKENDS,
     )
@@ -46,17 +49,18 @@ def dlc_model() -> YOLOModel:
 @pytest.fixture
 def dlc_model_nchw() -> YOLOModel:
     """Return an unloaded YOLOModel in DLC format with NCHW layout."""
-    return YOLOModel("other", Path("/fake/other"), ModelFormat.DLC, backends=_DLC_CPU_ONLY)
+    return YOLOModel(
+        "other", Path("/fake/other"), ModelType.DLC, DataType.W8A8, backends=_DLC_CPU_ONLY
+    )
 
 
 @pytest.fixture
-def mock_backend() -> MagicMock:
-    """Return a mock ComputeBackend."""
-    backend = MagicMock()
-    backend.preferred_unit = ComputeUnit.CPU
-    backend.load_model.return_value = MagicMock()
-    backend.load_model_dlc.return_value = MagicMock()
-    return backend
+def mock_platform() -> MagicMock:
+    """Return a mock Platform."""
+    platform = MagicMock(spec=Platform)
+    platform.load_onnx.return_value = MagicMock()
+    platform.load_dlc.return_value = MagicMock()
+    return platform
 
 
 def _make_outputs(
@@ -130,57 +134,57 @@ class TestYOLOModelPrepare:
 class TestYOLOModelRun:
     """Tests for YOLOModel.run()."""
 
-    def test_onnx_calls_backend_run(self, onnx_model: YOLOModel, mock_backend: MagicMock) -> None:
-        """ONNX run() delegates to backend.run()."""
-        onnx_model.load(mock_backend)
+    def test_onnx_calls_backend_run(self, onnx_model: YOLOModel, mock_platform: MagicMock) -> None:
+        """ONNX run() delegates to handle.run()."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         prepared = np.zeros((1, 3, 640, 640), dtype=np.float32)
         onnx_model.run(prepared)
-        mock_backend.run.assert_called_once_with(mock_backend.load_model.return_value, prepared)
+        mock_platform.load_onnx.return_value.run.assert_called_once_with(prepared)
 
     def test_dlc_calls_backend_infer_dlc(
-        self, dlc_model: YOLOModel, mock_backend: MagicMock
+        self, dlc_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
-        """DLC run() delegates to backend.infer_dlc()."""
-        mock_backend.infer_dlc.return_value = {
+        """DLC run() delegates to handle.run()."""
+        mock_platform.load_dlc.return_value.run.return_value = {
             "boxes": np.zeros((1, 8400, 4)),
             "cls": np.zeros((1, 8400, 80)),
             "class_idx": np.zeros((1, 8400)),
         }
-        dlc_model.load(mock_backend)
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         prepared = np.zeros((1, 640, 640, 3), dtype=np.float32)
         dlc_model.run(prepared)
-        mock_backend.infer_dlc.assert_called_once()
+        mock_platform.load_dlc.return_value.run.assert_called_once()
 
     def test_dlc_aihub_run_uses_scores_directly(
-        self, dlc_model: YOLOModel, mock_backend: MagicMock
+        self, dlc_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
         """AI Hub DLC run() returns scores directly when 'scores' key is present."""
         boxes = np.zeros((1, 8400, 4), dtype=np.float32)
         scores = np.full((1, 8400), 0.9, dtype=np.float32)
         class_idx = np.zeros((1, 8400), dtype=np.float32)
-        mock_backend.infer_dlc.return_value = {
+        mock_platform.load_dlc.return_value.run.return_value = {
             "boxes": boxes,
             "scores": scores,
             "class_idx": class_idx,
         }
-        dlc_model.load(mock_backend)
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         prepared = np.zeros((1, 640, 640, 3), dtype=np.float32)
         result = dlc_model.run(prepared)
         assert len(result) == 3
         assert result[1] is scores  # scores returned directly
 
     def test_dlc_local_convert_run_computes_cls_max(
-        self, dlc_model: YOLOModel, mock_backend: MagicMock
+        self, dlc_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
         """Local-convert DLC run() computes scores from cls.max() when 'scores' absent."""
         cls = np.zeros((1, 8400, 80), dtype=np.float32)
         cls[0, 0, 5] = 0.85  # anchor 0, class 5 is the max
-        mock_backend.infer_dlc.return_value = {
+        mock_platform.load_dlc.return_value.run.return_value = {
             "boxes": np.zeros((1, 8400, 4), dtype=np.float32),
             "cls": cls,
             "class_idx": np.zeros((1, 8400), dtype=np.float32),
         }
-        dlc_model.load(mock_backend)
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
         prepared = np.zeros((1, 640, 640, 3), dtype=np.float32)
         result = dlc_model.run(prepared)
         assert result[1][0, 0] == pytest.approx(0.85)
@@ -197,82 +201,84 @@ class TestYOLOModelLoadUnload:
     """Tests for load() and unload()."""
 
     def test_load_onnx_calls_load_model(
-        self, onnx_model: YOLOModel, mock_backend: MagicMock
+        self, onnx_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
-        """ONNX load() calls backend.load_model with the model path."""
-        onnx_model.load(mock_backend)
-        mock_backend.load_model.assert_called_once_with(Path("/fake/model.onnx"))
+        """ONNX load() calls platform.load_onnx with the model path."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
+        mock_platform.load_onnx.assert_called_once_with(
+            ComputeUnit.CPU, Path("/fake/model.onnx"), dtype=DataType.FP32
+        )
 
     def test_load_dlc_calls_load_model_dlc(
-        self, dlc_model: YOLOModel, mock_backend: MagicMock
+        self, dlc_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
-        """DLC load() looks up backends[preferred_unit] and passes artifact to load_model_dlc."""
-        dlc_model.load(mock_backend)
-        mock_backend.load_model_dlc.assert_called_once_with(Path("/fake/qcs6490/model.dlc"))
+        """DLC load() calls platform.load_dlc with the artifact path."""
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
+        mock_platform.load_dlc.assert_called_once_with(
+            ComputeUnit.CPU, Path("/fake/qcs6490/model.dlc"), dtype=DataType.W8A8
+        )
 
-    def test_load_sets_backend(self, onnx_model: YOLOModel, mock_backend: MagicMock) -> None:
-        """load() stores the backend on _backend."""
-        onnx_model.load(mock_backend)
-        assert onnx_model._backend is mock_backend
+    def test_load_sets_platform(self, onnx_model: YOLOModel, mock_platform: MagicMock) -> None:
+        """load() stores the platform on _platform."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
+        assert onnx_model._platform is mock_platform
 
-    def test_unload_onnx_calls_unload_model(
-        self, onnx_model: YOLOModel, mock_backend: MagicMock
+    def test_unload_onnx_calls_unload(
+        self, onnx_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
-        """ONNX unload() calls backend.unload_model(handle)."""
-        onnx_model.load(mock_backend)
-        handle = mock_backend.load_model.return_value
+        """ONNX unload() calls handle.unload()."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
+        handle = mock_platform.load_onnx.return_value
         onnx_model.unload()
-        mock_backend.unload_model.assert_called_once_with(handle)
+        handle.unload.assert_called_once_with()
 
-    def test_unload_dlc_calls_unload_dlc(
-        self, dlc_model: YOLOModel, mock_backend: MagicMock
-    ) -> None:
-        """DLC unload() calls backend.unload_dlc(handle)."""
-        dlc_model.load(mock_backend)
-        handle = mock_backend.load_model_dlc.return_value
+    def test_unload_dlc_calls_unload(self, dlc_model: YOLOModel, mock_platform: MagicMock) -> None:
+        """DLC unload() calls handle.unload()."""
+        dlc_model.load(mock_platform, ComputeUnit.CPU)
+        handle = mock_platform.load_dlc.return_value
         dlc_model.unload()
-        mock_backend.unload_dlc.assert_called_once_with(handle)
+        handle.unload.assert_called_once_with()
 
-    def test_unload_clears_backend_and_handle(
-        self, onnx_model: YOLOModel, mock_backend: MagicMock
+    def test_unload_clears_platform_and_handle(
+        self, onnx_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
-        """unload() clears _backend and _handle."""
-        onnx_model.load(mock_backend)
+        """unload() clears _platform and _handle."""
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         onnx_model.unload()
-        assert onnx_model._backend is None
+        assert onnx_model._platform is None
         assert onnx_model._handle is None
 
     def test_unload_without_load_is_safe(self, onnx_model: YOLOModel) -> None:
-        """unload() when _backend is None does not raise."""
+        """unload() when _platform is None does not raise."""
         onnx_model.unload()  # Should not raise
 
-    def test_double_load_raises(self, onnx_model: YOLOModel, mock_backend: MagicMock) -> None:
+    def test_double_load_raises(self, onnx_model: YOLOModel, mock_platform: MagicMock) -> None:
         """load() raises RuntimeError if model is already loaded."""
-        onnx_model.load(mock_backend)
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
         with pytest.raises(RuntimeError, match="already loaded"):
-            onnx_model.load(mock_backend)
+            onnx_model.load(mock_platform, ComputeUnit.CPU)
 
     def test_backend_not_set_before_handle_loaded(
-        self, onnx_model: YOLOModel, mock_backend: MagicMock
+        self, onnx_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
-        """_backend is only set after the handle is successfully loaded."""
+        """_platform is only set after the handle is successfully loaded."""
         load_calls: list[bool] = []
 
-        def _slow_load(_path: object) -> MagicMock:
-            load_calls.append(onnx_model._backend is None)
+        def _slow_load(_unit: object, _path: object, *, dtype: object) -> MagicMock:  # noqa: ARG001
+            load_calls.append(onnx_model._platform is None)
             return MagicMock()
 
-        mock_backend.load_model.side_effect = _slow_load
-        onnx_model.load(mock_backend)
-        assert load_calls == [True]  # _backend was None during handle load
+        mock_platform.load_onnx.side_effect = _slow_load
+        onnx_model.load(mock_platform, ComputeUnit.CPU)
+        assert load_calls == [True]  # _platform was None during handle load
 
     def test_load_failure_leaves_model_unloaded(
-        self, onnx_model: YOLOModel, mock_backend: MagicMock
+        self, onnx_model: YOLOModel, mock_platform: MagicMock
     ) -> None:
-        """If backend.load_model raises, is_loaded remains False."""
-        mock_backend.load_model.side_effect = RuntimeError("backend error")
+        """If platform.load_onnx raises, is_loaded remains False."""
+        mock_platform.load_onnx.side_effect = RuntimeError("backend error")
         with pytest.raises(RuntimeError, match="backend error"):
-            onnx_model.load(mock_backend)
+            onnx_model.load(mock_platform, ComputeUnit.CPU)
         assert onnx_model.is_loaded is False
 
 
@@ -331,7 +337,8 @@ class TestYOLOModelDecode:
         model = YOLOModel(
             "default",
             Path("/x"),
-            ModelFormat.ONNX,
+            ModelType.ONNX,
+            DataType.FP32,
             confidence_threshold=0.8,
             backends=_ONNX_BACKENDS,
         )
@@ -472,7 +479,12 @@ class TestYOLOModelProperties:
     def test_confidence_threshold_custom(self) -> None:
         """Custom confidence_threshold is stored."""
         model = YOLOModel(
-            "v", Path("/x"), ModelFormat.ONNX, confidence_threshold=0.75, backends=_ONNX_BACKENDS
+            "v",
+            Path("/x"),
+            ModelType.ONNX,
+            DataType.FP32,
+            confidence_threshold=0.75,
+            backends=_ONNX_BACKENDS,
         )
         assert model.confidence_threshold == pytest.approx(0.75)
 
@@ -491,7 +503,12 @@ class TestYOLOModelProperties:
     def test_input_layout_explicit_override(self) -> None:
         """Explicit input_layout is stored correctly."""
         model = YOLOModel(
-            "qcs6490", Path("/x"), ModelFormat.DLC, input_layout="NCHW", backends=_DLC_CPU_ONLY
+            "qcs6490",
+            Path("/x"),
+            ModelType.DLC,
+            DataType.FP32,
+            input_layout="NCHW",
+            backends=_DLC_CPU_ONLY,
         )
         assert model.input_layout == "NCHW"
 
@@ -554,7 +571,9 @@ class TestYOLOModelPrepareForConversion:
         """prepare_for_conversion() returns onnx_path unchanged when outputs are already split."""
         onnx_path = tmp_path / "split.onnx"
         _make_yolo_onnx_already_split(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         assert result == onnx_path
 
@@ -562,7 +581,9 @@ class TestYOLOModelPrepareForConversion:
         """prepare_for_conversion() returns a new temp path for a mixed-range ONNX."""
         onnx_path = tmp_path / "raw.onnx"
         _make_yolo_onnx_with_concat(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         try:
             assert result != onnx_path
@@ -577,7 +598,9 @@ class TestYOLOModelPrepareForConversion:
 
         onnx_path = tmp_path / "raw.onnx"
         _make_yolo_onnx_with_concat(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))
@@ -596,7 +619,9 @@ class TestYOLOModelPrepareForConversion:
 
         onnx_path = tmp_path / "raw.onnx"
         _make_yolo_onnx_with_concat(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))
@@ -610,7 +635,9 @@ class TestYOLOModelPrepareForConversion:
         """prepare_for_conversion() returns onnx_path when output0 has no Concat feeding it."""
         onnx_path = tmp_path / "no_concat.onnx"
         _make_yolo_onnx_output0_no_concat(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         assert result == onnx_path
 
@@ -620,7 +647,9 @@ class TestYOLOModelPrepareForConversion:
 
         onnx_path = tmp_path / "opset18.onnx"
         _make_yolo_onnx_with_concat(onnx_path, opset=18)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         try:
             assert result != onnx_path
@@ -688,7 +717,9 @@ class TestYOLOModelStripQDQ:
         """An ONNX with Q→DQ nodes produces a new temp path."""
         onnx_path = tmp_path / "qdq.onnx"
         _make_yolo_onnx_with_qdq(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         try:
             assert result != onnx_path
@@ -703,7 +734,9 @@ class TestYOLOModelStripQDQ:
 
         onnx_path = tmp_path / "qdq.onnx"
         _make_yolo_onnx_with_qdq(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))
@@ -720,7 +753,9 @@ class TestYOLOModelStripQDQ:
 
         onnx_path = tmp_path / "qdq.onnx"
         _make_yolo_onnx_with_qdq(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))
@@ -738,7 +773,9 @@ class TestYOLOModelStripQDQ:
 
         onnx_path = tmp_path / "qdq_out.onnx"
         _make_yolo_onnx_with_qdq_output(onnx_path)
-        model = YOLOModel("default", onnx_path, ModelFormat.ONNX, backends=_ONNX_BACKENDS)
+        model = YOLOModel(
+            "default", onnx_path, ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+        )
         result = model.prepare_for_conversion(onnx_path)
         try:
             modified = onnx.load(str(result))

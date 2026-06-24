@@ -9,8 +9,6 @@ import attrs
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.models._formats import ModelFormat
-
 
 @attrs.frozen
 class UltralyticsSource:
@@ -22,9 +20,6 @@ class UltralyticsSource:
 
     Requires ``ultralytics`` to be installed (``uv sync --extra yolo-export``).
     """
-
-    format: ModelFormat
-    """Format of the exported model (always ``ModelFormat.ONNX``)."""
 
     name: str
     """Ultralytics model name, e.g. ``"yolov8n"``."""

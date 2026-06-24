@@ -109,9 +109,6 @@ class ResourceUsageSample:
     npu_usage: ComputeUnitUsageSample
     """NPU usage sample at the time of this resource usage sample."""
 
-    dsp_usage: ComputeUnitUsageSample
-    """DSP usage sample at the time of this resource usage sample."""
-
     proc_cpu_usage: float
     """Process-specific CPU usage percentage at the time of this resource usage sample."""
 
@@ -126,7 +123,6 @@ class ResourceUsageSample:
             "cpu_usage": self.cpu_usage.json(),
             "gpu_usage": self.gpu_usage.json(),
             "npu_usage": self.npu_usage.json(),
-            "dsp_usage": self.dsp_usage.json(),
             "proc_cpu_usage": self.proc_cpu_usage,
             "mem_usage": self.mem_usage.json(),
         }
@@ -306,14 +302,12 @@ class Trace:
         cpu = np.array([s.cpu_usage.usage_pct for s in samples])
         gpu = np.array([s.gpu_usage.usage_pct for s in samples])
         npu = np.array([s.npu_usage.usage_pct for s in samples])
-        dsp = np.array([s.dsp_usage.usage_pct for s in samples])
         proc = np.array([s.proc_cpu_usage for s in samples])
         rss = np.array([s.mem_usage.rss_bytes for s in samples])
 
         avg_cpu, peak_cpu = float(cpu.mean()), float(cpu.max())
         avg_gpu, peak_gpu = float(gpu.mean()), float(gpu.max())
         avg_npu, peak_npu = float(npu.mean()), float(npu.max())
-        avg_dsp, peak_dsp = float(dsp.mean()), float(dsp.max())
         avg_proc_cpu, peak_proc_cpu = float(proc.mean()), float(proc.max())
         avg_rss_mb = float(rss.mean()) / 1024 / 1024
         peak_rss_mb = float(rss.max()) / 1024 / 1024
@@ -334,10 +328,6 @@ class Trace:
                     f"  peak [yellow]{peak_npu:.1f}%[/yellow]"
                 ),
                 (
-                    f"  DSP:      avg [green]{avg_dsp:.1f}%[/green]"
-                    f"  peak [yellow]{peak_dsp:.1f}%[/yellow]"
-                ),
-                (
                     f"  proc CPU: avg [green]{avg_proc_cpu:.1f}%[/green]"
                     f"  peak [yellow]{peak_proc_cpu:.1f}%[/yellow]"
                 ),
@@ -352,7 +342,6 @@ class Trace:
                 (f"  CPU:      avg {avg_cpu:.1f}%  peak {peak_cpu:.1f}%"),
                 (f"  GPU:      avg {avg_gpu:.1f}%  peak {peak_gpu:.1f}%"),
                 (f"  NPU:      avg {avg_npu:.1f}%  peak {peak_npu:.1f}%"),
-                (f"  DSP:      avg {avg_dsp:.1f}%  peak {peak_dsp:.1f}%"),
                 (f"  proc CPU: avg {avg_proc_cpu:.1f}%  peak {peak_proc_cpu:.1f}%"),
                 (f"  RSS:      avg {avg_rss_mb:.1f} MB  peak {peak_rss_mb:.1f} MB"),
             ]

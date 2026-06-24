@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import subprocess
 from typing import TYPE_CHECKING
 
-import httpx
-
-from moment_to_action.models.llm._base import LlamaGGUFModel, _wait_for_server
+from moment_to_action.models.llm._base import LlamaGGUFModel
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.hardware import ComputeBackend
-    from moment_to_action.hardware._types import ComputeUnit
-    from moment_to_action.models._formats import ModelFormat
+    from moment_to_action.hardware import Platform
+    from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 
 class LlamaVLModel(LlamaGGUFModel):
@@ -24,132 +20,105 @@ class LlamaVLModel(LlamaGGUFModel):
 
     - resolve a second ``"mmproj"`` artifact (the vision encoder projection weights)
       from the same variant directory as the text GGUF file.
-    - pass ``--mmproj <path>`` to llama-server on startup so the vision tower is loaded.
+    - pass ``--mmproj <path>`` to the platform's ``load_llama_cpp`` call.
     - accept ``(prompt, images)`` as input to :meth:`prepare`, where ``images`` is a
-      list of base64-encoded JPEG strings, and build the multimodal chat request
-      body expected by the OpenAI-compatible ``/v1/chat/completions`` endpoint.
+      list of base64-encoded JPEG strings, and build the multimodal ``/completion``
+      request body.
 
     The three-stage inference pipeline maps to multimodal generation:
 
-    - ``prepare((prompt, b64_images))`` — formats the multimodal chat request body
-    - ``run(prepared)`` — sends the HTTP POST, returns the generated text
+    - ``prepare((prompt, b64_images))`` — formats the multimodal ``/completion`` request
+    - ``run(prepared)`` — delegates to :class:`~moment_to_action.hardware._loaded_models.LlamaModel`
     - ``post_proc(raw)`` — wraps the text in a list for pipeline compatibility
 
     Args:
         variant: Registry variant key.
         path: Variant directory containing both the GGUF and mmproj files.
-        model_format: File format (``ModelFormat.GGUF``).
+        model_type: File format (``ModelType.LLAMA_CPP``).
+        data_type: Quantization type of the model (e.g. ``DataType.FP32``).
         backends: Compute-unit → artifact filename mapping; the first entry
             must contain both a ``"model"`` key (text GGUF) and an ``"mmproj"`` key
             (vision encoder GGUF).
         input_layout: Not applicable to VLMs; expected to be ``None``.
-        server_path: Filesystem path to the ``llama-server`` executable.
-        port: Port for llama-server to listen on.
-        system_prompt: System message prepended to every chat request.
+        system_prompt: System message prepended to every completion prompt.
         max_tokens: Maximum tokens the model may generate per call.
-        inference_timeout: Read timeout in seconds for ``/v1/chat/completions`` requests.
     """
 
     def __init__(
         self,
         variant: str,
         path: Path,
-        model_format: ModelFormat | None = None,
+        model_type: ModelType,
+        data_type: DataType,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
-        server_path: Path,
-        port: int = 8080,
         system_prompt: str = "",
         max_tokens: int = 128,
-        inference_timeout: float | None = None,
     ) -> None:
-        """Initialise with registry metadata, server configuration, and mmproj path.
+        """Initialise with registry metadata and mmproj resolution.
 
         Args:
             variant: Registry variant key (e.g. ``"default"``).
             path: Variant directory; both the GGUF and mmproj files are resolved
                 relative to this path.
-            model_format: File format — should be ``ModelFormat.GGUF``.
+            model_type: File format — should be ``ModelType.LLAMA_CPP``.
+            data_type: Quantization type of the model (e.g. ``DataType.FP32``).
             backends: Compute-unit → ``{component_name: filename}`` dict.  Must
                 contain at least ``"model"`` and ``"mmproj"`` keys in the first entry.
             input_layout: Unused for VLMs; pass ``None``.
-            server_path: Path to the ``llama-server`` executable.
-            port: Port for the llama-server HTTP API.
-            system_prompt: System message sent in every chat request.
+            system_prompt: System message prepended to every completion prompt.
             max_tokens: Maximum tokens to generate per completion.
-            inference_timeout: Read timeout in seconds.  ``None`` disables it.
         """
         super().__init__(
             variant,
             path,
-            model_format,
+            model_type,
+            data_type,
             backends=backends,
             input_layout=input_layout,
-            server_path=server_path,
-            port=port,
             system_prompt=system_prompt,
             max_tokens=max_tokens,
-            inference_timeout=inference_timeout,
         )
         first_unit_backends = next(iter(backends.values()))
         self._mmproj_path = path / first_unit_backends["mmproj"]
 
-    def load(self, backend: ComputeBackend) -> None:
-        """Start llama-server with the vision encoder projection file and wait for health.
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+        """Load the VLM via the platform's llama-server backend with the mmproj file.
 
         Args:
-            backend: Unused — llama-server runs independently of ComputeBackend.
+            platform: The hardware platform to load on.
+            unit: The compute unit to target.
 
         Raises:
             RuntimeError: If the model is already loaded.
-            RuntimeError: If llama-server does not start within the health timeout.
         """
         if self.is_loaded:
             msg = f"{type(self).__name__} is already loaded"
             raise RuntimeError(msg)
-        self._server_proc = subprocess.Popen(  # noqa: S603
-            [
-                str(self._server_path),
-                "-m",
-                str(self._gguf_path),
-                "--port",
-                str(self._port),
-                "--host",
-                "127.0.0.1",
-                "--mmproj",
-                str(self._mmproj_path),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        dtype = self._data_type
+        self._loaded_model = platform.load_llama_cpp(
+            unit, self._gguf_path, mmproj=self._mmproj_path, dtype=dtype
         )
-        self._client = httpx.Client(
-            base_url=f"http://127.0.0.1:{self._port}",
-            timeout=httpx.Timeout(connect=5.0, read=self._inference_timeout, write=5.0, pool=5.0),
-        )
-        _wait_for_server(self._client)
-        self._backend = backend
+        self._platform = platform
 
     def prepare(self, inputs: tuple[str, list[str]]) -> dict:  # type: ignore[override]
-        """Format a prompt and base64-encoded images into a multimodal chat request.
+        """Format a prompt and base64-encoded images into a multimodal ``/completion`` request.
 
         Args:
             inputs: ``(prompt, b64_images)`` where ``b64_images`` is a list of
                 base64-encoded JPEG strings (without the ``data:`` prefix).
 
         Returns:
-            Request body dict suitable for ``/v1/chat/completions``.
+            Request body dict for the llama.cpp ``/completion`` endpoint.
         """
         prompt, b64_images = inputs
-        image_content: list[dict] = [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b}"}}
-            for b in b64_images
-        ]
-        image_content.append({"type": "text", "text": prompt})
+        img_tags = "".join(f"[img-{i + 1}]\n" for i in range(len(b64_images)))
+        full_prompt = img_tags + (
+            f"{self._system_prompt}\n{prompt}" if self._system_prompt else prompt
+        )
         return {
-            "messages": [
-                {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": image_content},
-            ],
-            "max_tokens": self._max_tokens,
+            "prompt": full_prompt,
+            "image_data": [{"data": b, "id": i + 1} for i, b in enumerate(b64_images)],
+            "n_predict": self._max_tokens,
         }

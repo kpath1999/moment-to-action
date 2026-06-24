@@ -1,9 +1,13 @@
-from pathlib import Path
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import attrs
 
-from moment_to_action.models._formats import ModelFormat
 from moment_to_action.utils.web import download_file
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @attrs.frozen
@@ -12,9 +16,6 @@ class DownloadSource:
 
     Currently, only supports single-file downloads.
     """
-
-    format: ModelFormat
-    """Format of the model file (e.g. ONNX, TFLite)."""
 
     url: str
     """URL to download the model file from."""

@@ -1,25 +1,25 @@
-"""Hardware Abstraction Layer for moment-to-action.
-
-Public API::
-
-    from moment_to_action.hardware import (
-        BenchmarkResult,
-        ComputeBackend,
-        ComputeUnit,
-        PowerSample,
-        TorchExecutionPolicy,
-    )
-"""
+"""Hardware Abstraction Layer for moment-to-action."""
 
 from __future__ import annotations
 
-from ._backend import BenchmarkResult, ComputeBackend
-from ._types import ComputeUnit, ComputeUnitUsageSample, TorchExecutionPolicy
+from ._loaded_model import LoadedModel, LoadedStreamableModel
+from ._platform import Platform, detect_platform
+from ._types import (
+    ComputeUnit,
+    ComputeUnitUsageSample,
+    DataType,
+    ModelType,
+    PlatformType,
+)
 
 __all__ = [
-    "BenchmarkResult",
-    "ComputeBackend",
     "ComputeUnit",
     "ComputeUnitUsageSample",
-    "TorchExecutionPolicy",
+    "DataType",
+    "LoadedModel",
+    "LoadedStreamableModel",
+    "ModelType",
+    "Platform",
+    "PlatformType",
+    "detect_platform",
 ]

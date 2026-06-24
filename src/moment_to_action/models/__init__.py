@@ -1,7 +1,6 @@
 """Model management and downloading."""
 
 from ._base import BaseModel
-from ._formats import ModelFormat
 from ._manager import ModelManager
 from ._model_info import ModelID, ModelInfo, Variant, VariantStatus
 from ._registry import DEFAULT_KEY as DEFAULT_VARIANT_KEY
@@ -51,7 +50,6 @@ __all__ = [
     "LlamaGGUFModel",
     "LlamaVLModel",
     "MobileNetV2Model",
-    "ModelFormat",
     "ModelID",
     "ModelInfo",
     "ModelManager",

@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import cv2
 import numpy as np
 
-from moment_to_action.models._formats import ModelFormat
+from moment_to_action.hardware._types import ModelType
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
 if TYPE_CHECKING:
-    from moment_to_action.hardware import ComputeBackend
-    from moment_to_action.hardware._types import ComputeUnit
+    from moment_to_action.hardware import LoadedModel, Platform
+    from moment_to_action.hardware._types import ComputeUnit, DataType
 
 _YOLO_OUTPUT_NAME = "output0"
 _YOLO_INPUT_SIZE = 640
@@ -216,7 +216,7 @@ class YOLOModel(ImageDetectionModel):
     Args:
         variant: Registry variant key used to identify this instance.
         path: Path to the model weights file (``.onnx`` or ``.dlc``).
-        model_format: Model file format — determines which backend methods to call.
+        model_type: Model file format — determines which backend methods to call.
         confidence_threshold: Minimum confidence score to keep a detection.
     """
 
@@ -308,7 +308,8 @@ class YOLOModel(ImageDetectionModel):
         self,
         variant: str,
         path: Path,
-        model_format: ModelFormat,
+        model_type: ModelType,
+        data_type: DataType,
         confidence_threshold: float = 0.5,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
@@ -319,17 +320,20 @@ class YOLOModel(ImageDetectionModel):
         Args:
             variant: Registry variant key.
             path: Path to the model weights file or variant directory.
-            model_format: ``ModelFormat.ONNX`` or ``ModelFormat.DLC``.
+            model_type: ``ModelType.ONNX`` or ``ModelType.DLC``.
+            data_type: Quantization type (e.g. ``DataType.W8A8``); required for DLC variants.
             confidence_threshold: Detections below this score are discarded.
             backends: Compute unit → ``{"model": filename}`` mapping.  Keys
                 present are the supported units; ``load()`` indexes this with
-                ``backend.preferred_unit``.
+                the explicit ``unit`` argument.
             input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
                 use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
         """
-        super().__init__(variant, path, model_format, backends=backends, input_layout=input_layout)
+        super().__init__(
+            variant, path, model_type, data_type, backends=backends, input_layout=input_layout
+        )
         self._confidence_threshold = confidence_threshold
-        self._handle: object = None
+        self._handle: LoadedModel | None = None
         self._last_original_size: tuple[int, int] | None = None
 
     @property
@@ -337,37 +341,38 @@ class YOLOModel(ImageDetectionModel):
         """Minimum confidence score kept by :meth:`post_proc`."""
         return self._confidence_threshold
 
-    def load(self, backend: ComputeBackend) -> None:
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load model weights onto the backend.
 
         Selects the artifact filename from the per-unit ``backends`` table
-        using ``backend.preferred_unit``.
+        using ``unit``.
 
         Args:
-            backend: Hardware backend to load the model onto.
+            platform: Hardware platform to load the model onto.
+            unit: Compute unit to target.
 
         Raises:
             RuntimeError: If the model is already loaded.
-            KeyError: If ``backend.preferred_unit`` is not supported by this variant.
+            KeyError: If ``unit`` is not supported by this variant.
+            ValueError: If ``unit`` is not available on ``platform``.
         """
-        if self._backend is not None:
+        if self._platform is not None:
             msg = f"{type(self).__name__} is already loaded; call unload() first"
             raise RuntimeError(msg)
-        arts = self._backends[backend.preferred_unit]
-        if self._format is ModelFormat.ONNX:
-            self._handle = backend.load_model(self._artifact_path(arts["model"]))
+        arts = self._backends[unit]
+        if self._model_type is ModelType.ONNX:
+            dtype = self._data_type
+            self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]), dtype=dtype)
         else:
-            self._handle = backend.load_model_dlc(self._artifact_path(arts["model"]))
-        self._backend = backend
+            dtype = self._data_type
+            self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]), dtype=dtype)
+        self._platform = platform
 
     def unload(self) -> None:
         """Release backend resources and reset internal state."""
-        if self._backend is not None:
-            if self._format is ModelFormat.ONNX:
-                self._backend.unload_model(self._handle)
-            else:
-                self._backend.unload_dlc(self._handle)
-        self._backend = None
+        if self._handle is not None:
+            self._handle.unload()
+        self._platform = None
         self._handle = None
 
     def prepare_for_conversion(self, onnx_path: Path) -> Path:
@@ -458,12 +463,12 @@ class YOLOModel(ImageDetectionModel):
         Raises:
             RuntimeError: If the model has not been loaded.
         """
-        if self._backend is None:
+        if self._handle is None:
             msg = "YOLOModel.load() must be called before run()"
             raise RuntimeError(msg)
-        if self._format is ModelFormat.ONNX:
-            return self._backend.run(self._handle, prepared)
-        dlc_out = self._backend.infer_dlc(self._handle, prepared)
+        if self._model_type is ModelType.ONNX:
+            return cast("list[np.ndarray]", self._handle.run(prepared))
+        dlc_out = cast("dict[str, np.ndarray]", self._handle.run(prepared))
         if "scores" in dlc_out:
             # AI Hub DLC already emits per-anchor max class prob directly.
             return [dlc_out["boxes"], dlc_out["scores"], dlc_out["class_idx"]]

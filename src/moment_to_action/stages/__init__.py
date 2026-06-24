@@ -3,7 +3,7 @@
 Consumers import from the submodules directly::
 
     from moment_to_action.stages.image import ImageStage, ImageDetectionStage
-    from moment_to_action.stages.video import PreprocessorStage, ClipBufferStage
+    from moment_to_action.stages.video import ClipBufferStage
     from moment_to_action.stages.vlm import MobileCLIPStage, SmolVLM2Stage
     from moment_to_action.stages.llm import ReasoningStage
 """

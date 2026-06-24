@@ -656,7 +656,7 @@ class TestConvertAihubCommand:
         from moment_to_action.models import ModelID
 
         with pytest.raises(click.ClickException, match="No images found"):
-            _capture_reference_outputs(ModelID.YOLO_V8, empty_dir, tmp_path / "out")
+            _capture_reference_outputs(ModelID.YOLO_V8, empty_dir, tmp_path / "out", AppConfig())
 
     def test_capture_reference_outputs_saves_files(self, tmp_path: Path) -> None:
         """_capture_reference_outputs writes inputs.npy and outputs_0/1/2.npy from DLC."""
@@ -692,7 +692,7 @@ class TestConvertAihubCommand:
                 return_value=np.zeros((480, 640, 3), dtype=np.uint8),
             ),
         ):
-            _capture_reference_outputs(ModelID.YOLO_V8, calib, out)
+            _capture_reference_outputs(ModelID.YOLO_V8, calib, out, AppConfig())
 
         ref_dir = out / "reference_outputs"
         assert (ref_dir / "inputs.npy").exists()
@@ -724,7 +724,7 @@ class TestConvertAihubCommand:
             ),
         ):
             with pytest.raises(click.ClickException, match="not an image model"):
-                _capture_reference_outputs(ModelID.YOLO_V8, calib, tmp_path / "out")
+                _capture_reference_outputs(ModelID.YOLO_V8, calib, tmp_path / "out", AppConfig())
 
     def test_build_dlc_model_yolo_returns_yolo_model(self, tmp_path: Path) -> None:
         """_build_dlc_model returns a YOLOModel with qcs6490/NHWC config for YOLO_V8."""

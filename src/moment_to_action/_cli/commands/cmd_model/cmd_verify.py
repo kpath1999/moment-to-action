@@ -9,7 +9,7 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models import ModelID, ModelManager
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.utils.cli import GlobalData, pass_global_data
@@ -134,8 +134,8 @@ def verify(
             results.append((backend_name, False, "model does not support verify"))
             continue
 
-        be = ComputeBackend(unit)
-        model.load(be)
+        platform = Platform(data.config)
+        model.load(platform, unit)
         try:
             pass_all, fail_reason = model.verify_outputs(
                 inputs, ref_outputs, tol=tol, is_npu=is_npu

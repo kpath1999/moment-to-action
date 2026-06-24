@@ -5,149 +5,123 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
+from moment_to_action.hardware._loaded_models import OnnxModel, TfliteModel, TorchModel
 from moment_to_action.hardware._platforms.macos_arm64 import (
-    MacOSARM64Backend,
+    MacOSARM64CPUBackend,
     MacOSARM64ResourceMonitor,
 )
-from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
+from moment_to_action.hardware._types import (
+    ComputeUnit,
+    ComputeUnitUsageSample,
+    DataType,
+    ModelType,
+)
 
 
 @pytest.mark.unit
-class TestMacOSARM64Backend:
-    """Tests for MacOSARM64Backend construction and routing."""
+class TestMacOSARM64CPUBackend:
+    """Tests for MacOSARM64CPUBackend properties and load methods."""
 
-    def test_construction_succeeds(self) -> None:
-        """MacOSARM64Backend can be constructed without error."""
-        with (
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend"),
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend"),
+    def test_construction(self) -> None:
+        """MacOSARM64CPUBackend constructs without error."""
+        assert MacOSARM64CPUBackend() is not None
+
+    def test_unit_property(self) -> None:
+        """Unit property returns CPU."""
+        assert MacOSARM64CPUBackend().unit == ComputeUnit.CPU
+
+    def test_supported_dtypes(self) -> None:
+        """supported_dtypes returns {FP32}."""
+        assert MacOSARM64CPUBackend().supported_dtypes == {DataType.FP32}
+
+    def test_supported_formats(self) -> None:
+        """supported_formats includes TFLITE and ONNX."""
+        fmts = MacOSARM64CPUBackend().supported_formats
+        assert ModelType.TFLITE in fmts
+        assert ModelType.ONNX in fmts
+        assert ModelType.DLC not in fmts
+
+    def test_load_tflite_returns_tflite_model(self) -> None:
+        """load_tflite returns a TfliteModel with CPU unit."""
+        mock_interp = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.macos_arm64._cpu_backend._load_litert_interpreter",
+            return_value=mock_interp,
         ):
-            backend = MacOSARM64Backend()
-            assert backend is not None
+            model = MacOSARM64CPUBackend().load_tflite("/tmp/model.tflite", dtype=DataType.FP32)
 
-    def test_get_supported_unit_returns_cpu(self) -> None:
-        """MacOSARM64Backend reports CPU as the supported compute unit."""
-        with (
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend"),
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend"),
+        assert isinstance(model, TfliteModel)
+        assert model.unit == ComputeUnit.CPU
+
+    def test_load_onnx_returns_onnx_model(self) -> None:
+        """load_onnx returns an OnnxModel with CPU unit."""
+        mock_session = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.macos_arm64._cpu_backend.ort.InferenceSession",
+            return_value=mock_session,
         ):
-            backend = MacOSARM64Backend()
-            assert backend.get_supported_unit() == ComputeUnit.CPU
+            model = MacOSARM64CPUBackend().load_onnx("/tmp/model.onnx", dtype=DataType.FP32)
 
-    def test_load_tflite_routes_to_litert(self) -> None:
-        """load_model routes .tflite files to LiteRTBackend."""
-        mock_litert = MagicMock()
-        mock_litert.load_model.return_value = "raw_handle"
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend"),
-        ):
-            backend = MacOSARM64Backend()
-            backend.load_model("/tmp/model.tflite")
-            mock_litert.load_model.assert_called_once_with("/tmp/model.tflite")
+        assert isinstance(model, OnnxModel)
+        assert model.unit == ComputeUnit.CPU
 
-    def test_load_onnx_routes_to_onnx(self) -> None:
-        """load_model routes .onnx files to ONNXBackend."""
-        mock_onnx = MagicMock()
-        mock_onnx.load_model.return_value = "raw_handle"
-        with (
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend"),
-            patch(
-                "moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend",
-                return_value=mock_onnx,
-            ),
-        ):
-            backend = MacOSARM64Backend()
-            backend.load_model("/tmp/model.onnx")
-            mock_onnx.load_model.assert_called_once_with("/tmp/model.onnx")
+    def test_load_dlc_raises_not_implemented(self) -> None:
+        """load_dlc raises NotImplementedError (not in supported_formats)."""
+        with pytest.raises(NotImplementedError):
+            MacOSARM64CPUBackend().load_dlc("/tmp/model.dlc", dtype=DataType.W8A8)
 
-    def test_load_unsupported_format_raises_value_error(self) -> None:
-        """load_model raises ValueError for unrecognised file extensions."""
-        with (
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend"),
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend"),
-        ):
-            backend = MacOSARM64Backend()
-            with pytest.raises(ValueError, match="Unsupported model format"):
-                backend.load_model("/tmp/model.pt")
+    def test_load_torch_returns_torch_model(self) -> None:
+        """load_torch returns a TorchModel with CPU unit."""
+        mock_module = MagicMock()
+        with patch("torch.load", return_value=mock_module):
+            model = MacOSARM64CPUBackend().load_torch("/tmp/model.pt", dtype=DataType.FP32)
 
-    def test_run_delegates_to_sub_backend(self) -> None:
-        """run() delegates inference to the sub-backend that loaded the model."""
-        expected_output = [np.array([1.0, 2.0])]
-        mock_litert = MagicMock()
-        mock_litert.load_model.return_value = "raw"
-        mock_litert.run.return_value = expected_output
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend"),
-        ):
-            backend = MacOSARM64Backend()
-            handle = backend.load_model("/tmp/model.tflite")
-            inputs = np.zeros((1, 224, 224, 3), dtype=np.float32)
-            outputs = backend.run(handle, inputs)
-            mock_litert.run.assert_called_once()
-            assert outputs is expected_output
+        assert isinstance(model, TorchModel)
+        assert model.unit == ComputeUnit.CPU
 
-    def test_get_input_details_delegates(self) -> None:
-        """get_input_details() delegates to the sub-backend."""
-        details = [{"name": "input", "shape": (1, 224, 224, 3)}]
-        mock_litert = MagicMock()
-        mock_litert.load_model.return_value = "raw"
-        mock_litert.get_input_details.return_value = details
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend"),
-        ):
-            backend = MacOSARM64Backend()
-            handle = backend.load_model("/tmp/model.tflite")
-            assert backend.get_input_details(handle) == details
+    def test_load_llama_cpp_returns_model(self) -> None:
+        """load_llama_cpp calls _start_llama_model with cpu_only=True."""
+        mock_model = MagicMock()
+        with patch(
+            "moment_to_action.hardware._platforms.macos_arm64._cpu_backend._start_llama_model",
+            return_value=mock_model,
+        ) as mock_start:
+            result = MacOSARM64CPUBackend().load_llama_cpp(
+                "/tmp/model.gguf",
+                server_path="/usr/bin/llama-server",
+                port=8080,
+                dtype=DataType.FP32,
+            )
 
-    def test_get_output_details_delegates(self) -> None:
-        """get_output_details() delegates to the sub-backend."""
-        details = [{"name": "output", "shape": (1, 1000)}]
-        mock_litert = MagicMock()
-        mock_litert.load_model.return_value = "raw"
-        mock_litert.get_output_details.return_value = details
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend",
-                return_value=mock_litert,
-            ),
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend"),
-        ):
-            backend = MacOSARM64Backend()
-            handle = backend.load_model("/tmp/model.tflite")
-            assert backend.get_output_details(handle) == details
+        mock_start.assert_called_once_with(
+            path="/tmp/model.gguf",
+            mmproj=None,
+            server_path="/usr/bin/llama-server",
+            port=8080,
+            unit=ComputeUnit.CPU,
+            cpu_only=True,
+            dtype=DataType.FP32,
+        )
+        assert result is mock_model
 
-    def test_resolve_torch_policy_delegates_to_helper(self) -> None:
-        """resolve_torch_policy() delegates to resolve_torch_execution_policy."""
-        import torch
 
-        mock_policy = MagicMock(device=torch.device("cpu"), dtype=torch.float32)
-        with (
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.LiteRTBackend"),
-            patch("moment_to_action.hardware._platforms.macos_arm64._backend.ONNXBackend"),
-            patch(
-                "moment_to_action.hardware._platforms.macos_arm64._backend.resolve_torch_execution_policy",
-                return_value=mock_policy,
-            ) as mock_resolve,
-        ):
-            backend = MacOSARM64Backend()
-            policy = backend.resolve_torch_policy("auto")
-            mock_resolve.assert_called_once_with("auto")
-            assert policy is mock_policy
+@pytest.mark.unit
+class TestMacOSARM64DtypeValidation:
+    """Tests that MacOSARM64CPUBackend rejects unsupported dtypes via _check_dtype."""
+
+    def test_load_tflite_unsupported_dtype_raises(self) -> None:
+        """load_tflite raises ValueError for a dtype not in supported_dtypes."""
+        backend = MacOSARM64CPUBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_tflite("/fake/model.tflite", dtype=DataType.W8A8)
+
+    def test_load_onnx_unsupported_dtype_raises(self) -> None:
+        """load_onnx raises ValueError for a dtype not in supported_dtypes."""
+        backend = MacOSARM64CPUBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_onnx("/fake/model.onnx", dtype=DataType.W8A8)
 
 
 @pytest.mark.unit
@@ -219,3 +193,167 @@ class TestMacOSARM64ResourceMonitor:
             monitor = MacOSARM64ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
         assert sample.usage_pct == 42.0
+
+
+@pytest.mark.unit
+class TestMacOSARM64TfliteModel:
+    """Tests for TfliteModel on macOS arm64 (CPU unit)."""
+
+    def _make_model(self) -> TfliteModel:
+        """Return a TfliteModel with a mock interpreter."""
+        import numpy as np
+
+        mock_interp = MagicMock()
+        mock_interp.get_input_details.return_value = [
+            {"index": 0, "name": "input", "dtype": np.float32}
+        ]
+        mock_interp.get_output_details.return_value = [{"index": 0}]
+        mock_interp.get_tensor.return_value = np.zeros((1, 10))
+        return TfliteModel(unit=ComputeUnit.CPU, interp=mock_interp, dtype=DataType.FP32)
+
+    def test_unit_property(self) -> None:
+        """Unit is always CPU."""
+        assert self._make_model().unit == ComputeUnit.CPU
+
+    def test_dtype_property(self) -> None:
+        """Dtype returns the value passed at construction."""
+        assert self._make_model().dtype == DataType.FP32
+
+    def test_model_type_property(self) -> None:
+        """model_type is TFLITE."""
+        assert self._make_model().model_type == ModelType.TFLITE
+
+    def test_run_with_ndarray(self) -> None:
+        """run() accepts np.ndarray."""
+        import numpy as np
+
+        model = self._make_model()
+        result = model.run(np.zeros((1, 3, 224, 224), dtype=np.float32))
+        assert isinstance(result, list)
+
+    def test_run_with_dict(self) -> None:
+        """run() accepts dict[str, np.ndarray]."""
+        import numpy as np
+
+        model = self._make_model()
+        result = model.run({"input": np.zeros((1, 3, 224, 224), dtype=np.float32)})
+        assert isinstance(result, list)
+
+    def test_unload_clears_interp(self) -> None:
+        """unload() clears the interpreter handle."""
+        model = self._make_model()
+        model.unload()
+        assert model._interp is None
+        assert model._unloaded is True
+
+    def test_unload_idempotent(self) -> None:
+        """Calling unload() twice is safe."""
+        model = self._make_model()
+        model.unload()
+        model.unload()
+
+
+@pytest.mark.unit
+class TestMacOSARM64ONNXModel:
+    """Tests for OnnxModel on macOS arm64 (CPU unit)."""
+
+    def _make_model(self) -> OnnxModel:
+        """Return an OnnxModel with a mock session."""
+        import numpy as np
+
+        mock_session = MagicMock()
+        mock_input = MagicMock()
+        mock_input.name = "input"
+        mock_session.get_inputs.return_value = [mock_input]
+        mock_session.run.return_value = [np.zeros((1, 10))]
+        return OnnxModel(unit=ComputeUnit.CPU, session=mock_session, dtype=DataType.FP32)
+
+    def test_unit_property(self) -> None:
+        """Unit is always CPU."""
+        assert self._make_model().unit == ComputeUnit.CPU
+
+    def test_dtype_property(self) -> None:
+        """Dtype returns the value passed at construction."""
+        assert self._make_model().dtype == DataType.FP32
+
+    def test_model_type_property(self) -> None:
+        """model_type is ONNX."""
+        assert self._make_model().model_type == ModelType.ONNX
+
+    def test_run_with_ndarray(self) -> None:
+        """run() with ndarray passes it by first input name."""
+        import numpy as np
+
+        model = self._make_model()
+        result = model.run(np.zeros((1, 3, 224, 224), dtype=np.float32))
+        assert isinstance(result, list)
+
+    def test_run_with_dict(self) -> None:
+        """run() with dict passes it directly."""
+        import numpy as np
+
+        model = self._make_model()
+        result = model.run({"input": np.zeros((1, 3, 224, 224), dtype=np.float32)})
+        assert isinstance(result, list)
+
+    def test_unload_clears_session(self) -> None:
+        """unload() clears the session handle."""
+        model = self._make_model()
+        model.unload()
+        assert model._session is None
+        assert model._unloaded is True
+
+    def test_unload_idempotent(self) -> None:
+        """Calling unload() twice is safe."""
+        model = self._make_model()
+        model.unload()
+        model.unload()
+
+
+@pytest.mark.unit
+class TestMacOSARM64TfliteSetInputs:
+    """Tests for _tflite_set_inputs from hardware._platforms._shared (KeyError/TypeError paths)."""
+
+    def test_missing_key_raises_key_error(self) -> None:
+        """KeyError when input name not found in model."""
+        import numpy as np
+
+        from moment_to_action.hardware._platforms._shared import _tflite_set_inputs
+
+        interp = MagicMock()
+        interp.get_input_details.return_value = [{"index": 0, "name": "img", "dtype": np.float32}]
+        with pytest.raises(KeyError, match="wrong"):
+            _tflite_set_inputs(interp, {"wrong": np.zeros((1,), dtype=np.float32)})
+
+    def test_dtype_mismatch_raises_type_error(self) -> None:
+        """TypeError when tensor dtype does not match model's expected dtype."""
+        import numpy as np
+
+        from moment_to_action.hardware._platforms._shared import _tflite_set_inputs
+
+        interp = MagicMock()
+        interp.get_input_details.return_value = [{"index": 0, "name": "img", "dtype": np.float32}]
+        with pytest.raises(TypeError, match="dtype mismatch"):
+            _tflite_set_inputs(interp, {"img": np.zeros((1,), dtype=np.int32)})
+
+
+@pytest.mark.unit
+class TestMacOSARM64LoadLiteRTInterpreter:
+    """Tests for _load_litert_interpreter in macos_arm64._cpu_backend."""
+
+    def test_loads_and_allocates_interpreter(self) -> None:
+        """_load_litert_interpreter calls Interpreter and allocate_tensors."""
+        from moment_to_action.hardware._platforms.macos_arm64._cpu_backend import (
+            _load_litert_interpreter,
+        )
+
+        mock_interp = MagicMock()
+        with patch(
+            "ai_edge_litert.interpreter.Interpreter",
+            return_value=mock_interp,
+        ) as mock_cls:
+            result = _load_litert_interpreter("/tmp/model.tflite")
+
+        mock_cls.assert_called_once_with(model_path="/tmp/model.tflite", experimental_delegates=[])
+        mock_interp.allocate_tensors.assert_called_once()
+        assert result is mock_interp

@@ -12,7 +12,8 @@ import sysconfig
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from moment_to_action.hardware._platforms._detection import Platform, detect_platform
+from moment_to_action.hardware import PlatformType as Platform
+from moment_to_action.hardware import detect_platform
 from moment_to_action.qairt._deps import check_system_deps as _check_system_deps
 
 if TYPE_CHECKING:

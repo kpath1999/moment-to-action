@@ -73,7 +73,8 @@ class TestModelListCommand:
 
     def test_vendored_status_shown(self, tmp_path: Path) -> None:
         """Vendored variant shows 'vendored' status."""
-        from moment_to_action.models import ModelFormat, ModelInfo, YOLOModel
+        from moment_to_action.hardware._types import DataType, ModelType
+        from moment_to_action.models import ModelInfo, YOLOModel
 
         mid = ModelID.YOLO_V8
         vs = _make_variant_status(mid, "vendored_variant", available=True)
@@ -83,8 +84,10 @@ class TestModelListCommand:
                 model_class=YOLOModel,
                 variants={
                     "vendored_variant": Variant(
-                        source=VendoredSource(format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")),
+                        source=VendoredSource(path=_Path("yolo/m.onnx")),
                         backends={},
+                        model_type=ModelType.ONNX,
+                        data_type=DataType.FP32,
                     )
                 },
             )

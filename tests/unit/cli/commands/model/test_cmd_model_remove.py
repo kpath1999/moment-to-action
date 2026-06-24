@@ -14,7 +14,8 @@ import pytest
 from click.testing import CliRunner, Result
 
 from moment_to_action.config import AppConfig
-from moment_to_action.models import ModelFormat, Variant
+from moment_to_action.hardware._types import DataType, ModelType
+from moment_to_action.models import Variant
 from moment_to_action.models._sources._vendored import VendoredSource
 
 
@@ -57,8 +58,10 @@ class TestModelRemoveCommand:
                 model_class=YOLOModel,
                 variants={
                     "default": Variant(
-                        source=VendoredSource(format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")),
+                        source=VendoredSource(path=_Path("yolo/m.onnx")),
                         backends={},
+                        model_type=ModelType.ONNX,
+                        data_type=DataType.FP32,
                     ),
                 },
             )
@@ -107,10 +110,17 @@ class TestModelRemoveCommand:
                 model_class=YOLOModel,
                 variants={
                     "default": Variant(
-                        source=VendoredSource(format=ModelFormat.ONNX, path=_Path("yolo/m.onnx")),
+                        source=VendoredSource(path=_Path("yolo/m.onnx")),
                         backends={},
+                        model_type=ModelType.ONNX,
+                        data_type=DataType.FP32,
                     ),
-                    "qcs6490": Variant(source=MagicMock(format=ModelFormat.DLC), backends={}),
+                    "qcs6490": Variant(
+                        source=MagicMock(),
+                        backends={},
+                        model_type=ModelType.DLC,
+                        data_type=DataType.W8A8,
+                    ),
                 },
             )
         }

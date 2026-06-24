@@ -56,7 +56,7 @@ def _invoke(
                     return_value=mock_mgr,
                 ):
                     with patch(
-                        "moment_to_action._cli.commands.cmd_model.cmd_verify.ComputeBackend",
+                        "moment_to_action._cli.commands.cmd_model.cmd_verify.Platform",
                         return_value=be,
                     ):
                         return CliRunner().invoke(cli, ["model", "verify", *args])
@@ -188,7 +188,7 @@ class TestModelVerifyCommand:
                         return_value=mgr,
                     ):
                         with _patch(
-                            "moment_to_action._cli.commands.cmd_model.cmd_verify.ComputeBackend",
+                            "moment_to_action._cli.commands.cmd_model.cmd_verify.Platform",
                             return_value=MagicMock(),
                         ):
                             result = CliRunner().invoke(
@@ -226,7 +226,7 @@ class TestModelVerifyCommand:
                         return_value=mgr,
                     ):
                         with _patch(
-                            "moment_to_action._cli.commands.cmd_model.cmd_verify.ComputeBackend",
+                            "moment_to_action._cli.commands.cmd_model.cmd_verify.Platform",
                             return_value=MagicMock(),
                         ):
                             result = CliRunner().invoke(
@@ -266,7 +266,7 @@ class TestModelVerifyCommand:
                         return_value=mgr,
                     ):
                         with _patch(
-                            "moment_to_action._cli.commands.cmd_model.cmd_verify.ComputeBackend",
+                            "moment_to_action._cli.commands.cmd_model.cmd_verify.Platform",
                             return_value=MagicMock(),
                         ):
                             result = CliRunner().invoke(

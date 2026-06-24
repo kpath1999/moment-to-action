@@ -32,8 +32,7 @@ class TestComputeUnit:
         assert "CPU" in members
         assert "NPU" in members
         assert "GPU" in members
-        assert "DSP" in members
-        assert len(members) == 4
+        assert len(members) == 3
 
     def test_computeunit_cpu_member(self) -> None:
         """Test that CPU member exists and is accessible."""
@@ -49,11 +48,6 @@ class TestComputeUnit:
         """Test that GPU member exists and is accessible."""
         assert hasattr(ComputeUnit, "GPU")
         assert isinstance(ComputeUnit.GPU, ComputeUnit)
-
-    def test_computeunit_dsp_member(self) -> None:
-        """Test that DSP member exists and is accessible."""
-        assert hasattr(ComputeUnit, "DSP")
-        assert isinstance(ComputeUnit.DSP, ComputeUnit)
 
 
 @pytest.mark.unit
@@ -89,12 +83,6 @@ class TestComputeUnitUsageSample:
         sample = _make_sample(device=ComputeUnit.GPU, power_mw=500.0, usage_pct=95.0)
         assert sample.device == ComputeUnit.GPU
         assert sample.power_mw == 500.0
-
-    def test_sample_construction_dsp(self) -> None:
-        """Test construction with DSP compute unit."""
-        sample = _make_sample(device=ComputeUnit.DSP, power_mw=100.0, usage_pct=50.0)
-        assert sample.device == ComputeUnit.DSP
-        assert sample.power_mw == 100.0
 
     def test_sample_with_zero_values(self) -> None:
         """Test construction with zero values."""

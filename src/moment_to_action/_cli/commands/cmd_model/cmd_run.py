@@ -10,7 +10,7 @@ import attrs
 import cv2
 import rich_click as click
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models import DEFAULT_VARIANT_KEY, ModelID, ModelManager
 from moment_to_action.models.image._base import ImageModel
 from moment_to_action.models.image.classification._base import ImageClassificationModel
@@ -160,8 +160,8 @@ def run(
         msg = f"'{model_id}' is not an image model; run only supports image models currently."
         raise click.ClickException(msg)
 
-    backend = ComputeBackend(preferred_unit=unit)
-    model.load(backend)
+    platform = Platform(data.config)
+    model.load(platform, unit)
     try:
         prepared = model.prepare(frame)
         raw = model.run(prepared)

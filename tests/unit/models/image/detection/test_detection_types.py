@@ -35,7 +35,7 @@ class TestBoundingBox:
 
     def test_field_types_are_float(self) -> None:
         """All coordinate fields are float."""
-        bb = BoundingBox(x1=1, y1=2, x2=3, y2=4)  # type: ignore[arg-type]
+        bb = BoundingBox(x1=1, y1=2, x2=3, y2=4)
         assert isinstance(bb.x1, int | float)
 
 

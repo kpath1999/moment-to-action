@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import DataType, ModelType
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
@@ -17,19 +18,19 @@ class _ConcreteDetectionModel(ImageDetectionModel):
 
     def __init__(self, detections: list[Detection] | None = None) -> None:
         """Initialize with canned detections."""
-        super().__init__("default", Path("/x"), backends={})
+        super().__init__("default", Path("/x"), ModelType.ONNX, DataType.FP32, backends={})
         self._detections = detections or []
         self._run_output: list[np.ndarray] = []
 
-    def load(self, backend: object) -> None:
+    def load(self, platform: object, unit: object) -> None:
         """Load."""
-        self._backend = backend  # type: ignore[assignment]
+        self._platform = platform  # type: ignore[assignment]
 
     def unload(self) -> None:
         """Unload."""
-        self._backend = None
+        self._platform = None
 
-    def prepare(self, inputs: np.ndarray) -> np.ndarray:  # type: ignore[override]
+    def prepare(self, inputs: np.ndarray) -> np.ndarray:
         """Prepare."""
         return inputs
 
@@ -55,13 +56,13 @@ class TestImageDetectionModel:
         """Subclasses missing abstract methods cannot be instantiated."""
 
         class _Incomplete(ImageDetectionModel):
-            def load(self, backend: object) -> None:
+            def load(self, backend: object, unit: object = None) -> None:
                 """Load."""
 
             def unload(self) -> None:
                 """Unload."""
 
-            def prepare(self, inputs: np.ndarray) -> np.ndarray:  # type: ignore[override]
+            def prepare(self, inputs: np.ndarray) -> np.ndarray:
                 """Prepare."""
                 return inputs
 
@@ -93,7 +94,7 @@ class TestVerifyOutputs:
         inputs, ref_outputs = _make_ref_outputs()
         model = _ConcreteDetectionModel(detections=[])
         model._run_output = [np.zeros((1, 2), dtype=np.float32)]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is True
         assert reason == ""
@@ -103,7 +104,7 @@ class TestVerifyOutputs:
         inputs, ref_outputs = _make_ref_outputs()
         model = _ConcreteDetectionModel(detections=[])
         model._run_output = [np.ones((1, 2), dtype=np.float32) * 999.0]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is False
         assert "max_err" in reason
@@ -113,7 +114,7 @@ class TestVerifyOutputs:
         inputs, ref_outputs = _make_ref_outputs()
         model = _ConcreteDetectionModel(detections=[])
         model._run_output = [np.ones((1, 2), dtype=np.float32) * 999.0]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, _ = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=True)
         assert passed is True
 
@@ -133,7 +134,7 @@ class TestVerifyOutputs:
 
         model = _AlternatingModel(detections=[])
         model._run_output = [np.zeros((1, 2), dtype=np.float32)]
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is False
         assert "decoded mismatch" in reason
@@ -143,7 +144,7 @@ class TestVerifyOutputs:
         inputs = np.zeros((0, 3, 4, 4), dtype=np.float32)
         ref_outputs = [np.zeros((0, 2), dtype=np.float32)]
         model = _ConcreteDetectionModel(detections=[])
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         passed, reason = model.verify_outputs(inputs, ref_outputs, tol=0.01, is_npu=False)
         assert passed is True
         assert reason == ""

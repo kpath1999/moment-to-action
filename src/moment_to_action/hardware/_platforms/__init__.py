@@ -1,8 +1,3 @@
-"""Platform backends package — ABCs, platform detection, and concrete implementations."""
+"""Platform-specific backend implementations for the hardware abstraction layer."""
 
 from __future__ import annotations
-
-from ._base import InferenceBackend, ModelInput, ResourceMonitor
-from ._detection import Platform, detect_platform
-
-__all__ = ["InferenceBackend", "ModelInput", "Platform", "ResourceMonitor", "detect_platform"]

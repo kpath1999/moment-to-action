@@ -52,7 +52,7 @@ from rich.progress import (
 from rich.table import Table
 
 from moment_to_action.config import AppConfig, load_config
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
@@ -815,12 +815,10 @@ def main() -> None:  # noqa: C901, PLR0915
             try:
                 model = manager.get_model(
                     model_id,
-                    server_path=config.llama_server_path,
-                    port=config.llama_server_port,
                     system_prompt=_BENCHMARK_SYSTEM,
                     max_tokens=_MAX_TOKENS,
                 )
-                model.load(ComputeBackend(preferred_unit=ComputeUnit.GPU))  # type: ignore[union-attr]
+                model.load(Platform(config), ComputeUnit.GPU)
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                 progress.advance(model_task)
@@ -833,7 +831,7 @@ def main() -> None:  # noqa: C901, PLR0915
 
             t_unload = time.perf_counter_ns()
             try:
-                model.unload()  # type: ignore[union-attr]
+                model.unload()
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
             unload_ms = (time.perf_counter_ns() - t_unload) / 1e6

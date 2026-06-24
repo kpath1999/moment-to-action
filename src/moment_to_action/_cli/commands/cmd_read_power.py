@@ -7,17 +7,19 @@ import json
 import attrs
 import rich_click as click
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
+from moment_to_action.utils.cli import get_global_data
 
 
 @click.command(aliases=["rdpwr"])
 @click.argument("device", type=click.Choice(ComputeUnit, case_sensitive=False))
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON.")
 @click.pass_context
-def read_power(ctx: click.Context, *, device: ComputeUnit, json_output: bool) -> None:  # noqa: ARG001
+def read_power(ctx: click.Context, *, device: ComputeUnit, json_output: bool) -> None:
     """Read power of a device."""
-    backend = ComputeBackend(device)
-    resource_mon = backend.resource_monitor
+    data = get_global_data(ctx)
+    platform = Platform(data.config)
+    resource_mon = platform.resource_monitor
 
     sample = resource_mon.sample(device)
     if json_output:

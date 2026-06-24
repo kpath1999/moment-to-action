@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 
-from moment_to_action.models import ModelFormat
 from moment_to_action.models._sources._ultralytics import (
     UltralyticsSource,
     resolve_ultralytics_source,
@@ -19,19 +18,18 @@ class TestUltralyticsSource:
     """Attribute and construction tests for UltralyticsSource."""
 
     def test_required_fields(self) -> None:
-        """UltralyticsSource stores format and name."""
-        s = UltralyticsSource(format=ModelFormat.ONNX, name="yolov8n")
-        assert s.format is ModelFormat.ONNX
+        """UltralyticsSource stores name."""
+        s = UltralyticsSource(name="yolov8n")
         assert s.name == "yolov8n"
 
     def test_default_filename(self) -> None:
         """Default filename is model.onnx."""
-        s = UltralyticsSource(format=ModelFormat.ONNX, name="yolov8n")
+        s = UltralyticsSource(name="yolov8n")
         assert s.filename == "model.onnx"
 
     def test_custom_filename(self) -> None:
         """Custom filename is stored."""
-        s = UltralyticsSource(format=ModelFormat.ONNX, name="yolov8n", filename="custom.onnx")
+        s = UltralyticsSource(name="yolov8n", filename="custom.onnx")
         assert s.filename == "custom.onnx"
 
 
@@ -40,7 +38,7 @@ class TestResolveUltralyticsSource:
     """Tests for resolve_ultralytics_source."""
 
     def _source(self) -> UltralyticsSource:
-        return UltralyticsSource(format=ModelFormat.ONNX, name="yolov8n")
+        return UltralyticsSource(name="yolov8n")
 
     def test_returns_existing_file_without_download(self, tmp_path: Path) -> None:
         """If target file exists, returns path without importing ultralytics."""
@@ -116,7 +114,7 @@ class TestResolveUltralyticsSource:
         """resolve_model_source dispatches UltralyticsSource correctly."""
         from moment_to_action.models._sources import resolve_model_source
 
-        s = UltralyticsSource(format=ModelFormat.ONNX, name="yolov8n")
+        s = UltralyticsSource(name="yolov8n")
         (tmp_path / "model.onnx").write_text("ok")
         result = resolve_model_source(s, tmp_path)
         assert result == tmp_path / "model.onnx"

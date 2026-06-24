@@ -21,9 +21,11 @@ class TestImageModel:
 
     def test_abstract_methods_enforced(self) -> None:
         """Subclasses that skip abstract methods cannot be instantiated."""
+        from moment_to_action.hardware import Platform
+        from moment_to_action.hardware._types import ComputeUnit
 
         class _Incomplete(ImageModel[object, object]):
-            def load(self, backend: object) -> None:
+            def load(self, platform: Platform, unit: ComputeUnit) -> None:
                 """Load."""
 
             def unload(self) -> None:
@@ -42,7 +44,7 @@ class TestImageModel:
         """Subclass missing verify_outputs cannot be instantiated."""
 
         class _NoVerify(ImageModel[object, object]):
-            def load(self, backend: object) -> None:
+            def load(self, backend: object, unit: object = None) -> None:
                 """Load."""
 
             def unload(self) -> None:

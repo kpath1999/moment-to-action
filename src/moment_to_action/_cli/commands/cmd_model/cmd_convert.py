@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import rich_click as click
 
-from moment_to_action.hardware import ComputeBackend, ComputeUnit
+from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.models import DEFAULT_VARIANT_KEY, ModelID, ModelManager
 from moment_to_action.models.image._base import ImageModel
 from moment_to_action.qairt import QairtSDKManager
@@ -117,8 +117,8 @@ def convert(
     calibration_data = np.vstack(prepared_list).astype(np.float32)
 
     # Run ONNX model on each calibration image to capture reference outputs
-    backend = ComputeBackend(ComputeUnit.CPU)
-    model.load(backend)
+    platform = Platform(data.config)
+    model.load(platform, ComputeUnit.CPU)
     all_raw: list[list[np.ndarray]] = []
     for i in range(len(calibration_data)):
         raw = model.run(calibration_data[i : i + 1])

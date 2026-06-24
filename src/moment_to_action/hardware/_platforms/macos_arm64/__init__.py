@@ -1,16 +1,13 @@
-"""macOS arm64 (Apple Silicon) platform package.
-
-Public API:
-    ``MacOSARM64Backend``          — unified inference backend (routes .tflite / .onnx)
-    ``MacOSARM64ResourceMonitor``  — resource monitoring via psutil estimates
-"""
+"""macOS arm64 (Apple Silicon) platform backend and resource monitor."""
 
 from __future__ import annotations
 
-from ._backend import MacOSARM64Backend
+from ._cpu_backend import MacOSARM64CPUBackend
+from ._gpu_backend import MacOSARM64GPUBackend
 from ._resources import MacOSARM64ResourceMonitor
 
 __all__ = [
-    "MacOSARM64Backend",
+    "MacOSARM64CPUBackend",
+    "MacOSARM64GPUBackend",
     "MacOSARM64ResourceMonitor",
 ]

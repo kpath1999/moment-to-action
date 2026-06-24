@@ -16,7 +16,7 @@ class AppConfig(BaseModel, frozen=True):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     qairt_sdk_version: str = "2.45.0"
     qairt_sdk_path: Path | None = None
-    llama_server_path: Path | None = Path("/opt/llm/llama-server")
+    llama_server_path: Path = Path("/opt/llm/llama-server")
     llama_server_port: int = 8080
 
 

@@ -263,10 +263,11 @@ class ModelManager:
         variant = self._effective_variant(info, variant, unit)
         variant_obj = self._get_variant(info, variant)
         path = self.get_path(model_id, variant)
-        return info.model_class(  # type: ignore[call-arg]
+        return info.model_class(
             variant,
             path,
-            variant_obj.source.format,
+            variant_obj.model_type,
+            variant_obj.data_type,
             backends=variant_obj.backends,
             input_layout=variant_obj.input_layout,
             **model_kwargs,
@@ -285,7 +286,7 @@ class ModelManager:
         Raises:
             FileNotFoundError: If the variant directory does not exist.
         """
-        return self._path_manager.cache.models.remove_variant(model_id.value, variant)  # type: ignore[no-any-return]
+        return self._path_manager.cache.models.remove_variant(model_id.value, variant)
 
     def remove_model(self, model_id: ModelID) -> CachedModelInfo:
         """Remove all cached variants of a model.
@@ -300,7 +301,7 @@ class ModelManager:
         Raises:
             FileNotFoundError: If the model directory does not exist.
         """
-        return self._path_manager.cache.models.remove_model(model_id.value)  # type: ignore[no-any-return]
+        return self._path_manager.cache.models.remove_model(model_id.value)
 
     def clear_cache(self) -> ModelCacheContents:
         """Clear all downloaded model files from the cache.

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from moment_to_action.config import AppConfig
-from moment_to_action.hardware._platforms._detection import Platform
+from moment_to_action.hardware._types import PlatformType as Platform
 from moment_to_action.qairt._manager import QairtSDKManager
 
 

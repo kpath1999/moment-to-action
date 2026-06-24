@@ -29,7 +29,7 @@ class TestReadPowerCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 result = CliRunner().invoke(cli, ["read-power", "CPU"])
@@ -54,7 +54,7 @@ class TestReadPowerCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 result = CliRunner().invoke(cli, ["read-power", "CPU"])
@@ -78,7 +78,7 @@ class TestReadPowerCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 result = CliRunner().invoke(cli, ["read-power", "CPU"])
@@ -103,7 +103,7 @@ class TestReadPowerCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 result = CliRunner().invoke(cli, ["read-power", "CPU"])
@@ -134,7 +134,7 @@ class TestReadPowerCommand:
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 with patch(
@@ -167,7 +167,7 @@ class TestReadPowerCommand:
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 with patch(
@@ -200,7 +200,7 @@ class TestReadPowerCommand:
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 with patch(
@@ -234,7 +234,7 @@ class TestReadPowerCommand:
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 with patch(
@@ -269,7 +269,7 @@ class TestReadPowerCommand:
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 with patch(
@@ -283,9 +283,9 @@ class TestReadPowerCommand:
         assert "timestamp" in output_json
         assert output_json["timestamp"] == test_timestamp
 
-    @pytest.mark.parametrize("device", ["CPU", "NPU", "GPU", "DSP"])
+    @pytest.mark.parametrize("device", ["CPU", "NPU", "GPU"])
     def test_all_compute_units_succeed(self, device: str) -> None:
-        """All compute units (CPU, NPU, GPU, DSP) can be queried successfully."""
+        """All compute units (CPU, NPU, GPU) can be queried successfully."""
         from moment_to_action._cli import cli
 
         mock_sample = MagicMock()
@@ -300,7 +300,7 @@ class TestReadPowerCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 result = CliRunner().invoke(cli, ["read-power", device])
@@ -308,7 +308,7 @@ class TestReadPowerCommand:
         assert result.exit_code == 0
         assert "1000" in result.output or "50" in result.output
 
-    @pytest.mark.parametrize("device", ["CPU", "NPU", "GPU", "DSP"])
+    @pytest.mark.parametrize("device", ["CPU", "NPU", "GPU"])
     def test_all_compute_units_json_output(self, device: str) -> None:
         """JSON output works for all compute units."""
         from moment_to_action._cli import cli
@@ -329,7 +329,7 @@ class TestReadPowerCommand:
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 with patch(
@@ -377,7 +377,7 @@ class TestReadPowerCommand:
         }
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 with patch(
@@ -408,7 +408,7 @@ class TestReadPowerCommand:
 
         with patch("moment_to_action._cli.init_logging"):
             with patch(
-                "moment_to_action._cli.commands.cmd_read_power.ComputeBackend",
+                "moment_to_action._cli.commands.cmd_read_power.Platform",
                 return_value=mock_backend,
             ):
                 result = CliRunner().invoke(cli, ["rdpwr", "CPU"])

@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import DataType, ModelType, Platform
+from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.models._base import BaseModel
 
 
@@ -16,15 +18,15 @@ class _ConcreteModel(BaseModel[object, object, object, object]):
 
     def __init__(self, variant: str = "default", path: Path = Path("/x")) -> None:
         """Initialize with no backend table (testing-only shortcut)."""
-        super().__init__(variant, path, backends={})
+        super().__init__(variant, path, ModelType.DLC, DataType.W8A16, backends={})
 
-    def load(self, backend: object) -> None:
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load the model."""
-        self._backend = backend  # type: ignore[assignment]
+        self._platform = platform
 
     def unload(self) -> None:
         """Unload the model."""
-        self._backend = None
+        self._platform = None
 
     def prepare(self, inputs: object) -> object:
         """Prepare inputs."""
@@ -57,20 +59,20 @@ class TestBaseModel:
     def test_cannot_instantiate_abstract(self) -> None:
         """BaseModel cannot be instantiated directly."""
         with pytest.raises(TypeError):
-            BaseModel("default", Path("/x"))  # type: ignore[abstract, call-arg]
+            BaseModel("default", Path("/x"), ModelType.DLC, DataType.W8A16, backends={})  # type: ignore[abstract]
 
     def test_missing_abstracts_prevent_instantiation(self) -> None:
         """Subclass missing prepare/run/post_proc/verify_outputs cannot be instantiated."""
 
         class _Incomplete(BaseModel[object, object, object, object]):
-            def load(self, backend: object) -> None:
+            def load(self, platform: Platform, unit: ComputeUnit) -> None:
                 """Load."""
 
             def unload(self) -> None:
                 """Unload."""
 
         with pytest.raises(TypeError):
-            _Incomplete("v", Path("/x"))  # type: ignore[abstract, call-arg]
+            _Incomplete("v", Path("/x"), ModelType.DLC, DataType.W8A16, backends={})  # type: ignore[abstract]
 
     def test_init_stores_variant_and_path(self) -> None:
         """__init__ stores _variant and _path."""
@@ -84,24 +86,24 @@ class TestBaseModel:
         model = _ConcreteModel("default", p)
         assert model.path == p
 
-    def test_backend_starts_as_none(self) -> None:
-        """_backend is None before load() is called."""
+    def test_platform_starts_as_none(self) -> None:
+        """_platform is None before load() is called."""
         model = _ConcreteModel("default", Path("/x"))
-        assert model._backend is None
+        assert model._platform is None
 
-    def test_load_sets_backend(self) -> None:
-        """load() sets _backend."""
+    def test_load_sets_platform(self) -> None:
+        """load() sets _platform."""
         model = _ConcreteModel("default", Path("/x"))
-        mock_backend = MagicMock()
-        model.load(mock_backend)
-        assert model._backend is mock_backend
+        mock_platform = MagicMock()
+        model.load(mock_platform, ComputeUnit.CPU)
+        assert model._platform is mock_platform
 
-    def test_unload_clears_backend(self) -> None:
-        """unload() clears _backend."""
+    def test_unload_clears_platform(self) -> None:
+        """unload() clears _platform."""
         model = _ConcreteModel("default", Path("/x"))
-        model._backend = MagicMock()
+        model._platform = MagicMock()
         model.unload()
-        assert model._backend is None
+        assert model._platform is None
 
 
 @pytest.mark.unit
@@ -116,13 +118,13 @@ class TestBaseModelIsLoaded:
     def test_is_loaded_true_after_load(self) -> None:
         """is_loaded is True after load() is called."""
         model = _ConcreteModel("default", Path("/x"))
-        model.load(MagicMock())
+        model.load(MagicMock(), ComputeUnit.CPU)
         assert model.is_loaded is True
 
     def test_is_loaded_false_after_unload(self) -> None:
         """is_loaded is False after unload() is called."""
         model = _ConcreteModel("default", Path("/x"))
-        model.load(MagicMock())
+        model.load(MagicMock(), ComputeUnit.CPU)
         model.unload()
         assert model.is_loaded is False
 
@@ -134,15 +136,15 @@ class TestBaseModelLoadedContextManager:
     def test_loaded_enters_and_yields_self(self) -> None:
         """loaded() yields the model itself."""
         model = _ConcreteModel("default", Path("/x"))
-        backend = MagicMock()
-        with model.loaded(backend) as m:
+        platform = MagicMock()
+        with model.loaded(platform, ComputeUnit.CPU) as m:
             assert m is model
             assert model.is_loaded is True
 
     def test_loaded_unloads_on_clean_exit(self) -> None:
         """loaded() calls unload() when the block exits normally."""
         model = _ConcreteModel("default", Path("/x"))
-        with model.loaded(MagicMock()):
+        with model.loaded(MagicMock(), ComputeUnit.CPU):
             pass
         assert model.is_loaded is False
 
@@ -150,7 +152,7 @@ class TestBaseModelLoadedContextManager:
         """loaded() calls unload() even when an exception is raised."""
         model = _ConcreteModel("default", Path("/x"))
         with pytest.raises(ValueError, match="boom"):
-            with model.loaded(MagicMock()):
+            with model.loaded(MagicMock(), ComputeUnit.CPU):
                 raise ValueError("boom")
         assert model.is_loaded is False
 
@@ -158,7 +160,7 @@ class TestBaseModelLoadedContextManager:
         """loaded() re-raises exceptions from the body."""
         model = _ConcreteModel("default", Path("/x"))
         with pytest.raises(RuntimeError, match="oops"):
-            with model.loaded(MagicMock()):
+            with model.loaded(MagicMock(), ComputeUnit.CPU):
                 raise RuntimeError("oops")
 
 
@@ -174,14 +176,14 @@ class TestBaseModelEnterExit:
     def test_exit_calls_unload(self) -> None:
         """__exit__ calls unload()."""
         model = _ConcreteModel("default", Path("/x"))
-        model.load(MagicMock())
+        model.load(MagicMock(), ComputeUnit.CPU)
         model.__exit__(None, None, None)
         assert model.is_loaded is False
 
     def test_with_block_unloads(self) -> None:
         """Using model as a with-block calls unload() on exit."""
         model = _ConcreteModel("default", Path("/x"))
-        model.load(MagicMock())
+        model.load(MagicMock(), ComputeUnit.CPU)
         with model:
             assert model.is_loaded is True
         assert model.is_loaded is False
@@ -194,7 +196,7 @@ class TestBaseModelDel:
     def test_del_warns_and_unloads_loaded_model(self) -> None:
         """__del__ emits ResourceWarning and unloads if model is loaded."""
         model = _ConcreteModel("default", Path("/x"))
-        model.load(MagicMock())
+        model.load(MagicMock(), ComputeUnit.CPU)
         with pytest.warns(ResourceWarning, match="garbage-collected while still loaded"):
             model.__del__()
         assert model.is_loaded is False
@@ -211,11 +213,11 @@ class TestBaseModelDel:
         class _FailingModel(BaseModel[object, object, object, object]):
             def __init__(self) -> None:
                 """Initialize."""
-                super().__init__("default", Path("/x"), backends={})
+                super().__init__("default", Path("/x"), ModelType.DLC, DataType.W8A16, backends={})
 
-            def load(self, backend: object) -> None:
+            def load(self, platform: Platform, unit: ComputeUnit) -> None:
                 """Load."""
-                self._backend = backend  # type: ignore[assignment]
+                self._platform = platform
 
             def unload(self) -> None:
                 """Always raises."""
@@ -245,7 +247,7 @@ class TestBaseModelDel:
                 return True, ""
 
         model = _FailingModel()
-        model.load(MagicMock())
+        model.load(MagicMock(), ComputeUnit.CPU)
         with pytest.warns(ResourceWarning):
             model.__del__()  # Should not raise despite unload() failing
 

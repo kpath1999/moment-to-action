@@ -11,15 +11,10 @@ from moment_to_action.utils.web import download_file
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.models._formats import ModelFormat
-
 
 @attrs.frozen
 class HuggingFaceSource:
     """Model files sourced from HuggingFace Hub."""
-
-    format: ModelFormat
-    """Format of the model file (e.g. ONNX, TFLite)."""
 
     hf_repo_id: str
     """HuggingFace Hub repository identifier (e.g. 'user/repo')."""
