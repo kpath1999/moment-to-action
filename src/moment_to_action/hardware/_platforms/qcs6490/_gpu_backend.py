@@ -7,6 +7,7 @@ import os
 from typing import TYPE_CHECKING
 
 from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._platforms._shared import _load_litert_interpreter
 from moment_to_action.hardware._platforms.qcs6490._models import QCS6490TfliteModel
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
@@ -14,26 +15,6 @@ if TYPE_CHECKING:
     from moment_to_action.hardware._loaded_model import LoadedModel
 
 logger = logging.getLogger(__name__)
-
-
-def _load_litert_interpreter(path: str, delegates: list) -> object:
-    """Load and allocate a LiteRT interpreter with the given delegates.
-
-    Args:
-        path: Filesystem path to the ``.tflite`` model file.
-        delegates: List of delegate objects (empty = CPU/XNNPACK).
-
-    Returns:
-        An allocated LiteRT interpreter.
-    """
-    try:
-        from ai_edge_litert.interpreter import Interpreter  # noqa: PLC0415
-    except ImportError:  # pragma: no cover
-        from tensorflow.lite.python.interpreter import Interpreter  # noqa: PLC0415
-
-    interp = Interpreter(model_path=path, experimental_delegates=delegates)
-    interp.allocate_tensors()
-    return interp
 
 
 class QCS6490GPUBackend(ComputeBackend):
@@ -84,6 +65,6 @@ class QCS6490GPUBackend(ComputeBackend):
         """
         p = os.fspath(path)
         if p not in self._interp_cache:
-            self._interp_cache[p] = _load_litert_interpreter(p, [])
+            self._interp_cache[p] = _load_litert_interpreter(p)
             logger.info("QCS6490GPUBackend: loaded %s (CPU fallback)", p)
         return QCS6490TfliteModel(unit=ComputeUnit.GPU, interp=self._interp_cache[p])

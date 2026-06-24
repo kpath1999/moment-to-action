@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import onnxruntime as ort
 
 from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._platforms._shared import _load_litert_interpreter
 from moment_to_action.hardware._platforms.x86_64._models import (
     X86_64DLCModel,
     X86_64ONNXModel,
@@ -23,25 +24,6 @@ logger = logging.getLogger(__name__)
 
 # QAIRT CPU backend string.
 _QAIRT_CPU_BACKEND = "CPU"
-
-
-def _load_litert_interpreter(path: str) -> object:
-    """Load and allocate a LiteRT interpreter for CPU inference (XNNPACK).
-
-    Args:
-        path: Filesystem path to the ``.tflite`` model file.
-
-    Returns:
-        An allocated LiteRT interpreter.
-    """
-    try:
-        from ai_edge_litert.interpreter import Interpreter  # noqa: PLC0415
-    except ImportError:  # pragma: no cover
-        from tensorflow.lite.python.interpreter import Interpreter  # noqa: PLC0415
-
-    interp = Interpreter(model_path=path, experimental_delegates=[])
-    interp.allocate_tensors()
-    return interp
 
 
 class X86_64CPUBackend(ComputeBackend):  # noqa: N801

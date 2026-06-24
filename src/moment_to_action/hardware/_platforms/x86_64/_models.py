@@ -9,45 +9,13 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 
 from moment_to_action.hardware._loaded_model import LoadedModel
+from moment_to_action.hardware._platforms._shared import _tflite_set_inputs
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 if TYPE_CHECKING:
     import onnxruntime as ort
 
 logger = logging.getLogger(__name__)
-
-
-def _tflite_set_inputs(interp: Any, inputs: np.ndarray | dict[str, np.ndarray]) -> None:
-    """Feed input tensors into a LiteRT interpreter.
-
-    Args:
-        interp: An allocated LiteRT interpreter.
-        inputs: Single ndarray (single-input) or name→tensor dict (multi-input).
-
-    Raises:
-        KeyError: If a named input is not found in the model.
-        TypeError: If a tensor dtype does not match the model's expected dtype.
-    """
-    input_details = interp.get_input_details()
-
-    if isinstance(inputs, np.ndarray):
-        interp.set_tensor(input_details[0]["index"], inputs)
-        return
-
-    name_to_detail = {d["name"]: d for d in input_details}
-    for name, tensor in inputs.items():
-        if name not in name_to_detail:
-            available = list(name_to_detail.keys())
-            msg = f"Input name {name!r} not found in model. Available: {available}"
-            raise KeyError(msg)
-        detail = name_to_detail[name]
-        if tensor.dtype != detail["dtype"]:
-            msg = (
-                f"Input {name!r} dtype mismatch: "
-                f"got {tensor.dtype}, model expects {detail['dtype']}"
-            )
-            raise TypeError(msg)
-        interp.set_tensor(detail["index"], tensor)
 
 
 class X86_64TfliteModel(LoadedModel):  # noqa: N801

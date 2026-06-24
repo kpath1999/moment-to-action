@@ -7,6 +7,7 @@ import os
 from typing import TYPE_CHECKING
 
 from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._platforms._shared import _load_litert_interpreter
 from moment_to_action.hardware._platforms.qcs6490._models import (
     QCS6490DLCModel,
     QCS6490TfliteModel,
@@ -46,35 +47,6 @@ def _load_litert_delegate() -> list:
         raise RuntimeError(msg) from e
     logger.info("QNN HTP delegate loaded from %s", _QNN_DELEGATE_PATH)
     return [delegate]
-
-
-def _load_litert_interpreter(path: str, delegates: list) -> object:
-    """Load and allocate a LiteRT interpreter with the given delegates.
-
-    Args:
-        path: Filesystem path to the ``.tflite`` model file.
-        delegates: List of delegate objects (may be empty for CPU).
-
-    Returns:
-        An allocated LiteRT interpreter.
-
-    Raises:
-        RuntimeError: If the interpreter or delegate fails to initialize.
-    """
-    try:
-        from ai_edge_litert.interpreter import Interpreter  # noqa: PLC0415
-    except ImportError:  # pragma: no cover
-        from tensorflow.lite.python.interpreter import Interpreter  # noqa: PLC0415
-
-    try:
-        interp = Interpreter(model_path=path, experimental_delegates=delegates)
-    except RuntimeError as e:  # pragma: no cover
-        if delegates:
-            msg = f"Delegate failed for {path!r}: {e}"
-            raise RuntimeError(msg) from e
-        raise
-    interp.allocate_tensors()
-    return interp
 
 
 class QCS6490HTPBackend(ComputeBackend):
