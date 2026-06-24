@@ -12,9 +12,6 @@ import numpy as np
 import rich_click as click
 
 from moment_to_action.hardware import ComputeUnit, Platform
-
-if TYPE_CHECKING:
-    from moment_to_action.config import AppConfig
 from moment_to_action.hardware._types import ModelType
 from moment_to_action.models import ModelID
 from moment_to_action.models.image._base import ImageModel
@@ -23,6 +20,9 @@ from moment_to_action.models.image.detection.rf_detr._model import RFDETRModel
 from moment_to_action.models.image.detection.rtmdet._model import RTMDetModel
 from moment_to_action.models.image.detection.yolo._model import YOLOModel
 from moment_to_action.utils.cli import GlobalData, pass_global_data
+
+if TYPE_CHECKING:
+    from moment_to_action.config import AppConfig
 
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp"}
 
