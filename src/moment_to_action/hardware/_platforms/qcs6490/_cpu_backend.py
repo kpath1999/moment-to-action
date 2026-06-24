@@ -1,4 +1,4 @@
-"""QCS6490 CPU backend — TFLite via LiteRT/XNNPACK + ONNX Runtime."""
+"""QCS6490 CPU backend — TFLite via LiteRT/XNNPACK + ONNX Runtime + Torch + llama.cpp."""
 
 from __future__ import annotations
 
@@ -9,11 +9,9 @@ from typing import TYPE_CHECKING
 import onnxruntime as ort
 
 from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._loaded_models._onnx import OnnxModel
+from moment_to_action.hardware._loaded_models._tflite import TfliteModel
 from moment_to_action.hardware._platforms._shared import _load_litert_interpreter
-from moment_to_action.hardware._platforms.qcs6490._models import (
-    QCS6490ONNXModel,
-    QCS6490TfliteModel,
-)
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 if TYPE_CHECKING:
@@ -25,17 +23,20 @@ logger = logging.getLogger(__name__)
 class QCS6490CPUBackend(ComputeBackend):
     """CPU inference backend for the QCS6490.
 
-    Handles TFLite models via LiteRT/XNNPACK and ONNX models via ONNX Runtime.
+    Handles TFLite models via LiteRT/XNNPACK, ONNX models via ONNX Runtime,
+    PyTorch models, and GGUF models via llama-server on CPU (``--ngl 0``).
     This backend is always available — it is the unconditional fallback when
     the NPU or GPU backend cannot be initialized.
     """
 
     _SUPPORTED_DTYPES: frozenset[DataType] = frozenset({DataType.FP32})
-    _SUPPORTED_FORMATS: frozenset[ModelType] = frozenset({ModelType.TFLITE, ModelType.ONNX})
+    _SUPPORTED_FORMATS: frozenset[ModelType] = frozenset(
+        {ModelType.TFLITE, ModelType.ONNX, ModelType.TORCH, ModelType.LLAMA_CPP}
+    )
 
     def __init__(self) -> None:
         """Initialize the QCS6490 CPU backend."""
-        logger.info("QCS6490CPUBackend: initialized (LiteRT + ONNX Runtime)")
+        logger.info("QCS6490CPUBackend: initialized (LiteRT + ONNX Runtime + Torch + llama.cpp)")
 
     @property
     def unit(self) -> ComputeUnit:
@@ -49,7 +50,7 @@ class QCS6490CPUBackend(ComputeBackend):
 
     @property
     def supported_formats(self) -> set[ModelType]:
-        """Supported formats: TFLITE and ONNX."""
+        """Supported formats: TFLITE, ONNX, TORCH, and LLAMA_CPP."""
         return set(self._SUPPORTED_FORMATS)
 
     def load_tflite(self, path: str | os.PathLike[str]) -> LoadedModel:
@@ -59,12 +60,13 @@ class QCS6490CPUBackend(ComputeBackend):
             path: Path to the ``.tflite`` model file.
 
         Returns:
-            A :class:`~_models.QCS6490TfliteModel` backed by XNNPACK.
+            A :class:`~moment_to_action.hardware._loaded_models.TfliteModel`
+            backed by XNNPACK.
         """
         p = os.fspath(path)
         interp = _load_litert_interpreter(p)
         logger.info("QCS6490CPUBackend: loaded %s on CPU", p)
-        return QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=interp)
+        return TfliteModel(unit=ComputeUnit.CPU, interp=interp)
 
     def load_onnx(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load an ONNX model on CPU via ONNX Runtime.
@@ -73,9 +75,61 @@ class QCS6490CPUBackend(ComputeBackend):
             path: Path to the ``.onnx`` model file.
 
         Returns:
-            A :class:`~_models.QCS6490ONNXModel` backed by CPU EP.
+            An :class:`~moment_to_action.hardware._loaded_models.OnnxModel`
+            backed by CPU EP.
         """
         p = os.fspath(path)
         session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
         logger.info("QCS6490CPUBackend: loaded %s via onnxruntime", p)
-        return QCS6490ONNXModel(session=session)
+        return OnnxModel(unit=ComputeUnit.CPU, session=session)
+
+    def load_torch(self, path: str | os.PathLike[str]) -> LoadedModel:
+        """Load a PyTorch model on CPU.
+
+        Args:
+            path: Path to the saved model file.
+
+        Returns:
+            A :class:`~moment_to_action.hardware._loaded_models.TorchModel`
+            running on CPU.
+        """
+        import torch  # noqa: PLC0415
+
+        from moment_to_action.hardware._loaded_models._torch import TorchModel  # noqa: PLC0415
+
+        p = os.fspath(path)
+        model = torch.load(p, map_location="cpu", weights_only=False)
+        logger.info("QCS6490CPUBackend: loaded %s via PyTorch on CPU", p)
+        return TorchModel(unit=ComputeUnit.CPU, model=model)
+
+    def load_llama_cpp(
+        self,
+        path: str | os.PathLike[str],
+        *,
+        mmproj: str | os.PathLike[str] | None = None,
+        server_path: str | os.PathLike[str] | None = None,
+        port: int | None = None,
+    ) -> LoadedModel:
+        """Load a GGUF model via llama-server on CPU (``--ngl 0``).
+
+        Args:
+            path: Path to the ``.gguf`` model file.
+            mmproj: Optional path to the multimodal projector file.
+            server_path: Path to the ``llama-server`` binary.
+            port: Port for llama-server. If ``None``, a free port is assigned.
+
+        Returns:
+            A :class:`~moment_to_action.hardware._loaded_models.LlamaModel`
+            running on CPU.
+        """
+        from moment_to_action.hardware._loaded_models._llama import (  # noqa: PLC0415
+            _start_llama_model,
+        )
+
+        p = os.fspath(path)
+        mp = os.fspath(mmproj) if mmproj is not None else None
+        sp = os.fspath(server_path) if server_path is not None else None
+        logger.info("QCS6490CPUBackend: loading %s via llama-server (CPU)", p)
+        return _start_llama_model(
+            path=p, mmproj=mp, server_path=sp, port=port, unit=ComputeUnit.CPU, cpu_only=True
+        )

@@ -28,10 +28,8 @@ class TestQwen3Model:
             ModelFormat.GGUF,
             backends={ComputeUnit.GPU: {"model": "Qwen3-4B-Q4_K_M.gguf"}},
             input_layout=None,
-            server_path=Path("/usr/bin/llama-server"),
-            port=8080,
             system_prompt="Be concise.",
             max_tokens=128,
         )
-        assert model._port == 8080
         assert model._gguf_path == Path("/fake/dir/Qwen3-4B-Q4_K_M.gguf")
+        assert model._max_tokens == 128

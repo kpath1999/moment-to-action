@@ -1,4 +1,4 @@
-"""x86_64 CPU backend — TFLite via LiteRT/XNNPACK + ONNX Runtime + DLC debug."""
+"""x86_64 CPU backend — TFLite via LiteRT/XNNPACK + ONNX Runtime + DLC debug + Torch + llama.cpp."""
 
 from __future__ import annotations
 
@@ -9,12 +9,10 @@ from typing import TYPE_CHECKING
 import onnxruntime as ort
 
 from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._loaded_models._dlc import DlcModel
+from moment_to_action.hardware._loaded_models._onnx import OnnxModel
+from moment_to_action.hardware._loaded_models._tflite import TfliteModel
 from moment_to_action.hardware._platforms._shared import _load_litert_interpreter
-from moment_to_action.hardware._platforms.x86_64._models import (
-    X86_64DLCModel,
-    X86_64ONNXModel,
-    X86_64TfliteModel,
-)
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 if TYPE_CHECKING:
@@ -29,20 +27,23 @@ _QAIRT_CPU_BACKEND = "CPU"
 class X86_64CPUBackend(ComputeBackend):  # noqa: N801
     """CPU inference backend for x86_64.
 
-    Handles TFLite via LiteRT/XNNPACK, ONNX via ONNX Runtime, and DLC via
-    QAIRT CPU backend (for local debugging of QCS6490 models without a device).
+    Handles TFLite via LiteRT/XNNPACK, ONNX via ONNX Runtime, DLC via
+    QAIRT CPU backend (for local debugging of QCS6490 models without a device),
+    PyTorch models, and GGUF models via llama-server on CPU (``--ngl 0``).
 
     DLC support requires the QAIRT SDK to be installed (``m2a qairt install``).
     """
 
     _SUPPORTED_DTYPES: frozenset[DataType] = frozenset({DataType.FP32})
     _SUPPORTED_FORMATS: frozenset[ModelType] = frozenset(
-        {ModelType.TFLITE, ModelType.ONNX, ModelType.DLC}
+        {ModelType.TFLITE, ModelType.ONNX, ModelType.DLC, ModelType.TORCH, ModelType.LLAMA_CPP}
     )
 
     def __init__(self) -> None:
         """Initialize the x86_64 CPU backend."""
-        logger.info("X86_64CPUBackend: initialized (LiteRT + ONNX Runtime + DLC debug)")
+        logger.info(
+            "X86_64CPUBackend: initialized (LiteRT + ONNX Runtime + DLC debug + Torch + llama.cpp)"
+        )
 
     @property
     def unit(self) -> ComputeUnit:
@@ -56,7 +57,7 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
 
     @property
     def supported_formats(self) -> set[ModelType]:
-        """Supported formats: TFLITE, ONNX, and DLC (debug)."""
+        """Supported formats: TFLITE, ONNX, DLC (debug), TORCH, and LLAMA_CPP."""
         return set(self._SUPPORTED_FORMATS)
 
     def load_tflite(self, path: str | os.PathLike[str]) -> LoadedModel:
@@ -66,12 +67,13 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
             path: Path to the ``.tflite`` model file.
 
         Returns:
-            An :class:`~_models.X86_64TfliteModel` backed by XNNPACK.
+            A :class:`~moment_to_action.hardware._loaded_models.TfliteModel`
+            backed by XNNPACK.
         """
         p = os.fspath(path)
         interp = _load_litert_interpreter(p)
         logger.info("X86_64CPUBackend: loaded %s on CPU", p)
-        return X86_64TfliteModel(interp=interp)
+        return TfliteModel(unit=ComputeUnit.CPU, interp=interp)
 
     def load_onnx(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load an ONNX model on CPU via ONNX Runtime.
@@ -80,12 +82,13 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
             path: Path to the ``.onnx`` model file.
 
         Returns:
-            An :class:`~_models.X86_64ONNXModel` backed by CPU EP.
+            An :class:`~moment_to_action.hardware._loaded_models.OnnxModel`
+            backed by CPU EP.
         """
         p = os.fspath(path)
         session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
         logger.info("X86_64CPUBackend: loaded %s via onnxruntime", p)
-        return X86_64ONNXModel(session=session)
+        return OnnxModel(unit=ComputeUnit.CPU, session=session)
 
     def load_dlc(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load a DLC model via QAIRT CPU backend (debug path).
@@ -96,7 +99,8 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
             path: Path to the ``.dlc`` model file.
 
         Returns:
-            An :class:`~_models.X86_64DLCModel` initialized on the CPU backend.
+            A :class:`~moment_to_action.hardware._loaded_models.DlcModel`
+            initialized on the CPU backend.
 
         Raises:
             RuntimeError: If the QAIRT SDK is not installed.
@@ -109,4 +113,55 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
         raw = qairt.load(os.fspath(path))
         raw.initialize(backend=_QAIRT_CPU_BACKEND)
         logger.info("X86_64CPUBackend: loaded DLC %s on CPU backend", path)
-        return X86_64DLCModel(raw=raw)
+        return DlcModel(unit=ComputeUnit.CPU, raw=raw)
+
+    def load_torch(self, path: str | os.PathLike[str]) -> LoadedModel:
+        """Load a PyTorch model on CPU.
+
+        Args:
+            path: Path to the saved model file.
+
+        Returns:
+            A :class:`~moment_to_action.hardware._loaded_models.TorchModel`
+            running on CPU.
+        """
+        import torch  # noqa: PLC0415
+
+        from moment_to_action.hardware._loaded_models._torch import TorchModel  # noqa: PLC0415
+
+        p = os.fspath(path)
+        model = torch.load(p, map_location="cpu", weights_only=False)
+        logger.info("X86_64CPUBackend: loaded %s via PyTorch on CPU", p)
+        return TorchModel(unit=ComputeUnit.CPU, model=model)
+
+    def load_llama_cpp(
+        self,
+        path: str | os.PathLike[str],
+        *,
+        mmproj: str | os.PathLike[str] | None = None,
+        server_path: str | os.PathLike[str] | None = None,
+        port: int | None = None,
+    ) -> LoadedModel:
+        """Load a GGUF model via llama-server on CPU (``--ngl 0``).
+
+        Args:
+            path: Path to the ``.gguf`` model file.
+            mmproj: Optional path to the multimodal projector file.
+            server_path: Path to the ``llama-server`` binary.
+            port: Port for llama-server. If ``None``, a free port is assigned.
+
+        Returns:
+            A :class:`~moment_to_action.hardware._loaded_models.LlamaModel`
+            running on CPU.
+        """
+        from moment_to_action.hardware._loaded_models._llama import (  # noqa: PLC0415
+            _start_llama_model,
+        )
+
+        p = os.fspath(path)
+        mp = os.fspath(mmproj) if mmproj is not None else None
+        sp = os.fspath(server_path) if server_path is not None else None
+        logger.info("X86_64CPUBackend: loading %s via llama-server (CPU)", p)
+        return _start_llama_model(
+            path=p, mmproj=mp, server_path=sp, port=port, unit=ComputeUnit.CPU, cpu_only=True
+        )

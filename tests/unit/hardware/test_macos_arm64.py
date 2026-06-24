@@ -7,13 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from moment_to_action.hardware._loaded_models import OnnxModel, TfliteModel, TorchModel
 from moment_to_action.hardware._platforms.macos_arm64 import (
     MacOSARM64CPUBackend,
     MacOSARM64ResourceMonitor,
-)
-from moment_to_action.hardware._platforms.macos_arm64._models import (
-    MacOSARM64ONNXModel,
-    MacOSARM64TfliteModel,
 )
 from moment_to_action.hardware._types import (
     ComputeUnit,
@@ -47,7 +44,7 @@ class TestMacOSARM64CPUBackend:
         assert ModelType.DLC not in fmts
 
     def test_load_tflite_returns_tflite_model(self) -> None:
-        """load_tflite returns a MacOSARM64TfliteModel."""
+        """load_tflite returns a TfliteModel with CPU unit."""
         mock_interp = MagicMock()
         with patch(
             "moment_to_action.hardware._platforms.macos_arm64._cpu_backend._load_litert_interpreter",
@@ -55,10 +52,11 @@ class TestMacOSARM64CPUBackend:
         ):
             model = MacOSARM64CPUBackend().load_tflite("/tmp/model.tflite")
 
-        assert isinstance(model, MacOSARM64TfliteModel)
+        assert isinstance(model, TfliteModel)
+        assert model.unit == ComputeUnit.CPU
 
     def test_load_onnx_returns_onnx_model(self) -> None:
-        """load_onnx returns a MacOSARM64ONNXModel."""
+        """load_onnx returns an OnnxModel with CPU unit."""
         mock_session = MagicMock()
         with patch(
             "moment_to_action.hardware._platforms.macos_arm64._cpu_backend.ort.InferenceSession",
@@ -66,17 +64,43 @@ class TestMacOSARM64CPUBackend:
         ):
             model = MacOSARM64CPUBackend().load_onnx("/tmp/model.onnx")
 
-        assert isinstance(model, MacOSARM64ONNXModel)
+        assert isinstance(model, OnnxModel)
+        assert model.unit == ComputeUnit.CPU
 
     def test_load_dlc_raises_not_implemented(self) -> None:
         """load_dlc raises NotImplementedError (not in supported_formats)."""
         with pytest.raises(NotImplementedError):
             MacOSARM64CPUBackend().load_dlc("/tmp/model.dlc")
 
-    def test_load_torch_raises_not_implemented(self) -> None:
-        """load_torch raises NotImplementedError (not in supported_formats)."""
-        with pytest.raises(NotImplementedError):
-            MacOSARM64CPUBackend().load_torch("/tmp/model.pt")
+    def test_load_torch_returns_torch_model(self) -> None:
+        """load_torch returns a TorchModel with CPU unit."""
+        mock_module = MagicMock()
+        with patch("torch.load", return_value=mock_module):
+            model = MacOSARM64CPUBackend().load_torch("/tmp/model.pt")
+
+        assert isinstance(model, TorchModel)
+        assert model.unit == ComputeUnit.CPU
+
+    def test_load_llama_cpp_returns_model(self) -> None:
+        """load_llama_cpp calls _start_llama_model with cpu_only=True."""
+        mock_model = MagicMock()
+        with patch(
+            "moment_to_action.hardware._loaded_models._llama._start_llama_model",
+            return_value=mock_model,
+        ) as mock_start:
+            result = MacOSARM64CPUBackend().load_llama_cpp(
+                "/tmp/model.gguf", server_path="/usr/bin/llama-server", port=8080
+            )
+
+        mock_start.assert_called_once_with(
+            path="/tmp/model.gguf",
+            mmproj=None,
+            server_path="/usr/bin/llama-server",
+            port=8080,
+            unit=ComputeUnit.CPU,
+            cpu_only=True,
+        )
+        assert result is mock_model
 
 
 @pytest.mark.unit
@@ -152,9 +176,9 @@ class TestMacOSARM64ResourceMonitor:
 
 @pytest.mark.unit
 class TestMacOSARM64TfliteModel:
-    """Tests for MacOSARM64TfliteModel properties and run/unload."""
+    """Tests for TfliteModel on macOS arm64 (CPU unit)."""
 
-    def _make_model(self) -> MacOSARM64TfliteModel:
+    def _make_model(self) -> TfliteModel:
         """Return a TfliteModel with a mock interpreter."""
         import numpy as np
 
@@ -164,7 +188,7 @@ class TestMacOSARM64TfliteModel:
         ]
         mock_interp.get_output_details.return_value = [{"index": 0}]
         mock_interp.get_tensor.return_value = np.zeros((1, 10))
-        return MacOSARM64TfliteModel(interp=mock_interp)
+        return TfliteModel(unit=ComputeUnit.CPU, interp=mock_interp)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
@@ -210,10 +234,10 @@ class TestMacOSARM64TfliteModel:
 
 @pytest.mark.unit
 class TestMacOSARM64ONNXModel:
-    """Tests for MacOSARM64ONNXModel properties and run/unload."""
+    """Tests for OnnxModel on macOS arm64 (CPU unit)."""
 
-    def _make_model(self) -> MacOSARM64ONNXModel:
-        """Return an ONNXModel with a mock session."""
+    def _make_model(self) -> OnnxModel:
+        """Return an OnnxModel with a mock session."""
         import numpy as np
 
         mock_session = MagicMock()
@@ -221,7 +245,7 @@ class TestMacOSARM64ONNXModel:
         mock_input.name = "input"
         mock_session.get_inputs.return_value = [mock_input]
         mock_session.run.return_value = [np.zeros((1, 10))]
-        return MacOSARM64ONNXModel(session=mock_session)
+        return OnnxModel(unit=ComputeUnit.CPU, session=mock_session)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
@@ -267,13 +291,13 @@ class TestMacOSARM64ONNXModel:
 
 @pytest.mark.unit
 class TestMacOSARM64TfliteSetInputs:
-    """Tests for _tflite_set_inputs in macos_arm64._models (KeyError/TypeError paths)."""
+    """Tests for _tflite_set_inputs from hardware._platforms._shared (KeyError/TypeError paths)."""
 
     def test_missing_key_raises_key_error(self) -> None:
         """KeyError when input name not found in model."""
         import numpy as np
 
-        from moment_to_action.hardware._platforms.macos_arm64._models import _tflite_set_inputs
+        from moment_to_action.hardware._platforms._shared import _tflite_set_inputs
 
         interp = MagicMock()
         interp.get_input_details.return_value = [{"index": 0, "name": "img", "dtype": np.float32}]
@@ -284,7 +308,7 @@ class TestMacOSARM64TfliteSetInputs:
         """TypeError when tensor dtype does not match model's expected dtype."""
         import numpy as np
 
-        from moment_to_action.hardware._platforms.macos_arm64._models import _tflite_set_inputs
+        from moment_to_action.hardware._platforms._shared import _tflite_set_inputs
 
         interp = MagicMock()
         interp.get_input_details.return_value = [{"index": 0, "name": "img", "dtype": np.float32}]

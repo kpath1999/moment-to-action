@@ -18,6 +18,7 @@ from moment_to_action.stages._base import Stage
 if TYPE_CHECKING:
     import os
 
+    from moment_to_action.config import AppConfig
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
     from moment_to_action.models import ModelID, ModelManager
@@ -54,6 +55,12 @@ class ReasoningStage(Stage):
 
     Input:  DetectionMessage
     Output: ReasoningMessage
+
+    Args:
+        model_id: Optional model ID to load. If ``None``, runs in stub mode.
+        system_prompt: System prompt for the LLM. Defaults to a generic scene description prompt.
+        manager: Model manager; required when ``model_id`` is set.
+        config: Application configuration; required when ``model_id`` is set.
     """
 
     _platform: Platform | None
@@ -64,6 +71,7 @@ class ReasoningStage(Stage):
         model_id: ModelID | None = None,
         system_prompt: str = "",
         manager: ModelManager | None = None,
+        config: AppConfig | None = None,
     ) -> None:
         super().__init__()
         self._handle = None
@@ -72,9 +80,12 @@ class ReasoningStage(Stage):
             if manager is None:
                 msg = "Model manager is required when a model ID is provided!"
                 raise ValueError(msg)
+            if config is None:
+                msg = "AppConfig is required when a model ID is provided!"
+                raise ValueError(msg)
 
             model_path = manager.get_path(model_id)
-            self._platform = Platform()
+            self._platform = Platform(config)
             self._handle = _load_by_extension(self._platform, model_path)
             logger.info("ReasoningStage: loaded %s", model_path)
         else:

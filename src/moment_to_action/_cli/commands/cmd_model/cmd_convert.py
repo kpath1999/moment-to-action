@@ -117,7 +117,7 @@ def convert(
     calibration_data = np.vstack(prepared_list).astype(np.float32)
 
     # Run ONNX model on each calibration image to capture reference outputs
-    platform = Platform()
+    platform = Platform(data.config)
     model.load(platform, ComputeUnit.CPU)
     all_raw: list[list[np.ndarray]] = []
     for i in range(len(calibration_data)):

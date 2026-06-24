@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pytest
 
+from moment_to_action.config import AppConfig
 from moment_to_action.hardware._types import ComputeUnit
 from moment_to_action.messages import DetectionMessage
 from moment_to_action.messages.llm import ReasoningMessage
@@ -369,6 +370,16 @@ class TestReasoningStage:
         with pytest.raises(ValueError, match="Model manager is required"):
             ReasoningStage(model_id=ModelID.YOLO_V8, manager=None)
 
+    def test_config_required_with_model_id(self) -> None:
+        """Test that an error is thrown if model_id and manager provided but not config."""
+        from unittest.mock import MagicMock
+
+        from moment_to_action.models import ModelID
+
+        mock_manager = MagicMock()
+        with pytest.raises(ValueError, match="AppConfig is required"):
+            ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager, config=None)
+
     def test_reasoning_stage_with_model_id_mocked(self) -> None:
         """Test ReasoningStage initialisation with a model_id (mocked backend + manager)."""
         from pathlib import Path
@@ -388,7 +399,9 @@ class TestReasoningStage:
             "moment_to_action.stages.llm._reasoning.Platform",
             return_value=mock_platform,
         ):
-            stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
+            stage = ReasoningStage(
+                model_id=ModelID.YOLO_V8, manager=mock_manager, config=AppConfig()
+            )
 
         assert stage._platform is mock_platform
         assert stage._handle is mock_handle
@@ -414,7 +427,9 @@ class TestReasoningStage:
             "moment_to_action.stages.llm._reasoning.Platform",
             return_value=mock_platform,
         ):
-            stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
+            stage = ReasoningStage(
+                model_id=ModelID.YOLO_V8, manager=mock_manager, config=AppConfig()
+            )
 
         assert stage._handle is mock_handle
         mock_platform.load_tflite.assert_called_once_with(ComputeUnit.CPU, fake_path)
@@ -438,7 +453,9 @@ class TestReasoningStage:
             "moment_to_action.stages.llm._reasoning.Platform",
             return_value=mock_platform,
         ):
-            stage = ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
+            stage = ReasoningStage(
+                model_id=ModelID.YOLO_V8, manager=mock_manager, config=AppConfig()
+            )
 
         assert stage._handle is mock_handle
         mock_platform.load_dlc.assert_called_once_with(ComputeUnit.CPU, fake_path)
@@ -456,4 +473,4 @@ class TestReasoningStage:
 
         with patch("moment_to_action.stages.llm._reasoning.Platform"):
             with pytest.raises(ValueError, match="Unknown model format"):
-                ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager)
+                ReasoningStage(model_id=ModelID.YOLO_V8, manager=mock_manager, config=AppConfig())

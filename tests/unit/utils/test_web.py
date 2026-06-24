@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from moment_to_action.utils.web import download_file, stream_with_progress
+from moment_to_action.utils.web import download_file, pick_free_port, stream_with_progress
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -100,3 +100,18 @@ class TestDownloadFile:
         with mock.patch("httpx.stream", return_value=_stream_ctx(response)):
             with pytest.raises(RuntimeError, match="boom"):
                 download_file("http://x", dest, show_progress=False)
+
+
+@pytest.mark.unit
+class TestPickFreePort:
+    """Tests for pick_free_port."""
+
+    def test_returns_int(self) -> None:
+        """pick_free_port returns an integer port number."""
+        port = pick_free_port()
+        assert isinstance(port, int)
+
+    def test_port_in_valid_range(self) -> None:
+        """pick_free_port returns a port in the valid range (1024-65535)."""
+        port = pick_free_port()
+        assert 1024 <= port <= 65535

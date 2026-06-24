@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from moment_to_action.config import AppConfig
 from moment_to_action.hardware import BenchmarkResult, Platform
 from moment_to_action.hardware._backend import ComputeBackend
 from moment_to_action.hardware._loaded_model import LoadedModel
@@ -80,7 +81,7 @@ class TestPlatformProperties:
                 self._backends = {ComputeUnit.CPU: MagicMock()}
 
             mock_init.side_effect = _setup
-            return Platform()
+            return Platform(AppConfig())
 
     def test_platform_type_property(self) -> None:
         """platform_type returns the detected PlatformType."""
@@ -115,7 +116,7 @@ class TestPlatformDetection:
             with patch.object(
                 Platform, "_init_x86_64", autospec=True, side_effect=self._stub_init
             ) as mock_init:
-                Platform()
+                Platform(AppConfig())
                 mock_init.assert_called_once()
 
     def test_init_qcs6490_called_on_qcs6490(self) -> None:
@@ -125,7 +126,7 @@ class TestPlatformDetection:
             with patch.object(
                 Platform, "_init_qcs6490", autospec=True, side_effect=self._stub_init
             ) as mock_init:
-                Platform()
+                Platform(AppConfig())
                 mock_init.assert_called_once()
 
     def test_init_macos_arm64_called_on_macos(self) -> None:
@@ -135,7 +136,7 @@ class TestPlatformDetection:
             with patch.object(
                 Platform, "_init_macos_arm64", autospec=True, side_effect=self._stub_init
             ) as mock_init:
-                Platform()
+                Platform(AppConfig())
                 mock_init.assert_called_once()
 
 
@@ -157,7 +158,7 @@ class TestPlatformLoadDelegation:
                 self._backends = {ComputeUnit.CPU: mock_cpu}
 
             mock_init.side_effect = _setup
-            p = Platform()
+            p = Platform(AppConfig())
         return p, mock_cpu
 
     def test_load_tflite_delegates(self) -> None:
@@ -213,7 +214,12 @@ class TestPlatformLoadDelegation:
 
         result = p.load_llama_cpp(ComputeUnit.CPU, path, mmproj=mmproj)
 
-        mock_cpu.load_llama_cpp.assert_called_once_with(path, _mmproj=mmproj)
+        mock_cpu.load_llama_cpp.assert_called_once_with(
+            path,
+            mmproj=mmproj,
+            server_path=AppConfig().llama_server_path,
+            port=AppConfig().llama_server_port,
+        )
         assert result is mock_cpu.load_llama_cpp.return_value
 
     def test_unknown_unit_raises_value_error(self) -> None:
@@ -241,7 +247,7 @@ class TestPlatformBenchmark:
                 self._backends = {ComputeUnit.CPU: MagicMock()}
 
             mock_init.side_effect = _setup
-            return Platform()
+            return Platform(AppConfig())
 
     def test_benchmark_returns_benchmark_result(self) -> None:
         """benchmark() returns a BenchmarkResult."""
@@ -573,7 +579,7 @@ class TestPlatformInitMethods:
                         self._backends = {ComputeUnit.CPU: mock_cpu}
 
                     mock_init.side_effect = _setup
-                    return Platform()
+                    return Platform(AppConfig())
 
             if platform_type == PlatformType.MACOS_ARM64:
                 mock_cpu = MagicMock()
@@ -590,7 +596,7 @@ class TestPlatformInitMethods:
                         self._backends = {ComputeUnit.CPU: mock_cpu}
 
                     mock_init.side_effect = _setup_mac
-                    return Platform()
+                    return Platform(AppConfig())
 
             msg = f"Unsupported type: {platform_type}"
             raise ValueError(msg)
@@ -611,7 +617,7 @@ class TestPlatformInitMethods:
             ),
         ):
             mock_detect.return_value = PlatformType.X86_64
-            p = Platform()
+            p = Platform(AppConfig())
         assert ComputeUnit.CPU in p.supported_units
 
     def test_init_macos_arm64_creates_cpu_backend(self) -> None:
@@ -630,7 +636,7 @@ class TestPlatformInitMethods:
             ),
         ):
             mock_detect.return_value = PlatformType.MACOS_ARM64
-            p = Platform()
+            p = Platform(AppConfig())
         assert ComputeUnit.CPU in p.supported_units
 
     def test_init_qcs6490_cpu_always_registered(self) -> None:
@@ -648,10 +654,10 @@ class TestPlatformInitMethods:
                 return_value=mock_monitor,
             ),
             patch.object(Platform, "_try_add_htp_backend"),
-            patch.object(Platform, "_try_add_gpu_backend"),
+            patch.object(Platform, "_try_add_qcs6490_gpu_backend"),
         ):
             mock_detect.return_value = PlatformType.QCS6490
-            p = Platform()
+            p = Platform(AppConfig())
         assert ComputeUnit.CPU in p.supported_units
 
     def test_try_add_htp_backend_registers_npu_when_available(self) -> None:
@@ -671,7 +677,7 @@ class TestPlatformInitMethods:
                 self._backends = {ComputeUnit.CPU: MagicMock()}
 
             mock_init.side_effect = _setup
-            p = Platform()
+            p = Platform(AppConfig())
 
         # Now test _try_add_htp_backend directly
         with patch(
@@ -702,7 +708,7 @@ class TestPlatformInitMethods:
                 self._backends = {ComputeUnit.CPU: MagicMock()}
 
             mock_init.side_effect = _setup
-            p = Platform()
+            p = Platform(AppConfig())
 
         # Patch the import inside _try_add_htp_backend to raise
         import sys
@@ -721,8 +727,8 @@ class TestPlatformInitMethods:
             else:
                 sys.modules["moment_to_action.hardware._platforms.qcs6490._htp_backend"] = saved
 
-    def test_try_add_gpu_backend_logs_warning_when_unavailable(self) -> None:
-        """_try_add_gpu_backend logs warning when GPU backend raises."""
+    def test_try_add_qcs6490_gpu_backend_logs_warning_when_unavailable(self) -> None:
+        """_try_add_qcs6490_gpu_backend logs warning when GPU backend raises."""
         with (
             patch("moment_to_action.hardware._platform._detect_platform") as mock_detect,
             patch(
@@ -737,7 +743,7 @@ class TestPlatformInitMethods:
                 self._backends = {ComputeUnit.CPU: MagicMock()}
 
             mock_init.side_effect = _setup
-            p = Platform()
+            p = Platform(AppConfig())
 
         import sys
 
@@ -746,7 +752,7 @@ class TestPlatformInitMethods:
             mock_mod = MagicMock()
             mock_mod.QCS6490GPUBackend.side_effect = RuntimeError("delegate missing")
             sys.modules["moment_to_action.hardware._platforms.qcs6490._gpu_backend"] = mock_mod
-            p._try_add_gpu_backend()
+            p._try_add_qcs6490_gpu_backend()
             assert ComputeUnit.GPU not in p._backends  # type: ignore[attr-defined]
         finally:
             if saved is None:

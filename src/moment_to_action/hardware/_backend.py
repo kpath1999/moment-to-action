@@ -118,15 +118,20 @@ class ComputeBackend(ABC):
 
     def load_llama_cpp(
         self,
-        _path: str | os.PathLike[str],
+        path: str | os.PathLike[str],  # noqa: ARG002
         *,
-        _mmproj: str | os.PathLike[str] | None = None,
+        mmproj: str | os.PathLike[str] | None = None,  # noqa: ARG002
+        server_path: str | os.PathLike[str] | None = None,  # noqa: ARG002
+        port: int | None = None,  # noqa: ARG002
     ) -> LoadedModel:
         """Load a llama.cpp GGUF model.
 
         Args:
             path: Path to the ``.gguf`` model file.
             mmproj: Optional path to the multimodal projector file.
+            server_path: Path to the ``llama-server`` binary. If ``None``,
+                resolved by the backend from AppConfig or PATH.
+            port: Port for llama-server. If ``None``, a free port is assigned.
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` for this model.

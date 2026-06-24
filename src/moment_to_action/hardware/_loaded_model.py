@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 from typing_extensions import Self
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 logger = logging.getLogger(__name__)
@@ -100,3 +102,23 @@ class LoadedModel(ABC):
         """GC safety net — calls :meth:`unload`, swallowing all exceptions."""
         with contextlib.suppress(Exception):
             self.unload()
+
+
+class LoadedStreamableModel(LoadedModel):
+    """A :class:`LoadedModel` that additionally supports token-by-token streaming.
+
+    Subclasses must implement :meth:`stream` in addition to all abstract
+    members from :class:`LoadedModel`.
+    """
+
+    @abstractmethod
+    def stream(self, inputs: object) -> Generator[str, None, None]:
+        """Stream inference output token by token.
+
+        Args:
+            inputs: Input data — format is runtime-specific.
+
+        Yields:
+            String tokens/chunks as they are produced by the model.
+        """
+        ...

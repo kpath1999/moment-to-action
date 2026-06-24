@@ -17,6 +17,7 @@ import cv2
 from rich.console import Console
 from rich.logging import RichHandler
 
+from moment_to_action.config import AppConfig
 from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.messages import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
@@ -48,7 +49,7 @@ if frame is None:
     raise SystemExit(1)
 
 device = ComputeUnit.NPU if args.device == "npu" else ComputeUnit.CPU
-platform = Platform()
+platform = Platform(AppConfig())
 manager = ModelManager(PathManager())
 
 # ── load model ─────────────────────────────────────────────────────────────

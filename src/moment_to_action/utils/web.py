@@ -1,9 +1,14 @@
 """Web utility functions."""
 
-from pathlib import Path
-from typing import IO
+from __future__ import annotations
+
+import socket
+from typing import IO, TYPE_CHECKING
 
 import httpx
+
+if TYPE_CHECKING:
+    from pathlib import Path
 from rich.progress import (
     BarColumn,
     DownloadColumn,
@@ -13,6 +18,20 @@ from rich.progress import (
     TimeRemainingColumn,
     TransferSpeedColumn,
 )
+
+
+def pick_free_port() -> int:
+    """Return an unused TCP port on localhost.
+
+    Binds a socket to port 0 (OS assigns a free port), reads the assigned
+    port number, and closes the socket before returning.
+
+    Returns:
+        An available TCP port number.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 def stream_with_progress(

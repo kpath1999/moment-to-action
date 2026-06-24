@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import logging
-import subprocess
-import time
 from typing import TYPE_CHECKING
-
-import httpx
 
 from moment_to_action.models._base import BaseModel
 
@@ -15,49 +11,25 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import Platform
+    from moment_to_action.hardware._loaded_model import LoadedModel
     from moment_to_action.hardware._types import ComputeUnit
     from moment_to_action.models._formats import ModelFormat
 
 logger = logging.getLogger(__name__)
 
-_HEALTH_TIMEOUT_S = 30.0
-_HEALTH_POLL_S = 0.5
-_HTTP_OK = 200
-
-
-def _wait_for_server(client: httpx.Client, timeout: float = _HEALTH_TIMEOUT_S) -> None:
-    """Poll GET /health until the server responds 200 or timeout expires.
-
-    Args:
-        client: httpx client pointed at the llama-server base URL.
-        timeout: Maximum seconds to wait before raising.
-
-    Raises:
-        RuntimeError: If the server does not become healthy within ``timeout``.
-    """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            resp = client.get("/health")
-            if resp.status_code == _HTTP_OK:
-                return
-        except httpx.ConnectError:
-            pass
-        time.sleep(_HEALTH_POLL_S)
-    msg = f"llama-server did not become healthy within {timeout}s"
-    raise RuntimeError(msg)
-
 
 class LlamaGGUFModel(BaseModel[str, dict, str, str]):
     """Base for GGUF language models served via llama-server.
 
-    Manages the llama-server subprocess and an httpx client for calling
-    the OpenAI-compatible ``/v1/chat/completions`` endpoint.
+    Delegates subprocess management to the hardware layer via
+    :meth:`Platform.load_llama_cpp`. Uses the native llama.cpp
+    ``/completion`` endpoint.
 
     The three-stage inference pipeline maps to LLM text generation:
 
-    - ``prepare(prompt)`` — formats the chat request body (messages + params)
-    - ``run(prepared)`` — sends the HTTP POST, returns the generated text
+    - ``prepare(prompt)`` — formats the ``/completion`` request body
+    - ``run(prepared)`` — delegates to
+      :class:`~moment_to_action.hardware._loaded_models.LlamaModel`
     - ``post_proc(raw)`` — wraps the text in a list for pipeline compatibility
 
     Args:
@@ -66,15 +38,9 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         model_format: File format (``ModelFormat.GGUF``).
         backends: Compute-unit → artifact filename mapping; the first entry
             must contain a ``"model"`` key naming the ``.gguf`` file.
-            Annotate as ``GPU`` since llama-server targets GPU internally.
         input_layout: Not applicable to LLMs; expected to be ``None``.
-        server_path: Filesystem path to the ``llama-server`` executable.
-        port: Port for llama-server to listen on (and for the client to connect).
-        system_prompt: System message prepended to every chat request.
+        system_prompt: System message prepended to every completion prompt.
         max_tokens: Maximum tokens the model may generate per call.
-        inference_timeout: Read timeout (seconds) for ``/v1/chat/completions`` requests.
-            ``None`` (default) disables the timeout; httpx's 5 s default is too short
-            for generation on any real hardware.
     """
 
     def __init__(
@@ -85,13 +51,10 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
-        server_path: Path,
-        port: int = 8080,
         system_prompt: str = "",
         max_tokens: int = 128,
-        inference_timeout: float | None = None,
     ) -> None:
-        """Initialise with registry metadata and server configuration.
+        """Initialise with registry metadata.
 
         Args:
             variant: Registry variant key (e.g. ``"default"``).
@@ -100,13 +63,8 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             model_format: File format — should be ``ModelFormat.GGUF``.
             backends: Compute-unit → ``{component_name: filename}`` dict.
             input_layout: Unused for LLMs; pass ``None``.
-            server_path: Path to the ``llama-server`` executable.
-            port: Port for the llama-server HTTP API.
-            system_prompt: System message sent in every chat request.
+            system_prompt: System message prepended to every completion prompt.
             max_tokens: Maximum tokens to generate per completion.
-            inference_timeout: Read timeout in seconds for ``/v1/chat/completions``
-                requests.  ``None`` (default) disables the timeout entirely so
-                generation is never interrupted regardless of model size or hardware.
         """
         super().__init__(
             variant,
@@ -115,110 +73,70 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             backends=backends,
             input_layout=input_layout,
         )
-        # llama-server manages its own GPU/CPU dispatch internally; the registry
-        # annotates the compute unit that the server actually targets.  We resolve
-        # the GGUF filename from whichever unit is listed first rather than
-        # hard-coding CPU so GPU-annotated entries work correctly.
         self._gguf_path = path / next(iter(backends.values()))["model"]
-        self._server_path = server_path
-        self._port = port
         self._system_prompt = system_prompt
         self._max_tokens = max_tokens
-        self._inference_timeout = inference_timeout
-        self._server_proc: subprocess.Popen[bytes] | None = None
-        self._client: httpx.Client | None = None
+        self._loaded_model: LoadedModel | None = None
 
-    def load(self, _platform: Platform, _unit: ComputeUnit) -> None:
-        """Start llama-server and wait for it to become healthy.
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+        """Load the GGUF model via the platform's llama-server backend.
 
         Args:
-            _backend: Unused — llama-server runs independently of Platform.
-            _unit: Unused — llama-server manages its own dispatch.
+            platform: The hardware platform to load on.
+            unit: The compute unit to target.
 
         Raises:
             RuntimeError: If the model is already loaded.
-            RuntimeError: If llama-server does not start within the health timeout.
         """
         if self.is_loaded:
             msg = f"{type(self).__name__} is already loaded"
             raise RuntimeError(msg)
-        self._server_proc = subprocess.Popen(  # noqa: S603
-            [
-                str(self._server_path),
-                "-m",
-                str(self._gguf_path),
-                "--port",
-                str(self._port),
-                "--host",
-                "127.0.0.1",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        self._client = httpx.Client(
-            base_url=f"http://127.0.0.1:{self._port}",
-            timeout=httpx.Timeout(connect=5.0, read=self._inference_timeout, write=5.0, pool=5.0),
-        )
-        _wait_for_server(self._client)
-        self._platform = _platform
+        self._loaded_model = platform.load_llama_cpp(unit, self._gguf_path)
+        self._platform = platform
         logger.info(
-            "%s: llama-server started (pid=%d, port=%d, model=%s)",
+            "%s: loaded %s via platform.load_llama_cpp",
             type(self).__name__,
-            self._server_proc.pid,
-            self._port,
             self._gguf_path.name,
         )
 
     def unload(self) -> None:
-        """Terminate llama-server and close the HTTP client.
+        """Unload the model and stop llama-server.
 
         Safe to call when not loaded (no-op).
         """
-        if self._server_proc is not None:
-            self._server_proc.terminate()
-            self._server_proc.wait()
-            self._server_proc = None
-        if self._client is not None:
-            self._client.close()
-            self._client = None
+        if self._loaded_model is not None:
+            self._loaded_model.unload()
+            self._loaded_model = None
         self._platform = None
 
     def prepare(self, inputs: str) -> dict:
-        """Format a user prompt into a chat completion request body.
+        """Format a user prompt into a ``/completion`` request body.
 
         Args:
             inputs: User-facing text prompt.
 
         Returns:
-            Request body dict suitable for ``/v1/chat/completions``.
+            Request body dict for the llama.cpp ``/completion`` endpoint.
         """
-        return {
-            "messages": [
-                {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": inputs},
-            ],
-            "max_tokens": self._max_tokens,
-        }
+        prompt = f"{self._system_prompt}\n{inputs}" if self._system_prompt else inputs
+        return {"prompt": prompt, "n_predict": self._max_tokens}
 
     def run(self, prepared: dict) -> str:
-        """Send the chat request and return the generated text.
+        """Send the completion request and return the generated text.
 
         Args:
             prepared: Request body from :meth:`prepare`.
 
         Returns:
-            Generated text content from ``choices[0].message.content``.
+            Generated text content.
 
         Raises:
             RuntimeError: If the model has not been loaded.
-            httpx.HTTPStatusError: If the server returns a non-2xx response.
         """
-        if self._client is None:
+        if self._loaded_model is None:
             msg = f"{type(self).__name__} is not loaded; call load() first"
             raise RuntimeError(msg)
-        resp = self._client.post("/v1/chat/completions", json=prepared)
-        resp.raise_for_status()
-        return str(resp.json()["choices"][0]["message"]["content"])
+        return str(self._loaded_model.run(prepared))
 
     def post_proc(self, raw: str) -> list[str]:
         """Wrap the generated text in a list for pipeline compatibility.
@@ -240,6 +158,12 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         is_npu: bool,
     ) -> tuple[bool, str]:
         """Not supported — llama-server does not expose per-tensor verification.
+
+        Args:
+            inputs: Unused.
+            ref_outputs: Unused.
+            tol: Unused.
+            is_npu: Unused.
 
         Raises:
             NotImplementedError: Always.

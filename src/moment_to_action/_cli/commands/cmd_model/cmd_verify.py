@@ -134,7 +134,7 @@ def verify(
             results.append((backend_name, False, "model does not support verify"))
             continue
 
-        platform = Platform()
+        platform = Platform(data.config)
         model.load(platform, unit)
         try:
             pass_all, fail_reason = model.verify_outputs(

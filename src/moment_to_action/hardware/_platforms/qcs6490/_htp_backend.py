@@ -7,11 +7,9 @@ import os
 from typing import TYPE_CHECKING
 
 from moment_to_action.hardware._backend import ComputeBackend
+from moment_to_action.hardware._loaded_models._dlc import DlcModel
+from moment_to_action.hardware._loaded_models._tflite import TfliteModel
 from moment_to_action.hardware._platforms._shared import _load_litert_interpreter
-from moment_to_action.hardware._platforms.qcs6490._models import (
-    QCS6490DLCModel,
-    QCS6490TfliteModel,
-)
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 if TYPE_CHECKING:
@@ -97,7 +95,8 @@ class QCS6490HTPBackend(ComputeBackend):
             path: Path to the ``.tflite`` model file.
 
         Returns:
-            A :class:`~_models.QCS6490TfliteModel` backed by the QNN delegate.
+            A :class:`~moment_to_action.hardware._loaded_models.TfliteModel`
+            backed by the QNN delegate.
 
         Raises:
             RuntimeError: If the delegate fails to apply to this model.
@@ -105,7 +104,7 @@ class QCS6490HTPBackend(ComputeBackend):
         p = os.fspath(path)
         interp = _load_litert_interpreter(p, self._delegates)
         logger.info("QCS6490HTPBackend: loaded %s on NPU", p)
-        return QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=interp)
+        return TfliteModel(unit=ComputeUnit.NPU, interp=interp)
 
     def load_dlc(self, path: str | os.PathLike[str]) -> LoadedModel:
         """Load a DLC model and initialize it on the Hexagon HTP via QAIRT.
@@ -114,7 +113,7 @@ class QCS6490HTPBackend(ComputeBackend):
             path: Path to the ``.dlc`` model file.
 
         Returns:
-            A :class:`~_models.QCS6490DLCModel` initialized on the HTP.
+            A :class:`~moment_to_action.hardware._loaded_models.DlcModel` initialized on the HTP.
 
         Raises:
             RuntimeError: If the QAIRT SDK is not available on this device.
@@ -127,4 +126,4 @@ class QCS6490HTPBackend(ComputeBackend):
         raw = qairt.load(os.fspath(path))
         raw.initialize(backend=_QAIRT_HTP_BACKEND)
         logger.info("QCS6490HTPBackend: loaded DLC %s on HTP", path)
-        return QCS6490DLCModel(unit=ComputeUnit.NPU, raw=raw)
+        return DlcModel(unit=ComputeUnit.NPU, raw=raw)

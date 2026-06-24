@@ -7,12 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from moment_to_action.hardware._loaded_models import DlcModel, OnnxModel, TfliteModel, TorchModel
 from moment_to_action.hardware._platforms.x86_64 import X86_64CPUBackend, X86_64ResourceMonitor
-from moment_to_action.hardware._platforms.x86_64._models import (
-    X86_64DLCModel,
-    X86_64ONNXModel,
-    X86_64TfliteModel,
-)
 from moment_to_action.hardware._types import (
     ComputeUnit,
     ComputeUnitUsageSample,
@@ -38,15 +34,23 @@ class TestX86_64CPUBackend:  # noqa: N801
         """supported_dtypes returns {FP32}."""
         assert X86_64CPUBackend().supported_dtypes == {DataType.FP32}
 
-    def test_supported_formats(self) -> None:
+    def test_supported_formats_includes_tflite_onnx_dlc(self) -> None:
         """supported_formats includes TFLITE, ONNX, and DLC."""
         fmts = X86_64CPUBackend().supported_formats
         assert ModelType.TFLITE in fmts
         assert ModelType.ONNX in fmts
         assert ModelType.DLC in fmts
 
+    def test_supported_formats_includes_torch(self) -> None:
+        """supported_formats includes TORCH."""
+        assert ModelType.TORCH in X86_64CPUBackend().supported_formats
+
+    def test_supported_formats_includes_llama_cpp(self) -> None:
+        """supported_formats includes LLAMA_CPP."""
+        assert ModelType.LLAMA_CPP in X86_64CPUBackend().supported_formats
+
     def test_load_tflite_returns_tflite_model(self) -> None:
-        """load_tflite returns an X86_64TfliteModel."""
+        """load_tflite returns a TfliteModel with CPU unit."""
         mock_interp = MagicMock()
         with patch(
             "moment_to_action.hardware._platforms.x86_64._cpu_backend._load_litert_interpreter",
@@ -55,10 +59,11 @@ class TestX86_64CPUBackend:  # noqa: N801
             backend = X86_64CPUBackend()
             model = backend.load_tflite("/tmp/model.tflite")
 
-        assert isinstance(model, X86_64TfliteModel)
+        assert isinstance(model, TfliteModel)
+        assert model.unit == ComputeUnit.CPU
 
     def test_load_onnx_returns_onnx_model(self) -> None:
-        """load_onnx returns an X86_64ONNXModel."""
+        """load_onnx returns an OnnxModel with CPU unit."""
         mock_session = MagicMock()
         with patch(
             "moment_to_action.hardware._platforms.x86_64._cpu_backend.ort.InferenceSession",
@@ -67,17 +72,38 @@ class TestX86_64CPUBackend:  # noqa: N801
             backend = X86_64CPUBackend()
             model = backend.load_onnx("/tmp/model.onnx")
 
-        assert isinstance(model, X86_64ONNXModel)
+        assert isinstance(model, OnnxModel)
+        assert model.unit == ComputeUnit.CPU
 
-    def test_load_torch_raises_not_implemented(self) -> None:
-        """load_torch raises NotImplementedError (not in supported_formats)."""
-        with pytest.raises(NotImplementedError):
-            X86_64CPUBackend().load_torch("/tmp/model.pt")
+    def test_load_torch_returns_torch_model(self) -> None:
+        """load_torch returns a TorchModel with CPU unit."""
+        mock_module = MagicMock()
+        with patch("torch.load", return_value=mock_module):
+            model = X86_64CPUBackend().load_torch("/tmp/model.pt")
 
-    def test_load_llama_cpp_raises_not_implemented(self) -> None:
-        """load_llama_cpp raises NotImplementedError (not in supported_formats)."""
-        with pytest.raises(NotImplementedError):
-            X86_64CPUBackend().load_llama_cpp("/tmp/model.gguf")
+        assert isinstance(model, TorchModel)
+        assert model.unit == ComputeUnit.CPU
+
+    def test_load_llama_cpp_returns_model(self) -> None:
+        """load_llama_cpp calls _start_llama_model with cpu_only=True."""
+        mock_model = MagicMock()
+        with patch(
+            "moment_to_action.hardware._loaded_models._llama._start_llama_model",
+            return_value=mock_model,
+        ) as mock_start:
+            result = X86_64CPUBackend().load_llama_cpp(
+                "/tmp/model.gguf", server_path="/usr/bin/llama-server", port=8080
+            )
+
+        mock_start.assert_called_once_with(
+            path="/tmp/model.gguf",
+            mmproj=None,
+            server_path="/usr/bin/llama-server",
+            port=8080,
+            unit=ComputeUnit.CPU,
+            cpu_only=True,
+        )
+        assert result is mock_model
 
 
 @pytest.mark.unit
@@ -99,7 +125,7 @@ class TestX86_64DLCMethods:  # noqa: N801
 
         mock_qairt.load.assert_called_once_with(str(path))
         mock_raw.initialize.assert_called_once_with(backend="CPU")
-        assert isinstance(model, X86_64DLCModel)
+        assert isinstance(model, DlcModel)
 
     def test_load_dlc_raises_if_qairt_unavailable(self) -> None:
         """load_dlc raises RuntimeError when the QAIRT SDK cannot be imported."""
@@ -299,9 +325,9 @@ class TestX86_64ResourceMonitor:  # noqa: N801
 
 @pytest.mark.unit
 class TestX86_64TfliteModel:  # noqa: N801
-    """Tests for X86_64TfliteModel properties and run/unload."""
+    """Tests for TfliteModel on x86_64 (CPU unit)."""
 
-    def _make_model(self) -> X86_64TfliteModel:
+    def _make_model(self) -> TfliteModel:
         """Return a TfliteModel with a mock interpreter."""
         mock_interp = MagicMock()
         mock_interp.get_input_details.return_value = [
@@ -309,7 +335,7 @@ class TestX86_64TfliteModel:  # noqa: N801
         ]
         mock_interp.get_output_details.return_value = [{"index": 0}]
         mock_interp.get_tensor.return_value = __import__("numpy").zeros((1, 10))
-        return X86_64TfliteModel(interp=mock_interp)
+        return TfliteModel(unit=ComputeUnit.CPU, interp=mock_interp)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
@@ -355,16 +381,16 @@ class TestX86_64TfliteModel:  # noqa: N801
 
 @pytest.mark.unit
 class TestX86_64ONNXModel:  # noqa: N801
-    """Tests for X86_64ONNXModel properties and run/unload."""
+    """Tests for OnnxModel on x86_64 (CPU unit)."""
 
-    def _make_model(self) -> X86_64ONNXModel:
-        """Return an ONNXModel with a mock session."""
+    def _make_model(self) -> OnnxModel:
+        """Return an OnnxModel with a mock session."""
         mock_session = MagicMock()
         mock_input = MagicMock()
         mock_input.name = "input"
         mock_session.get_inputs.return_value = [mock_input]
         mock_session.run.return_value = [__import__("numpy").zeros((1, 10))]
-        return X86_64ONNXModel(session=mock_session)
+        return OnnxModel(unit=ComputeUnit.CPU, session=mock_session)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
@@ -410,23 +436,23 @@ class TestX86_64ONNXModel:  # noqa: N801
 
 @pytest.mark.unit
 class TestX86_64DLCModel:  # noqa: N801
-    """Tests for X86_64DLCModel properties and run/unload."""
+    """Tests for DlcModel on x86_64 (CPU unit)."""
 
-    def _make_model(self) -> X86_64DLCModel:
-        """Return a DLCModel with a mock raw handle."""
+    def _make_model(self) -> DlcModel:
+        """Return a DlcModel with a mock raw handle."""
         mock_raw = MagicMock()
         mock_result = MagicMock()
         mock_result.data = {"output": __import__("numpy").zeros((1, 10))}
         mock_raw.return_value = mock_result
-        return X86_64DLCModel(raw=mock_raw)
+        return DlcModel(unit=ComputeUnit.CPU, raw=mock_raw)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
         assert self._make_model().unit == ComputeUnit.CPU
 
     def test_dtype_property_default(self) -> None:
-        """Default dtype is FP32."""
-        assert self._make_model().dtype == DataType.FP32
+        """Default dtype is W8A8 (DLC models are quantized)."""
+        assert self._make_model().dtype == DataType.W8A8
 
     def test_model_type_property(self) -> None:
         """model_type is DLC."""
@@ -465,13 +491,13 @@ class TestX86_64DLCModel:  # noqa: N801
 
 @pytest.mark.unit
 class TestX86_64TfliteSetInputs:  # noqa: N801
-    """Tests for _tflite_set_inputs in x86_64._models (KeyError/TypeError paths)."""
+    """Tests for _tflite_set_inputs from hardware._platforms._shared (KeyError/TypeError paths)."""
 
     def test_missing_key_raises_key_error(self) -> None:
         """KeyError when input name not found in model."""
         import numpy as np
 
-        from moment_to_action.hardware._platforms.x86_64._models import _tflite_set_inputs
+        from moment_to_action.hardware._platforms._shared import _tflite_set_inputs
 
         interp = MagicMock()
         interp.get_input_details.return_value = [{"index": 0, "name": "img", "dtype": np.float32}]
@@ -482,7 +508,7 @@ class TestX86_64TfliteSetInputs:  # noqa: N801
         """TypeError when tensor dtype does not match model's expected dtype."""
         import numpy as np
 
-        from moment_to_action.hardware._platforms.x86_64._models import _tflite_set_inputs
+        from moment_to_action.hardware._platforms._shared import _tflite_set_inputs
 
         interp = MagicMock()
         interp.get_input_details.return_value = [{"index": 0, "name": "img", "dtype": np.float32}]

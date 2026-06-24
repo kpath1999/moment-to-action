@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 import cv2
 import rich
 
+from moment_to_action.config import AppConfig
 from moment_to_action.hardware import Platform
 from moment_to_action.messages import ClassificationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
@@ -296,7 +297,7 @@ def main() -> int:  # noqa: C901, PLR0915
     logger.info("Metrics JSON: %s", metrics_path)
 
     manager = ModelManager(PathManager())
-    platform = Platform()
+    platform = Platform(AppConfig())
     metrics = MetricsCollector(compute_platform=platform, session_id=run_id)
 
     # Build the pipeline: ClipBufferStage → SmolVLM2Stage

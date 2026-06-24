@@ -7,7 +7,7 @@ for each available compute unit, and delegates all load calls.
 
 Usage::
 
-    platform = Platform(preferred_unit=ComputeUnit.NPU)
+    platform = Platform(config, preferred_unit=ComputeUnit.NPU)
     model = platform.load_tflite(ComputeUnit.NPU, "mobileclip.tflite")
     outputs = model.run(image_tensor)
     model.unload()
@@ -36,6 +36,7 @@ from moment_to_action.hardware._types import (
 if TYPE_CHECKING:
     import os
 
+    from moment_to_action.config import AppConfig
     from moment_to_action.hardware._backend import ComputeBackend
     from moment_to_action.hardware._loaded_model import LoadedModel
     from moment_to_action.hardware._resource_monitor import ResourceMonitor
@@ -94,12 +95,21 @@ class Platform:
     :class:`~moment_to_action.hardware._backend.ComputeBackend` instances.
     Callers always specify the compute unit explicitly on each load call.
 
+    Args:
+        config: Application configuration used to resolve llama-server path and
+            port defaults when calling :meth:`load_llama_cpp`.
+
     Raises:
         RuntimeError: If the current platform cannot be detected.
     """
 
-    def __init__(self) -> None:
-        """Initialize Platform, detect hardware, and build all available backends."""
+    def __init__(self, config: AppConfig) -> None:
+        """Initialize Platform, detect hardware, and build all available backends.
+
+        Args:
+            config: Application configuration.
+        """
+        self._config = config
         self._platform_type = _detect_platform()
         self._backends: dict[ComputeUnit, ComputeBackend]
         self._resource_monitor: ResourceMonitor
@@ -134,7 +144,7 @@ class Platform:
         self._resource_monitor = QCS6490ResourceMonitor()
         self._backends = {ComputeUnit.CPU: QCS6490CPUBackend()}
         self._try_add_htp_backend()
-        self._try_add_gpu_backend()
+        self._try_add_qcs6490_gpu_backend()
 
     def _try_add_htp_backend(self) -> None:
         """Try to register the QCS6490 HTP (NPU) backend.
@@ -151,7 +161,7 @@ class Platform:
         except Exception as e:  # noqa: BLE001
             logger.warning("HTP backend unavailable (%s) — NPU not registered", e)
 
-    def _try_add_gpu_backend(self) -> None:
+    def _try_add_qcs6490_gpu_backend(self) -> None:
         """Try to register the QCS6490 GPU backend.
 
         If unavailable, GPU is simply not registered — callers get a
@@ -167,7 +177,7 @@ class Platform:
             logger.warning("GPU backend unavailable (%s) — GPU not registered", e)
 
     def _init_x86_64(self) -> None:
-        """Build x86_64 backends (CPU only)."""
+        """Build x86_64 backends: CPU always, GPU if CUDA is available."""
         from moment_to_action.hardware._platforms.x86_64._cpu_backend import (  # noqa: PLC0415
             X86_64CPUBackend,
         )
@@ -177,9 +187,24 @@ class Platform:
 
         self._resource_monitor = X86_64ResourceMonitor()
         self._backends = {ComputeUnit.CPU: X86_64CPUBackend()}
+        self._try_add_x86_64_gpu_backend()
+
+    def _try_add_x86_64_gpu_backend(self) -> None:
+        """Try to register the x86_64 GPU (CUDA) backend.
+
+        Fails silently if CUDA is unavailable.
+        """
+        try:
+            from moment_to_action.hardware._platforms.x86_64._gpu_backend import (  # noqa: PLC0415
+                X86_64GPUBackend,
+            )
+
+            self._backends[ComputeUnit.GPU] = X86_64GPUBackend()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("GPU backend unavailable (%s) — GPU not registered", e)
 
     def _init_macos_arm64(self) -> None:
-        """Build macOS arm64 backends (CPU only)."""
+        """Build macOS arm64 backends: CPU always, GPU if MPS is available."""
         from moment_to_action.hardware._platforms.macos_arm64._cpu_backend import (  # noqa: PLC0415
             MacOSARM64CPUBackend,
         )
@@ -189,6 +214,21 @@ class Platform:
 
         self._resource_monitor = MacOSARM64ResourceMonitor()
         self._backends = {ComputeUnit.CPU: MacOSARM64CPUBackend()}
+        self._try_add_macos_arm64_gpu_backend()
+
+    def _try_add_macos_arm64_gpu_backend(self) -> None:
+        """Try to register the macOS arm64 GPU (MPS) backend.
+
+        Fails silently if MPS is unavailable.
+        """
+        try:
+            from moment_to_action.hardware._platforms.macos_arm64._gpu_backend import (  # noqa: PLC0415
+                MacOSARM64GPUBackend,
+            )
+
+            self._backends[ComputeUnit.GPU] = MacOSARM64GPUBackend()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("GPU backend unavailable (%s) — GPU not registered", e)
 
     # ------------------------------------------------------------------
     # Public properties
@@ -318,13 +358,21 @@ class Platform:
         path: str | os.PathLike[str],
         *,
         mmproj: str | os.PathLike[str] | None = None,
+        server_path: str | os.PathLike[str] | None = None,
+        port: int | None = None,
     ) -> LoadedModel:
         """Load a llama.cpp GGUF model on the specified compute unit.
+
+        ``server_path`` and ``port`` fall back to ``AppConfig.llama_server_path``
+        and ``AppConfig.llama_server_port`` when not explicitly provided.
 
         Args:
             unit: The compute unit to run this model on.
             path: Path to the ``.gguf`` model file.
             mmproj: Optional path to the multimodal projector file.
+            server_path: Path to the ``llama-server`` binary. Defaults to
+                ``config.llama_server_path``.
+            port: Port for llama-server. Defaults to ``config.llama_server_port``.
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` ready for inference.
@@ -333,7 +381,11 @@ class Platform:
             ValueError: If *unit* is not available on this platform.
             NotImplementedError: If the backend does not support LLAMA_CPP.
         """
-        return self._backend_for(unit).load_llama_cpp(path, _mmproj=mmproj)
+        effective_server = server_path or self._config.llama_server_path
+        effective_port = port or self._config.llama_server_port
+        return self._backend_for(unit).load_llama_cpp(
+            path, mmproj=mmproj, server_path=effective_server, port=effective_port
+        )
 
     # ------------------------------------------------------------------
     # Benchmarking

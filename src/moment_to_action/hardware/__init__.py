@@ -7,6 +7,7 @@ Public API::
         ComputeUnit,
         DataType,
         LoadedModel,
+        LoadedStreamableModel,
         ModelType,
         Platform,
         PlatformType,
@@ -15,7 +16,7 @@ Public API::
 
 from __future__ import annotations
 
-from ._loaded_model import LoadedModel
+from ._loaded_model import LoadedModel, LoadedStreamableModel
 from ._platform import Platform
 from ._types import (
     BenchmarkResult,
@@ -32,6 +33,7 @@ __all__ = [
     "ComputeUnitUsageSample",
     "DataType",
     "LoadedModel",
+    "LoadedStreamableModel",
     "ModelType",
     "Platform",
     "PlatformType",

@@ -90,7 +90,7 @@ class LlamaServerStage(Stage):
             system_prompt=system_prompt,
             max_tokens=max_tokens,
         )
-        self._model.load(Platform(), ComputeUnit.CPU)
+        self._model.load(Platform(config), ComputeUnit.CPU)
         self._closed = False  # fully initialised — __del__ may now clean up
         logger.info("LlamaServerStage: llama-server started for model %s", model_id.value)
 

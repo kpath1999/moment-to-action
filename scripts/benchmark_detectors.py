@@ -51,7 +51,7 @@ from rich.table import Table
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-from moment_to_action.config import load_config
+from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
@@ -356,7 +356,7 @@ def _run_benchmark(
     rows: list[dict] = []
 
     # --- construct backend; skip if this compute unit is unsupported on this device ---
-    platform = Platform()
+    platform = Platform(AppConfig())
     if unit not in platform.supported_units:
         console.print(
             f"  [yellow]Skip {model_name}/{backend_name}: {backend_name} not available "

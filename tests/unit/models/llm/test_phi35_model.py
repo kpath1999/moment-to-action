@@ -28,10 +28,8 @@ class TestPhi35Model:
             ModelFormat.GGUF,
             backends={ComputeUnit.GPU: {"model": "Phi-3.5-mini-instruct-Q4_0.gguf"}},
             input_layout=None,
-            server_path=Path("/usr/bin/llama-server"),
-            port=8080,
             system_prompt="Be concise.",
             max_tokens=128,
         )
-        assert model._port == 8080
         assert model._gguf_path == Path("/fake/dir/Phi-3.5-mini-instruct-Q4_0.gguf")
+        assert model._max_tokens == 128

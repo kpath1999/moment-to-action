@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import httpx
 import pytest
 
 from moment_to_action.hardware._types import ComputeUnit
@@ -22,12 +20,10 @@ _BACKENDS: dict[ComputeUnit, dict[str, str]] = {
     },
 }
 _VARIANT_DIR = Path("/fake/variant")
-_SERVER_PATH = Path("/usr/bin/llama-server")
 _SYSTEM = "You are a vision AI."
 
 
 def _make_model(
-    port: int = 8080,
     system_prompt: str = _SYSTEM,
     max_tokens: int = 64,
 ) -> Qwen25VLModel:
@@ -38,8 +34,6 @@ def _make_model(
         ModelFormat.GGUF,
         backends=_BACKENDS,
         input_layout=None,
-        server_path=_SERVER_PATH,
-        port=port,
         system_prompt=system_prompt,
         max_tokens=max_tokens,
     )
@@ -58,16 +52,6 @@ class TestLlamaVLModelConstruction:
         """_mmproj_path joins variant dir with mmproj filename."""
         model = _make_model()
         assert model._mmproj_path == _VARIANT_DIR / "mmproj.gguf"
-
-    def test_server_path_stored(self) -> None:
-        """_server_path is stored as provided."""
-        model = _make_model()
-        assert model._server_path == _SERVER_PATH
-
-    def test_port_stored(self) -> None:
-        """_port is stored as provided."""
-        model = _make_model(port=9999)
-        assert model._port == 9999
 
     def test_system_prompt_stored(self) -> None:
         """_system_prompt is stored as provided."""
@@ -99,93 +83,40 @@ class TestLlamaVLModelConstruction:
 class TestLlamaVLModelLoad:
     """Tests for LlamaVLModel.load()."""
 
-    def test_load_starts_subprocess_with_mmproj_arg(self) -> None:
-        """load() launches llama-server with --mmproj in the CLI arguments."""
-        model = _make_model(port=8080)
-        mock_backend = MagicMock()
-
-        with (
-            patch("moment_to_action.models.vlm._base.subprocess.Popen") as mock_popen,
-            patch("moment_to_action.models.vlm._base._wait_for_server"),
-        ):
-            mock_proc = MagicMock()
-            mock_proc.pid = 12345
-            mock_popen.return_value = mock_proc
-
-            model.load(mock_backend, ComputeUnit.CPU)
-
-        mock_popen.assert_called_once_with(
-            [
-                str(_SERVER_PATH),
-                "-m",
-                str(_VARIANT_DIR / "model.gguf"),
-                "--port",
-                "8080",
-                "--host",
-                "127.0.0.1",
-                "--mmproj",
-                str(_VARIANT_DIR / "mmproj.gguf"),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-    def test_load_creates_httpx_client(self) -> None:
-        """load() creates an httpx.Client pointed at localhost:port."""
-        model = _make_model(port=7777)
-        mock_backend = MagicMock()
-
-        with (
-            patch("moment_to_action.models.vlm._base.subprocess.Popen"),
-            patch("moment_to_action.models.vlm._base._wait_for_server"),
-            patch("moment_to_action.models.vlm._base.httpx.Client") as mock_client_cls,
-        ):
-            model.load(mock_backend, ComputeUnit.CPU)
-
-        mock_client_cls.assert_called_once_with(
-            base_url="http://127.0.0.1:7777",
-            timeout=httpx.Timeout(connect=5.0, read=None, write=5.0, pool=5.0),
-        )
-
-    def test_load_calls_wait_for_server(self) -> None:
-        """load() calls _wait_for_server with the httpx client."""
+    def test_load_calls_platform_load_llama_cpp_with_mmproj(self) -> None:
+        """load() delegates to platform.load_llama_cpp with mmproj kwarg."""
         model = _make_model()
-        mock_backend = MagicMock()
+        mock_platform = MagicMock()
+        mock_loaded = MagicMock()
+        mock_platform.load_llama_cpp.return_value = mock_loaded
 
-        with (
-            patch("moment_to_action.models.vlm._base.subprocess.Popen"),
-            patch("moment_to_action.models.vlm._base.httpx.Client") as mock_client_cls,
-            patch("moment_to_action.models.vlm._base._wait_for_server") as mock_wait,
-        ):
-            mock_client_instance = MagicMock()
-            mock_client_cls.return_value = mock_client_instance
-            model.load(mock_backend, ComputeUnit.CPU)
+        model.load(mock_platform, ComputeUnit.CPU)
 
-        mock_wait.assert_called_once_with(mock_client_instance)
+        mock_platform.load_llama_cpp.assert_called_once_with(
+            ComputeUnit.CPU,
+            _VARIANT_DIR / "model.gguf",
+            mmproj=_VARIANT_DIR / "mmproj.gguf",
+        )
 
     def test_load_marks_model_as_loaded(self) -> None:
         """After load(), is_loaded returns True."""
         model = _make_model()
+        mock_platform = MagicMock()
+        mock_platform.load_llama_cpp.return_value = MagicMock()
 
-        with (
-            patch("moment_to_action.models.vlm._base.subprocess.Popen"),
-            patch("moment_to_action.models.vlm._base._wait_for_server"),
-        ):
-            model.load(MagicMock(), ComputeUnit.CPU)
+        model.load(mock_platform, ComputeUnit.CPU)
 
         assert model.is_loaded
 
     def test_load_raises_if_already_loaded(self) -> None:
         """load() raises RuntimeError when called on an already-loaded model."""
         model = _make_model()
+        mock_platform = MagicMock()
+        mock_platform.load_llama_cpp.return_value = MagicMock()
 
-        with (
-            patch("moment_to_action.models.vlm._base.subprocess.Popen"),
-            patch("moment_to_action.models.vlm._base._wait_for_server"),
-        ):
-            model.load(MagicMock(), ComputeUnit.CPU)
-            with pytest.raises(RuntimeError, match="already loaded"):
-                model.load(MagicMock(), ComputeUnit.CPU)
+        model.load(mock_platform, ComputeUnit.CPU)
+        with pytest.raises(RuntimeError, match="already loaded"):
+            model.load(mock_platform, ComputeUnit.CPU)
 
 
 @pytest.mark.unit
@@ -198,43 +129,39 @@ class TestLlamaVLModelPrepare:
         result = model.prepare(("describe this", ["abc123"]))
         assert isinstance(result, dict)
 
-    def test_prepare_system_message(self) -> None:
-        """prepare() includes the system prompt as the first message."""
-        model = _make_model(system_prompt="You are helpful.")
-        result = model.prepare(("question", ["img1"]))
-        assert result["messages"][0] == {"role": "system", "content": "You are helpful."}
+    def test_prepare_includes_prompt_key(self) -> None:
+        """prepare() produces a 'prompt' key with img tags and text."""
+        model = _make_model(system_prompt="")
+        result = model.prepare(("describe this", ["abc123"]))
+        assert "prompt" in result
+        assert "describe this" in result["prompt"]
 
-    def test_prepare_user_message_has_image_url_entries(self) -> None:
-        """prepare() includes image_url content blocks for each base64 image."""
+    def test_prepare_includes_image_data(self) -> None:
+        """prepare() includes image_data entries for each base64 image."""
         model = _make_model()
-        result = model.prepare(("what is this?", ["b64a", "b64b"]))
-        user_content = result["messages"][1]["content"]
-        image_blocks = [c for c in user_content if c.get("type") == "image_url"]
-        assert len(image_blocks) == 2
-        assert image_blocks[0]["image_url"]["url"] == "data:image/jpeg;base64,b64a"
-        assert image_blocks[1]["image_url"]["url"] == "data:image/jpeg;base64,b64b"
+        result = model.prepare(("x", ["b64a", "b64b"]))
+        img_data = result["image_data"]
+        assert len(img_data) == 2
+        assert img_data[0] == {"data": "b64a", "id": 1}
+        assert img_data[1] == {"data": "b64b", "id": 2}
 
-    def test_prepare_user_message_has_text_entry(self) -> None:
-        """prepare() includes a text content block with the prompt."""
-        model = _make_model()
-        result = model.prepare(("what is this?", ["b64a"]))
-        user_content = result["messages"][1]["content"]
-        text_blocks = [c for c in user_content if c.get("type") == "text"]
-        assert len(text_blocks) == 1
-        assert text_blocks[0]["text"] == "what is this?"
-
-    def test_prepare_max_tokens(self) -> None:
-        """prepare() includes max_tokens from constructor."""
+    def test_prepare_n_predict(self) -> None:
+        """prepare() sets n_predict from max_tokens."""
         model = _make_model(max_tokens=999)
         result = model.prepare(("x", []))
-        assert result["max_tokens"] == 999
+        assert result["n_predict"] == 999
+
+    def test_prepare_img_tags_in_prompt(self) -> None:
+        """prepare() includes [img-N] tags in the prompt for each image."""
+        model = _make_model(system_prompt="")
+        result = model.prepare(("describe", ["img1", "img2"]))
+        prompt = result["prompt"]
+        assert "[img-1]" in prompt
+        assert "[img-2]" in prompt
 
     def test_prepare_no_images(self) -> None:
-        """prepare() handles an empty image list (text-only fallback)."""
-        model = _make_model()
+        """prepare() handles an empty image list."""
+        model = _make_model(system_prompt="")
         result = model.prepare(("text only", []))
-        user_content = result["messages"][1]["content"]
-        image_blocks = [c for c in user_content if c.get("type") == "image_url"]
-        text_blocks = [c for c in user_content if c.get("type") == "text"]
-        assert len(image_blocks) == 0
-        assert len(text_blocks) == 1
+        assert result["image_data"] == []
+        assert "text only" in result["prompt"]

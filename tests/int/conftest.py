@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from moment_to_action.config import AppConfig
 from moment_to_action.hardware import Platform
 
 logger = logging.getLogger(__name__)
@@ -32,4 +33,4 @@ def compute_platform() -> Platform:
 
     Session-scoped so the same platform is reused across all tests.
     """
-    return Platform()
+    return Platform(AppConfig())

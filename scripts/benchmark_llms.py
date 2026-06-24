@@ -820,7 +820,7 @@ def main() -> None:  # noqa: C901, PLR0915
                     system_prompt=_BENCHMARK_SYSTEM,
                     max_tokens=_MAX_TOKENS,
                 )
-                model.load(Platform(), ComputeUnit.GPU)  # type: ignore[union-attr]
+                model.load(Platform(AppConfig()), ComputeUnit.GPU)  # type: ignore[union-attr]
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                 progress.advance(model_task)

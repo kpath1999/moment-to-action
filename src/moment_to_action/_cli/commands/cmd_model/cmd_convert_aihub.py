@@ -5,12 +5,16 @@ from __future__ import annotations
 import os
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 import rich_click as click
 
 from moment_to_action.hardware import ComputeUnit, Platform
+
+if TYPE_CHECKING:
+    from moment_to_action.config import AppConfig
 from moment_to_action.models import ModelID
 from moment_to_action.models._formats import ModelFormat
 from moment_to_action.models.image._base import ImageModel
@@ -187,6 +191,7 @@ def _capture_reference_outputs(
     model_id: ModelID,
     calibration_dir: Path,
     output_dir: Path,
+    config: AppConfig,
 ) -> None:
     """Run the AI Hub DLC on calibration images and save reference outputs.
 
@@ -203,6 +208,7 @@ def _capture_reference_outputs(
         calibration_dir: Directory of calibration images.
         output_dir: Variant output directory; ``reference_outputs/`` written here.
             Must already contain ``model.dlc``.
+        config: Application config used to resolve the Platform.
 
     Raises:
         click.ClickException: If no images are found or model_id has no factory.
@@ -221,7 +227,7 @@ def _capture_reference_outputs(
     prepared = [model.prepare(img) for img in raw_imgs]
     calib = np.vstack(prepared).astype(np.float32)
 
-    platform = Platform()
+    platform = Platform(config)
     model.load(platform, ComputeUnit.CPU)
     all_raw: list[list[np.ndarray]] = [model.run(calib[i : i + 1]) for i in range(len(calib))]
     model.unload()
@@ -413,7 +419,7 @@ def _run_aihub_export(
 )
 @pass_global_data
 def convert_aihub(
-    data: GlobalData,  # noqa: ARG001
+    data: GlobalData,
     model_id: str,
     precision: str,
     chipset: str,
@@ -484,7 +490,7 @@ def convert_aihub(
     # Must run before context binaries are copied into output_dir — context binaries
     # are compiled for the qcs6490 device (aarch64/HTP) and cannot load on x86.
     # resolve_backend_artifact falls back to model.dlc when no .bin files are present.
-    _capture_reference_outputs(mid, calibration_dir, output_dir)
+    _capture_reference_outputs(mid, calibration_dir, output_dir, data.config)
 
     # Drop the float component DLCs we just used for reference capture: they are
     # dead weight at runtime for NPU-only-shipping models (CPU/GPU use the

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from ._cpu_backend import MacOSARM64CPUBackend
+from ._gpu_backend import MacOSARM64GPUBackend
 from ._resources import MacOSARM64ResourceMonitor
 
 __all__ = [
     "MacOSARM64CPUBackend",
+    "MacOSARM64GPUBackend",
     "MacOSARM64ResourceMonitor",
 ]

@@ -160,7 +160,7 @@ def run(
         msg = f"'{model_id}' is not an image model; run only supports image models currently."
         raise click.ClickException(msg)
 
-    platform = Platform()
+    platform = Platform(data.config)
     model.load(platform, unit)
     try:
         prepared = model.prepare(frame)
