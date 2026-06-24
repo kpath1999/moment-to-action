@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware._platforms.qcs6490._resources import QCS6490ResourceMonitor
-from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
+from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample, DataType
 
 
 @pytest.mark.unit
@@ -261,7 +261,7 @@ class TestQCS6490CPUBackend:
             "moment_to_action.hardware._platforms.qcs6490._cpu_backend._load_litert_interpreter",
             return_value=mock_interp,
         ):
-            model = QCS6490CPUBackend().load_tflite("/tmp/model.tflite")
+            model = QCS6490CPUBackend().load_tflite("/tmp/model.tflite", dtype=DataType.FP32)
         assert isinstance(model, QCS6490TfliteModel)
 
     def test_load_onnx_returns_onnx_model(self) -> None:
@@ -275,7 +275,7 @@ class TestQCS6490CPUBackend:
 
         mock_session = MagicMock()
         with patch.object(ort, "InferenceSession", return_value=mock_session):
-            model = QCS6490CPUBackend().load_onnx("/tmp/model.onnx")
+            model = QCS6490CPUBackend().load_onnx("/tmp/model.onnx", dtype=DataType.FP32)
         assert isinstance(model, QCS6490ONNXModel)
 
     def test_load_litert_interpreter_allocates(self) -> None:
@@ -303,7 +303,7 @@ class TestQCS6490CPUBackend:
 
         mock_module = MagicMock()
         with patch("torch.load", return_value=mock_module):
-            model = QCS6490CPUBackend().load_torch("/tmp/model.pt")
+            model = QCS6490CPUBackend().load_torch("/tmp/model.pt", dtype=DataType.FP32)
 
         assert isinstance(model, TorchModel)
         assert model.unit == ComputeUnit.CPU
@@ -321,7 +321,10 @@ class TestQCS6490CPUBackend:
             return_value=mock_model,
         ) as mock_start:
             result = QCS6490CPUBackend().load_llama_cpp(
-                "/tmp/model.gguf", server_path="/usr/bin/llama-server", port=8080
+                "/tmp/model.gguf",
+                server_path="/usr/bin/llama-server",
+                port=8080,
+                dtype=DataType.FP32,
             )
 
         mock_start.assert_called_once_with(
@@ -331,8 +334,44 @@ class TestQCS6490CPUBackend:
             port=8080,
             unit=ComputeUnit.CPU,
             cpu_only=True,
+            dtype=DataType.FP32,
         )
         assert result is mock_model
+
+
+@pytest.mark.unit
+class TestQCS6490DtypeValidation:
+    """Tests that QCS6490 backends reject unsupported dtypes via _check_dtype."""
+
+    def test_cpu_load_tflite_unsupported_dtype_raises(self) -> None:
+        """QCS6490CPUBackend.load_tflite raises ValueError for unsupported dtype."""
+        from moment_to_action.hardware._platforms.qcs6490._cpu_backend import QCS6490CPUBackend
+
+        backend = QCS6490CPUBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_tflite("/fake/model.tflite", dtype=DataType.W8A8)
+
+    def test_cpu_load_onnx_unsupported_dtype_raises(self) -> None:
+        """QCS6490CPUBackend.load_onnx raises ValueError for unsupported dtype."""
+        from moment_to_action.hardware._platforms.qcs6490._cpu_backend import QCS6490CPUBackend
+
+        backend = QCS6490CPUBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_onnx("/fake/model.onnx", dtype=DataType.W8A8)
+
+    def test_htp_load_tflite_unsupported_dtype_raises(self) -> None:
+        """QCS6490HTPBackend.load_tflite raises ValueError for unsupported dtype (FP32)."""
+        from unittest.mock import patch
+
+        from moment_to_action.hardware._platforms.qcs6490._htp_backend import QCS6490HTPBackend
+
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._htp_backend._load_litert_delegate",
+            return_value=[MagicMock()],
+        ):
+            backend = QCS6490HTPBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_tflite("/fake/model.tflite", dtype=DataType.FP32)
 
 
 @pytest.mark.unit
@@ -378,9 +417,10 @@ class TestQCS6490GPUBackend:
     def test_load_tflite_raises(self) -> None:
         """load_tflite raises NotImplementedError since TFLITE is not supported."""
         from moment_to_action.hardware._platforms.qcs6490._gpu_backend import QCS6490GPUBackend
+        from moment_to_action.hardware._types import DataType
 
         with pytest.raises(NotImplementedError):
-            QCS6490GPUBackend().load_tflite("/tmp/model.tflite")
+            QCS6490GPUBackend().load_tflite("/tmp/model.tflite", dtype=DataType.FP16)
 
     def test_load_llama_cpp_returns_model(self) -> None:
         """load_llama_cpp delegates to _start_llama_model with cpu_only=False."""
@@ -395,7 +435,10 @@ class TestQCS6490GPUBackend:
             return_value=mock_model,
         ) as mock_start:
             result = QCS6490GPUBackend().load_llama_cpp(
-                "/tmp/model.gguf", server_path="/usr/bin/llama-server", port=8080
+                "/tmp/model.gguf",
+                server_path="/usr/bin/llama-server",
+                port=8080,
+                dtype=DataType.FP32,
             )
         mock_start.assert_called_once_with(
             path="/tmp/model.gguf",
@@ -404,6 +447,7 @@ class TestQCS6490GPUBackend:
             port=8080,
             unit=ComputeUnit.GPU,
             cpu_only=False,
+            dtype=DataType.FP32,
         )
         assert result is mock_model
 
@@ -484,7 +528,7 @@ class TestQCS6490HTPBackend:
             "moment_to_action.hardware._platforms.qcs6490._htp_backend._load_litert_interpreter",
             return_value=mock_interp,
         ):
-            model = backend.load_tflite("/tmp/model.tflite")
+            model = backend.load_tflite("/tmp/model.tflite", dtype=DataType.W8A8)
         assert isinstance(model, QCS6490TfliteModel)
         assert model.unit == ComputeUnit.NPU
 
@@ -508,13 +552,16 @@ class TestQCS6490HTPBackend:
         mock_raw = MagicMock()
         mock_qairt = MagicMock()
         mock_qairt.load.return_value = mock_raw
+        from moment_to_action.hardware._types import DataType
+
         with patch.dict(sys.modules, {"qairt": mock_qairt}):
-            model = backend.load_dlc(Path("/fake/model.dlc"))
+            model = backend.load_dlc(Path("/fake/model.dlc"), dtype=DataType.W8A8)
 
         mock_qairt.load.assert_called_once_with("/fake/model.dlc")
         mock_raw.initialize.assert_called_once_with(backend="HTP")
         assert isinstance(model, QCS6490DLCModel)
         assert model.unit == ComputeUnit.NPU
+        assert model.dtype == DataType.W8A8
 
     def test_load_dlc_raises_if_qairt_unavailable(self) -> None:
         """load_dlc raises RuntimeError when qairt cannot be imported."""
@@ -531,9 +578,11 @@ class TestQCS6490HTPBackend:
         ):
             backend = QCS6490HTPBackend()
 
+        from moment_to_action.hardware._types import DataType
+
         with patch.dict(sys.modules, {"qairt": None}):  # type: ignore[dict-item]
             with pytest.raises(RuntimeError, match="QAIRT SDK is not available"):
-                backend.load_dlc(Path("/fake/model.dlc"))
+                backend.load_dlc(Path("/fake/model.dlc"), dtype=DataType.W8A8)
 
     def test_load_litert_delegate_returns_list_on_success(self) -> None:
         """_load_litert_delegate returns [delegate] on success."""
@@ -609,17 +658,17 @@ class TestQCS6490Models:
         ]
         mock_interp.get_output_details.return_value = [{"index": 0}]
         mock_interp.get_tensor.return_value = np.zeros((1, 10))
-        model = QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=mock_interp)
+        model = QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=mock_interp, dtype=DataType.FP32)
         assert model.unit == ComputeUnit.NPU
 
-    def test_tflite_model_dtype_default(self) -> None:
-        """QCS6490TfliteModel dtype defaults to FP32."""
+    def test_tflite_model_dtype_stored(self) -> None:
+        """QCS6490TfliteModel stores the passed dtype."""
         from unittest.mock import MagicMock
 
         from moment_to_action.hardware._loaded_models import TfliteModel as QCS6490TfliteModel
         from moment_to_action.hardware._types import ComputeUnit, DataType
 
-        model = QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=MagicMock())
+        model = QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=MagicMock(), dtype=DataType.FP32)
         assert model.dtype == DataType.FP32
 
     def test_tflite_model_type_property(self) -> None:
@@ -629,7 +678,7 @@ class TestQCS6490Models:
         from moment_to_action.hardware._loaded_models import TfliteModel as QCS6490TfliteModel
         from moment_to_action.hardware._types import ComputeUnit, ModelType
 
-        model = QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=MagicMock())
+        model = QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=MagicMock(), dtype=DataType.FP32)
         assert model.model_type == ModelType.TFLITE
 
     def test_tflite_model_run_with_ndarray(self) -> None:
@@ -645,7 +694,7 @@ class TestQCS6490Models:
         ]
         mock_interp.get_output_details.return_value = [{"index": 0}]
         mock_interp.get_tensor.return_value = np.zeros((1, 10))
-        model = QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=mock_interp)
+        model = QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=mock_interp, dtype=DataType.FP32)
         result = model.run(np.zeros((1, 3, 224, 224), dtype=np.float32))
         assert isinstance(result, list)
 
@@ -662,7 +711,7 @@ class TestQCS6490Models:
         ]
         mock_interp.get_output_details.return_value = [{"index": 0}]
         mock_interp.get_tensor.return_value = np.zeros((1, 10))
-        model = QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=mock_interp)
+        model = QCS6490TfliteModel(unit=ComputeUnit.NPU, interp=mock_interp, dtype=DataType.FP32)
         result = model.run({"input": np.zeros((1, 3, 224, 224), dtype=np.float32)})
         assert isinstance(result, list)
 
@@ -673,7 +722,7 @@ class TestQCS6490Models:
         from moment_to_action.hardware._loaded_models import TfliteModel as QCS6490TfliteModel
         from moment_to_action.hardware._types import ComputeUnit
 
-        model = QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=MagicMock())
+        model = QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=MagicMock(), dtype=DataType.FP32)
         model.unload()
         assert model._interp is None
         assert model._unloaded is True
@@ -685,7 +734,7 @@ class TestQCS6490Models:
         from moment_to_action.hardware._loaded_models import TfliteModel as QCS6490TfliteModel
         from moment_to_action.hardware._types import ComputeUnit
 
-        model = QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=MagicMock())
+        model = QCS6490TfliteModel(unit=ComputeUnit.CPU, interp=MagicMock(), dtype=DataType.FP32)
         model.unload()
         model.unload()
 
@@ -701,17 +750,17 @@ class TestQCS6490Models:
         mock_input.name = "input"
         mock_session.get_inputs.return_value = [mock_input]
         mock_session.run.return_value = [np.zeros((1, 10))]
-        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=mock_session)
+        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=mock_session, dtype=DataType.FP32)
         assert model.unit == ComputeUnit.CPU
 
-    def test_onnx_model_dtype_default(self) -> None:
-        """QCS6490ONNXModel dtype defaults to FP32."""
+    def test_onnx_model_dtype_stored(self) -> None:
+        """QCS6490ONNXModel stores the passed dtype."""
         from unittest.mock import MagicMock
 
         from moment_to_action.hardware._loaded_models import OnnxModel as QCS6490ONNXModel
         from moment_to_action.hardware._types import DataType
 
-        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=MagicMock())
+        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=MagicMock(), dtype=DataType.FP32)
         assert model.dtype == DataType.FP32
 
     def test_onnx_model_type_property(self) -> None:
@@ -721,7 +770,7 @@ class TestQCS6490Models:
         from moment_to_action.hardware._loaded_models import OnnxModel as QCS6490ONNXModel
         from moment_to_action.hardware._types import ModelType
 
-        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=MagicMock())
+        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=MagicMock(), dtype=DataType.FP32)
         assert model.model_type == ModelType.ONNX
 
     def test_onnx_model_run_with_ndarray(self) -> None:
@@ -735,7 +784,7 @@ class TestQCS6490Models:
         mock_input.name = "input"
         mock_session.get_inputs.return_value = [mock_input]
         mock_session.run.return_value = [np.zeros((1, 10))]
-        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=mock_session)
+        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=mock_session, dtype=DataType.FP32)
         result = model.run(np.zeros((1, 3, 224, 224), dtype=np.float32))
         assert isinstance(result, list)
 
@@ -750,7 +799,7 @@ class TestQCS6490Models:
         mock_input.name = "input"
         mock_session.get_inputs.return_value = [mock_input]
         mock_session.run.return_value = [np.zeros((1, 10))]
-        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=mock_session)
+        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=mock_session, dtype=DataType.FP32)
         result = model.run({"input": np.zeros((1, 3, 224, 224), dtype=np.float32)})
         assert isinstance(result, list)
 
@@ -760,7 +809,7 @@ class TestQCS6490Models:
 
         from moment_to_action.hardware._loaded_models import OnnxModel as QCS6490ONNXModel
 
-        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=MagicMock())
+        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=MagicMock(), dtype=DataType.FP32)
         model.unload()
         assert model._session is None
         assert model._unloaded is True
@@ -771,7 +820,7 @@ class TestQCS6490Models:
 
         from moment_to_action.hardware._loaded_models import OnnxModel as QCS6490ONNXModel
 
-        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=MagicMock())
+        model = QCS6490ONNXModel(unit=ComputeUnit.CPU, session=MagicMock(), dtype=DataType.FP32)
         model.unload()
         model.unload()
 
@@ -786,17 +835,17 @@ class TestQCS6490Models:
         mock_result = MagicMock()
         mock_result.data = {"output": np.zeros((1, 10))}
         mock_raw.return_value = mock_result
-        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=mock_raw)
+        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=mock_raw, dtype=DataType.W8A8)
         assert model.unit == ComputeUnit.NPU
 
-    def test_dlc_model_dtype_default(self) -> None:
-        """QCS6490DLCModel dtype defaults to W8A8."""
+    def test_dlc_model_dtype_stored(self) -> None:
+        """QCS6490DLCModel stores the passed dtype."""
         from unittest.mock import MagicMock
 
         from moment_to_action.hardware._loaded_models import DlcModel as QCS6490DLCModel
         from moment_to_action.hardware._types import ComputeUnit, DataType
 
-        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock())
+        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock(), dtype=DataType.W8A8)
         assert model.dtype == DataType.W8A8
 
     def test_dlc_model_type_property(self) -> None:
@@ -806,7 +855,7 @@ class TestQCS6490Models:
         from moment_to_action.hardware._loaded_models import DlcModel as QCS6490DLCModel
         from moment_to_action.hardware._types import ComputeUnit, ModelType
 
-        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock())
+        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock(), dtype=DataType.W8A8)
         assert model.model_type == ModelType.DLC
 
     def test_dlc_model_run_returns_dict(self) -> None:
@@ -820,7 +869,7 @@ class TestQCS6490Models:
         mock_result = MagicMock()
         mock_result.data = {"output": np.zeros((1, 10))}
         mock_raw.return_value = mock_result
-        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=mock_raw)
+        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=mock_raw, dtype=DataType.W8A8)
         result = model.run(np.zeros((1, 3, 640, 640), dtype=np.float32))
         assert isinstance(result, dict)
 
@@ -831,7 +880,7 @@ class TestQCS6490Models:
         from moment_to_action.hardware._loaded_models import DlcModel as QCS6490DLCModel
         from moment_to_action.hardware._types import ComputeUnit
 
-        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock())
+        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock(), dtype=DataType.W8A8)
         raw = model._raw
         assert raw is not None
         model.unload()
@@ -846,7 +895,7 @@ class TestQCS6490Models:
         from moment_to_action.hardware._loaded_models import DlcModel as QCS6490DLCModel
         from moment_to_action.hardware._types import ComputeUnit
 
-        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock())
+        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=MagicMock(), dtype=DataType.W8A8)
         model.unload()
         model.unload()
 
@@ -859,7 +908,7 @@ class TestQCS6490Models:
 
         mock_raw = MagicMock()
         mock_raw.destroy.side_effect = RuntimeError("device gone")
-        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=mock_raw)
+        model = QCS6490DLCModel(unit=ComputeUnit.NPU, raw=mock_raw, dtype=DataType.W8A8)
         model.unload()  # should not raise
         assert model._unloaded is True
 

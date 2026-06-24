@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import Platform
-    from moment_to_action.hardware._types import ComputeUnit, ModelType
+    from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 
 class LlamaVLModel(LlamaGGUFModel):
@@ -35,6 +35,7 @@ class LlamaVLModel(LlamaGGUFModel):
         variant: Registry variant key.
         path: Variant directory containing both the GGUF and mmproj files.
         model_type: File format (``ModelType.LLAMA_CPP``).
+        data_type: Quantization type of the model (e.g. ``DataType.FP32``).
         backends: Compute-unit → artifact filename mapping; the first entry
             must contain both a ``"model"`` key (text GGUF) and an ``"mmproj"`` key
             (vision encoder GGUF).
@@ -48,6 +49,7 @@ class LlamaVLModel(LlamaGGUFModel):
         variant: str,
         path: Path,
         model_type: ModelType | None = None,
+        data_type: DataType | None = None,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
@@ -61,6 +63,7 @@ class LlamaVLModel(LlamaGGUFModel):
             path: Variant directory; both the GGUF and mmproj files are resolved
                 relative to this path.
             model_type: File format — should be ``ModelType.LLAMA_CPP``.
+            data_type: Quantization type of the model (e.g. ``DataType.FP32``).
             backends: Compute-unit → ``{component_name: filename}`` dict.  Must
                 contain at least ``"model"`` and ``"mmproj"`` keys in the first entry.
             input_layout: Unused for VLMs; pass ``None``.
@@ -71,6 +74,7 @@ class LlamaVLModel(LlamaGGUFModel):
             variant,
             path,
             model_type,
+            data_type,
             backends=backends,
             input_layout=input_layout,
             system_prompt=system_prompt,
@@ -88,12 +92,17 @@ class LlamaVLModel(LlamaGGUFModel):
 
         Raises:
             RuntimeError: If the model is already loaded.
+            RuntimeError: If ``data_type`` was not set in the registry entry.
         """
         if self.is_loaded:
             msg = f"{type(self).__name__} is already loaded"
             raise RuntimeError(msg)
+        dtype = self._data_type
+        if dtype is None:
+            msg = "data_type is required for llama.cpp VLMs; check registry entry"
+            raise RuntimeError(msg)
         self._loaded_model = platform.load_llama_cpp(
-            unit, self._gguf_path, mmproj=self._mmproj_path
+            unit, self._gguf_path, mmproj=self._mmproj_path, dtype=dtype
         )
         self._platform = platform
 

@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 import cv2
 import rich
 
-from moment_to_action.config import AppConfig
+from moment_to_action.config import load_config
 from moment_to_action.hardware import Platform
 from moment_to_action.messages import ClassificationMessage
 from moment_to_action.messages.sensor import RawFrameMessage

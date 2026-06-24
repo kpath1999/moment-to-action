@@ -31,8 +31,8 @@ class TestX86_64CPUBackend:  # noqa: N801
         assert X86_64CPUBackend().unit == ComputeUnit.CPU
 
     def test_supported_dtypes(self) -> None:
-        """supported_dtypes returns {FP32}."""
-        assert X86_64CPUBackend().supported_dtypes == {DataType.FP32}
+        """supported_dtypes returns {FP32, W8A8, W8A16}."""
+        assert X86_64CPUBackend().supported_dtypes == {DataType.FP32, DataType.W8A8, DataType.W8A16}
 
     def test_supported_formats_includes_tflite_onnx_dlc(self) -> None:
         """supported_formats includes TFLITE, ONNX, and DLC."""
@@ -57,7 +57,7 @@ class TestX86_64CPUBackend:  # noqa: N801
             return_value=mock_interp,
         ):
             backend = X86_64CPUBackend()
-            model = backend.load_tflite("/tmp/model.tflite")
+            model = backend.load_tflite("/tmp/model.tflite", dtype=DataType.FP32)
 
         assert isinstance(model, TfliteModel)
         assert model.unit == ComputeUnit.CPU
@@ -70,7 +70,7 @@ class TestX86_64CPUBackend:  # noqa: N801
             return_value=mock_session,
         ):
             backend = X86_64CPUBackend()
-            model = backend.load_onnx("/tmp/model.onnx")
+            model = backend.load_onnx("/tmp/model.onnx", dtype=DataType.FP32)
 
         assert isinstance(model, OnnxModel)
         assert model.unit == ComputeUnit.CPU
@@ -79,7 +79,7 @@ class TestX86_64CPUBackend:  # noqa: N801
         """load_torch returns a TorchModel with CPU unit."""
         mock_module = MagicMock()
         with patch("torch.load", return_value=mock_module):
-            model = X86_64CPUBackend().load_torch("/tmp/model.pt")
+            model = X86_64CPUBackend().load_torch("/tmp/model.pt", dtype=DataType.FP32)
 
         assert isinstance(model, TorchModel)
         assert model.unit == ComputeUnit.CPU
@@ -92,7 +92,10 @@ class TestX86_64CPUBackend:  # noqa: N801
             return_value=mock_model,
         ) as mock_start:
             result = X86_64CPUBackend().load_llama_cpp(
-                "/tmp/model.gguf", server_path="/usr/bin/llama-server", port=8080
+                "/tmp/model.gguf",
+                server_path="/usr/bin/llama-server",
+                port=8080,
+                dtype=DataType.FP32,
             )
 
         mock_start.assert_called_once_with(
@@ -102,6 +105,7 @@ class TestX86_64CPUBackend:  # noqa: N801
             port=8080,
             unit=ComputeUnit.CPU,
             cpu_only=True,
+            dtype=DataType.FP32,
         )
         assert result is mock_model
 
@@ -121,11 +125,12 @@ class TestX86_64DLCMethods:  # noqa: N801
         backend = X86_64CPUBackend()
         path = Path("/fake/model.dlc")
         with patch.dict(sys.modules, {"qairt": mock_qairt}):
-            model = backend.load_dlc(path)
+            model = backend.load_dlc(path, dtype=DataType.W8A8)
 
         mock_qairt.load.assert_called_once_with(str(path))
         mock_raw.initialize.assert_called_once_with(backend="CPU")
         assert isinstance(model, DlcModel)
+        assert model.dtype == DataType.W8A8
 
     def test_load_dlc_raises_if_qairt_unavailable(self) -> None:
         """load_dlc raises RuntimeError when the QAIRT SDK cannot be imported."""
@@ -137,7 +142,24 @@ class TestX86_64DLCMethods:  # noqa: N801
             patch.dict(sys.modules, {"qairt": None}),  # type: ignore[dict-item]
             pytest.raises(RuntimeError, match="QAIRT SDK is not available"),
         ):
-            backend.load_dlc(Path("/fake/model.dlc"))
+            backend.load_dlc(Path("/fake/model.dlc"), dtype=DataType.W8A8)
+
+
+@pytest.mark.unit
+class TestX86_64DtypeValidation:  # noqa: N801
+    """Tests that X86_64CPUBackend rejects unsupported dtypes via _check_dtype."""
+
+    def test_load_tflite_unsupported_dtype_raises(self) -> None:
+        """load_tflite raises ValueError for a dtype not in supported_dtypes."""
+        backend = X86_64CPUBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_tflite("/fake/model.tflite", dtype=DataType.FP16)
+
+    def test_load_onnx_unsupported_dtype_raises(self) -> None:
+        """load_onnx raises ValueError for a dtype not in supported_dtypes."""
+        backend = X86_64CPUBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_onnx("/fake/model.onnx", dtype=DataType.FP16)
 
 
 @pytest.mark.unit
@@ -335,14 +357,14 @@ class TestX86_64TfliteModel:  # noqa: N801
         ]
         mock_interp.get_output_details.return_value = [{"index": 0}]
         mock_interp.get_tensor.return_value = __import__("numpy").zeros((1, 10))
-        return TfliteModel(unit=ComputeUnit.CPU, interp=mock_interp)
+        return TfliteModel(unit=ComputeUnit.CPU, interp=mock_interp, dtype=DataType.FP32)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
         assert self._make_model().unit == ComputeUnit.CPU
 
-    def test_dtype_property_default(self) -> None:
-        """Default dtype is FP32."""
+    def test_dtype_property(self) -> None:
+        """Dtype returns the value passed at construction."""
         assert self._make_model().dtype == DataType.FP32
 
     def test_model_type_property(self) -> None:
@@ -390,14 +412,14 @@ class TestX86_64ONNXModel:  # noqa: N801
         mock_input.name = "input"
         mock_session.get_inputs.return_value = [mock_input]
         mock_session.run.return_value = [__import__("numpy").zeros((1, 10))]
-        return OnnxModel(unit=ComputeUnit.CPU, session=mock_session)
+        return OnnxModel(unit=ComputeUnit.CPU, session=mock_session, dtype=DataType.FP32)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
         assert self._make_model().unit == ComputeUnit.CPU
 
-    def test_dtype_property_default(self) -> None:
-        """Default dtype is FP32."""
+    def test_dtype_property(self) -> None:
+        """Dtype returns the value passed at construction."""
         assert self._make_model().dtype == DataType.FP32
 
     def test_model_type_property(self) -> None:
@@ -444,14 +466,14 @@ class TestX86_64DLCModel:  # noqa: N801
         mock_result = MagicMock()
         mock_result.data = {"output": __import__("numpy").zeros((1, 10))}
         mock_raw.return_value = mock_result
-        return DlcModel(unit=ComputeUnit.CPU, raw=mock_raw)
+        return DlcModel(unit=ComputeUnit.CPU, raw=mock_raw, dtype=DataType.W8A8)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
         assert self._make_model().unit == ComputeUnit.CPU
 
-    def test_dtype_property_default(self) -> None:
-        """Default dtype is W8A8 (DLC models are quantized)."""
+    def test_dtype_property(self) -> None:
+        """Dtype returns the value passed at construction."""
         assert self._make_model().dtype == DataType.W8A8
 
     def test_model_type_property(self) -> None:

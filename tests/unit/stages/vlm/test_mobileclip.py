@@ -12,7 +12,7 @@ from unittest import mock
 import numpy as np
 import pytest
 
-from moment_to_action.hardware._types import ComputeUnit
+from moment_to_action.hardware._types import ComputeUnit, DataType
 from moment_to_action.messages.video import FrameTensorMessage
 from moment_to_action.messages.vlm import ClassificationMessage
 from moment_to_action.models import ModelID, ModelManager
@@ -89,7 +89,7 @@ class TestMobileCLIPStage:
             assert stage._text_tokens.dtype == np.int64
             mock_manager.get_path.assert_called_once_with(ModelID.MOBILECLIP_S2)
             mock_platform.load_tflite.assert_called_once_with(
-                ComputeUnit.CPU, mock_manager.get_path.return_value
+                ComputeUnit.CPU, mock_manager.get_path.return_value, dtype=DataType.FP32
             )
 
     def test_mobileclip_zero_shot_classification(
@@ -440,5 +440,5 @@ class TestMobileCLIPStage:
             )
 
             mock_platform.load_onnx.assert_called_once_with(
-                ComputeUnit.CPU, mock_manager.get_path.return_value
+                ComputeUnit.CPU, mock_manager.get_path.return_value, dtype=DataType.FP32
             )

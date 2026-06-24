@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.hardware._types import ModelType
+from moment_to_action.hardware._types import DataType, ModelType
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.models.image.detection.yolo._model import YOLOModel
 
@@ -28,7 +28,9 @@ _DLC_CPU_ONLY: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "
 @pytest.fixture
 def onnx_model() -> YOLOModel:
     """Return an unloaded YOLOModel in ONNX format."""
-    return YOLOModel("default", Path("/fake/model.onnx"), ModelType.ONNX, backends=_ONNX_BACKENDS)
+    return YOLOModel(
+        "default", Path("/fake/model.onnx"), ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+    )
 
 
 @pytest.fixture
@@ -38,6 +40,7 @@ def dlc_model() -> YOLOModel:
         "qcs6490",
         Path("/fake/qcs6490"),
         ModelType.DLC,
+        DataType.W8A8,
         input_layout="NHWC",
         backends=_DLC_BACKENDS,
     )
@@ -46,7 +49,9 @@ def dlc_model() -> YOLOModel:
 @pytest.fixture
 def dlc_model_nchw() -> YOLOModel:
     """Return an unloaded YOLOModel in DLC format with NCHW layout."""
-    return YOLOModel("other", Path("/fake/other"), ModelType.DLC, backends=_DLC_CPU_ONLY)
+    return YOLOModel(
+        "other", Path("/fake/other"), ModelType.DLC, DataType.W8A8, backends=_DLC_CPU_ONLY
+    )
 
 
 @pytest.fixture
@@ -200,7 +205,9 @@ class TestYOLOModelLoadUnload:
     ) -> None:
         """ONNX load() calls platform.load_onnx with the model path."""
         onnx_model.load(mock_platform, ComputeUnit.CPU)
-        mock_platform.load_onnx.assert_called_once_with(ComputeUnit.CPU, Path("/fake/model.onnx"))
+        mock_platform.load_onnx.assert_called_once_with(
+            ComputeUnit.CPU, Path("/fake/model.onnx"), dtype=DataType.FP32
+        )
 
     def test_load_dlc_calls_load_model_dlc(
         self, dlc_model: YOLOModel, mock_platform: MagicMock
@@ -208,8 +215,22 @@ class TestYOLOModelLoadUnload:
         """DLC load() calls platform.load_dlc with the artifact path."""
         dlc_model.load(mock_platform, ComputeUnit.CPU)
         mock_platform.load_dlc.assert_called_once_with(
-            ComputeUnit.CPU, Path("/fake/qcs6490/model.dlc")
+            ComputeUnit.CPU, Path("/fake/qcs6490/model.dlc"), dtype=DataType.W8A8
         )
+
+    def test_load_dlc_none_data_type_raises(self, mock_platform: MagicMock) -> None:
+        """DLC load() raises RuntimeError when data_type is None."""
+        model = YOLOModel("qcs6490", Path("/fake/qcs6490"), ModelType.DLC, backends=_DLC_BACKENDS)
+        with pytest.raises(RuntimeError, match="data_type"):
+            model.load(mock_platform, ComputeUnit.CPU)
+
+    def test_load_onnx_none_data_type_raises(self, mock_platform: MagicMock) -> None:
+        """ONNX load() raises RuntimeError when data_type is None."""
+        model = YOLOModel(
+            "default", Path("/fake/model.onnx"), ModelType.ONNX, backends=_ONNX_BACKENDS
+        )
+        with pytest.raises(RuntimeError, match="data_type"):
+            model.load(mock_platform, ComputeUnit.CPU)
 
     def test_load_sets_platform(self, onnx_model: YOLOModel, mock_platform: MagicMock) -> None:
         """load() stores the platform on _platform."""
@@ -257,7 +278,7 @@ class TestYOLOModelLoadUnload:
         """_platform is only set after the handle is successfully loaded."""
         load_calls: list[bool] = []
 
-        def _slow_load(_unit: object, _path: object) -> MagicMock:
+        def _slow_load(_unit: object, _path: object, *, dtype: object) -> MagicMock:  # noqa: ARG001
             load_calls.append(onnx_model._platform is None)
             return MagicMock()
 

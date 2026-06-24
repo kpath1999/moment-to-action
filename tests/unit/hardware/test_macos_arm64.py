@@ -50,7 +50,7 @@ class TestMacOSARM64CPUBackend:
             "moment_to_action.hardware._platforms.macos_arm64._cpu_backend._load_litert_interpreter",
             return_value=mock_interp,
         ):
-            model = MacOSARM64CPUBackend().load_tflite("/tmp/model.tflite")
+            model = MacOSARM64CPUBackend().load_tflite("/tmp/model.tflite", dtype=DataType.FP32)
 
         assert isinstance(model, TfliteModel)
         assert model.unit == ComputeUnit.CPU
@@ -62,7 +62,7 @@ class TestMacOSARM64CPUBackend:
             "moment_to_action.hardware._platforms.macos_arm64._cpu_backend.ort.InferenceSession",
             return_value=mock_session,
         ):
-            model = MacOSARM64CPUBackend().load_onnx("/tmp/model.onnx")
+            model = MacOSARM64CPUBackend().load_onnx("/tmp/model.onnx", dtype=DataType.FP32)
 
         assert isinstance(model, OnnxModel)
         assert model.unit == ComputeUnit.CPU
@@ -70,13 +70,13 @@ class TestMacOSARM64CPUBackend:
     def test_load_dlc_raises_not_implemented(self) -> None:
         """load_dlc raises NotImplementedError (not in supported_formats)."""
         with pytest.raises(NotImplementedError):
-            MacOSARM64CPUBackend().load_dlc("/tmp/model.dlc")
+            MacOSARM64CPUBackend().load_dlc("/tmp/model.dlc", dtype=DataType.W8A8)
 
     def test_load_torch_returns_torch_model(self) -> None:
         """load_torch returns a TorchModel with CPU unit."""
         mock_module = MagicMock()
         with patch("torch.load", return_value=mock_module):
-            model = MacOSARM64CPUBackend().load_torch("/tmp/model.pt")
+            model = MacOSARM64CPUBackend().load_torch("/tmp/model.pt", dtype=DataType.FP32)
 
         assert isinstance(model, TorchModel)
         assert model.unit == ComputeUnit.CPU
@@ -89,7 +89,10 @@ class TestMacOSARM64CPUBackend:
             return_value=mock_model,
         ) as mock_start:
             result = MacOSARM64CPUBackend().load_llama_cpp(
-                "/tmp/model.gguf", server_path="/usr/bin/llama-server", port=8080
+                "/tmp/model.gguf",
+                server_path="/usr/bin/llama-server",
+                port=8080,
+                dtype=DataType.FP32,
             )
 
         mock_start.assert_called_once_with(
@@ -99,8 +102,26 @@ class TestMacOSARM64CPUBackend:
             port=8080,
             unit=ComputeUnit.CPU,
             cpu_only=True,
+            dtype=DataType.FP32,
         )
         assert result is mock_model
+
+
+@pytest.mark.unit
+class TestMacOSARM64DtypeValidation:
+    """Tests that MacOSARM64CPUBackend rejects unsupported dtypes via _check_dtype."""
+
+    def test_load_tflite_unsupported_dtype_raises(self) -> None:
+        """load_tflite raises ValueError for a dtype not in supported_dtypes."""
+        backend = MacOSARM64CPUBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_tflite("/fake/model.tflite", dtype=DataType.W8A8)
+
+    def test_load_onnx_unsupported_dtype_raises(self) -> None:
+        """load_onnx raises ValueError for a dtype not in supported_dtypes."""
+        backend = MacOSARM64CPUBackend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            backend.load_onnx("/fake/model.onnx", dtype=DataType.W8A8)
 
 
 @pytest.mark.unit
@@ -188,14 +209,14 @@ class TestMacOSARM64TfliteModel:
         ]
         mock_interp.get_output_details.return_value = [{"index": 0}]
         mock_interp.get_tensor.return_value = np.zeros((1, 10))
-        return TfliteModel(unit=ComputeUnit.CPU, interp=mock_interp)
+        return TfliteModel(unit=ComputeUnit.CPU, interp=mock_interp, dtype=DataType.FP32)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
         assert self._make_model().unit == ComputeUnit.CPU
 
-    def test_dtype_property_default(self) -> None:
-        """Default dtype is FP32."""
+    def test_dtype_property(self) -> None:
+        """Dtype returns the value passed at construction."""
         assert self._make_model().dtype == DataType.FP32
 
     def test_model_type_property(self) -> None:
@@ -245,14 +266,14 @@ class TestMacOSARM64ONNXModel:
         mock_input.name = "input"
         mock_session.get_inputs.return_value = [mock_input]
         mock_session.run.return_value = [np.zeros((1, 10))]
-        return OnnxModel(unit=ComputeUnit.CPU, session=mock_session)
+        return OnnxModel(unit=ComputeUnit.CPU, session=mock_session, dtype=DataType.FP32)
 
     def test_unit_property(self) -> None:
         """Unit is always CPU."""
         assert self._make_model().unit == ComputeUnit.CPU
 
-    def test_dtype_property_default(self) -> None:
-        """Default dtype is FP32."""
+    def test_dtype_property(self) -> None:
+        """Dtype returns the value passed at construction."""
         assert self._make_model().dtype == DataType.FP32
 
     def test_model_type_property(self) -> None:

@@ -60,11 +60,12 @@ class ComputeBackend(ABC):
         """
         ...
 
-    def load_onnx(self, _path: str | os.PathLike[str]) -> LoadedModel:
+    def load_onnx(self, _path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:  # noqa: ARG002
         """Load an ONNX model.
 
         Args:
             _path: Path to the ``.onnx`` file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` for this model.
@@ -74,11 +75,12 @@ class ComputeBackend(ABC):
         """
         self._raise_unsupported("ONNX")
 
-    def load_dlc(self, _path: str | os.PathLike[str]) -> LoadedModel:
+    def load_dlc(self, _path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:  # noqa: ARG002
         """Load a DLC model.
 
         Args:
             _path: Path to the ``.dlc`` file.
+            dtype: Quantization type of the model (e.g. ``DataType.W8A8``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` for this model.
@@ -88,11 +90,12 @@ class ComputeBackend(ABC):
         """
         self._raise_unsupported("DLC")
 
-    def load_torch(self, _path: str | os.PathLike[str]) -> LoadedModel:
+    def load_torch(self, _path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:  # noqa: ARG002
         """Load a PyTorch model.
 
         Args:
             _path: Path to the saved model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` for this model.
@@ -102,11 +105,12 @@ class ComputeBackend(ABC):
         """
         self._raise_unsupported("TORCH")
 
-    def load_tflite(self, _path: str | os.PathLike[str]) -> LoadedModel:
+    def load_tflite(self, _path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:  # noqa: ARG002
         """Load a TFLite model.
 
         Args:
             _path: Path to the ``.tflite`` file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` for this model.
@@ -123,6 +127,7 @@ class ComputeBackend(ABC):
         mmproj: str | os.PathLike[str] | None = None,  # noqa: ARG002
         server_path: str | os.PathLike[str] | None = None,  # noqa: ARG002
         port: int | None = None,  # noqa: ARG002
+        dtype: DataType,  # noqa: ARG002
     ) -> LoadedModel:
         """Load a llama.cpp GGUF model.
 
@@ -132,6 +137,7 @@ class ComputeBackend(ABC):
             server_path: Path to the ``llama-server`` binary. If ``None``,
                 resolved by the backend from AppConfig or PATH.
             port: Port for llama-server. If ``None``, a free port is assigned.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` for this model.
@@ -140,6 +146,29 @@ class ComputeBackend(ABC):
             NotImplementedError: If LLAMA_CPP is not in :attr:`supported_formats`.
         """
         self._raise_unsupported("LLAMA_CPP")
+
+    def _check_dtype(self, dtype: DataType) -> None:
+        """Raise ValueError if *dtype* is not in :attr:`supported_dtypes`.
+
+        Call this at the start of every concrete ``load_*`` implementation to
+        catch unsupported dtype requests early rather than failing inside the
+        runtime.
+
+        Args:
+            dtype: Requested quantization / precision type.
+
+        Raises:
+            ValueError: If *dtype* is not in :attr:`supported_dtypes`.
+        """
+        if dtype not in self.supported_dtypes:
+            supported = ", ".join(
+                d.name for d in sorted(self.supported_dtypes, key=lambda d: d.name)
+            )
+            msg = (
+                f"{type(self).__name__} ({self.unit.name}) does not support dtype {dtype.name}. "
+                f"Supported dtypes: {supported or 'none'}"
+            )
+            raise ValueError(msg)
 
     def _raise_unsupported(self, fmt: str) -> NoReturn:
         """Raise NotImplementedError for an unsupported format.

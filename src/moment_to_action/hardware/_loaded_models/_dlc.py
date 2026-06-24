@@ -28,14 +28,14 @@ class DlcModel(LoadedModel):
         self,
         unit: ComputeUnit,
         raw: Model,
-        dtype: DataType = DataType.W8A8,
+        dtype: DataType,
     ) -> None:
         """Initialize a DlcModel.
 
         Args:
             unit: The compute unit this model runs on (NPU, CPU, etc.).
             raw: A QAIRT model handle (from ``qairt.load``).
-            dtype: Quantization type — defaults to W8A8.
+            dtype: Quantization type.
         """
         self._unit = unit
         self._raw: Model | None = raw

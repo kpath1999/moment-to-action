@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 import open_clip
 
+from moment_to_action.hardware._types import DataType
 from moment_to_action.messages import ClassificationMessage, FrameTensorMessage
 from moment_to_action.metrics._types import SpanType
 from moment_to_action.models import ModelID, ModelManager
@@ -66,9 +67,9 @@ class MobileCLIPStage(Stage):
         model_path = manager.get_path(ModelID.MOBILECLIP_S2)
         p = str(model_path).lower()
         if p.endswith(".onnx"):
-            self._handle = platform.load_onnx(unit, model_path)
+            self._handle = platform.load_onnx(unit, model_path, dtype=DataType.FP32)
         else:
-            self._handle = platform.load_tflite(unit, model_path)
+            self._handle = platform.load_tflite(unit, model_path, dtype=DataType.FP32)
         self._text_prompts = text_prompts
         self._text_tokens = self._tokenize(text_prompts)
         logger.info("MobileCLIPStage: loaded %s with %d prompts", model_path, len(text_prompts))

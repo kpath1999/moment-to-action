@@ -19,7 +19,7 @@ import rich
 from rich.console import Console
 from rich.logging import RichHandler
 
-from moment_to_action.config import AppConfig
+from moment_to_action.config import load_config
 from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.messages import ClassificationMessage
 from moment_to_action.metrics import MetricsCollector

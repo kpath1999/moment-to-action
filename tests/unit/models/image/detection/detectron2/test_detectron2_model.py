@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.hardware._types import ModelType
+from moment_to_action.hardware._types import DataType, ModelType
 from moment_to_action.models.image.detection.detectron2._model import Detectron2Model
 
 _ONNX_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "model.onnx"}}
@@ -30,7 +30,9 @@ _DLC_FLOAT_BACKENDS: dict[ComputeUnit, dict[str, str]] = {
 @pytest.fixture
 def onnx_model() -> Detectron2Model:
     """Return an unloaded Detectron2Model in single-graph ONNX format."""
-    return Detectron2Model("default", Path("/fake/d2"), ModelType.ONNX, backends=_ONNX_BACKENDS)
+    return Detectron2Model(
+        "default", Path("/fake/d2"), ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+    )
 
 
 @pytest.fixture
@@ -40,6 +42,7 @@ def dlc_model() -> Detectron2Model:
         "qcs6490_w8a16",
         Path("/fake/d2_qcs"),
         ModelType.DLC,
+        DataType.W8A16,
         input_layout="NHWC",
         backends=_DLC_NPU_BACKENDS,
     )
@@ -52,6 +55,7 @@ def dlc_model_nchw() -> Detectron2Model:
         "other",
         Path("/fake/d2_other"),
         ModelType.DLC,
+        DataType.W8A8,
         backends=_DLC_FLOAT_BACKENDS,
     )
 
@@ -214,6 +218,22 @@ class TestLoadUnload:
         """DLC load() sets _roi_channel_last=False when roi artifact ends with .dlc."""
         dlc_model_nchw.load(mock_platform, ComputeUnit.CPU)
         assert dlc_model_nchw._roi_channel_last is False
+
+    def test_load_dlc_none_data_type_raises(self, mock_platform: MagicMock) -> None:
+        """DLC load() raises RuntimeError when data_type is None."""
+        model = Detectron2Model(
+            "qcs6490", Path("/fake/qcs6490"), ModelType.DLC, backends=_DLC_NPU_BACKENDS
+        )
+        with pytest.raises(RuntimeError, match="data_type"):
+            model.load(mock_platform, ComputeUnit.CPU)
+
+    def test_load_onnx_none_data_type_raises(self, mock_platform: MagicMock) -> None:
+        """ONNX load() raises RuntimeError when data_type is None."""
+        model = Detectron2Model(
+            "default", Path("/fake/d2"), ModelType.ONNX, backends=_ONNX_BACKENDS
+        )
+        with pytest.raises(RuntimeError, match="data_type"):
+            model.load(mock_platform, ComputeUnit.CPU)
 
     def test_load_twice_raises(self, onnx_model: Detectron2Model, mock_platform: MagicMock) -> None:
         """Loading twice raises RuntimeError."""

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from moment_to_action.hardware._types import ComputeUnit, ModelType
+from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 from moment_to_action.models.llm._base import LlamaGGUFModel
 from moment_to_action.models.llm.qwen2._model import Qwen2Model
 
@@ -27,6 +27,7 @@ def _make_model(
         "default",
         _VARIANT_DIR,
         ModelType.LLAMA_CPP,
+        DataType.FP32,
         backends=_BACKENDS,
         input_layout=None,
         system_prompt=system_prompt,
@@ -78,7 +79,7 @@ class TestLlamaGGUFModelLoad:
         model.load(mock_platform, ComputeUnit.CPU)
 
         mock_platform.load_llama_cpp.assert_called_once_with(
-            ComputeUnit.CPU, _VARIANT_DIR / "model.gguf"
+            ComputeUnit.CPU, _VARIANT_DIR / "model.gguf", dtype=DataType.FP32
         )
 
     def test_load_marks_model_as_loaded(self) -> None:
@@ -99,6 +100,20 @@ class TestLlamaGGUFModelLoad:
 
         model.load(mock_platform, ComputeUnit.CPU)
         with pytest.raises(RuntimeError, match="already loaded"):
+            model.load(mock_platform, ComputeUnit.CPU)
+
+    def test_load_raises_if_data_type_is_none(self) -> None:
+        """load() raises RuntimeError when data_type is None (missing registry entry)."""
+        model = Qwen2Model(
+            "default",
+            _VARIANT_DIR,
+            ModelType.LLAMA_CPP,
+            None,
+            backends=_BACKENDS,
+            input_layout=None,
+        )
+        mock_platform = MagicMock()
+        with pytest.raises(RuntimeError, match="data_type is required"):
             model.load(mock_platform, ComputeUnit.CPU)
 
 

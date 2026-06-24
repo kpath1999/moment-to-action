@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from moment_to_action.hardware._types import ComputeUnit, ModelType
+from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 from moment_to_action.models.llm._base import LlamaGGUFModel
 from moment_to_action.models.vlm._base import LlamaVLModel
 from moment_to_action.models.vlm.qwen25_vl._model import Qwen25VLModel
@@ -31,6 +31,7 @@ def _make_model(
         "default",
         _VARIANT_DIR,
         ModelType.LLAMA_CPP,
+        DataType.FP32,
         backends=_BACKENDS,
         input_layout=None,
         system_prompt=system_prompt,
@@ -95,6 +96,7 @@ class TestLlamaVLModelLoad:
             ComputeUnit.CPU,
             _VARIANT_DIR / "model.gguf",
             mmproj=_VARIANT_DIR / "mmproj.gguf",
+            dtype=DataType.FP32,
         )
 
     def test_load_marks_model_as_loaded(self) -> None:
@@ -115,6 +117,20 @@ class TestLlamaVLModelLoad:
 
         model.load(mock_platform, ComputeUnit.CPU)
         with pytest.raises(RuntimeError, match="already loaded"):
+            model.load(mock_platform, ComputeUnit.CPU)
+
+    def test_load_raises_if_data_type_is_none(self) -> None:
+        """load() raises RuntimeError when data_type is None (missing registry entry)."""
+        model = Qwen25VLModel(
+            "default",
+            _VARIANT_DIR,
+            ModelType.LLAMA_CPP,
+            None,
+            backends=_BACKENDS,
+            input_layout=None,
+        )
+        mock_platform = MagicMock()
+        with pytest.raises(RuntimeError, match="data_type is required"):
             model.load(mock_platform, ComputeUnit.CPU)
 
 

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from moment_to_action.hardware import Platform
     from moment_to_action.hardware._loaded_model import LoadedModel
-    from moment_to_action.hardware._types import ComputeUnit, ModelType
+    from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         variant: Registry variant key.
         path: Variant directory containing the GGUF file.
         model_type: File format (``ModelType.LLAMA_CPP``).
+        data_type: Quantization type of the model (e.g. ``DataType.FP32``).
         backends: Compute-unit → artifact filename mapping; the first entry
             must contain a ``"model"`` key naming the ``.gguf`` file.
         input_layout: Not applicable to LLMs; expected to be ``None``.
@@ -47,6 +48,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         variant: str,
         path: Path,
         model_type: ModelType | None = None,
+        data_type: DataType | None = None,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
@@ -60,6 +62,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             path: Variant directory; the GGUF file is at
                 ``path / next(iter(backends.values()))["model"]``.
             model_type: File format — should be ``ModelType.LLAMA_CPP``.
+            data_type: Quantization type of the model (e.g. ``DataType.FP32``).
             backends: Compute-unit → ``{component_name: filename}`` dict.
             input_layout: Unused for LLMs; pass ``None``.
             system_prompt: System message prepended to every completion prompt.
@@ -69,6 +72,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             variant,
             path,
             model_type,
+            data_type,
             backends=backends,
             input_layout=input_layout,
         )
@@ -86,11 +90,16 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
 
         Raises:
             RuntimeError: If the model is already loaded.
+            RuntimeError: If ``data_type`` was not set in the registry entry.
         """
         if self.is_loaded:
             msg = f"{type(self).__name__} is already loaded"
             raise RuntimeError(msg)
-        self._loaded_model = platform.load_llama_cpp(unit, self._gguf_path)
+        dtype = self._data_type
+        if dtype is None:
+            msg = "data_type is required for llama.cpp models; check registry entry"
+            raise RuntimeError(msg)
+        self._loaded_model = platform.load_llama_cpp(unit, self._gguf_path, dtype=dtype)
         self._platform = platform
         logger.info(
             "%s: loaded %s via platform.load_llama_cpp",

@@ -88,11 +88,12 @@ class QCS6490HTPBackend(ComputeBackend):
         """Supported formats: DLC and TFLITE."""
         return set(self._SUPPORTED_FORMATS)
 
-    def load_tflite(self, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_tflite(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load a TFLite model and run it on the Hexagon HTP via QNN delegate.
 
         Args:
             path: Path to the ``.tflite`` model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware._loaded_models.TfliteModel`
@@ -101,16 +102,18 @@ class QCS6490HTPBackend(ComputeBackend):
         Raises:
             RuntimeError: If the delegate fails to apply to this model.
         """
+        self._check_dtype(dtype)
         p = os.fspath(path)
         interp = _load_litert_interpreter(p, self._delegates)
         logger.info("QCS6490HTPBackend: loaded %s on NPU", p)
-        return TfliteModel(unit=ComputeUnit.NPU, interp=interp)
+        return TfliteModel(unit=ComputeUnit.NPU, interp=interp, dtype=dtype)
 
-    def load_dlc(self, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_dlc(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load a DLC model and initialize it on the Hexagon HTP via QAIRT.
 
         Args:
             path: Path to the ``.dlc`` model file.
+            dtype: Quantization type of the model (e.g. ``DataType.W8A8``).
 
         Returns:
             A :class:`~moment_to_action.hardware._loaded_models.DlcModel` initialized on the HTP.
@@ -118,6 +121,7 @@ class QCS6490HTPBackend(ComputeBackend):
         Raises:
             RuntimeError: If the QAIRT SDK is not available on this device.
         """
+        self._check_dtype(dtype)
         try:
             import qairt  # noqa: PLC0415
         except Exception as exc:
@@ -126,4 +130,4 @@ class QCS6490HTPBackend(ComputeBackend):
         raw = qairt.load(os.fspath(path))
         raw.initialize(backend=_QAIRT_HTP_BACKEND)
         logger.info("QCS6490HTPBackend: loaded DLC %s on HTP", path)
-        return DlcModel(unit=ComputeUnit.NPU, raw=raw)
+        return DlcModel(unit=ComputeUnit.NPU, raw=raw, dtype=dtype)

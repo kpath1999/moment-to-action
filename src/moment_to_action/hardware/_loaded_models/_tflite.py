@@ -26,14 +26,14 @@ class TfliteModel(LoadedModel):
         self,
         unit: ComputeUnit,
         interp: Any,
-        dtype: DataType = DataType.FP32,
+        dtype: DataType,
     ) -> None:
         """Initialize a TfliteModel.
 
         Args:
             unit: The compute unit this model runs on (CPU, GPU, or NPU).
             interp: An allocated LiteRT interpreter handle.
-            dtype: Data type of this model (defaults to FP32).
+            dtype: Data type of this model.
         """
         self._unit = unit
         self._interp = interp

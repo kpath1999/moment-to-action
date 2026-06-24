@@ -12,7 +12,7 @@ Usage::
     outputs = model.run(image_tensor)
     model.unload()
     # or:
-    with platform.load_dlc(ComputeUnit.NPU, "detector.dlc") as model:
+    with platform.load_dlc(ComputeUnit.NPU, "detector.dlc", dtype=DataType.W8A8) as model:
         result = model.run(inputs)
 """
 
@@ -315,12 +315,15 @@ class Platform:
             return False
         return data_type is None or data_type in backend.supported_dtypes
 
-    def load_tflite(self, unit: ComputeUnit, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_tflite(
+        self, unit: ComputeUnit, path: str | os.PathLike[str], *, dtype: DataType
+    ) -> LoadedModel:
         """Load a TFLite model on the specified compute unit.
 
         Args:
             unit: The compute unit to run this model on.
             path: Path to the ``.tflite`` model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` ready for inference.
@@ -329,14 +332,17 @@ class Platform:
             ValueError: If *unit* is not available on this platform.
             NotImplementedError: If the backend does not support TFLITE.
         """
-        return self._backend_for(unit).load_tflite(path)
+        return self._backend_for(unit).load_tflite(path, dtype=dtype)
 
-    def load_onnx(self, unit: ComputeUnit, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_onnx(
+        self, unit: ComputeUnit, path: str | os.PathLike[str], *, dtype: DataType
+    ) -> LoadedModel:
         """Load an ONNX model on the specified compute unit.
 
         Args:
             unit: The compute unit to run this model on.
             path: Path to the ``.onnx`` model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` ready for inference.
@@ -345,14 +351,17 @@ class Platform:
             ValueError: If *unit* is not available on this platform.
             NotImplementedError: If the backend does not support ONNX.
         """
-        return self._backend_for(unit).load_onnx(path)
+        return self._backend_for(unit).load_onnx(path, dtype=dtype)
 
-    def load_dlc(self, unit: ComputeUnit, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_dlc(
+        self, unit: ComputeUnit, path: str | os.PathLike[str], *, dtype: DataType
+    ) -> LoadedModel:
         """Load a DLC model on the specified compute unit.
 
         Args:
             unit: The compute unit to run this model on.
             path: Path to the ``.dlc`` model file.
+            dtype: Quantization type of the model (e.g. ``DataType.W8A8``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` ready for inference.
@@ -361,14 +370,17 @@ class Platform:
             ValueError: If *unit* is not available on this platform.
             NotImplementedError: If the backend does not support DLC.
         """
-        return self._backend_for(unit).load_dlc(path)
+        return self._backend_for(unit).load_dlc(path, dtype=dtype)
 
-    def load_torch(self, unit: ComputeUnit, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_torch(
+        self, unit: ComputeUnit, path: str | os.PathLike[str], *, dtype: DataType
+    ) -> LoadedModel:
         """Load a PyTorch model on the specified compute unit.
 
         Args:
             unit: The compute unit to run this model on.
             path: Path to the saved model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` ready for inference.
@@ -377,7 +389,7 @@ class Platform:
             ValueError: If *unit* is not available on this platform.
             NotImplementedError: If the backend does not support TORCH.
         """
-        return self._backend_for(unit).load_torch(path)
+        return self._backend_for(unit).load_torch(path, dtype=dtype)
 
     def load_llama_cpp(
         self,
@@ -387,6 +399,7 @@ class Platform:
         mmproj: str | os.PathLike[str] | None = None,
         server_path: str | os.PathLike[str] | None = None,
         port: int | None = None,
+        dtype: DataType,
     ) -> LoadedModel:
         """Load a llama.cpp GGUF model on the specified compute unit.
 
@@ -400,6 +413,7 @@ class Platform:
             server_path: Path to the ``llama-server`` binary. Defaults to
                 ``config.llama_server_path``.
             port: Port for llama-server. Defaults to ``config.llama_server_port``.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware.LoadedModel` ready for inference.
@@ -411,7 +425,7 @@ class Platform:
         effective_server = server_path or self._config.llama_server_path
         effective_port = port or self._config.llama_server_port
         return self._backend_for(unit).load_llama_cpp(
-            path, mmproj=mmproj, server_path=effective_server, port=effective_port
+            path, mmproj=mmproj, server_path=effective_server, port=effective_port, dtype=dtype
         )
 
     # ------------------------------------------------------------------

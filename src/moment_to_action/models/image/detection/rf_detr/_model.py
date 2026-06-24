@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import LoadedModel, Platform
-    from moment_to_action.hardware._types import ComputeUnit
+    from moment_to_action.hardware._types import ComputeUnit, DataType
 
 _RF_DETR_INPUT_SIZE = 560
 
@@ -124,6 +124,7 @@ class RFDETRModel(ImageDetectionModel):
         variant: str,
         path: Path,
         model_type: ModelType,
+        data_type: DataType | None = None,
         confidence_threshold: float = 0.5,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
@@ -135,6 +136,7 @@ class RFDETRModel(ImageDetectionModel):
             variant: Registry variant key.
             path: Path to the model weights file or variant directory.
             model_type: ``ModelType.ONNX`` or ``ModelType.DLC``.
+            data_type: Quantization type (e.g. ``DataType.W8A8``); required for DLC variants.
             confidence_threshold: Detections below this score are discarded.
             backends: Compute unit → ``{"model": filename}`` mapping.  Keys
                 present are the supported units; ``load()`` indexes this with
@@ -142,7 +144,9 @@ class RFDETRModel(ImageDetectionModel):
             input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
                 use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
         """
-        super().__init__(variant, path, model_type, backends=backends, input_layout=input_layout)
+        super().__init__(
+            variant, path, model_type, data_type, backends=backends, input_layout=input_layout
+        )
         self._confidence_threshold = confidence_threshold
         self._handle: LoadedModel | None = None
         self._last_original_size: tuple[int, int] | None = None
@@ -177,9 +181,17 @@ class RFDETRModel(ImageDetectionModel):
             raise RuntimeError(msg)
         arts = self._backends[unit]
         if self._model_type is ModelType.ONNX:
-            self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]))
+            dtype = self._data_type
+            if dtype is None:
+                msg = "ONNX model missing data_type; check registry entry"
+                raise RuntimeError(msg)
+            self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]), dtype=dtype)
         else:
-            self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]))
+            dtype = self._data_type
+            if dtype is None:
+                msg = "DLC model missing data_type; check registry entry"
+                raise RuntimeError(msg)
+            self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]), dtype=dtype)
         self._platform = platform
 
     def unload(self) -> None:

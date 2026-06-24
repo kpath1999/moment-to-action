@@ -20,6 +20,7 @@ def _make_llama_model(unit: ComputeUnit = ComputeUnit.CPU) -> LlamaModel:
         unit=unit,
         proc=MagicMock(),
         client=MagicMock(),
+        dtype=DataType.FP32,
     )
 
 
@@ -46,6 +47,7 @@ class TestFindLlamaServer:
                 path="/tmp/model.gguf",
                 server_path="/custom/llama-server",
                 unit=ComputeUnit.CPU,
+                dtype=DataType.FP32,
             )
         assert model._server_path == "/custom/llama-server"
 
@@ -69,6 +71,7 @@ class TestFindLlamaServer:
                 path="/tmp/model.gguf",
                 server_path=None,
                 unit=ComputeUnit.CPU,
+                dtype=DataType.FP32,
             )
         assert model._server_path == "/path/from/which/llama-server"
 
@@ -76,7 +79,9 @@ class TestFindLlamaServer:
         """Raises RuntimeError when llama-server is not on PATH and none given."""
         with patch("shutil.which", return_value=None):
             with pytest.raises(RuntimeError, match="llama-server not found"):
-                _start_llama_model(path="/tmp/model.gguf", unit=ComputeUnit.CPU)
+                _start_llama_model(
+                    path="/tmp/model.gguf", unit=ComputeUnit.CPU, dtype=DataType.FP32
+                )
 
 
 @pytest.mark.unit
@@ -102,6 +107,7 @@ class TestStartLlamaModel:
                 path="/tmp/model.gguf",
                 server_path="/usr/bin/llama-server",
                 unit=ComputeUnit.CPU,
+                dtype=DataType.FP32,
             )
         assert isinstance(model, LlamaModel)
         assert model.unit == ComputeUnit.CPU
@@ -132,6 +138,7 @@ class TestStartLlamaModel:
                 server_path="/usr/bin/llama-server",
                 unit=ComputeUnit.CPU,
                 cpu_only=True,
+                dtype=DataType.FP32,
             )
         assert "--ngl" in captured_args[0]
         assert "0" in captured_args[0]
@@ -161,6 +168,7 @@ class TestStartLlamaModel:
                 mmproj="/tmp/mmproj.gguf",
                 server_path="/usr/bin/llama-server",
                 unit=ComputeUnit.CPU,
+                dtype=DataType.FP32,
             )
         assert "--mmproj" in captured_args[0]
         assert "/tmp/mmproj.gguf" in captured_args[0]
@@ -187,6 +195,7 @@ class TestStartLlamaModel:
                     path="/tmp/model.gguf",
                     server_path="/usr/bin/llama-server",
                     unit=ComputeUnit.CPU,
+                    dtype=DataType.FP32,
                 )
         mock_proc.terminate.assert_called_once()
         mock_client.close.assert_called_once()
@@ -212,6 +221,7 @@ class TestStartLlamaModel:
                 server_path="/usr/bin/llama-server",
                 port=None,
                 unit=ComputeUnit.CPU,
+                dtype=DataType.FP32,
             )
         mock_pick.assert_called_once()
         assert model._port == 12345
@@ -234,6 +244,7 @@ class TestStartLlamaModel:
                 server_path="/usr/bin/llama-server",
                 port=8888,
                 unit=ComputeUnit.CPU,
+                dtype=DataType.FP32,
             )
         mock_pick.assert_not_called()
         assert model._port == 8888
@@ -249,7 +260,7 @@ class TestLlamaModelProperties:
         assert _make_llama_model(ComputeUnit.GPU).unit == ComputeUnit.GPU
 
     def test_dtype_property(self) -> None:
-        """Dtype is always FP32."""
+        """Dtype returns the value passed at construction."""
         assert _make_llama_model().dtype == DataType.FP32
 
     def test_model_type_property(self) -> None:
@@ -362,6 +373,7 @@ class TestLlamaModelUnload:
             unit=ComputeUnit.CPU,
             proc=mock_proc,
             client=mock_client,
+            dtype=DataType.FP32,
         )
         model.unload()
         mock_proc.terminate.assert_called_once()
@@ -381,6 +393,7 @@ class TestLlamaModelUnload:
             unit=ComputeUnit.CPU,
             proc=mock_proc,
             client=mock_client,
+            dtype=DataType.FP32,
         )
         model.unload()
         model.unload()

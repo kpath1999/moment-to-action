@@ -17,18 +17,21 @@ class TorchModel(LoadedModel):
     Attributes:
         _unit: The compute unit this model runs on.
         _model: The loaded ``torch.nn.Module`` handle.
+        _dtype: Data type of this model.
         _unloaded: Whether :meth:`unload` has already been called.
     """
 
-    def __init__(self, unit: ComputeUnit, model: Any) -> None:
+    def __init__(self, unit: ComputeUnit, model: Any, dtype: DataType) -> None:
         """Initialize a TorchModel.
 
         Args:
             unit: The compute unit this model runs on.
             model: A loaded ``torch.nn.Module`` (or any callable torch model).
+            dtype: Data type of this model (e.g. ``DataType.FP32``).
         """
         self._unit = unit
         self._model: Any = model
+        self._dtype = dtype
         self._unloaded = False
 
     @property
@@ -38,8 +41,8 @@ class TorchModel(LoadedModel):
 
     @property
     def dtype(self) -> DataType:
-        """Data type — FP32 by default."""
-        return DataType.FP32
+        """Data type of this model."""
+        return self._dtype
 
     @property
     def model_type(self) -> ModelType:

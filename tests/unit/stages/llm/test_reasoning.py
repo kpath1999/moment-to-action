@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.config import AppConfig
-from moment_to_action.hardware._types import ComputeUnit
+from moment_to_action.hardware._types import ComputeUnit, DataType
 from moment_to_action.messages import DetectionMessage
 from moment_to_action.messages.llm import ReasoningMessage
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
@@ -406,7 +406,9 @@ class TestReasoningStage:
         assert stage._platform is mock_platform
         assert stage._handle is mock_handle
         mock_manager.get_path.assert_called_once_with(ModelID.YOLO_V8)
-        mock_platform.load_onnx.assert_called_once_with(ComputeUnit.CPU, fake_path)
+        mock_platform.load_onnx.assert_called_once_with(
+            ComputeUnit.CPU, fake_path, dtype=DataType.FP32
+        )
 
     def test_reasoning_stage_with_tflite_model_id(self) -> None:
         """ReasoningStage with a .tflite path calls platform.load_tflite."""
@@ -432,7 +434,9 @@ class TestReasoningStage:
             )
 
         assert stage._handle is mock_handle
-        mock_platform.load_tflite.assert_called_once_with(ComputeUnit.CPU, fake_path)
+        mock_platform.load_tflite.assert_called_once_with(
+            ComputeUnit.CPU, fake_path, dtype=DataType.FP32
+        )
 
     def test_reasoning_stage_with_dlc_model_id(self) -> None:
         """ReasoningStage with a .dlc path calls platform.load_dlc."""
@@ -458,7 +462,9 @@ class TestReasoningStage:
             )
 
         assert stage._handle is mock_handle
-        mock_platform.load_dlc.assert_called_once_with(ComputeUnit.CPU, fake_path)
+        mock_platform.load_dlc.assert_called_once_with(
+            ComputeUnit.CPU, fake_path, dtype=DataType.W8A8
+        )
 
     def test_reasoning_stage_unknown_extension_raises(self) -> None:
         """ReasoningStage raises ValueError for unknown model file extension."""

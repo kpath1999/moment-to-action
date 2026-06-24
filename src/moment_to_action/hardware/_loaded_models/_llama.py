@@ -59,6 +59,7 @@ def _start_llama_model(
     port: int | None = None,
     unit: ComputeUnit,
     cpu_only: bool = False,
+    dtype: DataType,
 ) -> LlamaModel:
     """Start a llama-server subprocess and return a :class:`LlamaModel`.
 
@@ -71,6 +72,7 @@ def _start_llama_model(
             assigned automatically.
         unit: Compute unit to report for this model.
         cpu_only: If ``True``, passes ``--ngl 0`` to force CPU-only execution.
+        dtype: Data type of this model (e.g. ``DataType.FP32``).
 
     Returns:
         A :class:`LlamaModel` with the server already running and healthy.
@@ -146,6 +148,7 @@ def _start_llama_model(
         unit=unit,
         proc=proc,
         client=client,
+        dtype=dtype,
     )
 
     logger.info(
@@ -173,6 +176,7 @@ class LlamaModel(LoadedStreamableModel):
         _port: Port the server is listening on.
         _server_path: Path to the ``llama-server`` binary.
         _unit: Compute unit this model is resident on.
+        _dtype: Data type of this model.
         _proc: Running llama-server subprocess.
         _client: httpx client connected to the server.
         _unloaded: Whether :meth:`unload` has been called.
@@ -180,6 +184,7 @@ class LlamaModel(LoadedStreamableModel):
 
     def __init__(
         self,
+        *,
         path: str,
         mmproj: str | None,
         port: int,
@@ -187,6 +192,7 @@ class LlamaModel(LoadedStreamableModel):
         unit: ComputeUnit,
         proc: subprocess.Popen[bytes],
         client: httpx.Client,
+        dtype: DataType,
     ) -> None:
         """Initialize a LlamaModel container.
 
@@ -198,12 +204,14 @@ class LlamaModel(LoadedStreamableModel):
             unit: Compute unit to report for this model.
             proc: Already-running llama-server subprocess.
             client: httpx client connected to the server.
+            dtype: Data type of this model (e.g. ``DataType.FP32``).
         """
         self._path = path
         self._mmproj = mmproj
         self._port = port
         self._server_path = server_path
         self._unit = unit
+        self._dtype = dtype
         self._proc: subprocess.Popen[bytes] | None = proc
         self._client: httpx.Client | None = client
         self._unloaded = False
@@ -215,8 +223,8 @@ class LlamaModel(LoadedStreamableModel):
 
     @property
     def dtype(self) -> DataType:
-        """Data type — FP32 (llama-server manages quantization internally)."""
-        return DataType.FP32
+        """Data type of this model."""
+        return self._dtype
 
     @property
     def model_type(self) -> ModelType:

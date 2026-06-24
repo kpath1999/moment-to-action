@@ -12,6 +12,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from moment_to_action.hardware import ComputeUnit, LoadedModel, Platform
+from moment_to_action.hardware._types import DataType
 from moment_to_action.messages import DetectionMessage, ReasoningMessage
 from moment_to_action.stages._base import Stage
 
@@ -41,11 +42,11 @@ def _load_by_extension(platform: Platform, path: os.PathLike[str]) -> LoadedMode
     """
     p = str(path).lower()
     if p.endswith(".tflite"):
-        return platform.load_tflite(ComputeUnit.CPU, path)
+        return platform.load_tflite(ComputeUnit.CPU, path, dtype=DataType.FP32)
     if p.endswith(".onnx"):
-        return platform.load_onnx(ComputeUnit.CPU, path)
+        return platform.load_onnx(ComputeUnit.CPU, path, dtype=DataType.FP32)
     if p.endswith(".dlc"):
-        return platform.load_dlc(ComputeUnit.CPU, path)
+        return platform.load_dlc(ComputeUnit.CPU, path, dtype=DataType.W8A8)
     msg = f"Unknown model format for ReasoningStage: {path!r}"
     raise ValueError(msg)
 

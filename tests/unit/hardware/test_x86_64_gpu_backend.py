@@ -69,7 +69,7 @@ class TestX86_64GPUBackend:  # noqa: N801
         """load_tflite raises NotImplementedError since TFLITE is not supported."""
         backend = self._make_backend()
         with pytest.raises(NotImplementedError):
-            backend.load_tflite("/tmp/model.tflite")  # type: ignore[attr-defined]
+            backend.load_tflite("/tmp/model.tflite", dtype=DataType.FP32)  # type: ignore[attr-defined]
 
     def test_load_torch_returns_model(self) -> None:
         """load_torch returns a TorchModel with GPU unit."""
@@ -78,7 +78,7 @@ class TestX86_64GPUBackend:  # noqa: N801
         backend = self._make_backend()
         mock_module = MagicMock()
         with patch("torch.load", return_value=mock_module):
-            model = backend.load_torch("/tmp/model.pt")  # type: ignore[attr-defined]
+            model = backend.load_torch("/tmp/model.pt", dtype=DataType.FP32)  # type: ignore[attr-defined]
 
         assert isinstance(model, TorchModel)
         assert model.unit == ComputeUnit.GPU
@@ -92,7 +92,10 @@ class TestX86_64GPUBackend:  # noqa: N801
             return_value=mock_model,
         ) as mock_start:
             result = backend.load_llama_cpp(  # type: ignore[attr-defined]
-                "/tmp/model.gguf", server_path="/usr/bin/llama-server", port=8080
+                "/tmp/model.gguf",
+                server_path="/usr/bin/llama-server",
+                port=8080,
+                dtype=DataType.FP32,
             )
 
         mock_start.assert_called_once_with(
@@ -102,5 +105,6 @@ class TestX86_64GPUBackend:  # noqa: N801
             port=8080,
             unit=ComputeUnit.GPU,
             cpu_only=False,
+            dtype=DataType.FP32,
         )
         assert result is mock_model

@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import LoadedModel, Platform
-    from moment_to_action.hardware._types import ComputeUnit
+    from moment_to_action.hardware._types import ComputeUnit, DataType
 
 _INPUT_SIZE = 800
 _MAX_PRE_NMS = 6000
@@ -91,6 +91,7 @@ class Detectron2Model(ImageDetectionModel):
         variant: str,
         path: Path,
         model_type: ModelType,
+        data_type: DataType | None = None,
         confidence_threshold: float = 0.5,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
@@ -103,6 +104,7 @@ class Detectron2Model(ImageDetectionModel):
             path: Directory holding ``model.proposal_generator.*`` and
                 ``model.roi_head.*`` artifacts.
             model_type: ``ModelType.ONNX`` or ``ModelType.DLC``.
+            data_type: Quantization type (e.g. ``DataType.W8A8``); required for DLC variants.
             confidence_threshold: Detections below this score are discarded.
             backends: Compute unit → component filename mapping.  For ONNX,
                 key ``"model"``; for DLC, keys ``"proposal_generator"`` and
@@ -110,7 +112,9 @@ class Detectron2Model(ImageDetectionModel):
             input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
                 use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
         """
-        super().__init__(variant, path, model_type, backends=backends, input_layout=input_layout)
+        super().__init__(
+            variant, path, model_type, data_type, backends=backends, input_layout=input_layout
+        )
         self._confidence_threshold = confidence_threshold
         # ONNX is the single-graph float export (detectron2 tracing): one
         # end-to-end model.onnx that runs RPN + ROI head + NMS internally.  DLC
@@ -157,15 +161,25 @@ class Detectron2Model(ImageDetectionModel):
         arts = self._backends[unit]
         if self._single_graph_onnx:
             # Single end-to-end graph; reuse _handle_pg as the sole handle.
-            self._handle_pg = platform.load_onnx(unit, self._artifact_path(arts["model"]))
+            dtype = self._data_type
+            if dtype is None:
+                msg = "ONNX model missing data_type; check registry entry"
+                raise RuntimeError(msg)
+            self._handle_pg = platform.load_onnx(
+                unit, self._artifact_path(arts["model"]), dtype=dtype
+            )
         else:
+            dtype = self._data_type
+            if dtype is None:
+                msg = "DLC model missing data_type; check registry entry"
+                raise RuntimeError(msg)
             pg = self._artifact_path(arts["proposal_generator"])
             roi = self._artifact_path(arts["roi_head"])
             # Only the HTP context binary lays `features` out channel-last; the
             # float .dlc keeps NCHW, so the transpose in run() is binary-only.
             self._roi_channel_last = roi.name.endswith(".npu.bin")
-            self._handle_pg = platform.load_dlc(unit, pg)
-            self._handle_roi = platform.load_dlc(unit, roi)
+            self._handle_pg = platform.load_dlc(unit, pg, dtype=dtype)
+            self._handle_roi = platform.load_dlc(unit, roi, dtype=dtype)
         self._platform = platform
 
     def unload(self) -> None:

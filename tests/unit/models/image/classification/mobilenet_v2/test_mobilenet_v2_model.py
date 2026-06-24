@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.hardware._types import ModelType
+from moment_to_action.hardware._types import DataType, ModelType
 from moment_to_action.models.image.classification.mobilenet_v2._model import (
     MobileNetV2Model,
     _softmax,
@@ -25,14 +25,16 @@ _DLC_BACKENDS: dict[ComputeUnit, dict[str, str]] = {
 @pytest.fixture
 def onnx_model() -> MobileNetV2Model:
     """Return an unloaded MobileNetV2Model in ONNX format."""
-    return MobileNetV2Model("default", Path("/fake/mnv2"), ModelType.ONNX, backends=_CPU_BACKENDS)
+    return MobileNetV2Model(
+        "default", Path("/fake/mnv2"), ModelType.ONNX, DataType.FP32, backends=_CPU_BACKENDS
+    )
 
 
 @pytest.fixture
 def dlc_model() -> MobileNetV2Model:
     """Return an unloaded MobileNetV2Model in DLC format."""
     return MobileNetV2Model(
-        "qcs6490", Path("/fake/mnv2_qcs"), ModelType.DLC, backends=_DLC_BACKENDS
+        "qcs6490", Path("/fake/mnv2_qcs"), ModelType.DLC, DataType.W8A8, backends=_DLC_BACKENDS
     )
 
 
@@ -156,7 +158,7 @@ class TestMobileNetV2ModelLoadUnload:
         """ONNX load() calls platform.load_onnx with model.onnx path."""
         onnx_model.load(mock_platform, ComputeUnit.CPU)
         mock_platform.load_onnx.assert_called_once_with(
-            ComputeUnit.CPU, onnx_model.path / "model.onnx"
+            ComputeUnit.CPU, onnx_model.path / "model.onnx", dtype=DataType.FP32
         )
 
     def test_dlc_load_calls_load_model_dlc(
@@ -165,7 +167,7 @@ class TestMobileNetV2ModelLoadUnload:
         """DLC load() calls platform.load_dlc with model.dlc path."""
         dlc_model.load(mock_platform, ComputeUnit.CPU)
         mock_platform.load_dlc.assert_called_once_with(
-            ComputeUnit.CPU, dlc_model.path / "model.dlc"
+            ComputeUnit.CPU, dlc_model.path / "model.dlc", dtype=DataType.W8A8
         )
 
     def test_load_sets_is_loaded(
@@ -174,6 +176,22 @@ class TestMobileNetV2ModelLoadUnload:
         """After load(), is_loaded is True."""
         onnx_model.load(mock_platform, ComputeUnit.CPU)
         assert onnx_model.is_loaded is True
+
+    def test_dlc_load_none_data_type_raises(self, mock_platform: MagicMock) -> None:
+        """DLC load() raises RuntimeError when data_type is None."""
+        model = MobileNetV2Model(
+            "qcs6490", Path("/fake/mnv2_qcs"), ModelType.DLC, backends=_DLC_BACKENDS
+        )
+        with pytest.raises(RuntimeError, match="data_type"):
+            model.load(mock_platform, ComputeUnit.CPU)
+
+    def test_onnx_load_none_data_type_raises(self, mock_platform: MagicMock) -> None:
+        """ONNX load() raises RuntimeError when data_type is None."""
+        model = MobileNetV2Model(
+            "default", Path("/fake/mnv2"), ModelType.ONNX, backends=_CPU_BACKENDS
+        )
+        with pytest.raises(RuntimeError, match="data_type"):
+            model.load(mock_platform, ComputeUnit.CPU)
 
     def test_double_load_raises(
         self, onnx_model: MobileNetV2Model, mock_platform: MagicMock

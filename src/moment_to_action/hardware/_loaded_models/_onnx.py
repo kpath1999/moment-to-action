@@ -27,14 +27,14 @@ class OnnxModel(LoadedModel):
         self,
         unit: ComputeUnit,
         session: Any,
-        dtype: DataType = DataType.FP32,
+        dtype: DataType,
     ) -> None:
         """Initialize an OnnxModel.
 
         Args:
             unit: The compute unit this model runs on.
             session: An ``onnxruntime.InferenceSession`` handle.
-            dtype: Data type of this model (defaults to FP32).
+            dtype: Data type of this model.
         """
         self._unit = unit
         self._session = session

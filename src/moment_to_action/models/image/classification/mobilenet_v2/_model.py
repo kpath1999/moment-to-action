@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware import LoadedModel, Platform
-    from moment_to_action.hardware._types import ComputeUnit
+    from moment_to_action.hardware._types import ComputeUnit, DataType
 
 _MNV2_INPUT_SIZE = 224
 _MNV2_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -57,6 +57,7 @@ class MobileNetV2Model(ImageClassificationModel):
         variant: str,
         path: Path,
         model_type: ModelType,
+        data_type: DataType | None = None,
         top_k: int = 5,
         *,
         backends: dict[ComputeUnit, dict[str, str]],
@@ -68,6 +69,7 @@ class MobileNetV2Model(ImageClassificationModel):
             variant: Registry variant key.
             path: Path to the model directory containing ``model.onnx`` or ``model.dlc``.
             model_type: ``ModelType.ONNX`` or ``ModelType.DLC``.
+            data_type: Quantization type (e.g. ``DataType.W8A8``); required for DLC variants.
             top_k: Number of top predictions to return from :meth:`post_proc`.
             backends: Compute unit → ``{"model": filename}`` mapping.  Keys
                 present are the supported units; ``load()`` indexes this with
@@ -75,7 +77,9 @@ class MobileNetV2Model(ImageClassificationModel):
             input_layout: Input tensor layout (unused by MobileNet V2, which
                 always preprocesses to NCHW; accepted for interface uniformity).
         """
-        super().__init__(variant, path, model_type, backends=backends, input_layout=input_layout)
+        super().__init__(
+            variant, path, model_type, data_type, backends=backends, input_layout=input_layout
+        )
         self._top_k = top_k
         self._handle: LoadedModel | None = None
 
@@ -128,9 +132,17 @@ class MobileNetV2Model(ImageClassificationModel):
             raise RuntimeError(msg)
         arts = self._backends[unit]
         if self._model_type is ModelType.ONNX:
-            self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]))
+            dtype = self._data_type
+            if dtype is None:
+                msg = "ONNX model missing data_type; check registry entry"
+                raise RuntimeError(msg)
+            self._handle = platform.load_onnx(unit, self._artifact_path(arts["model"]), dtype=dtype)
         else:
-            self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]))
+            dtype = self._data_type
+            if dtype is None:
+                msg = "DLC model missing data_type; check registry entry"
+                raise RuntimeError(msg)
+            self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]), dtype=dtype)
         self._platform = platform
 
     def unload(self) -> None:

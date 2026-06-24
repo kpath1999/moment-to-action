@@ -162,63 +162,64 @@ class TestPlatformLoadDelegation:
         return p, mock_cpu
 
     def test_load_tflite_delegates(self) -> None:
-        """load_tflite calls backend.load_tflite with the path."""
+        """load_tflite calls backend.load_tflite with the path and dtype."""
         p, mock_cpu = self._make_platform_with_mock_cpu()
         path = Path("/fake/model.tflite")
         mock_cpu.load_tflite.return_value = MagicMock()
 
-        result = p.load_tflite(ComputeUnit.CPU, path)
+        result = p.load_tflite(ComputeUnit.CPU, path, dtype=DataType.FP32)
 
-        mock_cpu.load_tflite.assert_called_once_with(path)
+        mock_cpu.load_tflite.assert_called_once_with(path, dtype=DataType.FP32)
         assert result is mock_cpu.load_tflite.return_value
 
     def test_load_onnx_delegates(self) -> None:
-        """load_onnx calls backend.load_onnx with the path."""
+        """load_onnx calls backend.load_onnx with the path and dtype."""
         p, mock_cpu = self._make_platform_with_mock_cpu()
         path = Path("/fake/model.onnx")
         mock_cpu.load_onnx.return_value = MagicMock()
 
-        result = p.load_onnx(ComputeUnit.CPU, path)
+        result = p.load_onnx(ComputeUnit.CPU, path, dtype=DataType.FP32)
 
-        mock_cpu.load_onnx.assert_called_once_with(path)
+        mock_cpu.load_onnx.assert_called_once_with(path, dtype=DataType.FP32)
         assert result is mock_cpu.load_onnx.return_value
 
     def test_load_dlc_delegates(self) -> None:
-        """load_dlc calls backend.load_dlc with the path."""
+        """load_dlc calls backend.load_dlc with the path and dtype."""
         p, mock_cpu = self._make_platform_with_mock_cpu()
         path = Path("/fake/model.dlc")
         mock_cpu.load_dlc.return_value = MagicMock()
 
-        result = p.load_dlc(ComputeUnit.CPU, path)
+        result = p.load_dlc(ComputeUnit.CPU, path, dtype=DataType.W8A8)
 
-        mock_cpu.load_dlc.assert_called_once_with(path)
+        mock_cpu.load_dlc.assert_called_once_with(path, dtype=DataType.W8A8)
         assert result is mock_cpu.load_dlc.return_value
 
     def test_load_torch_delegates(self) -> None:
-        """load_torch calls backend.load_torch with the path."""
+        """load_torch calls backend.load_torch with the path and dtype."""
         p, mock_cpu = self._make_platform_with_mock_cpu()
         path = Path("/fake/model.pt")
         mock_cpu.load_torch.return_value = MagicMock()
 
-        result = p.load_torch(ComputeUnit.CPU, path)
+        result = p.load_torch(ComputeUnit.CPU, path, dtype=DataType.FP32)
 
-        mock_cpu.load_torch.assert_called_once_with(path)
+        mock_cpu.load_torch.assert_called_once_with(path, dtype=DataType.FP32)
         assert result is mock_cpu.load_torch.return_value
 
     def test_load_llama_cpp_delegates(self) -> None:
-        """load_llama_cpp calls backend.load_llama_cpp with path and mmproj."""
+        """load_llama_cpp calls backend.load_llama_cpp with path, mmproj, and dtype."""
         p, mock_cpu = self._make_platform_with_mock_cpu()
         path = Path("/fake/model.gguf")
         mmproj = Path("/fake/mmproj.gguf")
         mock_cpu.load_llama_cpp.return_value = MagicMock()
 
-        result = p.load_llama_cpp(ComputeUnit.CPU, path, mmproj=mmproj)
+        result = p.load_llama_cpp(ComputeUnit.CPU, path, mmproj=mmproj, dtype=DataType.FP32)
 
         mock_cpu.load_llama_cpp.assert_called_once_with(
             path,
             mmproj=mmproj,
             server_path=AppConfig().llama_server_path,
             port=AppConfig().llama_server_port,
+            dtype=DataType.FP32,
         )
         assert result is mock_cpu.load_llama_cpp.return_value
 
@@ -227,7 +228,7 @@ class TestPlatformLoadDelegation:
         p, _ = self._make_platform_with_mock_cpu()
 
         with pytest.raises(ValueError, match="NPU"):
-            p.load_tflite(ComputeUnit.NPU, Path("/fake/model.tflite"))
+            p.load_tflite(ComputeUnit.NPU, Path("/fake/model.tflite"), dtype=DataType.FP32)
 
 
 @pytest.mark.unit
@@ -342,31 +343,31 @@ class TestComputeBackendDefaults:
         """load_onnx raises NotImplementedError when ONNX not in supported_formats."""
         b = self._make_backend()
         with pytest.raises(NotImplementedError, match="ONNX"):
-            b.load_onnx("/tmp/model.onnx")
+            b.load_onnx("/tmp/model.onnx", dtype=DataType.FP32)
 
     def test_load_dlc_raises_not_implemented(self) -> None:
         """load_dlc raises NotImplementedError when DLC not in supported_formats."""
         b = self._make_backend()
         with pytest.raises(NotImplementedError, match="DLC"):
-            b.load_dlc("/tmp/model.dlc")
+            b.load_dlc("/tmp/model.dlc", dtype=DataType.W8A8)
 
     def test_load_torch_raises_not_implemented(self) -> None:
         """load_torch raises NotImplementedError when TORCH not in supported_formats."""
         b = self._make_backend()
         with pytest.raises(NotImplementedError, match="TORCH"):
-            b.load_torch("/tmp/model.pt")
+            b.load_torch("/tmp/model.pt", dtype=DataType.FP32)
 
     def test_load_tflite_raises_not_implemented(self) -> None:
         """load_tflite raises NotImplementedError when TFLITE not in supported_formats."""
         b = self._make_backend()
         with pytest.raises(NotImplementedError, match="TFLITE"):
-            b.load_tflite("/tmp/model.tflite")
+            b.load_tflite("/tmp/model.tflite", dtype=DataType.FP32)
 
     def test_load_llama_cpp_raises_not_implemented(self) -> None:
         """load_llama_cpp raises NotImplementedError when LLAMA_CPP not in supported_formats."""
         b = self._make_backend()
         with pytest.raises(NotImplementedError, match="LLAMA_CPP"):
-            b.load_llama_cpp("/tmp/model.gguf")
+            b.load_llama_cpp("/tmp/model.gguf", dtype=DataType.FP32)
 
     def test_raise_unsupported_message_includes_supported_formats(self) -> None:
         """_raise_unsupported error message lists supported formats."""
@@ -389,7 +390,47 @@ class TestComputeBackendDefaults:
 
         b = _WithOnnx()
         with pytest.raises(NotImplementedError, match="ONNX"):
-            b.load_dlc("/tmp/model.dlc")
+            b.load_dlc("/tmp/model.dlc", dtype=DataType.W8A8)
+
+    def test_check_dtype_raises_for_unsupported_dtype(self) -> None:
+        """_check_dtype raises ValueError for dtype not in supported_dtypes."""
+        b = self._make_backend()
+        with pytest.raises(ValueError, match="does not support dtype"):
+            b._check_dtype(DataType.FP32)
+
+    def test_check_dtype_passes_for_supported_dtype(self) -> None:
+        """_check_dtype does not raise when dtype is in supported_dtypes."""
+
+        class _WithFP32(ComputeBackend):
+            @property
+            def unit(self) -> ComputeUnit:
+                """Return CPU."""
+                return ComputeUnit.CPU
+
+            @property
+            def supported_dtypes(self) -> set[DataType]:
+                """Return FP32 only."""
+                return {DataType.FP32}
+
+            @property
+            def supported_formats(self) -> set[ModelType]:
+                """Return empty."""
+                return set()
+
+        b = _WithFP32()
+        b._check_dtype(DataType.FP32)  # should not raise
+
+    def test_check_dtype_error_message_includes_backend_name(self) -> None:
+        """_check_dtype error message names the backend and the dtype."""
+        b = self._make_backend()
+        with pytest.raises(ValueError, match="_Minimal"):
+            b._check_dtype(DataType.W8A8)
+
+    def test_check_dtype_error_message_says_none_when_no_dtypes(self) -> None:
+        """_check_dtype error message says 'none' when supported_dtypes is empty."""
+        b = self._make_backend()
+        with pytest.raises(ValueError, match="none"):
+            b._check_dtype(DataType.FP32)
 
 
 @pytest.mark.unit

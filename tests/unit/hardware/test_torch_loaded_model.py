@@ -17,7 +17,7 @@ class TestTorchModel:
     def _make_model(self, unit: ComputeUnit = ComputeUnit.CPU) -> TorchModel:
         """Return a TorchModel with a callable mock."""
         mock_module = MagicMock(return_value="output")
-        return TorchModel(unit=unit, model=mock_module)
+        return TorchModel(unit=unit, model=mock_module, dtype=DataType.FP32)
 
     def test_unit_property(self) -> None:
         """Unit returns the value passed at construction."""
@@ -25,7 +25,7 @@ class TestTorchModel:
         assert self._make_model(ComputeUnit.GPU).unit == ComputeUnit.GPU
 
     def test_dtype_property(self) -> None:
-        """Dtype is always FP32."""
+        """Dtype returns the value passed at construction."""
         assert self._make_model().dtype == DataType.FP32
 
     def test_model_type_property(self) -> None:

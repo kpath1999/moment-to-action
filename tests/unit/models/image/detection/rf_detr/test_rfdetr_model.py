@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.hardware._types import ModelType
+from moment_to_action.hardware._types import DataType, ModelType
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.models.image.detection.rf_detr._model import RFDETRModel
 
@@ -20,7 +20,9 @@ _DLC_BACKENDS: dict[ComputeUnit, dict[str, str]] = {ComputeUnit.CPU: {"model": "
 @pytest.fixture
 def onnx_model() -> RFDETRModel:
     """Return an unloaded RFDETRModel in ONNX format."""
-    return RFDETRModel("default", Path("/fake/model.onnx"), ModelType.ONNX, backends=_ONNX_BACKENDS)
+    return RFDETRModel(
+        "default", Path("/fake/model.onnx"), ModelType.ONNX, DataType.FP32, backends=_ONNX_BACKENDS
+    )
 
 
 @pytest.fixture
@@ -30,6 +32,7 @@ def dlc_model() -> RFDETRModel:
         "qcs6490",
         Path("/fake/qcs6490"),
         ModelType.DLC,
+        DataType.W8A8,
         input_layout="NHWC",
         backends=_DLC_BACKENDS,
     )
@@ -38,7 +41,9 @@ def dlc_model() -> RFDETRModel:
 @pytest.fixture
 def dlc_model_nchw() -> RFDETRModel:
     """Return an unloaded RFDETRModel in DLC format with NCHW layout."""
-    return RFDETRModel("other", Path("/fake/other"), ModelType.DLC, backends=_DLC_BACKENDS)
+    return RFDETRModel(
+        "other", Path("/fake/other"), ModelType.DLC, DataType.W8A8, backends=_DLC_BACKENDS
+    )
 
 
 @pytest.fixture
@@ -161,8 +166,22 @@ class TestRFDETRModelLoadUnload:
         """load() with DLC format calls platform.load_dlc."""
         dlc_model.load(mock_platform, ComputeUnit.CPU)
         mock_platform.load_dlc.assert_called_once_with(
-            ComputeUnit.CPU, Path("/fake/qcs6490/model.dlc")
+            ComputeUnit.CPU, Path("/fake/qcs6490/model.dlc"), dtype=DataType.W8A8
         )
+
+    def test_load_dlc_none_data_type_raises(self, mock_platform: MagicMock) -> None:
+        """DLC load() raises RuntimeError when data_type is None."""
+        model = RFDETRModel("qcs6490", Path("/fake/qcs6490"), ModelType.DLC, backends=_DLC_BACKENDS)
+        with pytest.raises(RuntimeError, match="data_type"):
+            model.load(mock_platform, ComputeUnit.CPU)
+
+    def test_load_onnx_none_data_type_raises(self, mock_platform: MagicMock) -> None:
+        """ONNX load() raises RuntimeError when data_type is None."""
+        model = RFDETRModel(
+            "default", Path("/fake/model.onnx"), ModelType.ONNX, backends=_ONNX_BACKENDS
+        )
+        with pytest.raises(RuntimeError, match="data_type"):
+            model.load(mock_platform, ComputeUnit.CPU)
 
     def test_load_twice_raises(self, onnx_model: RFDETRModel, mock_platform: MagicMock) -> None:
         """Loading an already-loaded model raises RuntimeError."""

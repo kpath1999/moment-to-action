@@ -34,7 +34,9 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
     DLC support requires the QAIRT SDK to be installed (``m2a qairt install``).
     """
 
-    _SUPPORTED_DTYPES: frozenset[DataType] = frozenset({DataType.FP32})
+    _SUPPORTED_DTYPES: frozenset[DataType] = frozenset(
+        {DataType.FP32, DataType.W8A8, DataType.W8A16}
+    )
     _SUPPORTED_FORMATS: frozenset[ModelType] = frozenset(
         {ModelType.TFLITE, ModelType.ONNX, ModelType.DLC, ModelType.TORCH, ModelType.LLAMA_CPP}
     )
@@ -52,7 +54,7 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
 
     @property
     def supported_dtypes(self) -> set[DataType]:
-        """Supported data types: FP32."""
+        """Supported data types: FP32, W8A8, and W8A16 (debug DLC path accepts quantized models)."""
         return set(self._SUPPORTED_DTYPES)
 
     @property
@@ -60,43 +62,48 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
         """Supported formats: TFLITE, ONNX, DLC (debug), TORCH, and LLAMA_CPP."""
         return set(self._SUPPORTED_FORMATS)
 
-    def load_tflite(self, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_tflite(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load a TFLite model on CPU via LiteRT/XNNPACK.
 
         Args:
             path: Path to the ``.tflite`` model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware._loaded_models.TfliteModel`
             backed by XNNPACK.
         """
+        self._check_dtype(dtype)
         p = os.fspath(path)
         interp = _load_litert_interpreter(p)
         logger.info("X86_64CPUBackend: loaded %s on CPU", p)
-        return TfliteModel(unit=ComputeUnit.CPU, interp=interp)
+        return TfliteModel(unit=ComputeUnit.CPU, interp=interp, dtype=dtype)
 
-    def load_onnx(self, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_onnx(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load an ONNX model on CPU via ONNX Runtime.
 
         Args:
             path: Path to the ``.onnx`` model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             An :class:`~moment_to_action.hardware._loaded_models.OnnxModel`
             backed by CPU EP.
         """
+        self._check_dtype(dtype)
         p = os.fspath(path)
         session = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
         logger.info("X86_64CPUBackend: loaded %s via onnxruntime", p)
-        return OnnxModel(unit=ComputeUnit.CPU, session=session)
+        return OnnxModel(unit=ComputeUnit.CPU, session=session, dtype=dtype)
 
-    def load_dlc(self, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_dlc(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load a DLC model via QAIRT CPU backend (debug path).
 
         Requires the QAIRT SDK to be installed (``m2a qairt install``).
 
         Args:
             path: Path to the ``.dlc`` model file.
+            dtype: Quantization type of the model (e.g. ``DataType.W8A8``).
 
         Returns:
             A :class:`~moment_to_action.hardware._loaded_models.DlcModel`
@@ -105,6 +112,7 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
         Raises:
             RuntimeError: If the QAIRT SDK is not installed.
         """
+        self._check_dtype(dtype)
         try:
             import qairt  # noqa: PLC0415
         except Exception as exc:
@@ -113,18 +121,20 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
         raw = qairt.load(os.fspath(path))
         raw.initialize(backend=_QAIRT_CPU_BACKEND)
         logger.info("X86_64CPUBackend: loaded DLC %s on CPU backend", path)
-        return DlcModel(unit=ComputeUnit.CPU, raw=raw)
+        return DlcModel(unit=ComputeUnit.CPU, raw=raw, dtype=dtype)
 
-    def load_torch(self, path: str | os.PathLike[str]) -> LoadedModel:
+    def load_torch(self, path: str | os.PathLike[str], *, dtype: DataType) -> LoadedModel:
         """Load a PyTorch model on CPU.
 
         Args:
             path: Path to the saved model file.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware._loaded_models.TorchModel`
             running on CPU.
         """
+        self._check_dtype(dtype)
         import torch  # noqa: PLC0415
 
         from moment_to_action.hardware._loaded_models._torch import TorchModel  # noqa: PLC0415
@@ -132,7 +142,7 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
         p = os.fspath(path)
         model = torch.load(p, map_location="cpu", weights_only=False)
         logger.info("X86_64CPUBackend: loaded %s via PyTorch on CPU", p)
-        return TorchModel(unit=ComputeUnit.CPU, model=model)
+        return TorchModel(unit=ComputeUnit.CPU, model=model, dtype=dtype)
 
     def load_llama_cpp(
         self,
@@ -141,6 +151,7 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
         mmproj: str | os.PathLike[str] | None = None,
         server_path: str | os.PathLike[str] | None = None,
         port: int | None = None,
+        dtype: DataType,
     ) -> LoadedModel:
         """Load a GGUF model via llama-server on CPU (``--ngl 0``).
 
@@ -149,11 +160,13 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
             mmproj: Optional path to the multimodal projector file.
             server_path: Path to the ``llama-server`` binary.
             port: Port for llama-server. If ``None``, a free port is assigned.
+            dtype: Data type of the model (e.g. ``DataType.FP32``).
 
         Returns:
             A :class:`~moment_to_action.hardware._loaded_models.LlamaModel`
             running on CPU.
         """
+        self._check_dtype(dtype)
         from moment_to_action.hardware._loaded_models._llama import (  # noqa: PLC0415
             _start_llama_model,
         )
@@ -163,5 +176,11 @@ class X86_64CPUBackend(ComputeBackend):  # noqa: N801
         sp = os.fspath(server_path) if server_path is not None else None
         logger.info("X86_64CPUBackend: loading %s via llama-server (CPU)", p)
         return _start_llama_model(
-            path=p, mmproj=mp, server_path=sp, port=port, unit=ComputeUnit.CPU, cpu_only=True
+            path=p,
+            mmproj=mp,
+            server_path=sp,
+            port=port,
+            unit=ComputeUnit.CPU,
+            cpu_only=True,
+            dtype=dtype,
         )
