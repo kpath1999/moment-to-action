@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import cv2
 import numpy as np
 
-from moment_to_action.hardware._types import ModelType
+from moment_to_action.hardware import ModelType
 from moment_to_action.models.image.classification._base import ImageClassificationModel
 from moment_to_action.models.image.classification._types import Classification
 

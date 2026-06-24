@@ -10,9 +10,7 @@ from moment_to_action.models._base import BaseModel
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from moment_to_action.hardware import Platform
-    from moment_to_action.hardware._loaded_model import LoadedModel
-    from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
+    from moment_to_action.hardware import ComputeUnit, DataType, LoadedModel, ModelType, Platform
 
 logger = logging.getLogger(__name__)
 
