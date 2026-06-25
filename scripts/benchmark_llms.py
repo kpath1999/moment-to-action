@@ -810,7 +810,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             rerun_models.add(model_name)
             progress.update(model_task, description=model_name)
 
-            metrics = MetricsCollector()
+            platform = Platform(config)
+            metrics = MetricsCollector(platform)
             t_load = time.perf_counter_ns()
             try:
                 model = manager.get_model(
@@ -827,7 +828,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             unload_ms = 0.0
             with metrics.start_trace():
                 try:
-                    model.load(Platform(config), ComputeUnit.GPU, metrics=metrics)
+                    model.load(platform, ComputeUnit.GPU, metrics=metrics)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                     progress.advance(model_task)

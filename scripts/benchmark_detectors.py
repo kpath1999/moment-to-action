@@ -86,11 +86,6 @@ _BACKENDS: list[tuple[str, ComputeUnit]] = [
 _N_CYCLES = 3
 _IOU_THRESHOLD_AP50 = 0.5
 
-# Toggled by --hw-metrics.  When False, traces record timing only (no power /
-# frequency sampling) — avoids per-sample sensor-read warnings on boards whose
-# power sysfs path is absent.  Set in main().
-_HW_METRICS = False
-
 # Sub progress bar tracking per-image progress within the current run.  Set in
 # main() so the nested _run_cycle can advance it without threading it through
 # every call.
@@ -372,7 +367,7 @@ def _run_benchmark(  # noqa: PLR0913
         console.print(f"  [yellow]Skip {model_name}/{backend_name} ({variant}): {exc}[/yellow]")
         return rows
 
-    metrics = MetricsCollector(platform if _HW_METRICS else None)
+    metrics = MetricsCollector(platform)
 
     for cycle in range(1, _N_CYCLES + 1):
         # One trace per load/infer/unload cycle (drives hardware sampling).
@@ -622,12 +617,6 @@ def _parse_args() -> argparse.Namespace:
         help="Output CSV path (default: benchmark_results.csv).",
     )
     parser.add_argument(
-        "--hw-metrics",
-        action="store_true",
-        help="Sample on-device power/frequency during traces (off by default; "
-        "enable only where the power sysfs path exists, else it logs per-sample warnings).",
-    )
-    parser.add_argument(
         "--models",
         default=None,
         help="Comma-separated model display names to run (default: all). "
@@ -785,11 +774,10 @@ def _configure_qairt() -> None:
 
 def main() -> None:  # noqa: PLR0915
     """Entry point for the benchmark script."""
-    global _HW_METRICS, _IMG_PROGRESS, _IMG_TASK  # noqa: PLW0603
+    global _IMG_PROGRESS, _IMG_TASK
     args = _parse_args()
     n_images: int = args.n_images
     output_path = Path(args.output)
-    _HW_METRICS = bool(args.hw_metrics)
 
     # Optional subset filters (for re-running a single model/backend after a fix).
     model_filter = set(args.models.split(",")) if args.models else None
