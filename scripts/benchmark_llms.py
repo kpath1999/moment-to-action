@@ -75,13 +75,23 @@ if TYPE_CHECKING:
 
 console = Console()
 
-# (ModelID, display name) — one backend per model (llama-server handles GPU internally)
-_MODEL_CONFIGS: list[tuple[ModelID, str]] = [
-    (ModelID.QWEN2_1_5B_INSTRUCT, "qwen2_1_5b"),
-    (ModelID.QWEN2_7B_INSTRUCT, "qwen2_7b"),
-    (ModelID.QWEN3_4B, "qwen3_4b"),
-    (ModelID.PHI35_MINI_INSTRUCT, "phi35_mini"),
-    (ModelID.MOONDREAM2, "moondream2"),
+# Prompt templates for models that require specific chat formats.
+# Applied in _build_payload; None means raw system\nuser concatenation.
+# {system} and {user} are replaced with the system prompt and user prompt respectively.
+_CHATML = (
+    "<|im_start|>system\n{system}<|im_end|>\n"
+    "<|im_start|>user\n{user}<|im_end|>\n"
+    "<|im_start|>assistant\n"
+)
+_PHI3 = "<|system|>\n{system}<|end|>\n<|user|>\n{user}<|end|>\n<|assistant|>\n"
+
+# (ModelID, display name, prompt template | None)
+_MODEL_CONFIGS: list[tuple[ModelID, str, str | None]] = [
+    (ModelID.QWEN2_1_5B_INSTRUCT, "qwen2_1_5b", _CHATML),
+    (ModelID.QWEN2_7B_INSTRUCT, "qwen2_7b", _CHATML),
+    (ModelID.QWEN3_4B, "qwen3_4b", _CHATML),
+    (ModelID.PHI35_MINI_INSTRUCT, "phi35_mini", _PHI3),
+    (ModelID.MOONDREAM2, "moondream2", _CHATML),
 ]
 
 _N_CYCLES = 3
@@ -533,21 +543,30 @@ def _detect_yn(text: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _build_payload(prompt: str, max_tokens: int, system_prompt: str) -> dict:
-    """Build a llama.cpp /completion request dict for text-only inference.
+def _build_payload(prompt: str, max_tokens: int, system_prompt: str, template: str | None) -> dict:
+    """Build a llama.cpp ``/completion`` request dict for text-only inference.
 
     Works for both LlamaGGUFModel and LlamaVLModel (text-only mode), bypassing
-    model._prepare() so Moondream can be used without passing image tuples.
+    ``model._prepare()`` so Moondream can be used without passing image tuples.
+
+    If *template* is provided it must contain ``{system}`` and ``{user}`` placeholders
+    which are substituted with *system_prompt* and *prompt* respectively.  Use this for
+    models that require specific chat tokens (ChatML, Phi-3, …).  When *template* is
+    ``None`` the system prompt is prepended raw (system + newline + prompt).
 
     Args:
         prompt: User prompt text.
         max_tokens: Maximum tokens to generate.
-        system_prompt: System message prepended to the prompt.
+        system_prompt: System message text.
+        template: Optional format string with ``{system}`` / ``{user}`` placeholders.
 
     Returns:
-        /completion request body dict.
+        ``/completion`` request body dict.
     """
-    full_prompt = f"{system_prompt}\n{prompt}" if system_prompt else prompt
+    if template is not None:
+        full_prompt = template.format(system=system_prompt, user=prompt)
+    else:
+        full_prompt = f"{system_prompt}\n{prompt}" if system_prompt else prompt
     return {"prompt": full_prompt, "n_predict": max_tokens}
 
 
@@ -578,6 +597,7 @@ def _run_scene(
     cycle: int,
     max_tokens: int,
     system_prompt: str,
+    template: str | None,
     metrics: MetricsCollector,
 ) -> dict:
     """Stream one scene through the model and collect all metrics.
@@ -593,6 +613,7 @@ def _run_scene(
         cycle: Cycle index (1-based).
         max_tokens: Maximum tokens to generate.
         system_prompt: System message for the prompt.
+        template: Optional chat template (``{system}``/``{user}`` placeholders).
         metrics: Active MetricsCollector (a trace must be open).
 
     Returns:
@@ -607,7 +628,7 @@ def _run_scene(
         raise TypeError(msg)
 
     prompt = _build_prompt(scene)
-    payload = _build_payload(prompt, max_tokens, system_prompt)
+    payload = _build_payload(prompt, max_tokens, system_prompt, template)
 
     t0 = time.perf_counter_ns()
     ttft_ms: float | None = None
@@ -665,13 +686,14 @@ def _run_scene(
     }
 
 
-def _run_benchmark(
+def _run_benchmark(  # noqa: PLR0913
     model: object,
     model_name: str,
     metrics: MetricsCollector,
     n_cycles: int,
     max_tokens: int,
     system_prompt: str,
+    template: str | None,
     progress: Progress,
     scene_task_id: object,
 ) -> list[dict]:
@@ -684,6 +706,7 @@ def _run_benchmark(
         n_cycles: Number of repetitions per scene.
         max_tokens: Maximum tokens to generate per scene.
         system_prompt: System message for each prompt.
+        template: Optional chat template (``{system}``/``{user}`` placeholders).
         progress: Rich Progress instance for updating the scene sub-bar.
         scene_task_id: Task ID of the scene sub-progress bar.
 
@@ -701,7 +724,7 @@ def _run_benchmark(
             )
             try:
                 row = _run_scene(
-                    model, model_name, scene, cycle, max_tokens, system_prompt, metrics
+                    model, model_name, scene, cycle, max_tokens, system_prompt, template, metrics
                 )
             except Exception as exc:  # noqa: BLE001
                 console.print(
@@ -901,7 +924,7 @@ def main() -> None:  # noqa: C901, PLR0915
         model_task = progress.add_task("models", total=len(configs))
         scene_task = progress.add_task("  (waiting)", total=None)
 
-        for model_id, model_name in configs:
+        for model_id, model_name, model_template in configs:
             if model_id not in MODEL_REGISTRY:
                 console.print(f"  [yellow]{model_name} not in registry, skipping.[/yellow]")
                 progress.advance(model_task)
@@ -938,6 +961,7 @@ def main() -> None:  # noqa: C901, PLR0915
                     _N_CYCLES,
                     _MAX_TOKENS,
                     _BENCHMARK_SYSTEM,
+                    model_template,
                     progress,
                     scene_task,
                 )
