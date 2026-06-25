@@ -825,6 +825,11 @@ def _parse_args() -> argparse.Namespace:
         help="Save frames for each scene to this directory as <scene>_<idx>.jpg. "
         "Directory is created if it does not exist.",
     )
+    parser.add_argument(
+        "--cpu",
+        action="store_true",
+        help="Run inference on CPU instead of GPU.",
+    )
     return parser.parse_args()
 
 
@@ -837,6 +842,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     _MAX_TOKENS = args.max_tokens
     _N_FRAMES = args.n_frames
     output_path = Path(args.output)
+    compute_unit = ComputeUnit.CPU if args.cpu else ComputeUnit.GPU
     video_dir = Path(args.video_dir) if args.video_dir else None
     frames_dir = Path(args.frames_dir) if args.frames_dir else None
 
@@ -872,6 +878,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     console.print(f"  output : {output_path}")
     console.print(f"  models : {', '.join(c[1] for c in configs)}")
     console.print(f"  server : {server_path}:{port}")
+    console.print(f"  device : {'CPU' if args.cpu else 'GPU'}")
     if video_dir:
         console.print(f"  videos : {video_dir}")
     else:
@@ -926,7 +933,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             rows: list[dict] = []
             with metrics.start_trace():
                 try:
-                    model.load(platform, ComputeUnit.GPU, metrics=metrics)
+                    model.load(platform, compute_unit, metrics=metrics)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                     progress.advance(model_task)
