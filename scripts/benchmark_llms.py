@@ -71,6 +71,7 @@ from moment_to_action.paths import PathManager
 
 if TYPE_CHECKING:
     from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
+    from moment_to_action.metrics._types import MetricsReport
 
 console = Console()
 
@@ -550,6 +551,26 @@ def _build_payload(prompt: str, max_tokens: int, system_prompt: str) -> dict:
     return {"prompt": full_prompt, "n_predict": max_tokens}
 
 
+def _extract_load_unload_ms(report: MetricsReport) -> tuple[float, float]:
+    """Extract load and unload latencies from a completed metrics report.
+
+    Args:
+        report: A completed MetricsReport whose trace spans are accessible.
+
+    Returns:
+        Tuple of (load_ms, unload_ms).  Returns 0.0 for any span not found.
+    """
+    load_ms = 0.0
+    unload_ms = 0.0
+    for trace in report.traces:
+        for span in trace.spans:
+            if span.type_ == SpanType.MODEL_LOAD:
+                load_ms = span.latency_ms
+            elif span.type_ == SpanType.MODEL_UNLOAD:
+                unload_ms = span.latency_ms
+    return load_ms, unload_ms
+
+
 def _run_scene(
     model: object,
     model_name: str,
@@ -605,9 +626,11 @@ def _run_scene(
             if ttfyd_ms is None and _detect_yn(accumulated) is not None:
                 ttfyd_ms = (now - t0) / 1e6
 
+        t_end = time.perf_counter_ns()
         itl_ms = [(token_times[i] - token_times[i - 1]) / 1e6 for i in range(1, len(token_times))]
         mean_itl = float(np.mean(itl_ms)) if itl_ms else 0.0
         std_itl = float(np.std(itl_ms)) if itl_ms else 0.0
+        infer_ms = (t_end - t0) / 1e6
 
         inf_m = loaded_model.last_inference_metrics
         if inf_m is not None:
@@ -630,8 +653,10 @@ def _run_scene(
         "expected": scene.expected_label,
         "run_idx": cycle,
         "response": accumulated,
+        "response_chars": len(accumulated),
         "yn_correct": yn_correct,
         "recall": round(_recall(accumulated, scene.recall_keywords), 4),
+        "infer_ms": round(infer_ms, 3),
         "ttft_ms": round(ttft_ms, 3) if ttft_ms is not None else None,
         "ttfyd_ms": round(ttfyd_ms, 3) if ttfyd_ms is not None else None,
         "mean_itl_ms": round(mean_itl, 3),
@@ -706,6 +731,10 @@ def _print_summary(all_rows: list[dict]) -> None:
 
     table = Table(title="LLM Benchmark Summary", show_lines=True)
     table.add_column("Model", style="bold cyan")
+    table.add_column("Load (ms)", justify="right")
+    table.add_column("Unload (ms)", justify="right")
+    table.add_column("Infer (ms)", justify="right")
+    table.add_column("Response", justify="right")
     table.add_column("Recall", justify="right", style="bold green")
     table.add_column("YN Acc", justify="right", style="bold yellow")
     table.add_column("TTFT (ms)", justify="right")
@@ -719,8 +748,16 @@ def _print_summary(all_rows: list[dict]) -> None:
         ttft_vals = [r["ttft_ms"] for r in rows if r["ttft_ms"] is not None]
         ttfyd_vals = [r["ttfyd_ms"] for r in rows if r["ttfyd_ms"] is not None]
         itl_vals = [r["mean_itl_ms"] for r in rows]
+        load_vals = [r["load_ms"] for r in rows if r.get("load_ms") is not None]
+        unload_vals = [r["unload_ms"] for r in rows if r.get("unload_ms") is not None]
+        infer_vals = [r["infer_ms"] for r in rows]
+        resp_vals = [r["response_chars"] for r in rows]
         table.add_row(
             model_name,
+            f"{float(np.mean(load_vals)):.0f}" if load_vals else "n/a",
+            f"{float(np.mean(unload_vals)):.0f}" if unload_vals else "n/a",
+            f"{float(np.mean(infer_vals)):.0f}" if infer_vals else "n/a",
+            f"{float(np.mean(resp_vals)):.0f}" if resp_vals else "n/a",
             f"{avg_recall:.3f}",
             f"{yn_acc:.3f}" if yn_rows else "n/a",
             f"{float(np.mean(ttft_vals)):.1f}" if ttft_vals else "n/a",
@@ -731,17 +768,20 @@ def _print_summary(all_rows: list[dict]) -> None:
     console.print(table)
 
 
-def _write_json(all_rows: list[dict], output_path: Path) -> None:
+def _write_json(model_entries: list[dict], output_path: Path) -> None:
     """Write benchmark results to a JSON file.
 
+    Each entry in ``model_entries`` contains a single model's ``metrics_report``
+    (once, not duplicated per row) plus a ``runs`` list of per-scene result dicts.
+
     Args:
-        all_rows: All result rows from the benchmark.
+        model_entries: Per-model result dicts, each containing ``metrics_report`` and ``runs``.
         output_path: Destination JSON path.
     """
     output = {
         "script": "benchmark_llms",
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        "runs": all_rows,
+        "models": model_entries,
     }
     output_path.write_text(json.dumps(output, indent=2))
 
@@ -841,6 +881,7 @@ def main() -> None:  # noqa: C901, PLR0915
 
     manager = ModelManager(path_manager)
     all_rows: list[dict] = []
+    model_entries: list[dict] = []
 
     with Progress(
         SpinnerColumn(),
@@ -900,8 +941,19 @@ def main() -> None:  # noqa: C901, PLR0915
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
             report = metrics.report()
+            load_ms, unload_ms = _extract_load_unload_ms(report)
             for row in rows:
-                row["metrics_report"] = report.json()
+                row["load_ms"] = round(load_ms, 3)
+                row["unload_ms"] = round(unload_ms, 3)
+            model_entries.append(
+                {
+                    "model": model_name,
+                    "load_ms": round(load_ms, 3),
+                    "unload_ms": round(unload_ms, 3),
+                    "metrics_report": report.json(),
+                    "runs": rows,
+                }
+            )
 
             if rows:
                 avg_recall = np.mean([r["recall"] for r in rows])
@@ -913,7 +965,7 @@ def main() -> None:  # noqa: C901, PLR0915
             progress.advance(model_task)
 
     if all_rows:
-        _write_json(all_rows, output_path)
+        _write_json(model_entries, output_path)
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")
