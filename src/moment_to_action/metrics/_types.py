@@ -14,6 +14,7 @@ import attrs
 import numpy as np
 
 if t.TYPE_CHECKING:  # pragma: no cover
+    from moment_to_action.hardware._metrics import InferenceMetrics
     from moment_to_action.hardware._types import ComputeUnitUsageSample
 
 
@@ -163,8 +164,18 @@ class Span:
     metadata: dict[str, t.Any] = attrs.Factory(_meta_dict)
     """Arbitrary key/value context for this span."""
 
+    inference_metrics: InferenceMetrics | None = attrs.field(default=None)
+    """Typed inference metrics attached by the model layer after inference completes.
+
+    Set on ``MODEL_INFERENCE`` spans by model implementations that expose
+    backend timing data (e.g. llama.cpp ``timings``).  ``None`` for spans
+    that do not represent model inference or whose backend does not expose metrics.
+    """
+
     _frozen: bool = attrs.field(default=False, init=False, repr=False)
     """Whether this span is frozen and should not be modified."""
+
+    _POST_FREEZE_MUTABLE: t.ClassVar[frozenset[str]] = frozenset({"inference_metrics"})
 
     @property
     def latency(self) -> timedelta:
@@ -178,16 +189,30 @@ class Span:
 
     def summary(self) -> str:
         """Generate a human-readable summary of this span."""
-        return (
+        base = (
             f"[{self.type_.name}] {self.name}: {self.latency_ms:.2f}ms (metadata={self.metadata})"
         )
+        if self.inference_metrics is not None:
+            m = self.inference_metrics
+            base += (
+                f" [llm: {m.predicted_n} tok @ {m.predicted_per_second:.1f} tok/s, "
+                f"prompt {m.prompt_n} tok @ {m.prompt_per_second:.1f} tok/s]"
+            )
+        return base
 
     def summary_rich(self) -> str:
         """Generate a human-readable summary of this span, with rich formatting."""
-        return (
+        base = (
             f"[[cyan]{self.type_.name}[/cyan]] [bold]{self.name}[/bold]: "
             f"[green]{self.latency_ms:.2f}ms[/green] (metadata={self.metadata})"
         )
+        if self.inference_metrics is not None:
+            m = self.inference_metrics
+            base += (
+                f" [[dim]llm: {m.predicted_n} tok @ {m.predicted_per_second:.1f} tok/s, "
+                f"prompt {m.prompt_n} tok @ {m.prompt_per_second:.1f} tok/s[/dim]]"
+            )
+        return base
 
     def json(self) -> dict[str, t.Any]:
         """Generate a JSON-serializable dictionary representation of this span."""
@@ -200,13 +225,16 @@ class Span:
             "end": self.end.isoformat(),
             "latency_ns": self.latency_ns,
             "metadata": self.metadata,
+            "inference_metrics": (
+                self.inference_metrics.model_dump() if self.inference_metrics is not None else None
+            ),
         }
 
     def __attrs_post_init__(self) -> None:
         self._frozen = True  # Freeze the span after initialization to prevent modifications
 
     def __setattr__(self, attr: str, value: t.Any) -> None:
-        if getattr(self, "_frozen", None):
+        if getattr(self, "_frozen", None) and attr not in self._POST_FREEZE_MUTABLE:
             msg = (
                 f"Span '{self.name}' is frozen and cannot be modified (tried to set {attr}={value})"
             )

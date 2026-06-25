@@ -5,12 +5,16 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from moment_to_action.hardware._loaded_models._llama import LlamaModel
+from moment_to_action.metrics import NullMetricsCollector, SpanType
 from moment_to_action.models._base import BaseModel
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
     from pathlib import Path
 
     from moment_to_action.hardware import ComputeUnit, DataType, LoadedModel, ModelType, Platform
+    from moment_to_action.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +143,82 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             msg = f"{type(self).__name__} is not loaded; call load() first"
             raise RuntimeError(msg)
         return str(self._loaded_model.run(prepared))
+
+    def run(self, prepared: dict, *, metrics: MetricsCollector | None = None) -> str:
+        """Run forward pass, recording a ``MODEL_INFERENCE`` span and attaching llama.cpp metrics.
+
+        Overrides :meth:`~moment_to_action.models._base.BaseModel.run` to capture
+        :class:`~moment_to_action.hardware.LlamaCppInferenceMetrics` from the
+        llama-server response and attach them to the span's ``inference_metrics`` field.
+
+        Args:
+            prepared: Output of :meth:`prepare`.
+            metrics: Active collector with an open trace to record the span.
+
+        Returns:
+            Generated text content.
+
+        Raises:
+            RuntimeError: If the model has not been loaded.
+        """
+        if metrics is None:
+            logger.warning(
+                "%s.run() called without a MetricsCollector;"
+                " inference latency will not be recorded",
+                type(self).__name__,
+            )
+            metrics = NullMetricsCollector()
+        with metrics.start_span(SpanType.MODEL_INFERENCE, f"{type(self).__name__}.run") as span:
+            result = self._run(prepared)
+            if isinstance(self._loaded_model, LlamaModel):
+                inf_m = self._loaded_model.last_inference_metrics
+                if inf_m is not None:
+                    span.inference_metrics = inf_m
+        return result
+
+    def stream(
+        self, inputs: str, *, metrics: MetricsCollector | None = None
+    ) -> Generator[str, None, None]:
+        """Stream generated tokens, recording a ``MODEL_INFERENCE`` span.
+
+        Wraps :meth:`~moment_to_action.hardware._loaded_models._llama.LlamaModel.stream`
+        in a ``MODEL_INFERENCE`` metrics span.  The span closes after the generator is
+        exhausted; :class:`~moment_to_action.hardware.LlamaCppInferenceMetrics`
+        from the stop chunk are attached to the span's ``inference_metrics`` field.
+
+        The caller **must drain the generator completely** (or call ``close()`` on it)
+        for the span to close and inference metrics to be recorded.
+
+        Args:
+            inputs: User prompt string (system prompt is prepended by :meth:`_prepare`).
+            metrics: Active collector with an open trace to record the span.
+
+        Yields:
+            String token chunks as they arrive from llama-server.
+
+        Raises:
+            RuntimeError: If the model has not been loaded.
+        """
+        if self._loaded_model is None:
+            msg = f"{type(self).__name__} is not loaded; call load() first"
+            raise RuntimeError(msg)
+        if metrics is None:
+            logger.warning(
+                "%s.stream() called without a MetricsCollector;"
+                " inference latency will not be recorded",
+                type(self).__name__,
+            )
+            metrics = NullMetricsCollector()
+        prepared = self._prepare(inputs)
+        if not isinstance(self._loaded_model, LlamaModel):
+            msg = f"{type(self).__name__}: streaming requires a LlamaModel loaded model"
+            raise TypeError(msg)
+        loaded = self._loaded_model
+        with metrics.start_span(SpanType.MODEL_INFERENCE, f"{type(self).__name__}.stream") as span:
+            yield from loaded.stream(prepared)
+            inf_m = loaded.last_inference_metrics
+            if inf_m is not None:
+                span.inference_metrics = inf_m
 
     def _post_proc(self, raw: str) -> list[str]:
         """Wrap the generated text in a list for pipeline compatibility.

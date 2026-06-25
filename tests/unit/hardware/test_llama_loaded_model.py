@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import typing as t
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from moment_to_action.hardware._loaded_models._llama import LlamaModel, _start_llama_model
+from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 
 
@@ -272,6 +274,17 @@ class TestLlamaModelProperties:
 class TestLlamaModelRun:
     """Tests for LlamaModel.run()."""
 
+    _TIMINGS: t.ClassVar = {
+        "prompt_n": 5,
+        "prompt_ms": 25.0,
+        "prompt_per_token_ms": 5.0,
+        "prompt_per_second": 200.0,
+        "predicted_n": 10,
+        "predicted_ms": 500.0,
+        "predicted_per_token_ms": 50.0,
+        "predicted_per_second": 20.0,
+    }
+
     def test_run_posts_and_returns_content(self) -> None:
         """run() POSTs to /completion and returns the content field."""
         model = _make_llama_model()
@@ -285,12 +298,39 @@ class TestLlamaModelRun:
             "/completion", json={"prompt": "Say hello", "stream": False}
         )
 
+    def test_run_captures_timings(self) -> None:
+        """run() stores timings in last_inference_metrics when present."""
+        model = _make_llama_model()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"content": "hi", "timings": self._TIMINGS}
+        model._client.post.return_value = mock_resp  # type: ignore[union-attr]
+
+        model.run({"prompt": "hi"})
+        assert isinstance(model.last_inference_metrics, LlamaCppInferenceMetrics)
+        assert model.last_inference_metrics.prompt_n == 5
+        assert model.last_inference_metrics.predicted_n == 10
+
+    def test_run_no_timings_leaves_metrics_none(self) -> None:
+        """run() does not set last_inference_metrics when timings absent."""
+        model = _make_llama_model()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"content": "hi"}
+        model._client.post.return_value = mock_resp  # type: ignore[union-attr]
+
+        model.run({"prompt": "hi"})
+        assert model.last_inference_metrics is None
+
     def test_run_when_unloaded_raises(self) -> None:
         """run() raises RuntimeError after unload()."""
         model = _make_llama_model()
         model.unload()
         with pytest.raises(RuntimeError, match="unloaded"):
             model.run({"prompt": "hi"})
+
+    def test_last_inference_metrics_initially_none(self) -> None:
+        """last_inference_metrics is None before any inference."""
+        model = _make_llama_model()
+        assert model.last_inference_metrics is None
 
 
 @pytest.mark.unit
@@ -355,6 +395,52 @@ class TestLlamaModelStream:
         model.unload()
         with pytest.raises(RuntimeError, match="unloaded"):
             list(model.stream({"prompt": "hi"}))
+
+    def test_stream_captures_timings_from_stop_chunk(self) -> None:
+        """stream() stores timings from the stop chunk in last_inference_metrics."""
+        model = _make_llama_model()
+        timings = {
+            "prompt_n": 3,
+            "prompt_ms": 15.0,
+            "prompt_per_token_ms": 5.0,
+            "prompt_per_second": 200.0,
+            "predicted_n": 7,
+            "predicted_ms": 350.0,
+            "predicted_per_token_ms": 50.0,
+            "predicted_per_second": 20.0,
+        }
+        import json as _json
+
+        stop_data = _json.dumps({"content": "", "stop": True, "timings": timings})
+        sse_lines = [
+            'data: {"content": "Hello", "stop": false}',
+            f"data: {stop_data}",
+        ]
+        mock_resp = MagicMock()
+        mock_resp.iter_lines.return_value = iter(sse_lines)
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        model._client.stream.return_value = mock_resp  # type: ignore[union-attr]
+
+        list(model.stream({"prompt": "hi"}))
+        assert isinstance(model.last_inference_metrics, LlamaCppInferenceMetrics)
+        assert model.last_inference_metrics.prompt_n == 3
+        assert model.last_inference_metrics.predicted_n == 7
+
+    def test_stream_no_timings_in_stop_chunk_leaves_metrics_none(self) -> None:
+        """stream() does not set last_inference_metrics when stop chunk has no timings."""
+        model = _make_llama_model()
+        sse_lines = [
+            'data: {"content": "Hi", "stop": true}',
+        ]
+        mock_resp = MagicMock()
+        mock_resp.iter_lines.return_value = iter(sse_lines)
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        model._client.stream.return_value = mock_resp  # type: ignore[union-attr]
+
+        list(model.stream({"prompt": "hi"}))
+        assert model.last_inference_metrics is None
 
 
 @pytest.mark.unit

@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
+from moment_to_action.hardware._loaded_models._llama import LlamaModel
+from moment_to_action.metrics import NullMetricsCollector, SpanType
 from moment_to_action.models.llm._base import LlamaGGUFModel
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
+    from collections.abc import Generator
     from pathlib import Path
 
     from moment_to_action.hardware import Platform
     from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
+    from moment_to_action.metrics import MetricsCollector
 
 
 class LlamaVLModel(LlamaGGUFModel):
@@ -122,3 +129,47 @@ class LlamaVLModel(LlamaGGUFModel):
             "image_data": [{"data": b, "id": i + 1} for i, b in enumerate(b64_images)],
             "n_predict": self._max_tokens,
         }
+
+    def stream(  # type: ignore[override]
+        self,
+        inputs: tuple[str, list[str]],
+        *,
+        metrics: MetricsCollector | None = None,
+    ) -> Generator[str, None, None]:
+        """Stream generated tokens for a multimodal prompt.
+
+        Overrides :meth:`~moment_to_action.models.llm._base.LlamaGGUFModel.stream` to accept
+        a ``(prompt, b64_images)`` tuple instead of a plain string.  Wraps the stream in a
+        ``MODEL_INFERENCE`` span and attaches inference metrics on completion.
+
+        Args:
+            inputs: ``(prompt, b64_images)`` where ``b64_images`` is a list of
+                base64-encoded JPEG strings.
+            metrics: Active collector with an open trace to record the span.
+
+        Yields:
+            String token chunks as they arrive from llama-server.
+
+        Raises:
+            RuntimeError: If the model has not been loaded.
+        """
+        if self._loaded_model is None:
+            msg = f"{type(self).__name__} is not loaded; call load() first"
+            raise RuntimeError(msg)
+        if metrics is None:
+            logger.warning(
+                "%s.stream() called without a MetricsCollector;"
+                " inference latency will not be recorded",
+                type(self).__name__,
+            )
+            metrics = NullMetricsCollector()
+        prepared = self._prepare(inputs)
+        if not isinstance(self._loaded_model, LlamaModel):
+            msg = f"{type(self).__name__}: streaming requires a LlamaModel loaded model"
+            raise TypeError(msg)
+        loaded = self._loaded_model
+        with metrics.start_span(SpanType.MODEL_INFERENCE, f"{type(self).__name__}.stream") as span:
+            yield from loaded.stream(prepared)
+            inf_m = loaded.last_inference_metrics
+            if inf_m is not None:
+                span.inference_metrics = inf_m

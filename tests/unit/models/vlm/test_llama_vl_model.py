@@ -7,7 +7,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from moment_to_action.hardware._loaded_models._llama import LlamaModel
+from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
+from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models.llm._base import LlamaGGUFModel
 from moment_to_action.models.vlm._base import LlamaVLModel
 from moment_to_action.models.vlm.qwen25_vl._model import Qwen25VLModel
@@ -166,3 +169,70 @@ class TestLlamaVLModelPrepare:
         result = model.prepare(("text only", []))  # type: ignore[arg-type]
         assert result["image_data"] == []
         assert "text only" in result["prompt"]
+
+
+@pytest.mark.unit
+class TestLlamaVLModelStream:
+    """Tests for LlamaVLModel.stream()."""
+
+    def _load_with_mock_llama(
+        self, model: Qwen25VLModel, tokens: list[str], inf_m: LlamaCppInferenceMetrics | None = None
+    ) -> LlamaModel:
+        """Load model with a mock LlamaModel whose stream() yields given tokens."""
+        mock_loaded = MagicMock(spec=LlamaModel)
+        mock_loaded.stream.return_value = iter(tokens)
+        mock_loaded.last_inference_metrics = inf_m
+        mock_platform = MagicMock()
+        mock_platform.load_llama_cpp.return_value = mock_loaded
+        model.load(mock_platform, ComputeUnit.CPU)
+        return mock_loaded
+
+    def test_stream_raises_when_not_loaded(self) -> None:
+        """stream() raises RuntimeError when model is not loaded."""
+        model = _make_model()
+        with pytest.raises(RuntimeError, match="not loaded"):
+            list(model.stream(("hi", [])))
+
+    def test_stream_yields_tokens(self) -> None:
+        """stream() yields all tokens from the underlying LlamaModel.stream()."""
+        model = _make_model(system_prompt="", max_tokens=32)
+        self._load_with_mock_llama(model, ["Hello", " world"])
+
+        platform = MagicMock()
+        collector = MetricsCollector(platform)
+        with collector.start_trace():
+            tokens = list(model.stream(("describe", ["b64img"]), metrics=collector))
+        assert tokens == ["Hello", " world"]
+
+    def test_stream_attaches_inference_metrics_to_span(self) -> None:
+        """stream() attaches inference_metrics to MODEL_INFERENCE span after exhaustion."""
+        model = _make_model()
+        inf_m = LlamaCppInferenceMetrics(
+            prompt_n=3,
+            prompt_ms=15.0,
+            prompt_per_token_ms=5.0,
+            prompt_per_second=200.0,
+            predicted_n=7,
+            predicted_ms=350.0,
+            predicted_per_token_ms=50.0,
+            predicted_per_second=20.0,
+        )
+        self._load_with_mock_llama(model, ["tok1"], inf_m)
+
+        platform = MagicMock()
+        collector = MetricsCollector(platform)
+        with collector.start_trace():
+            list(model.stream(("prompt", ["b64"]), metrics=collector))
+
+        stream_spans = [s for s in collector.spans if "stream" in s.name]
+        assert len(stream_spans) == 1
+        assert stream_spans[0].inference_metrics is inf_m
+
+    def test_stream_raises_type_error_for_non_llama_loaded_model(self) -> None:
+        """stream() raises TypeError when loaded model is not a LlamaModel."""
+        model = _make_model()
+        mock_platform = MagicMock()
+        mock_platform.load_llama_cpp.return_value = MagicMock()  # not LlamaModel
+        model.load(mock_platform, ComputeUnit.CPU)
+        with pytest.raises(TypeError, match="LlamaModel"):
+            list(model.stream(("hi", [])))

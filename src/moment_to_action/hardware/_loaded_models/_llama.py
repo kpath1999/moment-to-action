@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, cast
 import httpx
 
 from moment_to_action.hardware._loaded_model import LoadedStreamableModel
+from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
 from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
 from moment_to_action.utils.web import pick_free_port
 
@@ -180,6 +181,7 @@ class LlamaModel(LoadedStreamableModel):
         _proc: Running llama-server subprocess.
         _client: httpx client connected to the server.
         _unloaded: Whether :meth:`unload` has been called.
+        _last_inference_metrics: Timing metrics from the most recent inference call.
     """
 
     def __init__(
@@ -215,6 +217,7 @@ class LlamaModel(LoadedStreamableModel):
         self._proc: subprocess.Popen[bytes] | None = proc
         self._client: httpx.Client | None = client
         self._unloaded = False
+        self._last_inference_metrics: LlamaCppInferenceMetrics | None = None
 
     @property
     def unit(self) -> ComputeUnit:
@@ -230,6 +233,18 @@ class LlamaModel(LoadedStreamableModel):
     def model_type(self) -> ModelType:
         """Model format — always LLAMA_CPP."""
         return ModelType.LLAMA_CPP
+
+    @property
+    def last_inference_metrics(self) -> LlamaCppInferenceMetrics | None:
+        """Timing metrics from the most recent :meth:`run` or :meth:`stream` call.
+
+        Returns ``None`` if no inference has been run yet, or if the last
+        response did not include a ``timings`` field.
+
+        Returns:
+            :class:`LlamaCppInferenceMetrics` from the last inference, or ``None``.
+        """
+        return self._last_inference_metrics
 
     def run(self, inputs: object) -> object:
         """Run inference via a non-streaming POST to ``/completion``.
@@ -250,7 +265,10 @@ class LlamaModel(LoadedStreamableModel):
         payload = {**cast("dict", inputs), "stream": False}
         resp = self._client.post("/completion", json=payload)
         resp.raise_for_status()
-        return str(resp.json()["content"])
+        body = resp.json()
+        if timings := body.get("timings"):
+            self._last_inference_metrics = LlamaCppInferenceMetrics(**timings)
+        return str(body["content"])
 
     def stream(self, inputs: object) -> Generator[str, None, None]:
         """Stream inference output token by token from ``/completion``.
@@ -281,6 +299,8 @@ class LlamaModel(LoadedStreamableModel):
                 if chunk.get("content"):
                     yield chunk["content"]
                 if chunk.get("stop"):
+                    if timings := chunk.get("timings"):
+                        self._last_inference_metrics = LlamaCppInferenceMetrics(**timings)
                     break
 
     def unload(self) -> None:
