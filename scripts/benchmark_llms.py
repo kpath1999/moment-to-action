@@ -792,7 +792,11 @@ def _print_summary(all_rows: list[dict]) -> None:
 
 
 def _write_json(model_entries: list[dict], output_path: Path) -> None:
-    """Write benchmark results to a JSON file.
+    """Write benchmark results to a JSON file, merging with any existing results.
+
+    If *output_path* already exists, entries for models present in *model_entries*
+    are replaced; entries for models not in the current run are preserved.  The
+    top-level ``timestamp`` is updated to the current run time.
 
     Each entry in ``model_entries`` contains a single model's ``metrics_report``
     (once, not duplicated per row) plus a ``runs`` list of per-scene result dicts.
@@ -801,10 +805,21 @@ def _write_json(model_entries: list[dict], output_path: Path) -> None:
         model_entries: Per-model result dicts, each containing ``metrics_report`` and ``runs``.
         output_path: Destination JSON path.
     """
+    existing_models: list[dict] = []
+    if output_path.exists():
+        try:
+            existing = json.loads(output_path.read_text())
+            existing_models = existing.get("models", [])
+        except (json.JSONDecodeError, OSError):
+            existing_models = []
+
+    new_names = {e["model"] for e in model_entries}
+    merged = [e for e in existing_models if e["model"] not in new_names] + model_entries
+
     output = {
         "script": "benchmark_llms",
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        "models": model_entries,
+        "models": merged,
     }
     output_path.write_text(json.dumps(output, indent=2))
 
