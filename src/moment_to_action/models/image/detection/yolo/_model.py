@@ -341,7 +341,7 @@ class YOLOModel(ImageDetectionModel):
         """Minimum confidence score kept by :meth:`post_proc`."""
         return self._confidence_threshold
 
-    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load model weights onto the backend.
 
         Selects the artifact filename from the per-unit ``backends`` table
@@ -368,7 +368,7 @@ class YOLOModel(ImageDetectionModel):
             self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]), dtype=dtype)
         self._platform = platform
 
-    def unload(self) -> None:
+    def _unload(self) -> None:
         """Release backend resources and reset internal state."""
         if self._handle is not None:
             self._handle.unload()
@@ -426,7 +426,7 @@ class YOLOModel(ImageDetectionModel):
         """Input tensor layout: ``"NCHW"`` or ``"NHWC"`` (set at construction from the Variant)."""
         return self._input_layout or "NCHW"
 
-    def prepare(self, frame: np.ndarray) -> np.ndarray:
+    def _prepare(self, frame: np.ndarray) -> np.ndarray:
         """Resize, normalize, and batch a raw BGR frame for YOLO inference.
 
         Args:
@@ -451,7 +451,7 @@ class YOLOModel(ImageDetectionModel):
         chw = np.transpose(normalized, (2, 0, 1))
         return np.expand_dims(chw, axis=0)
 
-    def run(self, prepared: np.ndarray) -> list[np.ndarray]:
+    def _run(self, prepared: np.ndarray) -> list[np.ndarray]:
         """Run YOLOv8 forward pass.
 
         Args:
@@ -477,7 +477,7 @@ class YOLOModel(ImageDetectionModel):
         scores = dlc_out["cls"].max(axis=dlc_out["cls"].ndim - 1)
         return [dlc_out["boxes"], scores, dlc_out["class_idx"]]
 
-    def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
+    def _post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
         """Decode YOLOv8 3-output format into detections.
 
         Expects ``raw`` to be a list of three tensors:

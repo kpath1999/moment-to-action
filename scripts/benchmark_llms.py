@@ -537,10 +537,9 @@ def _run_benchmark(
             prompt = _build_prompt(scene)
             t_start = time.perf_counter_ns()
             try:
-                with metrics.start_trace():
-                    prepared = model.prepare(prompt)  # type: ignore[attr-defined]
-                    raw = model.run(prepared)  # type: ignore[attr-defined]
-                    response = model.post_proc(raw)[0]  # type: ignore[attr-defined]
+                prepared = model.prepare(prompt, metrics=metrics)  # type: ignore[attr-defined]
+                raw = model.run(prepared, metrics=metrics)  # type: ignore[attr-defined]
+                response = model.post_proc(raw, metrics=metrics)[0]  # type: ignore[attr-defined]
             except Exception as exc:  # noqa: BLE001
                 console.print(
                     f"  [yellow]{model_name} scene={scene.name} cycle={cycle}: {exc}[/yellow]"
@@ -741,7 +740,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:  # noqa: C901, PLR0915
+def main() -> None:  # noqa: C901, PLR0912, PLR0915
     """Entry point for the LLM benchmark script."""
     import numpy as np  # noqa: PLC0415
 
@@ -811,6 +810,7 @@ def main() -> None:  # noqa: C901, PLR0915
             rerun_models.add(model_name)
             progress.update(model_task, description=model_name)
 
+            metrics = MetricsCollector()
             t_load = time.perf_counter_ns()
             try:
                 model = manager.get_model(
@@ -818,23 +818,31 @@ def main() -> None:  # noqa: C901, PLR0915
                     system_prompt=_BENCHMARK_SYSTEM,
                     max_tokens=_MAX_TOKENS,
                 )
-                model.load(Platform(config), ComputeUnit.GPU)
             except Exception as exc:  # noqa: BLE001
-                console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
+                console.print(f"  [red]{model_name}: failed to get model — {exc}[/red]")
                 progress.advance(model_task)
                 continue
-            load_ms = (time.perf_counter_ns() - t_load) / 1e6
-            console.print(f"  [dim]{model_name}: server started in {load_ms:.0f} ms[/dim]")
 
-            metrics = MetricsCollector()
-            rows = _run_benchmark(model, model_name, metrics, _N_CYCLES, progress, scene_task)
+            rows: list[dict] = []
+            unload_ms = 0.0
+            with metrics.start_trace():
+                try:
+                    model.load(Platform(config), ComputeUnit.GPU, metrics=metrics)
+                except Exception as exc:  # noqa: BLE001
+                    console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
+                    progress.advance(model_task)
+                    continue
+                load_ms = (time.perf_counter_ns() - t_load) / 1e6
+                console.print(f"  [dim]{model_name}: server started in {load_ms:.0f} ms[/dim]")
 
-            t_unload = time.perf_counter_ns()
-            try:
-                model.unload()
-            except Exception as exc:  # noqa: BLE001
-                console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
-            unload_ms = (time.perf_counter_ns() - t_unload) / 1e6
+                rows = _run_benchmark(model, model_name, metrics, _N_CYCLES, progress, scene_task)
+
+                t_unload = time.perf_counter_ns()
+                try:
+                    model.unload(metrics=metrics)
+                except Exception as exc:  # noqa: BLE001
+                    console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
+                unload_ms = (time.perf_counter_ns() - t_unload) / 1e6
 
             for row in rows:
                 row["load_ms"] = round(load_ms, 3)

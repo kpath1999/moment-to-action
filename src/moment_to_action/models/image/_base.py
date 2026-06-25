@@ -30,35 +30,35 @@ class ImageModel(
     """
 
     @abstractmethod
-    def prepare(self, inputs: np.ndarray) -> np.ndarray:
+    def _prepare(self, inputs: np.ndarray) -> np.ndarray:
         """Preprocess a raw image frame for inference.
 
         Args:
             inputs: Raw BGR image as ``np.ndarray`` (HxWxC, uint8).
 
         Returns:
-            Preprocessed tensor ready to pass to :meth:`run`.
+            Preprocessed tensor ready to pass to :meth:`_run`.
         """
         ...
 
     @abstractmethod
-    def run(self, prepared: np.ndarray) -> _RawOutputT:
+    def _run(self, prepared: np.ndarray) -> _RawOutputT:
         """Run forward pass on a preprocessed tensor.
 
         Args:
-            prepared: Tensor returned by :meth:`prepare`.
+            prepared: Tensor returned by :meth:`_prepare`.
 
         Returns:
-            Raw model output(s) to pass to :meth:`post_proc`.
+            Raw model output(s) to pass to :meth:`_post_proc`.
         """
         ...
 
     @abstractmethod
-    def post_proc(self, raw: _RawOutputT) -> list[_ResultT]:
+    def _post_proc(self, raw: _RawOutputT) -> list[_ResultT]:
         """Decode raw model output into structured results.
 
         Args:
-            raw: Output returned by :meth:`run`.
+            raw: Output returned by :meth:`_run`.
 
         Returns:
             List of structured results (type narrowed by subclasses).

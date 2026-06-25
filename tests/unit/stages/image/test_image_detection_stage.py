@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import DataType, ModelType
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import FrameTensorMessage
@@ -15,6 +17,44 @@ from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.stages.image._base import ImageStage
 from moment_to_action.stages.image._detection import ImageDetectionStage
+
+
+class _StubDetectionModel(ImageDetectionModel):
+    """Minimal concrete detection model for span-recording tests."""
+
+    def __init__(self) -> None:
+        """Initialize with fixed output."""
+        super().__init__("default", Path("/x"), ModelType.ONNX, DataType.FP32, backends={})
+        self._platform = MagicMock()
+
+    def _load(self, platform: object, unit: object) -> None:
+        """No-op load."""
+
+    def _unload(self) -> None:
+        """No-op unload."""
+
+    def _prepare(self, inputs: np.ndarray) -> np.ndarray:
+        """Pass through."""
+        return inputs
+
+    def _run(self, prepared: np.ndarray) -> list[np.ndarray]:
+        """Return dummy output."""
+        return [np.zeros((1, 1, 4)), np.zeros((1, 1)), np.zeros((1, 1), dtype=np.uint8)]
+
+    def _post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
+        """Return fixed detection."""
+        return [Detection("person", 0.9, BoundingBox(10, 20, 100, 200))]
+
+    def verify_outputs(
+        self,
+        inputs: np.ndarray,
+        ref_outputs: list[np.ndarray],
+        *,
+        tol: float,
+        is_npu: bool,
+    ) -> tuple[bool, str]:
+        """Always pass."""
+        return True, ""
 
 
 @pytest.mark.unit
@@ -99,8 +139,8 @@ class TestImageDetectionStage:
         mock_model.prepare.assert_called_once()
         assert raw_frame_msg.frame is not None
         np.testing.assert_array_equal(mock_model.prepare.call_args[0][0], raw_frame_msg.frame)
-        mock_model.run.assert_called_once_with(mock_model.prepare.return_value)
-        mock_model.post_proc.assert_called_once_with(mock_model.run.return_value)
+        assert mock_model.run.call_args[0][0] is mock_model.prepare.return_value
+        assert mock_model.post_proc.call_args[0][0] is mock_model.run.return_value
 
     def test_wrong_message_type_returns_none_and_warns(
         self, mock_model: MagicMock, caplog: pytest.LogCaptureFixture
@@ -148,22 +188,22 @@ class TestImageDetectionStage:
 
     def test_metrics_spans_recorded(
         self,
-        mock_model: MagicMock,
         raw_frame_msg: RawFrameMessage,
     ) -> None:
         """Happy path records prepare, run, and post_proc spans in metrics."""
         from moment_to_action.metrics import MetricsCollector, SpanType
 
-        stage = ImageDetectionStage(model=mock_model)
+        stub = _StubDetectionModel()
+        stage = ImageDetectionStage(model=stub)
         metrics = MetricsCollector(session_id="test_detection_spans")
         with metrics.start_trace():
             stage.process(raw_frame_msg, metrics=metrics)
 
         span_names = {s.name for s in metrics.spans}
         span_types = {s.type_ for s in metrics.spans}
-        assert "prepare" in span_names
-        assert "run" in span_names
-        assert "post_process" in span_names
+        assert "_StubDetectionModel.prepare" in span_names
+        assert "_StubDetectionModel.run" in span_names
+        assert "_StubDetectionModel.post_proc" in span_names
         assert SpanType.MODEL_PREPROCESS in span_types
         assert SpanType.MODEL_INFERENCE in span_types
         assert SpanType.MODEL_POST_PROCESS in span_types

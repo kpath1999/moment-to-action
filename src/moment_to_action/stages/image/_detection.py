@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
-from moment_to_action.metrics import SpanType
 from moment_to_action.stages.image._base import ImageStage
 
 if TYPE_CHECKING:
@@ -66,13 +65,8 @@ class ImageDetectionStage(ImageStage):
         if msg.frame is None:
             return None
 
-        with metrics.start_span(SpanType.MODEL_PREPROCESS, "prepare"):
-            prepared = self._model.prepare(msg.frame)
-
-        with metrics.start_span(SpanType.MODEL_INFERENCE, "run"):
-            raw = self._model.run(prepared)
-
-        with metrics.start_span(SpanType.MODEL_POST_PROCESS, "post_process"):
-            detections = self._model.post_proc(raw)
+        prepared = self._model.prepare(msg.frame, metrics=metrics)
+        raw = self._model.run(prepared, metrics=metrics)
+        detections = self._model.post_proc(raw, metrics=metrics)
 
         return DetectionMessage(timestamp=msg.timestamp, detections=detections)

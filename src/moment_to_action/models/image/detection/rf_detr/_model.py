@@ -161,7 +161,7 @@ class RFDETRModel(ImageDetectionModel):
         """Input tensor layout: ``"NCHW"`` or ``"NHWC"`` (set at construction from the Variant)."""
         return self._input_layout or "NCHW"
 
-    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load model weights onto the backend.
 
         Selects the artifact filename from the per-unit ``backends`` table
@@ -188,14 +188,14 @@ class RFDETRModel(ImageDetectionModel):
             self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]), dtype=dtype)
         self._platform = platform
 
-    def unload(self) -> None:
+    def _unload(self) -> None:
         """Release backend resources and reset internal state."""
         if self._handle is not None:
             self._handle.unload()
         self._platform = None
         self._handle = None
 
-    def prepare(self, frame: np.ndarray) -> np.ndarray:
+    def _prepare(self, frame: np.ndarray) -> np.ndarray:
         """Resize, normalize, and batch a raw BGR frame for RF-DETR inference.
 
         Args:
@@ -216,7 +216,7 @@ class RFDETRModel(ImageDetectionModel):
         chw = np.transpose(normalized, (2, 0, 1))
         return np.expand_dims(chw, axis=0)
 
-    def run(self, prepared: np.ndarray) -> list[np.ndarray]:
+    def _run(self, prepared: np.ndarray) -> list[np.ndarray]:
         """Run RF-DETR forward pass.
 
         Args:
@@ -238,7 +238,7 @@ class RFDETRModel(ImageDetectionModel):
         # "scores" / "class_idx" — remap to the uniform [boxes, scores, class_idx] contract.
         return [dlc_out["boxes"], dlc_out["logits"], dlc_out["classes"]]
 
-    def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
+    def _post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
         """Decode RF-DETR 3-output format into detections.
 
         Args:

@@ -83,7 +83,7 @@ class LlamaVLModel(LlamaGGUFModel):
         first_unit_backends = next(iter(backends.values()))
         self._mmproj_path = path / first_unit_backends["mmproj"]
 
-    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load the VLM via the platform's llama-server backend with the mmproj file.
 
         Args:
@@ -102,7 +102,7 @@ class LlamaVLModel(LlamaGGUFModel):
         )
         self._platform = platform
 
-    def prepare(self, inputs: tuple[str, list[str]]) -> dict:  # type: ignore[override]
+    def _prepare(self, inputs: tuple[str, list[str]]) -> dict:  # type: ignore[override]
         """Format a prompt and base64-encoded images into a multimodal ``/completion`` request.
 
         Args:

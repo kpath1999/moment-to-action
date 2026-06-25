@@ -25,17 +25,17 @@ class TestImageModel:
         from moment_to_action.hardware._types import ComputeUnit
 
         class _Incomplete(ImageModel[object, object]):
-            def load(self, platform: Platform, unit: ComputeUnit) -> None:
+            def _load(self, platform: Platform, unit: ComputeUnit) -> None:
                 """Load."""
 
-            def unload(self) -> None:
+            def _unload(self) -> None:
                 """Unload."""
 
-            def prepare(self, inputs: np.ndarray) -> np.ndarray:
+            def _prepare(self, inputs: np.ndarray) -> np.ndarray:
                 """Prepare."""
                 return inputs
 
-            # Missing run, post_proc, verify_outputs
+            # Missing _run, _post_proc, verify_outputs
 
         with pytest.raises(TypeError):
             _Incomplete("v", Path("/x"))  # type: ignore[abstract, call-arg]
@@ -44,21 +44,21 @@ class TestImageModel:
         """Subclass missing verify_outputs cannot be instantiated."""
 
         class _NoVerify(ImageModel[object, object]):
-            def load(self, backend: object, unit: object = None) -> None:
+            def _load(self, backend: object, unit: object = None) -> None:
                 """Load."""
 
-            def unload(self) -> None:
+            def _unload(self) -> None:
                 """Unload."""
 
-            def prepare(self, inputs: np.ndarray) -> np.ndarray:
+            def _prepare(self, inputs: np.ndarray) -> np.ndarray:
                 """Prepare."""
                 return inputs
 
-            def run(self, prepared: np.ndarray) -> object:
+            def _run(self, prepared: np.ndarray) -> object:
                 """Run."""
                 return prepared
 
-            def post_proc(self, raw: object) -> list[object]:
+            def _post_proc(self, raw: object) -> list[object]:
                 """Post-process."""
                 return []
 

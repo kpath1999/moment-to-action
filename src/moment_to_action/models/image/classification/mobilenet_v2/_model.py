@@ -112,7 +112,7 @@ class MobileNetV2Model(ImageClassificationModel):
             return cls.IMAGENET_LABELS[class_id]
         return f"class_{class_id}"
 
-    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load model weights onto the backend.
 
         Selects the artifact filename from the per-unit ``backends`` table
@@ -141,14 +141,14 @@ class MobileNetV2Model(ImageClassificationModel):
             self._handle = platform.load_dlc(unit, self._artifact_path(arts["model"]), dtype=dtype)
         self._platform = platform
 
-    def unload(self) -> None:
+    def _unload(self) -> None:
         """Release backend resources and reset internal state."""
         if self._handle is not None:
             self._handle.unload()
         self._platform = None
         self._handle = None
 
-    def prepare(self, frame: np.ndarray) -> np.ndarray:
+    def _prepare(self, frame: np.ndarray) -> np.ndarray:
         """Resize, normalize, and batch a raw BGR frame for MobileNet V2 inference.
 
         Args:
@@ -165,7 +165,7 @@ class MobileNetV2Model(ImageClassificationModel):
         chw = np.transpose(normalized, (2, 0, 1))
         return np.expand_dims(chw, axis=0)
 
-    def run(self, prepared: np.ndarray) -> list[np.ndarray]:
+    def _run(self, prepared: np.ndarray) -> list[np.ndarray]:
         """Run MobileNet V2 forward pass.
 
         Args:
@@ -185,7 +185,7 @@ class MobileNetV2Model(ImageClassificationModel):
         dlc_out = cast("dict[str, np.ndarray]", self._handle.run(prepared))
         return [next(iter(dlc_out.values()))]
 
-    def post_proc(self, raw: list[np.ndarray]) -> list[Classification]:
+    def _post_proc(self, raw: list[np.ndarray]) -> list[Classification]:
         """Decode logits into top-k classification results.
 
         Args:
