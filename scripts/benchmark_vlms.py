@@ -741,8 +741,12 @@ def _print_summary(all_rows: list[dict]) -> None:
     console.print(table)
 
 
-def _write_json(model_entries: list[dict], output_path: Path) -> None:
+def _write_json(model_entries: list[dict], output_path: Path, *, merge: bool = False) -> None:
     """Write benchmark results to a JSON file.
+
+    When *merge* is ``True`` and *output_path* already exists, entries for models
+    present in *model_entries* are replaced and entries for models not in the current
+    run are preserved.  When *merge* is ``False`` (default) the file is overwritten.
 
     Each entry in ``model_entries`` contains a single model's ``metrics_report``
     (once, not duplicated per row) plus a ``runs`` list of per-scene result dicts.
@@ -750,11 +754,23 @@ def _write_json(model_entries: list[dict], output_path: Path) -> None:
     Args:
         model_entries: Per-model result dicts, each containing ``metrics_report`` and ``runs``.
         output_path: Destination JSON path.
+        merge: If ``True``, merge into any existing file rather than overwriting.
     """
+    existing_models: list[dict] = []
+    if merge and output_path.exists():
+        try:
+            existing = json.loads(output_path.read_text())
+            existing_models = existing.get("models", [])
+        except (json.JSONDecodeError, OSError):
+            existing_models = []
+
+    new_names = {e["model"] for e in model_entries}
+    merged = [e for e in existing_models if e["model"] not in new_names] + model_entries
+
     output = {
         "script": "benchmark_vlms",
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        "models": model_entries,
+        "models": merged,
     }
     output_path.write_text(json.dumps(output, indent=2))
 
@@ -829,6 +845,11 @@ def _parse_args() -> argparse.Namespace:
         "--cpu",
         action="store_true",
         help="Run inference on CPU instead of GPU.",
+    )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge results into existing output file instead of overwriting it.",
     )
     return parser.parse_args()
 
@@ -980,7 +1001,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             progress.advance(model_task)
 
     if all_rows:
-        _write_json(model_entries, output_path)
+        _write_json(model_entries, output_path, merge=args.merge)
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")

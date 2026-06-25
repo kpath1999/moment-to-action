@@ -523,7 +523,11 @@ def _recall(response: str, keywords: list[str]) -> float:
 
 
 def _detect_yn(text: str) -> str | None:
-    """Return "yes" or "no" if the first word of ``text`` is a yes/no answer, else ``None``.
+    """Return "yes" or "no" if the text contains a yes/no answer, else ``None``.
+
+    Matches several formats:
+    - Leading word: ``"YES, because..."`` / ``"No."``
+    - Labelled: ``"Answer: YES"`` / ``"Answer: No"``
 
     Args:
         text: Accumulated model response so far.
@@ -531,11 +535,18 @@ def _detect_yn(text: str) -> str | None:
     Returns:
         "yes", "no", or ``None`` if not yet decidable.
     """
-    words = text.strip().lower().split()
-    if not words:
-        return None
-    first = words[0].rstrip(".,!?;:")
-    return first if first in {"yes", "no"} else None
+    import re  # noqa: PLC0415
+
+    cleaned = text.strip().lower()
+    # Leading yes/no (with optional punctuation)
+    words = cleaned.split()
+    if words and words[0].rstrip(".,!?;:") in {"yes", "no"}:
+        return words[0].rstrip(".,!?;:")
+    # "Answer: yes/no" pattern
+    m = re.search(r"\banswer\s*:\s*(yes|no)\b", cleaned)
+    if m:
+        return m.group(1)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -791,12 +802,12 @@ def _print_summary(all_rows: list[dict]) -> None:
     console.print(table)
 
 
-def _write_json(model_entries: list[dict], output_path: Path) -> None:
-    """Write benchmark results to a JSON file, merging with any existing results.
+def _write_json(model_entries: list[dict], output_path: Path, *, merge: bool = False) -> None:
+    """Write benchmark results to a JSON file.
 
-    If *output_path* already exists, entries for models present in *model_entries*
-    are replaced; entries for models not in the current run are preserved.  The
-    top-level ``timestamp`` is updated to the current run time.
+    When *merge* is ``True`` and *output_path* already exists, entries for models
+    present in *model_entries* are replaced and entries for models not in the current
+    run are preserved.  When *merge* is ``False`` (default) the file is overwritten.
 
     Each entry in ``model_entries`` contains a single model's ``metrics_report``
     (once, not duplicated per row) plus a ``runs`` list of per-scene result dicts.
@@ -804,9 +815,10 @@ def _write_json(model_entries: list[dict], output_path: Path) -> None:
     Args:
         model_entries: Per-model result dicts, each containing ``metrics_report`` and ``runs``.
         output_path: Destination JSON path.
+        merge: If ``True``, merge into any existing file rather than overwriting.
     """
     existing_models: list[dict] = []
-    if output_path.exists():
+    if merge and output_path.exists():
         try:
             existing = json.loads(output_path.read_text())
             existing_models = existing.get("models", [])
@@ -876,6 +888,11 @@ def _parse_args() -> argparse.Namespace:
         "--cpu",
         action="store_true",
         help="Run inference on CPU instead of GPU.",
+    )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge results into existing output file instead of overwriting it.",
     )
     return parser.parse_args()
 
@@ -1011,7 +1028,7 @@ def main() -> None:  # noqa: C901, PLR0915
             progress.advance(model_task)
 
     if all_rows:
-        _write_json(model_entries, output_path)
+        _write_json(model_entries, output_path, merge=args.merge)
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")
