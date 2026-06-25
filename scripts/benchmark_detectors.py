@@ -12,10 +12,12 @@
 
 Downloads ~N images from COCO val2017, runs yolo_v8 / rf_detr / rtm_det on
 each image for each backend (cpu, gpu, npu) x 3 load/infer/unload cycles, and
-reports per-image latency + AP50 accuracy.
+reports per-image AP50 accuracy.  All latency data is captured via
+MetricsCollector and included in the JSON output (load, preproc, inference,
+postproc, and unload spans with hardware resource samples).
 
 Usage:
-    uv run python scripts/benchmark_detectors.py [--n-images 50] [--output benchmark_results.csv]
+    uv run python scripts/benchmark_detectors.py [--n-images 50] [--output benchmark_results.json]
 
 Requires QAI_HUB_API_TOKEN or QAI_HUB_API_KEY for npu backend; npu is skipped
 gracefully when the environment is not configured or the backend is unavailable.
@@ -25,11 +27,10 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import csv
 import json
 import os
 import sys
-import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -309,11 +310,6 @@ def _ap50(
 
 
 # ---------------------------------------------------------------------------
-# Model factory
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # Benchmark runner
 # ---------------------------------------------------------------------------
 
@@ -329,12 +325,11 @@ def _run_benchmark(  # noqa: PLR0913
     gt_by_image: list[list[list[float]]],
     config: AppConfig,
 ) -> list[dict]:
-    """Run one (model, backend, N_CYCLES) benchmark and return per-row results.
+    """Run one (model, backend, N_CYCLES) benchmark and return per-cycle result rows.
 
-    Each row covers one (model, backend, image_id, run) combination.  Models are
-    resolved and downloaded (if necessary) through ``manager.get_model``.  Each
-    load/infer/unload cycle is wrapped in its own metrics trace, with on-device
-    hardware sampling driven by the run's :class:`Platform`.
+    Each row covers one (model, backend, cycle) combination and contains per-image
+    AP50 values plus the full MetricsReport JSON (load + preproc + infer + postproc
+    + unload spans with hardware resource samples).
 
     Args:
         manager: ModelManager used to resolve/download/instantiate the model.
@@ -348,11 +343,10 @@ def _run_benchmark(  # noqa: PLR0913
         config: Application config passed to :class:`Platform`.
 
     Returns:
-        List of dicts, each representing one CSV row.
+        List of dicts, one per (model, backend, cycle).
     """
     rows: list[dict] = []
 
-    # --- construct backend; skip if this compute unit is unsupported on this device ---
     platform = Platform(config)
     if unit not in platform.supported_units:
         console.print(
@@ -370,9 +364,8 @@ def _run_benchmark(  # noqa: PLR0913
     metrics = MetricsCollector(platform)
 
     for cycle in range(1, _N_CYCLES + 1):
-        # One trace per load/infer/unload cycle (drives hardware sampling).
         with metrics.start_trace():
-            cycle_rows = _run_cycle(
+            cycle_row = _run_cycle(
                 model=model,
                 platform=platform,
                 unit=unit,
@@ -383,14 +376,10 @@ def _run_benchmark(  # noqa: PLR0913
                 gt_by_image=gt_by_image,
                 metrics=metrics,
             )
-        rows.extend(cycle_rows)
+        if cycle_row is not None:
+            cycle_row["metrics_report"] = metrics.report().json()
+            rows.append(cycle_row)
 
-    report = metrics.report()
-    if report.traces:
-        console.print(
-            f"  [dim]{model_name}/{backend_name}: {len(report.traces)} traces "
-            f"({len(report.slow_traces)} over budget)[/dim]"
-        )
     return rows
 
 
@@ -404,8 +393,13 @@ def _run_cycle(  # noqa: PLR0913
     images: list[np.ndarray],
     gt_by_image: list[list[list[float]]],
     metrics: MetricsCollector,
-) -> list[dict]:
+) -> dict | None:
     """Run one load → per-image infer → unload cycle inside an active trace.
+
+    All latency data is captured via MetricsCollector spans (MODEL_LOAD,
+    MODEL_PREPROCESS, MODEL_INFERENCE, MODEL_POST_PROCESS, MODEL_UNLOAD) and
+    included in the trace, which is serialized to the output JSON via
+    ``metrics.report().json()``.
 
     Args:
         model: Unloaded detection model instance.
@@ -419,10 +413,8 @@ def _run_cycle(  # noqa: PLR0913
         metrics: Active MetricsCollector (a trace must be open).
 
     Returns:
-        Rows produced this cycle (empty if load failed).
+        Cycle row dict, or ``None`` if load failed.
     """
-    # --- load (abort cycle on failure) ---
-    t_load_start = time.perf_counter_ns()
     try:
         with _silence_native_output():
             model.load(platform, unit, metrics=metrics)  # type: ignore[attr-defined]
@@ -431,12 +423,11 @@ def _run_cycle(  # noqa: PLR0913
             f"  [yellow]Load failed {model_name}/{backend_name} cycle {cycle}: {exc}[/yellow]"
         )
         _safe_unload(model)
-        return []
-    load_ms = (time.perf_counter_ns() - t_load_start) / 1e6
+        return None
 
-    cycle_rows: list[dict] = []
+    image_results: list[dict] = []
     for img_idx, (frame, gt_boxes_raw) in enumerate(zip(images, gt_by_image, strict=True)):
-        row = _process_image(
+        result = _process_image(
             model=model,
             frame=frame,
             gt_boxes_raw=gt_boxes_raw,
@@ -444,20 +435,20 @@ def _run_cycle(  # noqa: PLR0913
             backend_name=backend_name,
             img_idx=img_idx,
             cycle=cycle,
-            load_ms=load_ms,
             metrics=metrics,
         )
-        if row is not None:
-            cycle_rows.append(row)
+        if result is not None:
+            image_results.append(result)
         _advance_image()
 
-    # --- unload (best-effort) and backfill timing on this cycle's rows ---
-    t_unload = time.perf_counter_ns()
     _safe_unload(model, metrics=metrics)
-    unload_ms = (time.perf_counter_ns() - t_unload) / 1e6
-    for row in cycle_rows:
-        row["unload_ms"] = round(unload_ms, 3)
-    return cycle_rows
+
+    return {
+        "model": model_name,
+        "backend": backend_name,
+        "cycle": cycle,
+        "image_results": image_results,
+    }
 
 
 def _safe_unload(
@@ -477,7 +468,7 @@ def _safe_unload(
         console.print(f"  [yellow]Unload failed: {exc}[/yellow]")
 
 
-def _process_image(  # noqa: PLR0913
+def _process_image(
     model: object,
     frame: np.ndarray,
     gt_boxes_raw: list[list[float]],
@@ -485,13 +476,12 @@ def _process_image(  # noqa: PLR0913
     backend_name: str,
     img_idx: int,
     cycle: int,
-    load_ms: float,
     metrics: MetricsCollector,
 ) -> dict | None:
-    """Run prepare/infer/post/AP50 for one image, returning a row or None on error.
+    """Run prepare/infer/post/AP50 for one image, returning a result dict or None on error.
 
-    Any exception is caught and logged so the benchmark continues with the next
-    image rather than aborting the whole run.
+    Latency is captured via MetricsCollector spans created inside prepare/run/post_proc.
+    AP50 accuracy is computed against ground-truth boxes and stored in the result dict.
 
     Args:
         model: Loaded detection model.
@@ -501,25 +491,16 @@ def _process_image(  # noqa: PLR0913
         backend_name: Backend name for the output row.
         img_idx: Index of this image.
         cycle: Current benchmark cycle.
-        load_ms: Load latency recorded for this cycle.
         metrics: MetricsCollector for spans.
 
     Returns:
-        A CSV row dict, or ``None`` if inference failed for this image.
+        A result dict with ``image_idx`` and ``ap50``, or ``None`` if inference failed.
     """
     try:
-        t_pre = time.perf_counter_ns()
         prepared = model.prepare(frame, metrics=metrics)  # type: ignore[attr-defined]
-        pre_ms = (time.perf_counter_ns() - t_pre) / 1e6
-
-        t_inf = time.perf_counter_ns()
         with _silence_native_output():
             raw = model.run(prepared, metrics=metrics)  # type: ignore[attr-defined]
-        inf_ms = (time.perf_counter_ns() - t_inf) / 1e6
-
-        t_post = time.perf_counter_ns()
         detections = model.post_proc(raw, metrics=metrics)  # type: ignore[attr-defined]
-        post_ms = (time.perf_counter_ns() - t_post) / 1e6
 
         pred_boxes = np.array(
             [[d.bbox.x1, d.bbox.y1, d.bbox.x2, d.bbox.y2] for d in detections],
@@ -535,18 +516,7 @@ def _process_image(  # noqa: PLR0913
         )
         return None
 
-    return {
-        "model": model_name,
-        "backend": backend_name,
-        "image_idx": img_idx,
-        "run": cycle,
-        "load_ms": round(load_ms, 3),
-        "preproc_ms": round(pre_ms, 3),
-        "infer_ms": round(inf_ms, 3),
-        "postproc_ms": round(post_ms, 3),
-        "unload_ms": 0.0,  # filled by caller after unload
-        "ap50": round(ap, 4),
-    }
+    return {"image_idx": img_idx, "ap50": round(ap, 4)}
 
 
 # ---------------------------------------------------------------------------
@@ -558,9 +528,8 @@ def _print_summary(all_rows: list[dict]) -> None:
     """Print a rich summary table with averages per (model, backend).
 
     Args:
-        all_rows: All result rows from the benchmark.
+        all_rows: All cycle result rows from the benchmark.
     """
-    # Group by (model, backend)
     groups: dict[tuple[str, str], list[dict]] = {}
     for row in all_rows:
         key = (row["model"], row["backend"])
@@ -569,28 +538,20 @@ def _print_summary(all_rows: list[dict]) -> None:
     table = Table(title="Detector Benchmark Summary", show_lines=True)
     table.add_column("Model", style="bold cyan")
     table.add_column("Backend", style="bold magenta")
-    table.add_column("Load (ms)", justify="right")
-    table.add_column("Preproc (ms)", justify="right")
-    table.add_column("Infer (ms)", justify="right")
-    table.add_column("Postproc (ms)", justify="right")
-    table.add_column("Unload (ms)", justify="right")
+    table.add_column("Cycles", justify="right")
+    table.add_column("Images", justify="right")
     table.add_column("AP50", justify="right", style="bold green")
 
     for (model_name, backend_name), rows in sorted(groups.items()):
-
-        def avg(key: str, _rows: list[dict] = rows) -> str:
-            vals = [r[key] for r in _rows]
-            return f"{np.mean(vals):.2f}"
-
+        all_image_results = [r for row in rows for r in row["image_results"]]
+        ap50_vals = [r["ap50"] for r in all_image_results]
+        avg_ap50 = float(np.mean(ap50_vals)) if ap50_vals else float("nan")
         table.add_row(
             model_name,
             backend_name,
-            avg("load_ms"),
-            avg("preproc_ms"),
-            avg("infer_ms"),
-            avg("postproc_ms"),
-            avg("unload_ms"),
-            avg("ap50"),
+            str(len(rows)),
+            str(len(all_image_results)),
+            f"{avg_ap50:.4f}",
         )
 
     console.print(table)
@@ -613,8 +574,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--n-images", type=int, default=50, help="Number of COCO images to use.")
     parser.add_argument(
         "--output",
-        default="benchmark_results.csv",
-        help="Output CSV path (default: benchmark_results.csv).",
+        default="benchmark_results.json",
+        help="Output JSON path (default: benchmark_results.json).",
     )
     parser.add_argument(
         "--models",
@@ -627,67 +588,7 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Comma-separated backends to run: cpu,gpu,npu (default: all).",
     )
-    parser.add_argument(
-        "--merge",
-        action="store_true",
-        help="Merge results into the existing --output CSV: rows for the "
-        "(model, backend) pairs re-run are replaced; all others are kept. "
-        "Use with --models/--backends to re-run just one combo after a fix.",
-    )
     return parser.parse_args()
-
-
-# CSV columns and their types, used when merging an existing results file.
-_CSV_FLOAT_FIELDS = ("load_ms", "preproc_ms", "infer_ms", "postproc_ms", "unload_ms", "ap50")
-_CSV_INT_FIELDS = ("image_idx", "run")
-
-
-def _read_existing_csv(path: Path) -> list[dict]:
-    """Read an existing results CSV, coercing numeric columns back to numbers.
-
-    Args:
-        path: Path to a CSV previously written by :func:`_write_csv`.
-
-    Returns:
-        List of row dicts with numeric fields as ``float``/``int`` (so they can be
-        averaged alongside freshly produced rows).
-    """
-    rows: list[dict] = []
-    with path.open(newline="") as f:
-        for raw in csv.DictReader(f):
-            row = dict(raw)
-            for k in _CSV_FLOAT_FIELDS:
-                row[k] = float(row[k])
-            for k in _CSV_INT_FIELDS:
-                row[k] = int(row[k])
-            rows.append(row)
-    return rows
-
-
-def _merge_rows(
-    existing_path: Path,
-    new_rows: list[dict],
-    rerun_pairs: set[tuple[str, str]],
-) -> list[dict]:
-    """Merge ``new_rows`` into an existing CSV, replacing the re-run pairs.
-
-    Rows in the existing file whose ``(model, backend)`` is in ``rerun_pairs`` are
-    dropped (they were just re-run); everything else is kept and the new rows are
-    appended.
-
-    Args:
-        existing_path: Path to the existing results CSV (may not exist).
-        new_rows: Freshly produced rows from this run.
-        rerun_pairs: ``(model, backend)`` pairs that were attempted this run.
-
-    Returns:
-        The merged row list.
-    """
-    if not existing_path.exists():
-        return new_rows
-    existing = _read_existing_csv(existing_path)
-    kept = [r for r in existing if (r["model"], r["backend"]) not in rerun_pairs]
-    return kept + new_rows
 
 
 def _load_coco_images(
@@ -727,29 +628,19 @@ def _load_coco_images(
     return images, gt_boxes_list
 
 
-def _write_csv(rows: list[dict], output_path: Path) -> None:
-    """Write benchmark result rows to a CSV file.
+def _write_json(all_rows: list[dict], output_path: Path) -> None:
+    """Write benchmark results to a JSON file.
 
     Args:
-        rows: List of result dicts (one per model/backend/image/run).
-        output_path: Destination CSV path.
+        all_rows: All cycle result rows from the benchmark.
+        output_path: Destination JSON path.
     """
-    fieldnames = [
-        "model",
-        "backend",
-        "image_idx",
-        "run",
-        "load_ms",
-        "preproc_ms",
-        "infer_ms",
-        "postproc_ms",
-        "unload_ms",
-        "ap50",
-    ]
-    with output_path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
+    output = {
+        "script": "benchmark_detectors",
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "runs": all_rows,
+    }
+    output_path.write_text(json.dumps(output, indent=2))
 
 
 def _configure_qairt() -> None:
@@ -779,7 +670,6 @@ def main() -> None:  # noqa: PLR0915
     n_images: int = args.n_images
     output_path = Path(args.output)
 
-    # Optional subset filters (for re-running a single model/backend after a fix).
     model_filter = set(args.models.split(",")) if args.models else None
     backend_filter = set(args.backends.split(",")) if args.backends else None
     configs = [c for c in _MODEL_CONFIGS if model_filter is None or c[1] in model_filter]
@@ -791,8 +681,6 @@ def main() -> None:  # noqa: PLR0915
     console.print(f"  output : {output_path}")
     console.print(f"  models : {', '.join(c[1] for c in configs)}")
     console.print(f"  backend: {', '.join(b[0] for b in backends)}")
-    if args.merge:
-        console.print("  merge  : on (re-run pairs replace existing rows)")
     console.print()
 
     if not configs or not backends:
@@ -811,10 +699,8 @@ def main() -> None:  # noqa: PLR0915
 
     console.print(f"  Loaded {len(images)} images.\n")
 
-    # 2. Run benchmarks (each run builds its own MetricsCollector + per-cycle trace)
     manager = ModelManager(PathManager())
     all_rows: list[dict] = []
-    rerun_pairs: set[tuple[str, str]] = set()
 
     with Progress(
         SpinnerColumn(),
@@ -839,7 +725,6 @@ def main() -> None:  # noqa: PLR0915
                 continue
 
             for backend_name, unit in backends:
-                rerun_pairs.add((model_name, backend_name))
                 progress.update(task, description=f"{model_name}/{backend_name}")
                 progress.reset(
                     img_task,
@@ -863,17 +748,12 @@ def main() -> None:  # noqa: PLR0915
                     console.print(f"  [red]Run {model_name}/{backend_name} crashed: {exc}[/red]")
                 progress.advance(task)
 
-    # 3. Merge with existing results (if requested) and write CSV
-    if args.merge:
-        all_rows = _merge_rows(output_path, all_rows, rerun_pairs)
-
     if all_rows:
-        _write_csv(all_rows, output_path)
+        _write_json(all_rows, output_path)
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")
 
-    # 4. Print summary table (full merged picture)
     console.print()
     _print_summary(all_rows)
 
