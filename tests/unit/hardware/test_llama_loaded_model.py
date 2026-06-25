@@ -115,8 +115,8 @@ class TestStartLlamaModel:
         assert model.unit == ComputeUnit.CPU
         assert model._port == 9999
 
-    def test_cpu_only_adds_ngl_zero(self) -> None:
-        """cpu_only=True appends --ngl 0 to the server args."""
+    def test_cpu_only_adds_ngl_zero_and_no_mmap(self) -> None:
+        """cpu_only=True appends --ngl 0 --no-mmap to the server args."""
         mock_proc = MagicMock()
         mock_client = MagicMock()
         mock_resp = MagicMock()
@@ -144,6 +144,57 @@ class TestStartLlamaModel:
             )
         assert "--ngl" in captured_args[0]
         assert "0" in captured_args[0]
+        assert "--no-mmap" in captured_args[0]
+
+    def test_health_check_accepts_unparseable_body(self) -> None:
+        """Health loop breaks immediately when /health body cannot be parsed as JSON."""
+        mock_proc = MagicMock()
+        mock_client = MagicMock()
+        unparseable_resp = MagicMock()
+        unparseable_resp.status_code = 200
+        unparseable_resp.json.side_effect = ValueError("not JSON")
+
+        with (
+            patch("subprocess.Popen", return_value=mock_proc),
+            patch("httpx.Client", return_value=mock_client),
+            patch.object(mock_client, "get", return_value=unparseable_resp),
+            patch(
+                "moment_to_action.hardware._loaded_models._llama.pick_free_port", return_value=9999
+            ),
+        ):
+            model = _start_llama_model(
+                path="/tmp/model.gguf",
+                server_path="/usr/bin/llama-server",
+                unit=ComputeUnit.CPU,
+                dtype=DataType.FP32,
+            )
+        assert isinstance(model, LlamaModel)
+
+    def test_health_check_blocks_on_loading_status(self) -> None:
+        """Health loop does not break when /health returns status='loading model'."""
+        mock_proc = MagicMock()
+        mock_client = MagicMock()
+        loading_resp = MagicMock()
+        loading_resp.status_code = 200
+        loading_resp.json.return_value = {"status": "loading model"}
+
+        with (
+            patch("subprocess.Popen", return_value=mock_proc),
+            patch("httpx.Client", return_value=mock_client),
+            patch.object(mock_client, "get", return_value=loading_resp),
+            patch("moment_to_action.hardware._loaded_models._llama._HEALTH_TIMEOUT_S", 0.01),
+            patch("moment_to_action.hardware._loaded_models._llama._HEALTH_POLL_S", 0.001),
+            patch(
+                "moment_to_action.hardware._loaded_models._llama.pick_free_port", return_value=9999
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="did not become healthy"):
+                _start_llama_model(
+                    path="/tmp/model.gguf",
+                    server_path="/usr/bin/llama-server",
+                    unit=ComputeUnit.CPU,
+                    dtype=DataType.FP32,
+                )
 
     def test_mmproj_appended_to_args(self) -> None:
         """Mmproj path is appended with --mmproj flag."""

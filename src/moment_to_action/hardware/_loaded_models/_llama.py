@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _HEALTH_TIMEOUT_S = 30.0
+_HEALTH_TIMEOUT_CPU_S = 300.0
 _HEALTH_POLL_S = 0.5
 _HTTP_OK = 200
 
@@ -72,7 +73,8 @@ def _start_llama_model(
         port: Port for llama-server to listen on. If ``None``, a free port is
             assigned automatically.
         unit: Compute unit to report for this model.
-        cpu_only: If ``True``, passes ``--ngl 0`` to force CPU-only execution.
+        cpu_only: If ``True``, passes ``--ngl 0 --no-mmap`` to force CPU-only execution
+            with eager weight loading (avoids mmap lazy-load / spurious empty responses).
         dtype: Data type of this model (e.g. ``DataType.FP32``).
 
     Returns:
@@ -80,7 +82,8 @@ def _start_llama_model(
 
     Raises:
         RuntimeError: If ``llama-server`` cannot be found.
-        RuntimeError: If the server does not become healthy within 30 seconds.
+        RuntimeError: If the server does not become healthy within the timeout
+            (30 s for GPU, 300 s for CPU).
     """
     # Get server and port
     resolved_server = __find_llama_server(server_path)
@@ -97,7 +100,9 @@ def _start_llama_model(
         "127.0.0.1",
     ]
     if cpu_only:
-        args += ["--ngl", "0"]
+        # --no-mmap forces eager weight loading so /health only returns 200 after
+        # weights are fully resident in RAM, avoiding spurious-empty inference results.
+        args += ["--ngl", "0", "--no-mmap"]
     if mmproj is not None:
         args += ["--mmproj", mmproj]
 
@@ -115,29 +120,34 @@ def _start_llama_model(
         timeout=httpx.Timeout(connect=5.0, read=None, write=5.0, pool=5.0),
     )
 
-    # Spin until server is heathly
-    deadline = time.monotonic() + _HEALTH_TIMEOUT_S
+    # Spin until server is healthy and model is fully loaded.
+    # CPU runs use --no-mmap (eager load) so need a longer deadline.
+    timeout = _HEALTH_TIMEOUT_CPU_S if cpu_only else _HEALTH_TIMEOUT_S
+    deadline = time.monotonic() + timeout
 
     while time.monotonic() < deadline:
         try:
-            # Check status
             resp = client.get("/health")
             if resp.status_code == _HTTP_OK:
-                break
+                try:
+                    body = resp.json()
+                    # If body has an explicit "status" key, honour it (llama.cpp returns
+                    # "loading model" while weights are being read).  If the body is not
+                    # a plain dict or has no "status" key, fall through and accept the 200.
+                    status = body.get("status") if isinstance(body, dict) else None
+                    if status is None or status == "ok":
+                        break
+                except Exception:  # noqa: BLE001
+                    break  # unparseable body; assume ready
         except httpx.ConnectError:
             pass
 
-        # Busy loop
         time.sleep(_HEALTH_POLL_S)
     else:
-        # Server failed
         proc.terminate()
         proc.wait()
-
         client.close()
-
-        # Raise error
-        msg = f"llama-server did not become healthy within {_HEALTH_TIMEOUT_S}s"
+        msg = f"llama-server did not become healthy within {timeout}s"
         raise RuntimeError(msg)
 
     # Build model class
