@@ -20,23 +20,23 @@ class _ConcreteModel(BaseModel[object, object, object, object]):
         """Initialize with no backend table (testing-only shortcut)."""
         super().__init__(variant, path, ModelType.DLC, DataType.W8A16, backends={})
 
-    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load the model."""
         self._platform = platform
 
-    def unload(self) -> None:
+    def _unload(self) -> None:
         """Unload the model."""
         self._platform = None
 
-    def prepare(self, inputs: object) -> object:
+    def _prepare(self, inputs: object) -> object:
         """Prepare inputs."""
         return inputs
 
-    def run(self, prepared: object) -> object:
+    def _run(self, prepared: object) -> object:
         """Run forward pass."""
         return prepared
 
-    def post_proc(self, raw: object) -> list[object]:
+    def _post_proc(self, raw: object) -> list[object]:
         """Post-process outputs."""
         return []
 
@@ -65,10 +65,10 @@ class TestBaseModel:
         """Subclass missing prepare/run/post_proc/verify_outputs cannot be instantiated."""
 
         class _Incomplete(BaseModel[object, object, object, object]):
-            def load(self, platform: Platform, unit: ComputeUnit) -> None:
+            def _load(self, platform: Platform, unit: ComputeUnit) -> None:
                 """Load."""
 
-            def unload(self) -> None:
+            def _unload(self) -> None:
                 """Unload."""
 
         with pytest.raises(TypeError):
@@ -215,23 +215,23 @@ class TestBaseModelDel:
                 """Initialize."""
                 super().__init__("default", Path("/x"), ModelType.DLC, DataType.W8A16, backends={})
 
-            def load(self, platform: Platform, unit: ComputeUnit) -> None:
+            def _load(self, platform: Platform, unit: ComputeUnit) -> None:
                 """Load."""
                 self._platform = platform
 
-            def unload(self) -> None:
+            def _unload(self) -> None:
                 """Always raises."""
                 raise RuntimeError("unload failed")
 
-            def prepare(self, inputs: object) -> object:
+            def _prepare(self, inputs: object) -> object:
                 """Prepare."""
                 return inputs
 
-            def run(self, prepared: object) -> object:
+            def _run(self, prepared: object) -> object:
                 """Run."""
                 return prepared
 
-            def post_proc(self, raw: object) -> list[object]:
+            def _post_proc(self, raw: object) -> list[object]:
                 """Post-process."""
                 return []
 

@@ -23,11 +23,11 @@ class ImageClassificationModel(ImageModel[list[np.ndarray], Classification]):
     """
 
     @abstractmethod
-    def post_proc(self, raw: list[np.ndarray]) -> list[Classification]:
+    def _post_proc(self, raw: list[np.ndarray]) -> list[Classification]:
         """Decode raw model output into a list of classifications.
 
         Args:
-            raw: Output returned by :meth:`~moment_to_action.models.image.ImageModel.run`.
+            raw: Output returned by :meth:`~moment_to_action.models.image.ImageModel._run`.
 
         Returns:
             List of :class:`~moment_to_action.models.image.classification.Classification`
@@ -62,7 +62,7 @@ class ImageClassificationModel(ImageModel[list[np.ndarray], Classification]):
         """
         for i in range(len(inputs)):
             inp = inputs[i : i + 1]
-            act_raw = self.run(inp)
+            act_raw = self._run(inp)
 
             if not is_npu:
                 for k, (act_t, ref_t) in enumerate(zip(act_raw, ref_outputs, strict=False)):
@@ -74,8 +74,8 @@ class ImageClassificationModel(ImageModel[list[np.ndarray], Classification]):
                         return False, f"output_{k}[{i}] max_err={max_err:.4f} > tol={tol}"
 
             ref_raw = [ref_outputs[k][i : i + 1] for k in range(len(ref_outputs))]
-            ref_top1 = self.post_proc(ref_raw)[:1]
-            act_top1 = self.post_proc(act_raw)[:1]
+            ref_top1 = self._post_proc(ref_raw)[:1]
+            act_top1 = self._post_proc(act_raw)[:1]
 
             ref_label = ref_top1[0].label if ref_top1 else ""
             act_label = act_top1[0].label if act_top1 else ""

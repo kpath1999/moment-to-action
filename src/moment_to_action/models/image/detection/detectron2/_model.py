@@ -139,7 +139,7 @@ class Detectron2Model(ImageDetectionModel):
         """Input tensor layout: ``"NCHW"`` or ``"NHWC"`` (set at construction from the Variant)."""
         return self._input_layout or "NCHW"
 
-    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load the model graph(s) onto the backend.
 
         For the single-graph ONNX variant, loads ``model.onnx`` resolved via
@@ -176,7 +176,7 @@ class Detectron2Model(ImageDetectionModel):
             self._handle_roi = platform.load_dlc(unit, roi, dtype=dtype)
         self._platform = platform
 
-    def unload(self) -> None:
+    def _unload(self) -> None:
         """Release backend resources for the loaded graph(s) and reset state."""
         if self._handle_pg is not None:
             self._handle_pg.unload()
@@ -186,7 +186,7 @@ class Detectron2Model(ImageDetectionModel):
         self._handle_pg = None
         self._handle_roi = None
 
-    def prepare(self, frame: np.ndarray) -> np.ndarray:
+    def _prepare(self, frame: np.ndarray) -> np.ndarray:
         """Letterbox and format a raw BGR frame for Detectron2 inference.
 
         Both paths aspect-preserve resize + center pad into an ``_INPUT_SIZE``
@@ -226,7 +226,7 @@ class Detectron2Model(ImageDetectionModel):
         chw = np.transpose(normalized, (2, 0, 1))
         return np.expand_dims(chw, axis=0)
 
-    def run(self, prepared: np.ndarray) -> list[np.ndarray]:
+    def _run(self, prepared: np.ndarray) -> list[np.ndarray]:
         """Run the Detectron2 forward pass.
 
         The single-graph ONNX runs the whole detector end-to-end (RPN + ROI head
@@ -315,7 +315,7 @@ class Detectron2Model(ImageDetectionModel):
         padded[: len(selected)] = selected
         return padded[np.newaxis, :, :]
 
-    def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
+    def _post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
         """Decode ROI-head outputs into detections.
 
         Args:

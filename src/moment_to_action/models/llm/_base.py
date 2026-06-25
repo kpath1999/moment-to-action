@@ -79,7 +79,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         self._max_tokens = max_tokens
         self._loaded_model: LoadedModel | None = None
 
-    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
         """Load the GGUF model via the platform's llama-server backend.
 
         Args:
@@ -101,7 +101,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             self._gguf_path.name,
         )
 
-    def unload(self) -> None:
+    def _unload(self) -> None:
         """Unload the model and stop llama-server.
 
         Safe to call when not loaded (no-op).
@@ -111,7 +111,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             self._loaded_model = None
         self._platform = None
 
-    def prepare(self, inputs: str) -> dict:
+    def _prepare(self, inputs: str) -> dict:
         """Format a user prompt into a ``/completion`` request body.
 
         Args:
@@ -123,7 +123,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         prompt = f"{self._system_prompt}\n{inputs}" if self._system_prompt else inputs
         return {"prompt": prompt, "n_predict": self._max_tokens}
 
-    def run(self, prepared: dict) -> str:
+    def _run(self, prepared: dict) -> str:
         """Send the completion request and return the generated text.
 
         Args:
@@ -140,7 +140,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             raise RuntimeError(msg)
         return str(self._loaded_model.run(prepared))
 
-    def post_proc(self, raw: str) -> list[str]:
+    def _post_proc(self, raw: str) -> list[str]:
         """Wrap the generated text in a list for pipeline compatibility.
 
         Args:

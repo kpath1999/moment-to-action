@@ -22,23 +22,23 @@ class _ConcreteDetectionModel(ImageDetectionModel):
         self._detections = detections or []
         self._run_output: list[np.ndarray] = []
 
-    def load(self, platform: object, unit: object) -> None:
+    def _load(self, platform: object, unit: object) -> None:
         """Load."""
         self._platform = platform  # type: ignore[assignment]
 
-    def unload(self) -> None:
+    def _unload(self) -> None:
         """Unload."""
         self._platform = None
 
-    def prepare(self, inputs: np.ndarray) -> np.ndarray:
+    def _prepare(self, inputs: np.ndarray) -> np.ndarray:
         """Prepare."""
         return inputs
 
-    def run(self, prepared: np.ndarray) -> list[np.ndarray]:
+    def _run(self, prepared: np.ndarray) -> list[np.ndarray]:
         """Return canned run output."""
         return self._run_output
 
-    def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
+    def _post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
         """Return canned detections."""
         return self._detections
 
@@ -56,21 +56,21 @@ class TestImageDetectionModel:
         """Subclasses missing abstract methods cannot be instantiated."""
 
         class _Incomplete(ImageDetectionModel):
-            def load(self, backend: object, unit: object = None) -> None:
+            def _load(self, backend: object, unit: object = None) -> None:
                 """Load."""
 
-            def unload(self) -> None:
+            def _unload(self) -> None:
                 """Unload."""
 
-            def prepare(self, inputs: np.ndarray) -> np.ndarray:
+            def _prepare(self, inputs: np.ndarray) -> np.ndarray:
                 """Prepare."""
                 return inputs
 
-            def run(self, prepared: np.ndarray) -> list[np.ndarray]:
+            def _run(self, prepared: np.ndarray) -> list[np.ndarray]:
                 """Run."""
                 return []
 
-            # Missing post_proc
+            # Missing _post_proc
 
         with pytest.raises(TypeError):
             _Incomplete("v", Path("/x"))  # type: ignore[abstract, call-arg]
@@ -124,7 +124,7 @@ class TestVerifyOutputs:
         call_count = 0
 
         class _AlternatingModel(_ConcreteDetectionModel):
-            def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
+            def _post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
                 """Alternate between two label sets."""
                 nonlocal call_count
                 call_count += 1

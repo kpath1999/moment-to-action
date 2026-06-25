@@ -23,11 +23,11 @@ class ImageDetectionModel(ImageModel[list[np.ndarray], Detection]):
     """
 
     @abstractmethod
-    def post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
+    def _post_proc(self, raw: list[np.ndarray]) -> list[Detection]:
         """Decode raw model output into a list of detections.
 
         Args:
-            raw: Output returned by :meth:`~moment_to_action.models.image.ImageModel.run`.
+            raw: Output returned by :meth:`~moment_to_action.models.image.ImageModel._run`.
 
         Returns:
             List of :class:`~moment_to_action.models.image.detection.Detection` objects.
@@ -61,7 +61,7 @@ class ImageDetectionModel(ImageModel[list[np.ndarray], Detection]):
         """
         for i in range(len(inputs)):
             inp = inputs[i : i + 1]
-            act_raw = self.run(inp)
+            act_raw = self._run(inp)
 
             if not is_npu:
                 for k, (act_t, ref_t) in enumerate(zip(act_raw, ref_outputs, strict=False)):
@@ -73,8 +73,8 @@ class ImageDetectionModel(ImageModel[list[np.ndarray], Detection]):
                         return False, f"output_{k}[{i}] max_err={max_err:.4f} > tol={tol}"
 
             ref_raw = [ref_outputs[k][i : i + 1] for k in range(len(ref_outputs))]
-            ref_dets = self.post_proc(ref_raw)
-            act_dets = self.post_proc(act_raw)
+            ref_dets = self._post_proc(ref_raw)
+            act_dets = self._post_proc(act_raw)
 
             ref_labels = sorted(d.label for d in ref_dets)
             act_labels = sorted(d.label for d in act_dets)

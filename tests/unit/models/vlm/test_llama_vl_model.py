@@ -127,20 +127,20 @@ class TestLlamaVLModelPrepare:
     def test_prepare_returns_dict(self) -> None:
         """prepare() returns a dict."""
         model = _make_model()
-        result = model.prepare(("describe this", ["abc123"]))
+        result = model.prepare(("describe this", ["abc123"]))  # type: ignore[arg-type]
         assert isinstance(result, dict)
 
     def test_prepare_includes_prompt_key(self) -> None:
         """prepare() produces a 'prompt' key with img tags and text."""
         model = _make_model(system_prompt="")
-        result = model.prepare(("describe this", ["abc123"]))
+        result = model.prepare(("describe this", ["abc123"]))  # type: ignore[arg-type]
         assert "prompt" in result
         assert "describe this" in result["prompt"]
 
     def test_prepare_includes_image_data(self) -> None:
         """prepare() includes image_data entries for each base64 image."""
         model = _make_model()
-        result = model.prepare(("x", ["b64a", "b64b"]))
+        result = model.prepare(("x", ["b64a", "b64b"]))  # type: ignore[arg-type]
         img_data = result["image_data"]
         assert len(img_data) == 2
         assert img_data[0] == {"data": "b64a", "id": 1}
@@ -149,13 +149,13 @@ class TestLlamaVLModelPrepare:
     def test_prepare_n_predict(self) -> None:
         """prepare() sets n_predict from max_tokens."""
         model = _make_model(max_tokens=999)
-        result = model.prepare(("x", []))
+        result = model.prepare(("x", []))  # type: ignore[arg-type]
         assert result["n_predict"] == 999
 
     def test_prepare_img_tags_in_prompt(self) -> None:
         """prepare() includes [img-N] tags in the prompt for each image."""
         model = _make_model(system_prompt="")
-        result = model.prepare(("describe", ["img1", "img2"]))
+        result = model.prepare(("describe", ["img1", "img2"]))  # type: ignore[arg-type]
         prompt = result["prompt"]
         assert "[img-1]" in prompt
         assert "[img-2]" in prompt
@@ -163,6 +163,6 @@ class TestLlamaVLModelPrepare:
     def test_prepare_no_images(self) -> None:
         """prepare() handles an empty image list."""
         model = _make_model(system_prompt="")
-        result = model.prepare(("text only", []))
+        result = model.prepare(("text only", []))  # type: ignore[arg-type]
         assert result["image_data"] == []
         assert "text only" in result["prompt"]

@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 
 from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.metrics import MetricsCollector, SpanType
+from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.paths import PathManager
 from moment_to_action.qairt import QairtSDKManager
@@ -429,11 +429,8 @@ def _run_cycle(  # noqa: PLR0913
     # --- load (abort cycle on failure) ---
     t_load_start = time.perf_counter_ns()
     try:
-        with (
-            metrics.start_span(SpanType.MODEL_LOAD, f"{model_name}.{backend_name}.load"),
-            _silence_native_output(),
-        ):
-            model.load(platform, unit)  # type: ignore[attr-defined]
+        with _silence_native_output():
+            model.load(platform, unit, metrics=metrics)  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(
             f"  [yellow]Load failed {model_name}/{backend_name} cycle {cycle}: {exc}[/yellow]"
@@ -461,7 +458,7 @@ def _run_cycle(  # noqa: PLR0913
 
     # --- unload (best-effort) and backfill timing on this cycle's rows ---
     t_unload = time.perf_counter_ns()
-    _safe_unload(model, metrics=metrics, span_name=f"{model_name}.{backend_name}.unload")
+    _safe_unload(model, metrics=metrics)
     unload_ms = (time.perf_counter_ns() - t_unload) / 1e6
     for row in cycle_rows:
         row["unload_ms"] = round(unload_ms, 3)
@@ -471,25 +468,16 @@ def _run_cycle(  # noqa: PLR0913
 def _safe_unload(
     model: object,
     metrics: MetricsCollector | None = None,
-    span_name: str = "unload",
 ) -> None:
     """Unload a model, swallowing any error so the benchmark can continue.
 
     Args:
         model: The model to unload (must have an ``unload()`` method).
-        metrics: Optional collector to wrap the unload in a span.
-        span_name: Span name to use when ``metrics`` is provided.
+        metrics: Collector to record the unload span (passed through to ``unload()``).
     """
     try:
-        if metrics is not None:
-            with (
-                metrics.start_span(SpanType.MODEL_UNLOAD, span_name),
-                _silence_native_output(),
-            ):
-                model.unload()  # type: ignore[attr-defined]
-        else:
-            with _silence_native_output():
-                model.unload()  # type: ignore[attr-defined]
+        with _silence_native_output():
+            model.unload(metrics=metrics)  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(f"  [yellow]Unload failed: {exc}[/yellow]")
 
@@ -526,21 +514,16 @@ def _process_image(  # noqa: PLR0913
     """
     try:
         t_pre = time.perf_counter_ns()
-        with metrics.start_span(SpanType.MODEL_PREPROCESS, f"{model_name}.preproc"):
-            prepared = model.prepare(frame)  # type: ignore[attr-defined]
+        prepared = model.prepare(frame, metrics=metrics)  # type: ignore[attr-defined]
         pre_ms = (time.perf_counter_ns() - t_pre) / 1e6
 
         t_inf = time.perf_counter_ns()
-        with (
-            metrics.start_span(SpanType.MODEL_INFERENCE, f"{model_name}.infer"),
-            _silence_native_output(),
-        ):
-            raw = model.run(prepared)  # type: ignore[attr-defined]
+        with _silence_native_output():
+            raw = model.run(prepared, metrics=metrics)  # type: ignore[attr-defined]
         inf_ms = (time.perf_counter_ns() - t_inf) / 1e6
 
         t_post = time.perf_counter_ns()
-        with metrics.start_span(SpanType.MODEL_POST_PROCESS, f"{model_name}.post"):
-            detections = model.post_proc(raw)  # type: ignore[attr-defined]
+        detections = model.post_proc(raw, metrics=metrics)  # type: ignore[attr-defined]
         post_ms = (time.perf_counter_ns() - t_post) / 1e6
 
         pred_boxes = np.array(
