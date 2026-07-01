@@ -1,11 +1,12 @@
 """Resource monitoring implementation for the QCS6490 platform.
 
-Reads power draw from sysfs when hardware sensors are available; otherwise
-returns static estimates derived from typical QCS6490 power envelopes.
+Power readings are disabled — the battery sysfs sensor reports whole-system
+draw and is unreliable for per-unit attribution.  ``power_mw`` is always 0.0.
 
-Utilization is read via:
-- **CPU**: ``psutil.cpu_percent()`` — cross-platform, accurate
-- **GPU**: ``/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage`` — Qualcomm Adreno sysfs
+Utilization and frequency are read via:
+- **CPU**: ``psutil.cpu_percent()`` / ``psutil.cpu_freq()`` — cross-platform
+- **GPU**: ``/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage`` — Adreno busy %
+           ``/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq``    — Adreno clock (Hz)
 - **NPU/DSP**: not available via a stable public sysfs interface; reported as 0.0
 """
 
@@ -14,7 +15,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import ClassVar
 
 import psutil
 
@@ -24,84 +24,48 @@ from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 logger = logging.getLogger(__name__)
 
 
-# Adreno GPU utilization sysfs path (Qualcomm kgsl driver).
+# Adreno GPU sysfs paths (Qualcomm kgsl driver).
 _KGSL_GPU_BUSY_PATH = Path("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage")
+_KGSL_GPU_FREQ_PATH = Path("/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq")
 
 
 class QCS6490ResourceMonitor(ResourceMonitor):
-    """Reads power from sysfs on the QCS6490; falls back to estimates.
+    """Resource monitor for the QCS6490 (Snapdragon 778G / Adreno 642L).
 
-    Power estimates are based on typical operating power envelopes for the
-    Snapdragon 778G SoC (QCS6490):
-      - NPU (Hexagon HTP): ~500 mW sustained inference load
-      - GPU (Adreno 642L): ~800 mW sustained load
-      - DSP (CDSP):        ~150 mW
-      - CPU (Kryo 670):    ~300 mW multi-core load
-    These are approximate mid-load figures, not TDP or peak values.
+    Power is always reported as 0.0 — the battery sysfs node exposes total
+    system draw, not per-unit, so it is not meaningful here.
+    Utilization and frequency are read from kgsl sysfs where available.
     """
-
-    SYSFS_POWER_PATH: ClassVar[str] = "/sys/class/power_supply"
-
-    _ESTIMATES: ClassVar[dict[ComputeUnit, float]] = {
-        ComputeUnit.NPU: 500.0,
-        ComputeUnit.GPU: 800.0,
-        ComputeUnit.CPU: 300.0,
-    }
-
-    def __init__(self) -> None:
-        self._hw_available = Path(self.SYSFS_POWER_PATH).exists()
-
-        if self._hw_available:
-            logger.info("SoC power info available at %s", self.SYSFS_POWER_PATH)
-        else:
-            logger.warning("SoC power info not available - using utilization-based estimates")
 
     def sample(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         """Take a resource measurement for *unit*.
-
-        Reads from sysfs when available; falls back to static estimates.
 
         Args:
             unit: The compute unit to sample.
 
         Returns:
-            A ``ComputeUnitUsageSample`` with the current readings.
+            A ``ComputeUnitUsageSample`` with utilization, frequency, and
+            memory readings.  ``power_mw`` is always 0.0.
         """
-        if self._hw_available:
-            return self._read_hw_sensor(unit)
-        return self._estimate(unit)
-
-    def _read_hw_sensor(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
-        # NOTE: the battery power_now file reports *total* system power draw,
-        # not per-unit.  We pass `unit` through so the caller knows which
-        # unit was active when the sample was taken.
-        try:
-            power_uw = int(Path(f"{self.SYSFS_POWER_PATH}/battery/power_now").read_text().strip())
-            return ComputeUnitUsageSample(
-                timestamp=datetime.now(tz=timezone.utc),
-                device=unit,
-                usage_pct=self._read_utilization(unit),
-                frequency_mhz=self._read_frequency_mhz(unit),
-                memory_mb=self.used_memory_mb(),
-                power_mw=power_uw / 1000.0,
-            )
-        except (FileNotFoundError, ValueError) as e:
-            logger.warning("HW power sensor read failed: %s", e)
-            return self._estimate(unit)
-
-    def _estimate(self, unit: ComputeUnit) -> ComputeUnitUsageSample:
         return ComputeUnitUsageSample(
             timestamp=datetime.now(tz=timezone.utc),
             device=unit,
             usage_pct=self._read_utilization(unit),
             frequency_mhz=self._read_frequency_mhz(unit),
             memory_mb=self.used_memory_mb(),
-            power_mw=self._ESTIMATES.get(unit, 300.0),
+            power_mw=0.0,
         )
 
     @staticmethod
     def _read_frequency_mhz(unit: ComputeUnit) -> float:
-        """Return operating frequency in MHz for *unit*, or 0.0 if unavailable."""
+        """Return operating frequency in MHz for *unit*, or 0.0 if unavailable.
+
+        Args:
+            unit: The compute unit whose frequency to query.
+
+        Returns:
+            Frequency in MHz, or 0.0 when the sysfs/psutil source is absent.
+        """
         if unit == ComputeUnit.CPU:
             try:
                 freq_info = psutil.cpu_freq()
@@ -109,7 +73,13 @@ class QCS6490ResourceMonitor(ResourceMonitor):
                 return 0.0
             else:
                 return freq_info.current if freq_info else 0.0
-        # GPU/NPU/DSP frequencies are not available via a stable public interface.
+
+        if unit == ComputeUnit.GPU and _KGSL_GPU_FREQ_PATH.exists():
+            try:
+                return float(_KGSL_GPU_FREQ_PATH.read_text().strip()) / 1_000_000
+            except (ValueError, OSError) as e:
+                logger.debug("GPU freq read failed: %s", e)
+
         return 0.0
 
     @staticmethod
@@ -119,9 +89,14 @@ class QCS6490ResourceMonitor(ResourceMonitor):
         - CPU: ``psutil.cpu_percent()`` (instantaneous, non-blocking)
         - GPU: Adreno kgsl sysfs ``gpu_busy_percentage``
         - NPU/DSP: no stable public sysfs interface available; returns 0.0
+
+        Args:
+            unit: The compute unit to query.
+
+        Returns:
+            Utilization in percent, or 0.0 when unavailable.
         """
         if unit == ComputeUnit.CPU:
-            # interval=None returns the value since the last call (non-blocking).
             return psutil.cpu_percent(interval=None)
 
         if unit == ComputeUnit.GPU and _KGSL_GPU_BUSY_PATH.exists():
@@ -130,5 +105,4 @@ class QCS6490ResourceMonitor(ResourceMonitor):
             except (ValueError, OSError) as e:
                 logger.debug("GPU busy read failed: %s", e)
 
-        # NPU and DSP utilization is not available via a stable public interface.
         return 0.0

@@ -13,108 +13,42 @@ from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 
 @pytest.mark.unit
 class TestQCS6490ResourceMonitor:
-    """Test QCS6490ResourceMonitor power sampling and utilization reading."""
+    """Test QCS6490ResourceMonitor sampling, utilization, and frequency reading."""
 
-    def test_qcs6490_power_monitor_hw_available_reads_sensor(self) -> None:
-        """Test ResourceMonitor reads hw sensor when sysfs path exists."""
-        mock_sysfs = MagicMock()
-        mock_sysfs.exists.return_value = True
-        mock_power_path = MagicMock()
-        mock_power_path.read_text.return_value = "5000000\n"
-
-        with (
-            patch("moment_to_action.hardware._platforms.qcs6490._resources.Path") as mock_path,
-            patch("psutil.cpu_percent", return_value=50.0),
-        ):
-            mock_path.return_value = mock_sysfs
-            monitor = QCS6490ResourceMonitor()
-            assert monitor._hw_available is True
-
-    def test_qcs6490_power_monitor_hw_unavailable_estimates(self) -> None:
-        """Test ResourceMonitor uses estimates when sysfs unavailable."""
-        mock_sysfs = MagicMock()
-        mock_sysfs.exists.return_value = False
-
-        with patch("moment_to_action.hardware._platforms.qcs6490._resources.Path") as mock_path:
-            mock_path.return_value = mock_sysfs
-            monitor = QCS6490ResourceMonitor()
-            assert monitor._hw_available is False
-
-    def test_qcs6490_power_monitor_sample_hw_available(self) -> None:
-        """Test sample returns PowerSample from hardware sensor."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = True
-        mock_power_path = MagicMock()
-        mock_power_path.read_text.return_value = "5000000\n"
-
-        with (
-            patch("moment_to_action.hardware._platforms.qcs6490._resources.Path") as mock_path_cls,
-            patch("psutil.cpu_percent", return_value=50.0),
-        ):
-
-            def path_side_effect(path_str: str) -> MagicMock:
-                if "battery/power_now" in path_str:
-                    return mock_power_path
-                # Default for sysfs check in __init__
-                return mock_sysfs_root
-
-            mock_path_cls.side_effect = path_side_effect
-
+    def test_qcs6490_sample_returns_zero_power(self) -> None:
+        """Power is always 0.0 — battery sensor disabled."""
+        with patch("psutil.cpu_percent", return_value=25.0):
             monitor = QCS6490ResourceMonitor()
             sample = monitor.sample(ComputeUnit.CPU)
 
-            assert isinstance(sample, ComputeUnitUsageSample)
-            assert sample.device == ComputeUnit.CPU
-            assert sample.power_mw == 5000.0
-            assert sample.usage_pct == 50.0
+        assert isinstance(sample, ComputeUnitUsageSample)
+        assert sample.device == ComputeUnit.CPU
+        assert sample.power_mw == 0.0
+        assert sample.usage_pct == 25.0
 
-    def test_qcs6490_power_monitor_sample_hw_unavailable_fallback(self) -> None:
-        """Test sample falls back to estimate when sysfs unavailable."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = False
+    def test_qcs6490_sample_npu_zero_power(self) -> None:
+        """NPU sample returns 0.0 power and 0.0 utilization."""
+        monitor = QCS6490ResourceMonitor()
+        sample = monitor.sample(ComputeUnit.NPU)
 
-        with (
-            patch(
-                "moment_to_action.hardware._platforms.qcs6490._resources.Path",
-                return_value=mock_sysfs_root,
-            ),
-            patch("psutil.cpu_percent", return_value=25.0),
+        assert sample.power_mw == 0.0
+        assert sample.usage_pct == 0.0
+        assert sample.device == ComputeUnit.NPU
+
+    def test_qcs6490_sample_gpu_zero_power(self) -> None:
+        """GPU sample returns 0.0 power regardless of utilization."""
+        mock_gpu_path = MagicMock()
+        mock_gpu_path.exists.return_value = False
+
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._resources._KGSL_GPU_BUSY_PATH",
+            mock_gpu_path,
         ):
             monitor = QCS6490ResourceMonitor()
-            sample = monitor.sample(ComputeUnit.CPU)
+            sample = monitor.sample(ComputeUnit.GPU)
 
-            assert isinstance(sample, ComputeUnitUsageSample)
-            assert sample.device == ComputeUnit.CPU
-            assert sample.power_mw == 300.0
-            assert sample.usage_pct == 25.0
-
-    def test_qcs6490_power_monitor_sample_hw_read_error_fallback(self) -> None:
-        """Test sample falls back to estimate on hardware read error."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = True
-        mock_power_path = MagicMock()
-        mock_power_path.read_text.side_effect = FileNotFoundError()
-
-        with (
-            patch("moment_to_action.hardware._platforms.qcs6490._resources.Path") as mock_path_cls,
-            patch("psutil.cpu_percent", return_value=30.0),
-        ):
-
-            def path_side_effect(path_str: str) -> MagicMock:
-                if "battery/power_now" in path_str:
-                    return mock_power_path
-                # Default for sysfs check in __init__
-                return mock_sysfs_root
-
-            mock_path_cls.side_effect = path_side_effect
-
-            monitor = QCS6490ResourceMonitor()
-            sample = monitor.sample(ComputeUnit.CPU)
-
-            assert isinstance(sample, ComputeUnitUsageSample)
-            assert sample.device == ComputeUnit.CPU
-            assert sample.power_mw == 300.0
-            assert sample.usage_pct == 30.0
+        assert sample.power_mw == 0.0
+        assert sample.device == ComputeUnit.GPU
 
     def test_qcs6490_power_monitor_read_utilization_cpu(self) -> None:
         """Test _read_utilization returns CPU percent for CPU unit."""
@@ -166,49 +100,93 @@ class TestQCS6490ResourceMonitor:
         assert util == 0.0
 
     def test_qcs6490_power_monitor_multiple_samples_npu(self) -> None:
-        """Test ResourceMonitor returns consistent samples for NPU."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = False
+        """ResourceMonitor returns consistent zero-power samples for NPU."""
+        monitor = QCS6490ResourceMonitor()
+        sample1 = monitor.sample(ComputeUnit.NPU)
+        sample2 = monitor.sample(ComputeUnit.NPU)
 
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._resources.Path",
-            return_value=mock_sysfs_root,
-        ):
-            monitor = QCS6490ResourceMonitor()
-            sample1 = monitor.sample(ComputeUnit.NPU)
-            sample2 = monitor.sample(ComputeUnit.NPU)
-
-            assert sample1.power_mw == 500.0
-            assert sample2.power_mw == 500.0
-            assert sample1.device == ComputeUnit.NPU
-            assert sample2.device == ComputeUnit.NPU
+        assert sample1.power_mw == 0.0
+        assert sample2.power_mw == 0.0
+        assert sample1.device == ComputeUnit.NPU
+        assert sample2.device == ComputeUnit.NPU
 
     def test_qcs6490_power_monitor_multiple_samples_gpu(self) -> None:
-        """Test ResourceMonitor returns consistent samples for GPU."""
-        mock_sysfs_root = MagicMock()
-        mock_sysfs_root.exists.return_value = False
+        """ResourceMonitor returns consistent zero-power samples for GPU."""
+        mock_gpu_busy = MagicMock()
+        mock_gpu_busy.exists.return_value = False
+        mock_gpu_freq = MagicMock()
+        mock_gpu_freq.exists.return_value = False
 
-        with patch(
-            "moment_to_action.hardware._platforms.qcs6490._resources.Path",
-            return_value=mock_sysfs_root,
+        with (
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._resources._KGSL_GPU_BUSY_PATH",
+                mock_gpu_busy,
+            ),
+            patch(
+                "moment_to_action.hardware._platforms.qcs6490._resources._KGSL_GPU_FREQ_PATH",
+                mock_gpu_freq,
+            ),
         ):
             monitor = QCS6490ResourceMonitor()
             sample1 = monitor.sample(ComputeUnit.GPU)
             sample2 = monitor.sample(ComputeUnit.GPU)
 
-            assert sample1.power_mw == 800.0
-            assert sample2.power_mw == 800.0
-            assert sample1.device == ComputeUnit.GPU
-            assert sample2.device == ComputeUnit.GPU
+        assert sample1.power_mw == 0.0
+        assert sample2.power_mw == 0.0
+        assert sample1.device == ComputeUnit.GPU
+        assert sample2.device == ComputeUnit.GPU
 
     def test_qcs6490_read_frequency_mhz_cpu_error_fallback(self) -> None:
-        """Test _read_frequency_mhz returns 0.0 when psutil.cpu_freq raises for CPU.
-
-        Covers the except branch at lines 108-109 of _power.py.
-        """
+        """_read_frequency_mhz returns 0.0 when psutil.cpu_freq raises for CPU."""
         with patch("psutil.cpu_freq", side_effect=OSError("cpu_freq unavailable")):
             freq = QCS6490ResourceMonitor._read_frequency_mhz(ComputeUnit.CPU)
             assert freq == 0.0
+
+    def test_qcs6490_read_frequency_mhz_gpu_available(self) -> None:
+        """_read_frequency_mhz reads GPU clock from kgsl devfreq/cur_freq and converts Hz→MHz."""
+        mock_freq_path = MagicMock()
+        mock_freq_path.exists.return_value = True
+        mock_freq_path.read_text.return_value = "535000000\n"
+
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._resources._KGSL_GPU_FREQ_PATH",
+            mock_freq_path,
+        ):
+            freq = QCS6490ResourceMonitor._read_frequency_mhz(ComputeUnit.GPU)
+
+        assert freq == 535.0
+
+    def test_qcs6490_read_frequency_mhz_gpu_unavailable(self) -> None:
+        """_read_frequency_mhz returns 0.0 for GPU when kgsl path does not exist."""
+        mock_freq_path = MagicMock()
+        mock_freq_path.exists.return_value = False
+
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._resources._KGSL_GPU_FREQ_PATH",
+            mock_freq_path,
+        ):
+            freq = QCS6490ResourceMonitor._read_frequency_mhz(ComputeUnit.GPU)
+
+        assert freq == 0.0
+
+    def test_qcs6490_read_frequency_mhz_gpu_read_error(self) -> None:
+        """_read_frequency_mhz returns 0.0 on OSError reading kgsl freq file."""
+        mock_freq_path = MagicMock()
+        mock_freq_path.exists.return_value = True
+        mock_freq_path.read_text.side_effect = OSError("permission denied")
+
+        with patch(
+            "moment_to_action.hardware._platforms.qcs6490._resources._KGSL_GPU_FREQ_PATH",
+            mock_freq_path,
+        ):
+            freq = QCS6490ResourceMonitor._read_frequency_mhz(ComputeUnit.GPU)
+
+        assert freq == 0.0
+
+    def test_qcs6490_read_frequency_mhz_npu_returns_zero(self) -> None:
+        """_read_frequency_mhz returns 0.0 for NPU (no sysfs interface)."""
+        freq = QCS6490ResourceMonitor._read_frequency_mhz(ComputeUnit.NPU)
+        assert freq == 0.0
 
 
 # ---------------------------------------------------------------------------
