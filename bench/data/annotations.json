@@ -55,7 +55,7 @@
         },
         {
           "id": "eating_002",
-          "file": "eating/positive/ic_crop.webm",
+          "file": "eating/positive/ice_cream_crop.webm",
           "label": "positive",
           "start_s": 0.0,
           "end_s": 12.0,

@@ -160,6 +160,8 @@ ignore = [
     "INP001",
     # we can (and have to) print in bench scripts
     "T201",
+    # model/detector config lists intentionally use commented-out entries to skip models
+    "ERA001",
 ]
 
 # Tests: exceptions for the many things that are OK in tests
