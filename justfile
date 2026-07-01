@@ -39,11 +39,11 @@ coverage-html *args:
 
 # lint source + tests
 lint:
-    -uv run ruff format --check src tests scripts
-    -uv run ruff check src tests scripts
-    -uv run mypy src tests scripts
+    -uv run ruff format --check src tests scripts bench
+    -uv run ruff check src tests scripts bench
+    -uv run mypy src tests scripts bench
 
 # format source + tests
 format:
-    uv run ruff format src tests scripts
-    -uv run ruff check --fix src tests scripts
+    uv run ruff format src tests scripts bench
+    -uv run ruff check --fix src tests scripts bench

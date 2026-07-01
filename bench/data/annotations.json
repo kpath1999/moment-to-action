@@ -1,0 +1,122 @@
+{
+  "version": "1",
+  "applications": {
+    "violence_detection": {
+      "question": "Is there physical violence or aggression in this scene? Answer YES or NO, then one sentence of reasoning.",
+      "positive_keywords": ["yes", "violence", "fight", "aggression", "attack", "hit", "punch", "kick", "altercation", "physical", "shoot", "shot", "gun", "weapon"],
+      "negative_keywords": ["no", "peaceful", "calm", "safe", "non-violent", "normal"],
+      "clips": [
+        {
+          "id": "violence_001",
+          "file": "violence/positive/shooting_john_wick.webm",
+          "label": "positive",
+          "start_s": 0.0,
+          "end_s": null,
+          "description": "John Wick action sequence with gunfight and hand-to-hand combat"
+        },
+        {
+          "id": "violence_002",
+          "file": "violence/positive/cop_fight.webm",
+          "label": "positive",
+          "start_s": 1.0,
+          "end_s": 11.0,
+          "description": "Physical altercation involving a police officer"
+        },
+        {
+          "id": "violence_003",
+          "file": "violence/negative/safe_cop_encounter.webm",
+          "label": "negative",
+          "start_s": 0.0,
+          "end_s": null,
+          "description": "Routine calm police encounter with no violence"
+        },
+        {
+          "id": "violence_004",
+          "file": "violence/negative/slipping_on_ice.webm",
+          "label": "negative",
+          "start_s": 6.0,
+          "end_s": 15.0,
+          "description": "Person slipping and falling on ice — accidental, no aggression"
+        }
+      ]
+    },
+    "eating": {
+      "question": "Is someone eating or drinking food in this scene? Answer YES or NO, then one sentence of reasoning.",
+      "positive_keywords": ["yes", "eating", "food", "meal", "chewing", "drinking", "consuming", "fork", "bite", "burger", "ice cream"],
+      "negative_keywords": ["no", "not eating", "no food"],
+      "clips": [
+        {
+          "id": "eating_001",
+          "file": "eating/positive/eating_burger.webm",
+          "label": "positive",
+          "start_s": 62.0,
+          "end_s": 80.0,
+          "description": "Person eating a burger"
+        },
+        {
+          "id": "eating_002",
+          "file": "eating/positive/ic_crop.webm",
+          "label": "positive",
+          "start_s": 0.0,
+          "end_s": 12.0,
+          "description": "Person eating ice cream"
+        },
+        {
+          "id": "eating_003",
+          "file": "eating/negative/people_walking.mkv",
+          "label": "negative",
+          "start_s": 30.0,
+          "end_s": 45.0,
+          "description": "People walking outdoors, no food or eating"
+        },
+        {
+          "id": "eating_004",
+          "file": "eating/negative/sitting_talking.webm",
+          "label": "negative",
+          "start_s": 10.0,
+          "end_s": 18.0,
+          "description": "People sitting and talking, no food or eating"
+        }
+      ]
+    },
+    "animals": {
+      "question": "Is an animal posing a threat or attacking in this scene? Answer YES or NO, then one sentence of reasoning.",
+      "positive_keywords": ["yes", "attack", "threat", "aggressive", "aggression", "charge", "bite", "kick", "lunge", "dangerous", "threatening"],
+      "negative_keywords": ["no", "calm", "friendly", "peaceful", "safe", "no threat", "resting", "non-threatening"],
+      "clips": [
+        {
+          "id": "animals_001",
+          "file": "animals/positive/dog_attacking_az_driver.mp4",
+          "label": "positive",
+          "start_s": 0.0,
+          "end_s": 17.0,
+          "description": "Dog charging and attacking a driver — clear animal threat"
+        },
+        {
+          "id": "animals_002",
+          "file": "animals/positive/horse_kicking_woman_crop.mp4",
+          "label": "positive",
+          "start_s": 0.0,
+          "end_s": 8.0,
+          "description": "Horse kicking toward a woman — animal aggression/threat"
+        },
+        {
+          "id": "animals_003",
+          "file": "animals/negative/dog_ups_friendly.webm",
+          "label": "negative",
+          "start_s": 3.0,
+          "end_s": 14.0,
+          "description": "Dog greeting UPS driver in friendly non-threatening manner"
+        },
+        {
+          "id": "animals_004",
+          "file": "animals/negative/cat_curled_up.mkv",
+          "label": "negative",
+          "start_s": 0.0,
+          "end_s": 15.0,
+          "description": "Cat curled up resting — animal present but no threat"
+        }
+      ]
+    }
+  }
+}
