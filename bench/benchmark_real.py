@@ -124,9 +124,10 @@ _LLM_CONFIGS: list[tuple[ModelID, str, str | None]] = [
 ]
 
 # Detectors used for the LLM pipeline — comment out any to skip.
-_LLM_DETECTORS: list[tuple[ModelID, str]] = [
-    # (ModelID.YOLO_V8, "yolo_v8"),
-    (ModelID.DETECTRON2, "detectron2"),
+# Tuple: (ModelID, display_name, ComputeUnit, variant_key)
+_LLM_DETECTORS: list[tuple[ModelID, str, ComputeUnit, str]] = [
+    # (ModelID.YOLO_V8, "yolo_v8", ComputeUnit.NPU, "qcs6490"),
+    (ModelID.DETECTRON2, "detectron2", ComputeUnit.NPU, "qcs6490_w8a16"),
 ]
 
 _N_CYCLES = 3
@@ -1293,7 +1294,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     console.print(f"  apps       : {', '.join(apps)}")
     console.print(f"  cycles     : {_N_CYCLES}")
     console.print(f"  tokens     : {_MAX_TOKENS}")
-    console.print(f"  detectors  : {', '.join(d for _, d in _LLM_DETECTORS)} (for LLM pipeline)")
+    console.print(
+        f"  detectors  : {', '.join(d for _, d, *_ in _LLM_DETECTORS)} (for LLM pipeline)"
+    )
     console.print(f"  output     : {output_path}")
     console.print(f"  vlm models : {', '.join(c[1] for c in vlm_configs)}")
     console.print(f"  llm models : {', '.join(c[1] for c in llm_configs)}")
@@ -1385,7 +1388,12 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
         # --- LLM models (require detector) ---
         if llm_configs:
-            for detector_model_id, detector_display in _LLM_DETECTORS:
+            for (
+                detector_model_id,
+                detector_display,
+                detector_unit,
+                detector_variant,
+            ) in _LLM_DETECTORS:
                 console.rule(f"[dim]LLM x {detector_display}[/dim]")
 
                 for model_id, model_name, model_template in llm_configs:
@@ -1399,7 +1407,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     )
 
                     try:
-                        detector_obj = manager.get_model(detector_model_id)
+                        detector_obj = manager.get_model(
+                            detector_model_id, variant=detector_variant
+                        )
                     except Exception as exc:  # noqa: BLE001
                         console.print(
                             f"  [red]Detector {detector_display}: failed to get — {exc}[/red]"
@@ -1423,9 +1433,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     metrics = MetricsCollector(platform)
                     rows = []
                     with metrics.start_trace():
-                        # Detector loads on NPU; its spans are sub-spans of this model's trace.
+                        # Detector spans are sub-spans of this model's trace.
                         try:
-                            detector_obj.load(detector_platform, ComputeUnit.NPU, metrics=metrics)
+                            detector_obj.load(detector_platform, detector_unit, metrics=metrics)
                         except Exception as exc:  # noqa: BLE001
                             console.print(
                                 f"  [red]Detector {detector_display}: failed to load — {exc}[/red]"
