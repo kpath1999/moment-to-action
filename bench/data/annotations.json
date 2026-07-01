@@ -8,7 +8,7 @@
       "clips": [
         {
           "id": "violence_001",
-          "file": "violence/positive/shooting_john_wick.webm",
+          "file": "violence/positive/shooting_john_wick.mp4",
           "label": "positive",
           "start_s": 0.0,
           "end_s": null,
@@ -16,7 +16,7 @@
         },
         {
           "id": "violence_002",
-          "file": "violence/positive/cop_fight.webm",
+          "file": "violence/positive/cop_fight.mp4",
           "label": "positive",
           "start_s": 1.0,
           "end_s": 11.0,
@@ -24,7 +24,7 @@
         },
         {
           "id": "violence_003",
-          "file": "violence/negative/safe_cop_encounter.webm",
+          "file": "violence/negative/safe_cop_encounter.mp4",
           "label": "negative",
           "start_s": 0.0,
           "end_s": null,
@@ -32,7 +32,7 @@
         },
         {
           "id": "violence_004",
-          "file": "violence/negative/slipping_on_ice.webm",
+          "file": "violence/negative/slipping_on_ice.mp4",
           "label": "negative",
           "start_s": 6.0,
           "end_s": 15.0,
@@ -47,7 +47,7 @@
       "clips": [
         {
           "id": "eating_001",
-          "file": "eating/positive/eating_burger.webm",
+          "file": "eating/positive/eating_burger.mp4",
           "label": "positive",
           "start_s": 62.0,
           "end_s": 80.0,
@@ -55,7 +55,7 @@
         },
         {
           "id": "eating_002",
-          "file": "eating/positive/ice_cream_crop.webm",
+          "file": "eating/positive/ice_cream_crop.mp4",
           "label": "positive",
           "start_s": 0.0,
           "end_s": 12.0,
@@ -63,7 +63,7 @@
         },
         {
           "id": "eating_003",
-          "file": "eating/negative/people_walking.mkv",
+          "file": "eating/negative/people_walking.mp4",
           "label": "negative",
           "start_s": 30.0,
           "end_s": 45.0,
@@ -71,10 +71,10 @@
         },
         {
           "id": "eating_004",
-          "file": "eating/negative/sitting_talking.webm",
+          "file": "eating/negative/sitting_talking.mp4",
           "label": "negative",
-          "start_s": 10.0,
-          "end_s": 18.0,
+          "start_s": 0.0,
+          "end_s": null,
           "description": "People sitting and talking, no food or eating"
         }
       ]
@@ -102,7 +102,7 @@
         },
         {
           "id": "animals_003",
-          "file": "animals/negative/dog_ups_friendly.webm",
+          "file": "animals/negative/dog_ups_friendly.mp4",
           "label": "negative",
           "start_s": 3.0,
           "end_s": 14.0,
@@ -110,7 +110,7 @@
         },
         {
           "id": "animals_004",
-          "file": "animals/negative/cat_curled_up.mkv",
+          "file": "animals/negative/cat_curled_up.mp4",
           "label": "negative",
           "start_s": 0.0,
           "end_s": 15.0,

@@ -169,14 +169,6 @@ ENV/
 env.bak/
 venv.bak/
 
-# large mp4 files
-images/*.mp4
-# Allow test videos
-!images/*test*.mp4
-
-# bench real data videos (keep annotations.json and .gitkeep tracked)
-bench/data/videos/**/*.mp4
-
 # Spyder project settings
 .spyderproject
 .spyproject

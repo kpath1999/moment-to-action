@@ -49,8 +49,6 @@ import argparse
 import base64
 import json
 import re
-import shutil
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -253,98 +251,15 @@ def _load_clips(data_dir: Path) -> list[Clip]:
 # ---------------------------------------------------------------------------
 
 
-def _extract_frames_ffmpeg(
-    video_path: Path,
-    start_s: float,
-    end_s: float | None,
-) -> list[np.ndarray]:
-    """Extract 1-FPS frames via ffmpeg subprocess (handles AV1 and other codecs OpenCV cannot).
-
-    Pipes raw BGR24 frames from ffmpeg stdout.  Used as a fallback when
-    OpenCV returns zero frames (e.g. AV1-encoded webm on ARM without hw decode).
-
-    Args:
-        video_path: Path to the video file.
-        start_s: Start of the ROI window in seconds.
-        end_s: End of the ROI window in seconds; ``None`` means end of file.
-
-    Returns:
-        List of BGR uint8 frames sampled at 1 FPS within [start_s, end_s].
-    """
-    if not shutil.which("ffmpeg"):
-        return []
-
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
-    if start_s > 0:
-        cmd += ["-ss", str(start_s)]
-    if end_s is not None:
-        cmd += ["-to", str(end_s)]
-    cmd += [
-        "-i",
-        str(video_path),
-        "-vf",
-        "fps=1",
-        "-f",
-        "rawvideo",
-        "-pix_fmt",
-        "bgr24",
-        "pipe:1",
-    ]
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, timeout=120, check=False)  # noqa: S603
-    except (subprocess.TimeoutExpired, OSError):
-        return []
-
-    raw = result.stdout
-    if not raw:
-        return []
-
-    # Probe frame dimensions from a separate ffprobe call.
-    probe_cmd = [
-        "ffprobe",
-        "-v",
-        "error",
-        "-select_streams",
-        "v:0",
-        "-show_entries",
-        "stream=width,height",
-        "-of",
-        "csv=p=0",
-        str(video_path),
-    ]
-    try:
-        probe = subprocess.run(  # noqa: S603
-            probe_cmd, capture_output=True, text=True, timeout=10, check=False
-        )
-        w_str, h_str = probe.stdout.strip().split(",")
-        w, h = int(w_str), int(h_str)
-    except (subprocess.TimeoutExpired, OSError, ValueError):
-        return []
-
-    frame_bytes = w * h * 3
-    if frame_bytes == 0 or len(raw) % frame_bytes != 0:
-        return []
-
-    frames = []
-    for i in range(len(raw) // frame_bytes):
-        chunk = raw[i * frame_bytes : (i + 1) * frame_bytes]
-        frames.append(np.frombuffer(chunk, dtype=np.uint8).reshape(h, w, 3).copy())
-    return frames
-
-
 def _extract_frames_1fps(
     video_path: Path,
     start_s: float = 0.0,
     end_s: float | None = None,
 ) -> list[np.ndarray]:
-    """Extract one frame per second from a video ROI window.
-
-    Tries OpenCV first; falls back to ffmpeg for codecs OpenCV cannot decode
-    on this platform (e.g. AV1-encoded webm on ARM without hardware acceleration).
+    """Extract one frame per second from a video ROI window using OpenCV.
 
     Args:
-        video_path: Path to a video file.
+        video_path: Path to a video file (H.264 mp4 recommended).
         start_s: Start of the ROI window in seconds.
         end_s: End of the ROI window in seconds; ``None`` means end of file.
 
@@ -352,17 +267,14 @@ def _extract_frames_1fps(
         List of BGR uint8 frames sampled at 1 FPS within [start_s, end_s].
 
     Raises:
-        RuntimeError: If the video cannot be opened by either backend.
+        RuntimeError: If the video cannot be opened.
     """
     import cv2  # noqa: PLC0415
 
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
-        fallback = _extract_frames_ffmpeg(video_path, start_s, end_s)
-        if not fallback:
-            msg = f"Cannot open video: {video_path}"
-            raise RuntimeError(msg)
-        return fallback
+        msg = f"Cannot open video: {video_path}"
+        raise RuntimeError(msg)
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -380,8 +292,7 @@ def _extract_frames_1fps(
         if ok:
             frames.append(frame)
     cap.release()
-
-    return frames or _extract_frames_ffmpeg(video_path, start_s, end_s)
+    return frames
 
 
 def _resize_480p(frame: np.ndarray) -> np.ndarray:
