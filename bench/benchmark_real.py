@@ -146,6 +146,11 @@ _OVERLAP_THRESH = 0.05
 _MIN_PAIR = 2
 _MAX_FRAME_HEIGHT = 480
 
+# All COCO animal classes (used for person-animal proximity context in prompts).
+_COCO_ANIMALS: frozenset[str] = frozenset(
+    ("bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe")
+)
+
 
 # ---------------------------------------------------------------------------
 # Annotation schema
@@ -458,7 +463,7 @@ def _build_llm_prompt(clip: Clip, detections: list[Detection]) -> str:
     lines.append("Detections:\n" + "\n".join(f"  - {dl}" for dl in det_lines))
 
     persons = [d for d in detections if d.label == "person"]
-    animals = [d for d in detections if d.label in ("dog", "cat", "bear", "wolf", "animal")]
+    animals = [d for d in detections if d.label in _COCO_ANIMALS]
 
     if len(persons) >= _MIN_PAIR:
         max_person_iou = max(
@@ -544,11 +549,16 @@ def _detect_yn(text: str) -> str | None:
     return None
 
 
-def _extract_load_unload_ms(report: MetricsReport) -> tuple[float, float]:
+def _extract_load_unload_ms(report: MetricsReport, name_contains: str = "") -> tuple[float, float]:
     """Extract load and unload latencies from a completed MetricsReport.
+
+    When the trace contains spans from multiple models (e.g. detector + LLM),
+    pass *name_contains* to restrict matching to spans whose name includes that
+    substring (e.g. ``"LlamaGGUFModel"``).
 
     Args:
         report: A completed MetricsReport.
+        name_contains: Optional substring filter on span name.
 
     Returns:
         Tuple of (load_ms, unload_ms); 0.0 for any span not found.
@@ -557,6 +567,8 @@ def _extract_load_unload_ms(report: MetricsReport) -> tuple[float, float]:
     unload_ms = 0.0
     for trace in report.traces:
         for span in trace.spans:
+            if name_contains and name_contains not in (span.name or ""):
+                continue
             if span.type_ == SpanType.MODEL_LOAD:
                 load_ms = span.latency_ms
             elif span.type_ == SpanType.MODEL_UNLOAD:
@@ -1272,28 +1284,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         # --- LLM models (require detector) ---
         if llm_configs:
             for detector_model_id, detector_display in _LLM_DETECTORS:
-                # Load detector once per detector type, shared across all LLM models.
-                detector_obj: object = None
-                detector_platform = Platform(config)
-                detector_metrics = MetricsCollector(detector_platform)
-
-                try:
-                    detector_obj = manager.get_model(detector_model_id)
-                except Exception as exc:  # noqa: BLE001
-                    console.print(
-                        f"  [red]Detector {detector_display}: failed to get — {exc}[/red]"
-                    )
-                    continue
-
-                try:
-                    with detector_metrics.start_trace():
-                        detector_obj.load(detector_platform, compute_unit, metrics=detector_metrics)
-                except Exception as exc:  # noqa: BLE001
-                    console.print(
-                        f"  [red]Detector {detector_display}: failed to load — {exc}[/red]"
-                    )
-                    continue
-
                 console.rule(f"[dim]LLM x {detector_display}[/dim]")
 
                 for model_id, model_name, model_template in llm_configs:
@@ -1306,8 +1296,15 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         model_task, description=f"{model_name} (llm/{detector_display})"
                     )
 
-                    platform = Platform(config)
-                    metrics = MetricsCollector(platform)
+                    try:
+                        detector_obj = manager.get_model(detector_model_id)
+                    except Exception as exc:  # noqa: BLE001
+                        console.print(
+                            f"  [red]Detector {detector_display}: failed to get — {exc}[/red]"
+                        )
+                        progress.advance(model_task)
+                        continue
+
                     try:
                         model = manager.get_model(
                             model_id,
@@ -1319,12 +1316,26 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         progress.advance(model_task)
                         continue
 
+                    platform = Platform(config)
+                    detector_platform = Platform(config)
+                    metrics = MetricsCollector(platform)
                     rows = []
                     with metrics.start_trace():
+                        # Detector loads on NPU; its spans are sub-spans of this model's trace.
+                        try:
+                            detector_obj.load(detector_platform, ComputeUnit.NPU, metrics=metrics)
+                        except Exception as exc:  # noqa: BLE001
+                            console.print(
+                                f"  [red]Detector {detector_display}: failed to load — {exc}[/red]"
+                            )
+                            progress.advance(model_task)
+                            continue
+
                         try:
                             model.load(platform, compute_unit, metrics=metrics)
                         except Exception as exc:  # noqa: BLE001
                             console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
+                            detector_obj.unload(metrics=metrics)
                             progress.advance(model_task)
                             continue
 
@@ -1347,8 +1358,16 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         except Exception as exc:  # noqa: BLE001
                             console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
+                        try:
+                            detector_obj.unload(metrics=metrics)
+                        except Exception as exc:  # noqa: BLE001
+                            console.print(
+                                f"  [yellow]Detector {detector_display} unload error"
+                                f" — {exc}[/yellow]"
+                            )
+
                     report = metrics.report()
-                    load_ms, unload_ms = _extract_load_unload_ms(report)
+                    load_ms, unload_ms = _extract_load_unload_ms(report, "LlamaGGUFModel")
                     for row in rows:
                         row["kind"] = "llm"
                         row["detector"] = detector_display
@@ -1375,15 +1394,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
                     all_rows.extend(rows)
                     progress.advance(model_task)
-
-                # Unload detector.
-                try:
-                    with detector_metrics.start_trace():
-                        detector_obj.unload(metrics=detector_metrics)
-                except Exception as exc:  # noqa: BLE001
-                    console.print(
-                        f"  [yellow]Detector {detector_display} unload error — {exc}[/yellow]"
-                    )
 
     if all_rows:
         _write_json(model_entries, output_path, merge=args.merge)
