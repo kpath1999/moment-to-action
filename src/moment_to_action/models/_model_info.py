@@ -27,11 +27,19 @@ class ModelID(Enum):
     QWEN2_1_5B_INSTRUCT = "qwen2_1_5b_instruct"
     QWEN2_7B_INSTRUCT = "qwen2_7b_instruct"
     QWEN3_4B = "qwen3_4b"
+    QWEN3_0_6B = "qwen3_0_6b"
+    QWEN3_1_7B = "qwen3_1_7b"
+    GEMMA3_270M_IT = "gemma3_270m_it"
+    GEMMA3_1B_IT = "gemma3_1b_it"
     PHI35_MINI_INSTRUCT = "phi35_mini_instruct"
     QWEN25_VL_3B_INSTRUCT = "qwen25_vl_3b_instruct"
     QWEN3_VL_2B_INSTRUCT = "qwen3_vl_2b_instruct"
     QWEN3_VL_4B_INSTRUCT = "qwen3_vl_4b_instruct"
     MOONDREAM2 = "moondream2"
+    SMOLVLM2_256M = "smolvlm2_256m"
+    SMOLVLM2_500M = "smolvlm2_500m"
+    INTERNVL3_1B_INSTRUCT = "internvl3_1b_instruct"
+    MINISTRAL_3_3B_REASONING = "ministral_3_3b_reasoning"
 
 
 @attrs.frozen
