@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import attrs
 import pytest
 
+from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
 from moment_to_action.hardware._types import ComputeUnit, ComputeUnitUsageSample
 from moment_to_action.metrics._types import (
     MemoryUsageSample,
@@ -297,6 +298,172 @@ class TestSpan:
         as_dict = attrs.asdict(span)
         assert "id_" in as_dict
         assert "type_" in as_dict
+
+    def test_span_inference_metrics_default_none(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """inference_metrics is None by default."""
+        span = Span(
+            id_=1,
+            parent_id=None,
+            type_=SpanType.MODEL_INFERENCE,
+            name="Infer",
+            start=utc_past,
+            end=utc_now,
+        )
+        assert span.inference_metrics is None
+
+    def test_span_inference_metrics_settable_after_freeze(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """inference_metrics can be set even after the span is frozen."""
+        span = Span(
+            id_=1,
+            parent_id=None,
+            type_=SpanType.MODEL_INFERENCE,
+            name="Infer",
+            start=utc_past,
+            end=utc_now,
+        )
+        m = LlamaCppInferenceMetrics(
+            prompt_n=5,
+            prompt_ms=25.0,
+            prompt_per_token_ms=5.0,
+            prompt_per_second=200.0,
+            predicted_n=10,
+            predicted_ms=500.0,
+            predicted_per_token_ms=50.0,
+            predicted_per_second=20.0,
+        )
+        span.inference_metrics = m
+        assert span.inference_metrics is m
+
+    def test_span_other_attrs_still_frozen(self, utc_past: datetime, utc_now: datetime) -> None:
+        """Non-exempt attributes are still frozen after init."""
+        span = Span(
+            id_=1,
+            parent_id=None,
+            type_=SpanType.STAGE,
+            name="TestSpan",
+            start=utc_past,
+            end=utc_now,
+        )
+        with pytest.raises(AttributeError, match="frozen"):
+            span.name = "NewName"
+
+    def test_span_json_includes_inference_metrics_none(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """json() includes inference_metrics key as None when not set."""
+        span = Span(
+            id_=1,
+            parent_id=None,
+            type_=SpanType.MODEL_INFERENCE,
+            name="Infer",
+            start=utc_past,
+            end=utc_now,
+        )
+        j = span.json()
+        assert "inference_metrics" in j
+        assert j["inference_metrics"] is None
+
+    def test_span_json_includes_inference_metrics_dict(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """json() serializes inference_metrics via model_dump() when set."""
+        span = Span(
+            id_=1,
+            parent_id=None,
+            type_=SpanType.MODEL_INFERENCE,
+            name="Infer",
+            start=utc_past,
+            end=utc_now,
+        )
+        m = LlamaCppInferenceMetrics(
+            prompt_n=5,
+            prompt_ms=25.0,
+            prompt_per_token_ms=5.0,
+            prompt_per_second=200.0,
+            predicted_n=10,
+            predicted_ms=500.0,
+            predicted_per_token_ms=50.0,
+            predicted_per_second=20.0,
+        )
+        span.inference_metrics = m
+        j = span.json()
+        assert isinstance(j["inference_metrics"], dict)
+        assert j["inference_metrics"]["prompt_n"] == 5
+        assert j["inference_metrics"]["predicted_n"] == 10
+
+    def test_span_summary_includes_inference_metrics(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """summary() appends inference metrics info when inference_metrics is set."""
+        span = Span(
+            id_=1,
+            parent_id=None,
+            type_=SpanType.MODEL_INFERENCE,
+            name="Infer",
+            start=utc_past,
+            end=utc_now,
+            latency_ns=1_000_000_000,
+        )
+        span.inference_metrics = LlamaCppInferenceMetrics(
+            prompt_n=5,
+            prompt_ms=25.0,
+            prompt_per_token_ms=5.0,
+            prompt_per_second=200.0,
+            predicted_n=10,
+            predicted_ms=500.0,
+            predicted_per_token_ms=50.0,
+            predicted_per_second=20.0,
+        )
+        s = span.summary()
+        assert "10" in s  # predicted_n
+        assert "20.0" in s  # predicted_per_second
+
+    def test_span_summary_rich_includes_inference_metrics(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """summary_rich() appends inference metrics info when inference_metrics is set."""
+        span = Span(
+            id_=1,
+            parent_id=None,
+            type_=SpanType.MODEL_INFERENCE,
+            name="Infer",
+            start=utc_past,
+            end=utc_now,
+            latency_ns=1_000_000_000,
+        )
+        span.inference_metrics = LlamaCppInferenceMetrics(
+            prompt_n=5,
+            prompt_ms=25.0,
+            prompt_per_token_ms=5.0,
+            prompt_per_second=200.0,
+            predicted_n=10,
+            predicted_ms=500.0,
+            predicted_per_token_ms=50.0,
+            predicted_per_second=20.0,
+        )
+        s = span.summary_rich()
+        assert "10" in s
+        assert "20.0" in s
+
+    def test_span_summary_without_inference_metrics(
+        self, utc_past: datetime, utc_now: datetime
+    ) -> None:
+        """summary() does not include llm section when inference_metrics is None."""
+        span = Span(
+            id_=1,
+            parent_id=None,
+            type_=SpanType.STAGE,
+            name="Stage",
+            start=utc_past,
+            end=utc_now,
+            latency_ns=100_000_000,
+        )
+        s = span.summary()
+        assert "llm:" not in s
 
 
 @pytest.mark.unit

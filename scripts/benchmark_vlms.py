@@ -23,11 +23,18 @@ PIL (colored rectangles with label text on a gray canvas). If ``--video-dir``
 is supplied and a file ``<dir>/<scene_name>.mp4`` exists for a scene, real
 frames are sampled from that video instead.
 
-Accuracy is keyword recall: words a model produces only by answering the
-classification question correctly.
+Accuracy metrics:
+  - ``yn_correct``: bool — whether the model's first word was the correct yes/no.
+  - ``recall``: float in [0, 1] — keyword recall for classification keywords.
+
+Timing metrics (streaming-derived):
+  - ``ttft_ms``: time from stream start to first token.
+  - ``ttfyd_ms``: time from stream start to first yes/no decision.
+  - ``mean_itl_ms``, ``std_itl_ms``: inter-token latency statistics.
+  - ``inference_metrics``: llama.cpp-native timing fields from the stop chunk.
 
 Usage:
-    uv run python scripts/benchmark_vlms.py [--n-cycles 3] [--output vlm_benchmark_results.csv]
+    uv run python scripts/benchmark_vlms.py [--n-cycles 3] [--output results.json]
 
 Requires llama_server_path to be set in the M2A config (or pass --server-path).
 """
@@ -36,13 +43,16 @@ from __future__ import annotations
 
 import argparse
 import base64
-import csv
+import json
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from rich.console import Console
 from rich.progress import (
@@ -58,10 +68,15 @@ from rich.table import Table
 
 from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.metrics import MetricsCollector
+from moment_to_action.hardware._loaded_models._llama import LlamaModel
+from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.models import MODEL_REGISTRY, BaseModel, ModelID, ModelManager
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.paths import PathManager
+
+if TYPE_CHECKING:
+    from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
+    from moment_to_action.metrics._types import MetricsReport
 
 console = Console()
 
@@ -154,7 +169,7 @@ class Scene:
     """One benchmark scene backed by YOLO-realistic bounding box inputs.
 
     Attributes:
-        name: Short identifier used in CSV output.
+        name: Short identifier used in output.
         app: Target application name.
         task: The binary question posed to the VLM.
         detections: YOLO detections used to render the synthetic frame.
@@ -468,7 +483,7 @@ def _save_frames(scene: Scene, b64_frames: list[str], frames_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Recall metric
+# Metrics helpers
 # ---------------------------------------------------------------------------
 
 
@@ -489,9 +504,137 @@ def _recall(response: str, keywords: list[str]) -> float:
     return found / len(keywords)
 
 
+def _detect_yn(text: str) -> str | None:
+    """Return "yes" or "no" if the first word of ``text`` is a yes/no answer, else ``None``.
+
+    Args:
+        text: Accumulated model response so far.
+
+    Returns:
+        "yes", "no", or ``None`` if not yet decidable.
+    """
+    words = text.strip().lower().split()
+    if not words:
+        return None
+    first = words[0].rstrip(".,!?;:")
+    return first if first in {"yes", "no"} else None
+
+
+def _extract_load_unload_ms(report: MetricsReport) -> tuple[float, float]:
+    """Extract load and unload latencies from a completed metrics report.
+
+    Args:
+        report: A completed MetricsReport whose trace spans are accessible.
+
+    Returns:
+        Tuple of (load_ms, unload_ms).  Returns 0.0 for any span not found.
+    """
+    load_ms = 0.0
+    unload_ms = 0.0
+    for trace in report.traces:
+        for span in trace.spans:
+            if span.type_ == SpanType.MODEL_LOAD:
+                load_ms = span.latency_ms
+            elif span.type_ == SpanType.MODEL_UNLOAD:
+                unload_ms = span.latency_ms
+    return load_ms, unload_ms
+
+
 # ---------------------------------------------------------------------------
-# Benchmark runner
+# Streaming benchmark
 # ---------------------------------------------------------------------------
+
+
+def _run_scene(
+    model: BaseModel,
+    model_name: str,
+    scene: Scene,
+    cycle: int,
+    b64_frames: list[str],
+    metrics: MetricsCollector,
+) -> dict:
+    """Stream one scene through the VLM model and collect all metrics.
+
+    Wraps the streaming loop in a MODEL_INFERENCE span.  Tracks TTFT, TTFYD,
+    and inter-token latencies manually via perf_counter, then stores them as
+    span metadata via ``metrics.set_meta``.
+
+    Args:
+        model: Loaded LlamaVLModel instance.
+        model_name: Display name for the result.
+        scene: Scene to evaluate.
+        cycle: Cycle index (1-based).
+        b64_frames: Base64-encoded JPEG frames for this scene.
+        metrics: Active MetricsCollector (a trace must be open).
+
+    Returns:
+        Result dict for this (scene, cycle).
+
+    Raises:
+        RuntimeError: If ``model._loaded_model`` is not a LlamaModel.
+    """
+    loaded_model = getattr(model, "_loaded_model", None)
+    if not isinstance(loaded_model, LlamaModel):
+        msg = f"{model_name}: _loaded_model is not a LlamaModel"
+        raise TypeError(msg)
+
+    prepared = model.prepare((scene.task, b64_frames), metrics=metrics)
+
+    t0 = time.perf_counter_ns()
+    ttft_ms: float | None = None
+    ttfyd_ms: float | None = None
+    token_times: list[int] = []
+    accumulated = ""
+    inf_m: LlamaCppInferenceMetrics | None = None
+
+    with metrics.start_span(SpanType.MODEL_INFERENCE, f"{model_name}.stream") as span:
+        for token in loaded_model.stream(prepared):
+            now = time.perf_counter_ns()
+            token_times.append(now)
+            accumulated += token
+            if ttft_ms is None:
+                ttft_ms = (now - t0) / 1e6
+            if ttfyd_ms is None and _detect_yn(accumulated) is not None:
+                ttfyd_ms = (now - t0) / 1e6
+
+        t_end = time.perf_counter_ns()
+        itl_ms = [(token_times[i] - token_times[i - 1]) / 1e6 for i in range(1, len(token_times))]
+        mean_itl = float(np.mean(itl_ms)) if itl_ms else 0.0
+        std_itl = float(np.std(itl_ms)) if itl_ms else 0.0
+        infer_ms = (t_end - t0) / 1e6
+
+        inf_m = loaded_model.last_inference_metrics
+        if inf_m is not None:
+            span.inference_metrics = inf_m
+
+        metrics.set_meta("ttft_ms", ttft_ms)
+        metrics.set_meta("ttfyd_ms", ttfyd_ms)
+        metrics.set_meta("mean_itl_ms", round(mean_itl, 3))
+        metrics.set_meta("std_itl_ms", round(std_itl, 3))
+
+    yn = _detect_yn(accumulated)
+    yn_correct: bool | None = None
+    if yn is not None:
+        yn_correct = yn == scene.expected_label.lower()
+
+    return {
+        "model": model_name,
+        "app": scene.app,
+        "scene": scene.name,
+        "expected": scene.expected_label,
+        "run_idx": cycle,
+        "n_frames": len(b64_frames),
+        "response": accumulated,
+        "response_chars": len(accumulated),
+        "yn_correct": yn_correct,
+        "recall": round(_recall(accumulated, scene.recall_keywords), 4),
+        "infer_ms": round(infer_ms, 3),
+        "ttft_ms": round(ttft_ms, 3) if ttft_ms is not None else None,
+        "ttfyd_ms": round(ttfyd_ms, 3) if ttfyd_ms is not None else None,
+        "mean_itl_ms": round(mean_itl, 3),
+        "std_itl_ms": round(std_itl, 3),
+        "inference_metrics": inf_m.model_dump() if inf_m is not None else None,
+    }
 
 
 def _run_benchmark(
@@ -509,7 +652,7 @@ def _run_benchmark(
     Args:
         model: Loaded LlamaVLModel instance.
         model_name: Human-readable name for output rows.
-        metrics: MetricsCollector for span timing.
+        metrics: Active MetricsCollector (a trace must be open).
         n_cycles: Number of repetitions per scene.
         n_frames: Number of frames to pass per scene.
         video_dir: Optional directory with real video files.
@@ -524,41 +667,22 @@ def _run_benchmark(
 
     rows: list[dict] = []
     for cycle in range(1, n_cycles + 1):
-        for scene_idx, scene in enumerate(_SCENES):
+        for scene in _SCENES:
             progress.update(
                 scene_task_id,
                 description=f"  {scene.name} [{cycle}/{n_cycles}]",
             )
             b64_frames, is_real = _get_frames(scene, video_dir, n_frames)
-            t_start = time.perf_counter_ns()
             try:
-                prepared = model.prepare((scene.task, b64_frames), metrics=metrics)
-                raw = model.run(prepared, metrics=metrics)
-                response = model.post_proc(raw, metrics=metrics)[0]
+                row = _run_scene(model, model_name, scene, cycle, b64_frames, metrics)
+                row["real_video"] = is_real
             except Exception as exc:  # noqa: BLE001
                 console.print(
                     f"  [yellow]{model_name} scene={scene.name} cycle={cycle}: {exc}[/yellow]"
                 )
                 progress.advance(scene_task_id)
                 continue
-            infer_ms = (time.perf_counter_ns() - t_start) / 1e6
-            recall = _recall(response, scene.recall_keywords)
-
-            rows.append(
-                {
-                    "model": model_name,
-                    "app": scene.app,
-                    "scene": scene.name,
-                    "scene_idx": scene_idx,
-                    "expected": scene.expected_label,
-                    "run": cycle,
-                    "n_frames": len(b64_frames),
-                    "real_video": is_real,
-                    "infer_ms": round(infer_ms, 3),
-                    "response_chars": len(response),
-                    "recall": round(recall, 4),
-                }
-            )
+            rows.append(row)
             progress.advance(scene_task_id)
     return rows
 
@@ -574,8 +698,6 @@ def _print_summary(all_rows: list[dict]) -> None:
     Args:
         all_rows: All result rows from the benchmark.
     """
-    import numpy as np  # noqa: PLC0415
-
     groups: dict[str, list[dict]] = {}
     for row in all_rows:
         groups.setdefault(row["model"], []).append(row)
@@ -585,102 +707,72 @@ def _print_summary(all_rows: list[dict]) -> None:
     table.add_column("Load (ms)", justify="right")
     table.add_column("Unload (ms)", justify="right")
     table.add_column("Infer (ms)", justify="right")
-    table.add_column("Response (chars)", justify="right")
+    table.add_column("Response", justify="right")
     table.add_column("Recall", justify="right", style="bold green")
+    table.add_column("YN Acc", justify="right", style="bold yellow")
+    table.add_column("TTFT (ms)", justify="right")
+    table.add_column("TTFYD (ms)", justify="right")
+    table.add_column("Mean ITL (ms)", justify="right")
 
     for model_name, rows in sorted(groups.items()):
-        load_ms = rows[0].get("load_ms", 0.0)
-        unload_ms = rows[0].get("unload_ms", 0.0)
-        avg_infer = float(np.mean([r["infer_ms"] for r in rows]))
-        avg_chars = float(np.mean([r["response_chars"] for r in rows]))
         avg_recall = float(np.mean([r["recall"] for r in rows]))
+        yn_rows = [r for r in rows if r["yn_correct"] is not None]
+        yn_acc = float(np.mean([r["yn_correct"] for r in yn_rows])) if yn_rows else float("nan")
+        ttft_vals = [r["ttft_ms"] for r in rows if r["ttft_ms"] is not None]
+        ttfyd_vals = [r["ttfyd_ms"] for r in rows if r["ttfyd_ms"] is not None]
+        itl_vals = [r["mean_itl_ms"] for r in rows]
+        load_vals = [r["load_ms"] for r in rows if r.get("load_ms") is not None]
+        unload_vals = [r["unload_ms"] for r in rows if r.get("unload_ms") is not None]
+        infer_vals = [r["infer_ms"] for r in rows]
+        resp_vals = [r["response_chars"] for r in rows]
         table.add_row(
             model_name,
-            f"{load_ms:.0f}",
-            f"{unload_ms:.0f}",
-            f"{avg_infer:.1f}",
-            f"{avg_chars:.0f}",
+            f"{float(np.mean(load_vals)):.0f}" if load_vals else "n/a",
+            f"{float(np.mean(unload_vals)):.0f}" if unload_vals else "n/a",
+            f"{float(np.mean(infer_vals)):.0f}" if infer_vals else "n/a",
+            f"{float(np.mean(resp_vals)):.0f}" if resp_vals else "n/a",
             f"{avg_recall:.3f}",
+            f"{yn_acc:.3f}" if yn_rows else "n/a",
+            f"{float(np.mean(ttft_vals)):.1f}" if ttft_vals else "n/a",
+            f"{float(np.mean(ttfyd_vals)):.1f}" if ttfyd_vals else "n/a",
+            f"{float(np.mean(itl_vals)):.1f}" if itl_vals else "n/a",
         )
 
     console.print(table)
 
 
-_CSV_FLOAT_FIELDS = ("infer_ms", "recall", "load_ms", "unload_ms")
-_CSV_INT_FIELDS = ("scene_idx", "run", "response_chars", "n_frames")
+def _write_json(model_entries: list[dict], output_path: Path, *, merge: bool = False) -> None:
+    """Write benchmark results to a JSON file.
 
+    When *merge* is ``True`` and *output_path* already exists, entries for models
+    present in *model_entries* are replaced and entries for models not in the current
+    run are preserved.  When *merge* is ``False`` (default) the file is overwritten.
 
-def _read_existing_csv(path: Path) -> list[dict]:
-    """Read an existing results CSV, coercing numeric columns back to numbers.
-
-    Args:
-        path: Path to a CSV previously written by this script.
-
-    Returns:
-        List of row dicts with numeric fields as ``float``/``int``.
-    """
-    rows: list[dict] = []
-    with path.open(newline="") as f:
-        for raw in csv.DictReader(f):
-            row = dict(raw)
-            for k in _CSV_FLOAT_FIELDS:
-                if k in row:
-                    row[k] = float(row[k])
-            for k in _CSV_INT_FIELDS:
-                if k in row:
-                    row[k] = int(row[k])
-            rows.append(row)
-    return rows
-
-
-def _merge_rows(
-    existing_path: Path,
-    new_rows: list[dict],
-    rerun_models: set[str],
-) -> list[dict]:
-    """Merge ``new_rows`` into an existing CSV, replacing re-run models.
+    Each entry in ``model_entries`` contains a single model's ``metrics_report``
+    (once, not duplicated per row) plus a ``runs`` list of per-scene result dicts.
 
     Args:
-        existing_path: Path to the existing results CSV (may not exist).
-        new_rows: Freshly produced rows from this run.
-        rerun_models: Model display names that were re-run this session.
-
-    Returns:
-        Merged row list.
+        model_entries: Per-model result dicts, each containing ``metrics_report`` and ``runs``.
+        output_path: Destination JSON path.
+        merge: If ``True``, merge into any existing file rather than overwriting.
     """
-    if not existing_path.exists():
-        return new_rows
-    existing = _read_existing_csv(existing_path)
-    kept = [r for r in existing if r["model"] not in rerun_models]
-    return kept + new_rows
+    existing_models: list[dict] = []
+    if merge and output_path.exists():
+        try:
+            existing = json.loads(output_path.read_text())
+            existing_models = existing.get("models", [])
+        except (json.JSONDecodeError, OSError):
+            existing_models = []
 
+    new_names = {e["model"] for e in model_entries}
+    merged = [e for e in existing_models if e["model"] not in new_names] + model_entries
 
-def _write_csv(rows: list[dict], output_path: Path) -> None:
-    """Write benchmark result rows to a CSV file.
-
-    Args:
-        rows: List of result dicts.
-        output_path: Destination CSV path.
-    """
-    fieldnames = [
-        "model",
-        "app",
-        "scene",
-        "scene_idx",
-        "expected",
-        "run",
-        "n_frames",
-        "real_video",
-        "load_ms",
-        "infer_ms",
-        "unload_ms",
-        "response_chars",
-        "recall",
-    ]
-    with output_path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    output = {
+        "script": "benchmark_vlms",
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "models": merged,
+    }
+    output_path.write_text(json.dumps(output, indent=2))
 
 
 # ---------------------------------------------------------------------------
@@ -711,8 +803,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default="vlm_benchmark_results.csv",
-        help="Output CSV path (default: vlm_benchmark_results.csv).",
+        default="vlm_benchmark_results.json",
+        help="Output JSON path (default: vlm_benchmark_results.json).",
     )
     parser.add_argument(
         "--server-path",
@@ -738,11 +830,6 @@ def _parse_args() -> argparse.Namespace:
         help=f"Maximum tokens per model response (default: {_MAX_TOKENS}).",
     )
     parser.add_argument(
-        "--merge",
-        action="store_true",
-        help="Merge results into the existing --output CSV; re-run models replace existing rows.",
-    )
-    parser.add_argument(
         "--video-dir",
         default=None,
         help="Directory with real video clips named <scene_name>.mp4. "
@@ -754,13 +841,21 @@ def _parse_args() -> argparse.Namespace:
         help="Save frames for each scene to this directory as <scene>_<idx>.jpg. "
         "Directory is created if it does not exist.",
     )
+    parser.add_argument(
+        "--cpu",
+        action="store_true",
+        help="Run inference on CPU instead of GPU.",
+    )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge results into existing output file instead of overwriting it.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:  # noqa: C901, PLR0912, PLR0915
     """Entry point for the VLM benchmark script."""
-    import numpy as np  # noqa: PLC0415
-
     global _N_CYCLES, _MAX_TOKENS, _N_FRAMES  # noqa: PLW0603
 
     args = _parse_args()
@@ -768,6 +863,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     _MAX_TOKENS = args.max_tokens
     _N_FRAMES = args.n_frames
     output_path = Path(args.output)
+    compute_unit = ComputeUnit.CPU if args.cpu else ComputeUnit.GPU
     video_dir = Path(args.video_dir) if args.video_dir else None
     frames_dir = Path(args.frames_dir) if args.frames_dir else None
 
@@ -803,14 +899,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     console.print(f"  output : {output_path}")
     console.print(f"  models : {', '.join(c[1] for c in configs)}")
     console.print(f"  server : {server_path}:{port}")
+    console.print(f"  device : {'CPU' if args.cpu else 'GPU'}")
     if video_dir:
         console.print(f"  videos : {video_dir}")
     else:
         console.print("  videos : synthetic (use --video-dir for real clips)")
     if frames_dir:
         console.print(f"  frames : saving to {frames_dir}")
-    if args.merge:
-        console.print("  merge  : on")
     console.print()
 
     if frames_dir is not None:
@@ -822,7 +917,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
     manager = ModelManager(path_manager)
     all_rows: list[dict] = []
-    rerun_models: set[str] = set()
+    model_entries: list[dict] = []
 
     with Progress(
         SpinnerColumn(),
@@ -841,11 +936,10 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 progress.advance(model_task)
                 continue
 
-            rerun_models.add(model_name)
             progress.update(model_task, description=model_name)
 
-            metrics = MetricsCollector()
-            t_load = time.perf_counter_ns()
+            platform = Platform(config)
+            metrics = MetricsCollector(platform)
             try:
                 model = manager.get_model(
                     model_id,
@@ -858,16 +952,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 continue
 
             rows: list[dict] = []
-            unload_ms = 0.0
             with metrics.start_trace():
                 try:
-                    model.load(Platform(config), ComputeUnit.GPU, metrics=metrics)
+                    model.load(platform, compute_unit, metrics=metrics)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                     progress.advance(model_task)
                     continue
-                load_ms = (time.perf_counter_ns() - t_load) / 1e6
-                console.print(f"  [dim]{model_name}: server started in {load_ms:.0f} ms[/dim]")
 
                 rows = _run_benchmark(
                     model,
@@ -880,33 +971,37 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     scene_task,
                 )
 
-                t_unload = time.perf_counter_ns()
                 try:
                     model.unload(metrics=metrics)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
-                unload_ms = (time.perf_counter_ns() - t_unload) / 1e6
 
+            report = metrics.report()
+            load_ms, unload_ms = _extract_load_unload_ms(report)
             for row in rows:
                 row["load_ms"] = round(load_ms, 3)
                 row["unload_ms"] = round(unload_ms, 3)
+            model_entries.append(
+                {
+                    "model": model_name,
+                    "load_ms": round(load_ms, 3),
+                    "unload_ms": round(unload_ms, 3),
+                    "metrics_report": report.json(),
+                    "runs": rows,
+                }
+            )
 
             if rows:
-                avg_infer = np.mean([r["infer_ms"] for r in rows])
                 avg_recall = np.mean([r["recall"] for r in rows])
                 console.print(
-                    f"  [dim]{model_name}: {len(rows)} results — "
-                    f"avg infer {avg_infer:.0f} ms, recall {avg_recall:.3f}[/dim]"
+                    f"  [dim]{model_name}: {len(rows)} results — recall {avg_recall:.3f}[/dim]"
                 )
 
             all_rows.extend(rows)
             progress.advance(model_task)
 
-    if args.merge:
-        all_rows = _merge_rows(output_path, all_rows, rerun_models)
-
     if all_rows:
-        _write_csv(all_rows, output_path)
+        _write_json(model_entries, output_path, merge=args.merge)
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")
