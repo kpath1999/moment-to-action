@@ -121,8 +121,11 @@ _LLM_CONFIGS: list[tuple[ModelID, str, str | None]] = [
     (ModelID.PHI35_MINI_INSTRUCT, "phi35_mini", _PHI3),
 ]
 
-# Detector used for the LLM pipeline (overridden by --detector flag).
-_LLM_DETECTOR: ModelID = ModelID.YOLO_V8
+# Detectors used for the LLM pipeline — comment out any to skip.
+_LLM_DETECTORS: list[tuple[ModelID, str]] = [
+    (ModelID.YOLO_V8, "yolo_v8"),
+    (ModelID.DETECTRON2, "detectron2"),
+]
 
 _N_CYCLES = 3
 _MAX_TOKENS = 128
@@ -1016,7 +1019,6 @@ def _print_summary(all_rows: list[dict]) -> None:
 
 def _write_json(
     model_entries: list[dict],
-    detector_name: str,
     output_path: Path,
     *,
     merge: bool = False,
@@ -1024,11 +1026,12 @@ def _write_json(
     """Write benchmark results to a JSON file.
 
     When *merge* is ``True`` and *output_path* already exists, entries for
-    models present in *model_entries* are replaced; others are preserved.
+    models present in *model_entries* (matched by ``(model, detector)`` pair for
+    LLM entries and by ``model`` alone for VLM entries) are replaced; others are
+    preserved.
 
     Args:
         model_entries: Per-model result dicts with ``metrics_report`` and ``runs``.
-        detector_name: Name of the detector used for LLM clips.
         output_path: Destination JSON path.
         merge: If ``True``, merge into any existing file rather than overwriting.
     """
@@ -1040,13 +1043,15 @@ def _write_json(
         except (json.JSONDecodeError, OSError):
             existing_models = []
 
-    new_names = {e["model"] for e in model_entries}
-    merged = [e for e in existing_models if e["model"] not in new_names] + model_entries
+    def _entry_key(e: dict) -> tuple[str, str]:
+        return (e["model"], e.get("detector", ""))
+
+    new_keys = {_entry_key(e) for e in model_entries}
+    merged = [e for e in existing_models if _entry_key(e) not in new_keys] + model_entries
 
     output = {
         "script": "benchmark_real",
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        "detector": detector_name,
         "models": merged,
     }
     output_path.write_text(json.dumps(output, indent=2))
@@ -1072,12 +1077,6 @@ def _parse_args() -> argparse.Namespace:
         "--data-dir",
         default="bench/data",
         help="Directory containing annotations.json and videos/ (default: bench/data).",
-    )
-    parser.add_argument(
-        "--detector",
-        choices=["yolo", "detectron2"],
-        default="yolo",
-        help="Detection model for the LLM pipeline (default: yolo).",
     )
     parser.add_argument(
         "--n-cycles",
@@ -1128,13 +1127,11 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:  # noqa: C901, PLR0912, PLR0915
     """Entry point for the real-data benchmark script."""
-    global _N_CYCLES, _MAX_TOKENS, _LLM_DETECTOR  # noqa: PLW0603
+    global _N_CYCLES, _MAX_TOKENS  # noqa: PLW0603
 
     args = _parse_args()
     _N_CYCLES = args.n_cycles
     _MAX_TOKENS = args.max_tokens
-    _LLM_DETECTOR = ModelID.DETECTRON2 if args.detector == "detectron2" else ModelID.YOLO_V8
-    detector_display = args.detector
 
     data_dir = Path(args.data_dir)
     output_path = Path(args.output)
@@ -1182,7 +1179,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     console.print(f"  apps       : {', '.join(apps)}")
     console.print(f"  cycles     : {_N_CYCLES}")
     console.print(f"  tokens     : {_MAX_TOKENS}")
-    console.print(f"  detector   : {detector_display} (for LLM pipeline)")
+    console.print(f"  detectors  : {', '.join(d for _, d in _LLM_DETECTORS)} (for LLM pipeline)")
     console.print(f"  output     : {output_path}")
     console.print(f"  vlm models : {', '.join(c[1] for c in vlm_configs)}")
     console.print(f"  llm models : {', '.join(c[1] for c in llm_configs)}")
@@ -1202,7 +1199,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         MofNCompleteColumn(),
         console=console,
     ) as progress:
-        total_models = len(vlm_configs) + len(llm_configs)
+        total_models = len(vlm_configs) + len(llm_configs) * len(_LLM_DETECTORS)
         model_task = progress.add_task("models", total=total_models)
         clip_task = progress.add_task("  (waiting)", total=None)
 
@@ -1274,115 +1271,122 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
         # --- LLM models (require detector) ---
         if llm_configs:
-            # Load detector once, shared across all LLM models.
-            detector_model_id = _LLM_DETECTOR
-            detector_obj: object = None
-            detector_platform = Platform(config)
-            detector_metrics = MetricsCollector(detector_platform)
+            for detector_model_id, detector_display in _LLM_DETECTORS:
+                # Load detector once per detector type, shared across all LLM models.
+                detector_obj: object = None
+                detector_platform = Platform(config)
+                detector_metrics = MetricsCollector(detector_platform)
 
-            try:
-                detector_obj = manager.get_model(detector_model_id)
-            except Exception as exc:  # noqa: BLE001
-                console.print(f"  [red]Detector {detector_display}: failed to get — {exc}[/red]")
-                llm_configs = []
+                try:
+                    detector_obj = manager.get_model(detector_model_id)
+                except Exception as exc:  # noqa: BLE001
+                    console.print(
+                        f"  [red]Detector {detector_display}: failed to get — {exc}[/red]"
+                    )
+                    continue
 
-            if detector_obj is not None:
                 try:
                     with detector_metrics.start_trace():
-                        detector_obj.load(  # type: ignore[attr-defined]
-                            detector_platform, compute_unit, metrics=detector_metrics
-                        )
+                        detector_obj.load(detector_platform, compute_unit, metrics=detector_metrics)
                 except Exception as exc:  # noqa: BLE001
                     console.print(
                         f"  [red]Detector {detector_display}: failed to load — {exc}[/red]"
                     )
-                    llm_configs = []
-
-            for model_id, model_name, model_template in llm_configs:
-                if model_id not in MODEL_REGISTRY:
-                    console.print(f"  [yellow]{model_name} not in registry, skipping.[/yellow]")
-                    progress.advance(model_task)
                     continue
 
-                progress.update(model_task, description=f"{model_name} (llm)")
+                console.rule(f"[dim]LLM x {detector_display}[/dim]")
 
-                platform = Platform(config)
-                metrics = MetricsCollector(platform)
-                try:
-                    model = manager.get_model(
-                        model_id,
-                        system_prompt=_BENCHMARK_SYSTEM,
-                        max_tokens=_MAX_TOKENS,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    console.print(f"  [red]{model_name}: failed to get model — {exc}[/red]")
-                    progress.advance(model_task)
-                    continue
-
-                rows = []
-                with metrics.start_trace():
-                    try:
-                        model.load(platform, compute_unit, metrics=metrics)
-                    except Exception as exc:  # noqa: BLE001
-                        console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
+                for model_id, model_name, model_template in llm_configs:
+                    if model_id not in MODEL_REGISTRY:
+                        console.print(f"  [yellow]{model_name} not in registry, skipping.[/yellow]")
                         progress.advance(model_task)
                         continue
 
-                    rows = _run_llm_benchmark(
-                        model,
-                        model_name,
-                        model_template,
-                        clips,
-                        _N_CYCLES,
-                        data_dir,
-                        detector_obj,
-                        detector_display,
-                        metrics,
-                        progress,
-                        clip_task,
+                    progress.update(
+                        model_task, description=f"{model_name} (llm/{detector_display})"
                     )
 
+                    platform = Platform(config)
+                    metrics = MetricsCollector(platform)
                     try:
-                        model.unload(metrics=metrics)
+                        model = manager.get_model(
+                            model_id,
+                            system_prompt=_BENCHMARK_SYSTEM,
+                            max_tokens=_MAX_TOKENS,
+                        )
                     except Exception as exc:  # noqa: BLE001
-                        console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
+                        console.print(f"  [red]{model_name}: failed to get model — {exc}[/red]")
+                        progress.advance(model_task)
+                        continue
 
-                report = metrics.report()
-                load_ms, unload_ms = _extract_load_unload_ms(report)
-                for row in rows:
-                    row["kind"] = "llm"
-                    row["load_ms"] = round(load_ms, 3)
-                    row["unload_ms"] = round(unload_ms, 3)
-                model_entries.append(
-                    {
-                        "model": model_name,
-                        "kind": "llm",
-                        "load_ms": round(load_ms, 3),
-                        "unload_ms": round(unload_ms, 3),
-                        "metrics_report": report.json(),
-                        "runs": rows,
-                    }
-                )
+                    rows = []
+                    with metrics.start_trace():
+                        try:
+                            model.load(platform, compute_unit, metrics=metrics)
+                        except Exception as exc:  # noqa: BLE001
+                            console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
+                            progress.advance(model_task)
+                            continue
 
-                if rows:
-                    avg_recall = np.mean([r["recall"] for r in rows])
-                    console.print(
-                        f"  [dim]{model_name}: {len(rows)} results — recall {avg_recall:.3f}[/dim]"
+                        rows = _run_llm_benchmark(
+                            model,
+                            model_name,
+                            model_template,
+                            clips,
+                            _N_CYCLES,
+                            data_dir,
+                            detector_obj,
+                            detector_display,
+                            metrics,
+                            progress,
+                            clip_task,
+                        )
+
+                        try:
+                            model.unload(metrics=metrics)
+                        except Exception as exc:  # noqa: BLE001
+                            console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
+
+                    report = metrics.report()
+                    load_ms, unload_ms = _extract_load_unload_ms(report)
+                    for row in rows:
+                        row["kind"] = "llm"
+                        row["detector"] = detector_display
+                        row["load_ms"] = round(load_ms, 3)
+                        row["unload_ms"] = round(unload_ms, 3)
+                    model_entries.append(
+                        {
+                            "model": model_name,
+                            "kind": "llm",
+                            "detector": detector_display,
+                            "load_ms": round(load_ms, 3),
+                            "unload_ms": round(unload_ms, 3),
+                            "metrics_report": report.json(),
+                            "runs": rows,
+                        }
                     )
 
-                all_rows.extend(rows)
-                progress.advance(model_task)
+                    if rows:
+                        avg_recall = np.mean([r["recall"] for r in rows])
+                        console.print(
+                            f"  [dim]{model_name}: {len(rows)} results "
+                            f"— recall {avg_recall:.3f}[/dim]"
+                        )
 
-            # Unload detector.
-            if detector_obj is not None:
+                    all_rows.extend(rows)
+                    progress.advance(model_task)
+
+                # Unload detector.
                 try:
                     with detector_metrics.start_trace():
-                        detector_obj.unload(metrics=detector_metrics)  # type: ignore[attr-defined]
+                        detector_obj.unload(metrics=detector_metrics)
                 except Exception as exc:  # noqa: BLE001
-                    console.print(f"  [yellow]Detector unload error — {exc}[/yellow]")
+                    console.print(
+                        f"  [yellow]Detector {detector_display} unload error — {exc}[/yellow]"
+                    )
 
     if all_rows:
-        _write_json(model_entries, detector_display, output_path, merge=args.merge)
+        _write_json(model_entries, output_path, merge=args.merge)
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")
