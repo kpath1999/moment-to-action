@@ -1119,6 +1119,12 @@ def _parse_args() -> argparse.Namespace:
         "E.g. --models smolvlm2_256m,qwen3_0_6b",
     )
     parser.add_argument(
+        "--model-group",
+        choices=["vlm", "llm"],
+        default=None,
+        help="Run only VLMs or only LLMs (overrides --models).",
+    )
+    parser.add_argument(
         "--max-tokens",
         type=int,
         default=_MAX_TOKENS,
@@ -1177,8 +1183,15 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
     model_filter = set(args.models.split(",")) if args.models else None
 
-    vlm_configs = [c for c in _VLM_CONFIGS if model_filter is None or c[1] in model_filter]
-    llm_configs = [c for c in _LLM_CONFIGS if model_filter is None or c[1] in model_filter]
+    if args.model_group == "vlm":
+        vlm_configs = _VLM_CONFIGS[:]
+        llm_configs = []
+    elif args.model_group == "llm":
+        vlm_configs = []
+        llm_configs = _LLM_CONFIGS[:]
+    else:
+        vlm_configs = [c for c in _VLM_CONFIGS if model_filter is None or c[1] in model_filter]
+        llm_configs = [c for c in _LLM_CONFIGS if model_filter is None or c[1] in model_filter]
 
     if not vlm_configs and not llm_configs:
         console.print("[red]No models selected. Exiting.[/red]")
