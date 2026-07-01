@@ -1159,6 +1159,11 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
     path_manager = PathManager()
     config = load_config(path_manager.app_config_file)
+
+    from moment_to_action.qairt._manager import QairtSDKManager  # noqa: PLC0415
+
+    QairtSDKManager.from_app_config(config, path_manager).configure_env()
+
     server_path = Path(args.server_path) if args.server_path else config.llama_server_path
     port = args.port if args.port is not None else config.llama_server_port
 
