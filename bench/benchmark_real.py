@@ -123,7 +123,7 @@ _LLM_CONFIGS: list[tuple[ModelID, str, str | None]] = [
 
 # Detectors used for the LLM pipeline — comment out any to skip.
 _LLM_DETECTORS: list[tuple[ModelID, str]] = [
-    (ModelID.YOLO_V8, "yolo_v8"),
+    # (ModelID.YOLO_V8, "yolo_v8"),
     (ModelID.DETECTRON2, "detectron2"),
 ]
 
