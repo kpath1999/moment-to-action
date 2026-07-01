@@ -102,10 +102,10 @@ _VLM_CONFIGS: list[tuple[ModelID, str]] = [
     (ModelID.MOONDREAM2, "moondream2"),
     (ModelID.SMOLVLM2_256M, "smolvlm2_256m"),
     (ModelID.SMOLVLM2_500M, "smolvlm2_500m"),
-    (ModelID.SMOLVLM2_2_2B, "smolvlm2_2_2b"),
+    # (ModelID.SMOLVLM2_2_2B, "smolvlm2_2_2b"),
     (ModelID.QWEN25_VL_3B_INSTRUCT, "qwen25_vl_3b"),
     (ModelID.QWEN3_VL_2B_INSTRUCT, "qwen3_vl_2b"),
-    (ModelID.QWEN3_VL_4B_INSTRUCT, "qwen3_vl_4b"),
+    # (ModelID.QWEN3_VL_4B_INSTRUCT, "qwen3_vl_4b"),
     (ModelID.INTERNVL3_1B_INSTRUCT, "internvl3_1b"),
     (ModelID.MINISTRAL_3_3B_REASONING, "ministral_3_3b"),
 ]
@@ -123,7 +123,7 @@ _LLM_CONFIGS: list[tuple[ModelID, str, str | None]] = [
 
 # Detectors used for the LLM pipeline — comment out any to skip.
 _LLM_DETECTORS: list[tuple[ModelID, str]] = [
-    (ModelID.YOLO_V8, "yolo_v8"),
+    # (ModelID.YOLO_V8, "yolo_v8"),
     (ModelID.DETECTRON2, "detectron2"),
 ]
 
