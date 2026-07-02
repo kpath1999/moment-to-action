@@ -95,7 +95,7 @@ def _wait_for_health(client: httpx.Client, timeout: float) -> bool:
                 except Exception:  # noqa: BLE001
                     return True  # unparseable body; assume ready
             elif f"http_{resp.status_code}" != last_status:
-                logger.debug(
+                logger.info(
                     "llama-server: HTTP %d (%.1fs elapsed)",
                     resp.status_code,
                     time.monotonic() - t_start,
@@ -103,7 +103,7 @@ def _wait_for_health(client: httpx.Client, timeout: float) -> bool:
                 last_status = f"http_{resp.status_code}"
         except httpx.ConnectError:
             if last_status != "connecting":
-                logger.debug(
+                logger.info(
                     "llama-server: waiting for connection (%.1fs elapsed)",
                     time.monotonic() - t_start,
                 )

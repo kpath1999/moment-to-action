@@ -92,7 +92,7 @@ if TYPE_CHECKING:
 console = Console()
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(message)s",
     datefmt="[%X]",
     handlers=[RichHandler(rich_tracebacks=True, console=console)],
