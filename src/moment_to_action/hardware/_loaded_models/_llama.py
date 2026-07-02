@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_HEALTH_TIMEOUT_S = 120.0
+_HEALTH_TIMEOUT_S = 1200.0
 _HEALTH_POLL_S = 0.5
 _HTTP_OK = 200
 
