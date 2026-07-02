@@ -231,6 +231,7 @@ class TestStartLlamaModel:
         import httpx as _httpx
 
         mock_proc = MagicMock()
+        mock_proc.poll.return_value = None  # still running
         mock_client = MagicMock()
         mock_client.get.side_effect = _httpx.ConnectError("refused")
 
@@ -252,6 +253,99 @@ class TestStartLlamaModel:
                 )
         mock_proc.terminate.assert_called_once()
         mock_client.close.assert_called_once()
+
+    def test_process_crash_raises_runtime_error(self) -> None:
+        """Raises RuntimeError immediately if llama-server process exits during startup."""
+        import httpx as _httpx
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = 1  # process crashed
+        mock_client = MagicMock()
+        mock_client.get.side_effect = _httpx.ConnectError("refused")
+
+        with (
+            patch("subprocess.Popen", return_value=mock_proc),
+            patch("httpx.Client", return_value=mock_client),
+            patch("moment_to_action.hardware._loaded_models._llama._HEALTH_TIMEOUT_S", 60.0),
+            patch("moment_to_action.hardware._loaded_models._llama._HEALTH_POLL_S", 0.001),
+            patch(
+                "moment_to_action.hardware._loaded_models._llama.pick_free_port", return_value=9999
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="did not become healthy"):
+                _start_llama_model(
+                    path="/tmp/model.gguf",
+                    server_path="/usr/bin/llama-server",
+                    unit=ComputeUnit.CPU,
+                    dtype=DataType.FP32,
+                )
+        mock_proc.terminate.assert_called_once()
+
+    def test_non_200_status_logs_and_retries(self) -> None:
+        """Non-200 HTTP response is logged and polling continues until timeout."""
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        non_200_resp = MagicMock()
+        non_200_resp.status_code = 503
+
+        mock_client = MagicMock()
+        mock_client.get.return_value = non_200_resp
+
+        with (
+            patch("subprocess.Popen", return_value=mock_proc),
+            patch("httpx.Client", return_value=mock_client),
+            patch("moment_to_action.hardware._loaded_models._llama._HEALTH_TIMEOUT_S", 0.01),
+            patch("moment_to_action.hardware._loaded_models._llama._HEALTH_POLL_S", 0.001),
+            patch(
+                "moment_to_action.hardware._loaded_models._llama.pick_free_port", return_value=9999
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="did not become healthy"):
+                _start_llama_model(
+                    path="/tmp/model.gguf",
+                    server_path="/usr/bin/llama-server",
+                    unit=ComputeUnit.CPU,
+                    dtype=DataType.FP32,
+                )
+
+    def test_connect_error_after_status_change_logs_reconnect(self) -> None:
+        """ConnectError after a prior non-connecting status logs the reconnect message."""
+        import httpx as _httpx
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        loading_resp = MagicMock()
+        loading_resp.status_code = 200
+        loading_resp.json.return_value = {"status": "loading model"}
+
+        call_count = 0
+
+        def _get_side_effect(_url: str) -> object:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return loading_resp
+            raise _httpx.ConnectError("dropped")
+
+        mock_client = MagicMock()
+        mock_client.get.side_effect = _get_side_effect
+
+        with (
+            patch("subprocess.Popen", return_value=mock_proc),
+            patch("httpx.Client", return_value=mock_client),
+            patch("moment_to_action.hardware._loaded_models._llama._HEALTH_TIMEOUT_S", 0.01),
+            patch("moment_to_action.hardware._loaded_models._llama._HEALTH_POLL_S", 0.001),
+            patch(
+                "moment_to_action.hardware._loaded_models._llama.pick_free_port", return_value=9999
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="did not become healthy"):
+                _start_llama_model(
+                    path="/tmp/model.gguf",
+                    server_path="/usr/bin/llama-server",
+                    unit=ComputeUnit.CPU,
+                    dtype=DataType.FP32,
+                )
 
     def test_uses_pick_free_port_when_port_none(self) -> None:
         """pick_free_port is called when port=None."""

@@ -52,7 +52,11 @@ def __find_llama_server(explicit: str | os.PathLike[str] | None) -> str:
     raise RuntimeError(msg)
 
 
-def _wait_for_health(client: httpx.Client, timeout: float) -> bool:
+def _wait_for_health(
+    client: httpx.Client,
+    timeout: float,
+    proc: subprocess.Popen[bytes],
+) -> bool:
     """Poll ``/health`` until the server reports ready or the deadline is reached.
 
     Logs status transitions at INFO level so progress is visible in the logs.
@@ -60,9 +64,13 @@ def _wait_for_health(client: httpx.Client, timeout: float) -> bool:
     Args:
         client: httpx client already pointed at the server base URL.
         timeout: Maximum seconds to wait.
+        proc: The llama-server subprocess; checked on each ``ConnectError`` so
+            that a crashed server is detected immediately rather than waiting
+            for the full timeout.
 
     Returns:
-        ``True`` if the server became healthy, ``False`` if the deadline elapsed.
+        ``True`` if the server became healthy, ``False`` if the deadline elapsed
+        or the process exited before becoming healthy.
     """
     deadline = time.monotonic() + timeout
     t_start = time.monotonic()
@@ -102,6 +110,14 @@ def _wait_for_health(client: httpx.Client, timeout: float) -> bool:
                 )
                 last_status = f"http_{resp.status_code}"
         except httpx.ConnectError:
+            rc = proc.poll()
+            if rc is not None:
+                logger.warning(
+                    "llama-server exited with code %d after %.1fs",
+                    rc,
+                    time.monotonic() - t_start,
+                )
+                return False
             if last_status != "connecting":
                 logger.info(
                     "llama-server: waiting for connection (%.1fs elapsed)",
@@ -182,7 +198,7 @@ def _start_llama_model(
     )
 
     # Spin until server is healthy and model is fully loaded.
-    if not _wait_for_health(client, _HEALTH_TIMEOUT_S):
+    if not _wait_for_health(client, _HEALTH_TIMEOUT_S, proc):
         proc.terminate()
         proc.wait()
         client.close()

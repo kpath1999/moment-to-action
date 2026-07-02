@@ -1429,7 +1429,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                             console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
                     report = metrics.report()
-                    load_ms, unload_ms = _extract_load_unload_ms(report, "LlamaGGUFModel")
+                    load_ms, unload_ms = _extract_load_unload_ms(report)
                     for row in rows:
                         row["kind"] = "llm"
                         row["detector"] = detector_display
