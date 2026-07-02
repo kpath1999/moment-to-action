@@ -109,6 +109,7 @@ In-repo design docs live in `docs/`. Consult before touching the relevant subsys
 
 - [`docs/paths.md`](docs/paths.md) — `PathManager` / `CacheManager` / `DataManager` contract and platform-specific directory layout. Required reading before adding any filesystem path.
 - [`docs/app.md`](docs/app.md) — `Moment2Action` usage: building/loading/running/unloading pipelines, metrics reporting, and when you need to drive stages directly instead of one chained `run()`.
+- [`docs/prompt_tuning.md`](docs/prompt_tuning.md) — `prompt_tuning` subsystem: the iterate-the-VLM-prompt loop (`PromptCandidate` → `PromptRunner` → `EvalReport` → `PromptProposer`), the human/LLM proposer **port**, and the `scripts/tune_vlm_prompt.py` driver.
 
 ## Contributing flow
 
