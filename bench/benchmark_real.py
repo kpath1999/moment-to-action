@@ -47,7 +47,10 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import json
+import logging
+import os
 import re
 import sys
 import time
@@ -60,6 +63,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from PIL import Image
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -79,11 +83,48 @@ from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.paths import PathManager
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
     from moment_to_action.metrics._types import MetricsReport
     from moment_to_action.models.image.detection._types import BoundingBox, Detection
 
 console = Console()
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[RichHandler(rich_tracebacks=True, console=console)],
+)
+
+
+@contextlib.contextmanager
+def _silence_native_output() -> Iterator[None]:
+    """Redirect OS-level stdout+stderr to /dev/null for the duration of the block.
+
+    The QAIRT runtime emits C++ chatter (e.g. "Profile Logger with name = defaultKey
+    doesn't exist!") straight to file descriptors 1/2, bypassing Python's logging and
+    corrupting the rich progress bar.
+
+    Yields:
+        None.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    saved = (os.dup(1), os.dup(2))
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        yield
+    finally:
+        os.dup2(saved[0], 1)
+        os.dup2(saved[1], 2)
+        os.close(devnull)
+        os.close(saved[0])
+        os.close(saved[1])
+
 
 # ---------------------------------------------------------------------------
 # Model lists — comment out any entry to skip it
@@ -821,9 +862,10 @@ def _detect_frames(
         span_name = f"{detector_name}.detect.frame{i}"
         with metrics.start_span(SpanType.MODEL_INFERENCE, span_name):
             try:
-                prepared = detector.prepare(frame, metrics=metrics)  # type: ignore[attr-defined]
-                raw = detector.run(prepared, metrics=metrics)  # type: ignore[attr-defined]
-                dets: list[Detection] = detector.post_proc(raw, metrics=metrics)  # type: ignore[attr-defined]
+                with _silence_native_output():
+                    prepared = detector.prepare(frame, metrics=metrics)  # type: ignore[attr-defined]
+                    raw = detector.run(prepared, metrics=metrics)  # type: ignore[attr-defined]
+                    dets: list[Detection] = detector.post_proc(raw, metrics=metrics)  # type: ignore[attr-defined]
                 results.append(dets)
             except Exception:  # noqa: BLE001
                 results.append([])
@@ -1312,6 +1354,29 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             ) in _LLM_DETECTORS:
                 console.rule(f"[dim]LLM x {detector_display}[/dim]")
 
+                # Load detector once and reuse across all LLM models.
+                try:
+                    detector_obj = manager.get_model(detector_model_id, variant=detector_variant)
+                except Exception as exc:  # noqa: BLE001
+                    console.print(
+                        f"  [red]Detector {detector_display}: failed to get — {exc}[/red]"
+                    )
+                    for _ in llm_configs:
+                        progress.advance(model_task)
+                    continue
+
+                detector_platform = Platform(config)
+                try:
+                    with _silence_native_output():
+                        detector_obj.load(detector_platform, detector_unit)
+                except Exception as exc:  # noqa: BLE001
+                    console.print(
+                        f"  [red]Detector {detector_display}: failed to load — {exc}[/red]"
+                    )
+                    for _ in llm_configs:
+                        progress.advance(model_task)
+                    continue
+
                 for model_id, model_name, model_template in llm_configs:
                     if model_id not in MODEL_REGISTRY:
                         console.print(f"  [yellow]{model_name} not in registry, skipping.[/yellow]")
@@ -1321,17 +1386,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     progress.update(
                         model_task, description=f"{model_name} (llm/{detector_display})"
                     )
-
-                    try:
-                        detector_obj = manager.get_model(
-                            detector_model_id, variant=detector_variant
-                        )
-                    except Exception as exc:  # noqa: BLE001
-                        console.print(
-                            f"  [red]Detector {detector_display}: failed to get — {exc}[/red]"
-                        )
-                        progress.advance(model_task)
-                        continue
 
                     try:
                         model = manager.get_model(
@@ -1345,25 +1399,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         continue
 
                     platform = Platform(config)
-                    detector_platform = Platform(config)
                     metrics = MetricsCollector(platform)
                     rows = []
                     with metrics.start_trace():
-                        # Detector spans are sub-spans of this model's trace.
-                        try:
-                            detector_obj.load(detector_platform, detector_unit, metrics=metrics)
-                        except Exception as exc:  # noqa: BLE001
-                            console.print(
-                                f"  [red]Detector {detector_display}: failed to load — {exc}[/red]"
-                            )
-                            progress.advance(model_task)
-                            continue
-
                         try:
                             model.load(platform, compute_unit, metrics=metrics)
                         except Exception as exc:  # noqa: BLE001
                             console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
-                            detector_obj.unload(metrics=metrics)
                             progress.advance(model_task)
                             continue
 
@@ -1385,14 +1427,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                             model.unload(metrics=metrics)
                         except Exception as exc:  # noqa: BLE001
                             console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
-
-                        try:
-                            detector_obj.unload(metrics=metrics)
-                        except Exception as exc:  # noqa: BLE001
-                            console.print(
-                                f"  [yellow]Detector {detector_display} unload error"
-                                f" — {exc}[/yellow]"
-                            )
 
                     report = metrics.report()
                     load_ms, unload_ms = _extract_load_unload_ms(report, "LlamaGGUFModel")
@@ -1422,6 +1456,14 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
                     all_rows.extend(rows)
                     progress.advance(model_task)
+
+                try:
+                    with _silence_native_output():
+                        detector_obj.unload()
+                except Exception as exc:  # noqa: BLE001
+                    console.print(
+                        f"  [yellow]Detector {detector_display} unload error — {exc}[/yellow]"
+                    )
 
     if all_rows:
         _write_json(model_entries, output_path, merge=args.merge)
