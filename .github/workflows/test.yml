@@ -52,7 +52,7 @@ jobs:
 
       - name: Publish coverage comment
         if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: MishaKav/pytest-coverage-comment@v1.7.2
+        uses: MishaKav/pytest-coverage-comment@v1.8.0
         with:
           junitxml-path: pytest-results.xml
           pytest-xml-coverage-path: coverage.xml
