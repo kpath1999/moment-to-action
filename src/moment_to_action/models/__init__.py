@@ -27,13 +27,17 @@ from .image.detection.rf_detr._model import RFDETRModel
 from .image.detection.rtmdet._model import RTMDetModel
 from .image.detection.yolo._model import YOLOModel
 from .llm._base import LlamaGGUFModel
+from .llm.gemma3._model import Gemma3Model
 from .llm.phi35._model import Phi35Model
 from .llm.qwen2._model import Qwen2Model
 from .llm.qwen3._model import Qwen3Model
 from .vlm._base import LlamaVLModel
+from .vlm.internvl3._model import InternVL3Model
+from .vlm.ministral._model import MinistralModel
 from .vlm.moondream2._model import Moondream2Model
 from .vlm.qwen3_vl._model import Qwen3VLModel
 from .vlm.qwen25_vl._model import Qwen25VLModel
+from .vlm.smolvlm2._model import SmolVLM2Model
 
 __all__ = [
     "DEFAULT_VARIANT_KEY",
@@ -43,12 +47,15 @@ __all__ = [
     "Classification",
     "Detection",
     "DownloadSource",
+    "Gemma3Model",
     "HuggingFaceSource",
     "ImageClassificationModel",
     "ImageDetectionModel",
     "ImageModel",
+    "InternVL3Model",
     "LlamaGGUFModel",
     "LlamaVLModel",
+    "MinistralModel",
     "MobileNetV2Model",
     "ModelID",
     "ModelInfo",
@@ -62,6 +69,7 @@ __all__ = [
     "Qwen25VLModel",
     "RFDETRModel",
     "RTMDetModel",
+    "SmolVLM2Model",
     "UltralyticsSource",
     "Variant",
     "VariantStatus",

@@ -9,12 +9,16 @@ from .image.detection.detectron2._model import Detectron2Model
 from .image.detection.rf_detr._model import RFDETRModel
 from .image.detection.rtmdet._model import RTMDetModel
 from .image.detection.yolo._model import YOLOModel
+from .llm.gemma3._model import Gemma3Model
 from .llm.phi35._model import Phi35Model
 from .llm.qwen2._model import Qwen2Model
 from .llm.qwen3._model import Qwen3Model
+from .vlm.internvl3._model import InternVL3Model
+from .vlm.ministral._model import MinistralModel
 from .vlm.moondream2._model import Moondream2Model
 from .vlm.qwen3_vl._model import Qwen3VLModel
 from .vlm.qwen25_vl._model import Qwen25VLModel
+from .vlm.smolvlm2._model import SmolVLM2Model
 
 DEFAULT_KEY = "default"
 
@@ -411,6 +415,199 @@ MODEL_REGISTRY: dict[ModelID, ModelInfo] = {
                     ComputeUnit.GPU: {
                         "model": "moondream2-text-model-f16.gguf",
                         "mmproj": "moondream2-mmproj-f16.gguf",
+                    }
+                },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.QWEN3_0_6B: ModelInfo(
+        id=ModelID.QWEN3_0_6B,
+        model_class=Qwen3Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/Qwen3-0.6B-GGUF",
+                    files=["Qwen3-0.6B-Q4_0.gguf"],
+                    revision="a41486f827d17edd055fe6b3b0ba3f8d427c0519",
+                ),
+                backends={ComputeUnit.GPU: {"model": "Qwen3-0.6B-Q4_0.gguf"}},
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.QWEN3_1_7B: ModelInfo(
+        id=ModelID.QWEN3_1_7B,
+        model_class=Qwen3Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/Qwen3-1.7B-GGUF",
+                    files=["Qwen3-1.7B-Q4_K_M.gguf"],
+                    revision="daeb8e2d528a760970442092f6bf1e55c3b659eb",
+                ),
+                backends={ComputeUnit.GPU: {"model": "Qwen3-1.7B-Q4_K_M.gguf"}},
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.GEMMA3_270M_IT: ModelInfo(
+        id=ModelID.GEMMA3_270M_IT,
+        model_class=Gemma3Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/gemma-3-270m-it-GGUF",
+                    files=["gemma-3-270m-it-Q8_0.gguf"],
+                    revision="e7647be17ae1108f2f605ed061ca0608b171afff",
+                ),
+                backends={ComputeUnit.GPU: {"model": "gemma-3-270m-it-Q8_0.gguf"}},
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.GEMMA3_1B_IT: ModelInfo(
+        id=ModelID.GEMMA3_1B_IT,
+        model_class=Gemma3Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/gemma-3-1b-it-GGUF",
+                    files=["gemma-3-1b-it-Q4_K_M.gguf"],
+                    revision="f9c28bcd85737ffc5aef028638d3341d49869c27",
+                ),
+                backends={ComputeUnit.GPU: {"model": "gemma-3-1b-it-Q4_K_M.gguf"}},
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.SMOLVLM2_256M: ModelInfo(
+        id=ModelID.SMOLVLM2_256M,
+        model_class=SmolVLM2Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/SmolVLM2-256M-Video-Instruct-GGUF",
+                    files=[
+                        "SmolVLM2-256M-Video-Instruct-Q8_0.gguf",
+                        "mmproj-SmolVLM2-256M-Video-Instruct-Q8_0.gguf",
+                    ],
+                    revision="7b6af08ec3a985c86542c095a63bab2e68510461",
+                ),
+                backends={
+                    ComputeUnit.GPU: {
+                        "model": "SmolVLM2-256M-Video-Instruct-Q8_0.gguf",
+                        "mmproj": "mmproj-SmolVLM2-256M-Video-Instruct-Q8_0.gguf",
+                    }
+                },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.SMOLVLM2_500M: ModelInfo(
+        id=ModelID.SMOLVLM2_500M,
+        model_class=SmolVLM2Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/SmolVLM2-500M-Video-Instruct-GGUF",
+                    files=[
+                        "SmolVLM2-500M-Video-Instruct-Q8_0.gguf",
+                        "mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf",
+                    ],
+                    revision="ccd7aae53bcb1997355c2f094959e72b3642ce17",
+                ),
+                backends={
+                    ComputeUnit.GPU: {
+                        "model": "SmolVLM2-500M-Video-Instruct-Q8_0.gguf",
+                        "mmproj": "mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf",
+                    }
+                },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.SMOLVLM2_2_2B: ModelInfo(
+        id=ModelID.SMOLVLM2_2_2B,
+        model_class=SmolVLM2Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/SmolVLM2-2.2B-Instruct-GGUF",
+                    files=[
+                        "SmolVLM2-2.2B-Instruct-Q4_K_M.gguf",
+                        "mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf",
+                    ],
+                    revision="1bc3c9f74ceafd4c8d4411cc9cf188bba3798f91",
+                ),
+                backends={
+                    ComputeUnit.GPU: {
+                        "model": "SmolVLM2-2.2B-Instruct-Q4_K_M.gguf",
+                        "mmproj": "mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf",
+                    }
+                },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.INTERNVL3_1B_INSTRUCT: ModelInfo(
+        id=ModelID.INTERNVL3_1B_INSTRUCT,
+        model_class=InternVL3Model,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/InternVL3-1B-Instruct-GGUF",
+                    files=[
+                        "InternVL3-1B-Instruct-Q8_0.gguf",
+                        "mmproj-InternVL3-1B-Instruct-Q8_0.gguf",
+                    ],
+                    revision="c622c04f3b46dc8ef733ca64ffb25a800c4041cc",
+                ),
+                backends={
+                    ComputeUnit.GPU: {
+                        "model": "InternVL3-1B-Instruct-Q8_0.gguf",
+                        "mmproj": "mmproj-InternVL3-1B-Instruct-Q8_0.gguf",
+                    }
+                },
+                model_type=ModelType.LLAMA_CPP,
+                data_type=DataType.FP32,
+                input_layout=None,
+            ),
+        },
+    ),
+    ModelID.MINISTRAL_3_3B_REASONING: ModelInfo(
+        id=ModelID.MINISTRAL_3_3B_REASONING,
+        model_class=MinistralModel,
+        variants={
+            DEFAULT_KEY: Variant(
+                source=HuggingFaceSource(
+                    hf_repo_id="ggml-org/Ministral-3-3B-Reasoning-2512-GGUF",
+                    files=[
+                        "Ministral-3-3B-Reasoning-2512-Q8_0.gguf",
+                        "mmproj-Ministral-3-3B-Reasoning-2512-Q8_0.gguf",
+                    ],
+                    revision="6373de865cde31bb48488a22684512a1997867be",
+                ),
+                backends={
+                    ComputeUnit.GPU: {
+                        "model": "Ministral-3-3B-Reasoning-2512-Q8_0.gguf",
+                        "mmproj": "mmproj-Ministral-3-3B-Reasoning-2512-Q8_0.gguf",
                     }
                 },
                 model_type=ModelType.LLAMA_CPP,
