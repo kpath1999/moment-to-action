@@ -155,6 +155,14 @@ ignore = [
     # we can (and have to) print in scripts
     "T201",
 ]
+"bench/*.py" = [
+    # bench/ is not a package — INP001 (implicit namespace) doesn't apply
+    "INP001",
+    # we can (and have to) print in bench scripts
+    "T201",
+    # model/detector config lists intentionally use commented-out entries to skip models
+    "ERA001",
+]
 
 # Tests: exceptions for the many things that are OK in tests
 "tests/**/*.py" = [

@@ -9,7 +9,7 @@ import subprocess
 _LOG = logging.getLogger(__name__)
 
 _APT_DEPS: list[str] = [
-    "libncurses5",
+    "libncurses-dev",
     "libgl1",
     "clang",
     "libc++-dev",
