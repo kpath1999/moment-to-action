@@ -48,6 +48,7 @@ from __future__ import annotations
 import argparse
 import base64
 import contextlib
+import gzip
 import json
 import logging
 import os
@@ -1080,6 +1081,8 @@ def _write_json(
 ) -> None:
     """Write benchmark results to a JSON file.
 
+    Output is written gzip-compressed with no indentation to keep file size down.
+
     When *merge* is ``True`` and *output_path* already exists, entries for
     models present in *model_entries* (matched by ``(model, detector)`` pair for
     LLM entries and by ``model`` alone for VLM entries) are replaced; others are
@@ -1087,15 +1090,16 @@ def _write_json(
 
     Args:
         model_entries: Per-model result dicts with ``metrics_report`` and ``runs``.
-        output_path: Destination JSON path.
+        output_path: Destination ``.json.gz`` path.
         merge: If ``True``, merge into any existing file rather than overwriting.
     """
     existing_models: list[dict] = []
     if merge and output_path.exists():
         try:
-            existing = json.loads(output_path.read_text())
+            with gzip.open(output_path, "rt", encoding="utf-8") as f:
+                existing = json.load(f)
             existing_models = existing.get("models", [])
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, gzip.BadGzipFile):
             existing_models = []
 
     def _entry_key(e: dict) -> tuple[str, str]:
@@ -1109,7 +1113,8 @@ def _write_json(
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "models": merged,
     }
-    output_path.write_text(json.dumps(output, indent=2))
+    with gzip.open(output_path, "wt", encoding="utf-8") as f:
+        json.dump(output, f, separators=(",", ":"))
 
 
 # ---------------------------------------------------------------------------
@@ -1124,7 +1129,7 @@ def _parse_args() -> argparse.Namespace:
         Parsed argument namespace.
     """
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
-    default_output = str(Path("bench/results") / f"benchmark_real_{ts}.json")
+    default_output = str(Path("bench/results") / f"benchmark_real_{ts}.json.gz")
     parser = argparse.ArgumentParser(
         description="Benchmark VLMs and LLMs against real annotated video clips."
     )
@@ -1142,7 +1147,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         default=default_output,
-        help=f"Output JSON path (default: {default_output}).",
+        help=f"Output gzip-compressed JSON path (default: {default_output}).",
     )
     parser.add_argument(
         "--server-path",

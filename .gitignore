@@ -218,3 +218,11 @@ pyrightconfig.json
 
 # Ignore log outputs
 logs/
+
+# Benchmark result outputs
+bench/results/*
+!bench/results/.gitkeep
+
+# Stray benchmark result artifacts at repo root
+/results_*.json
+/results_*.json.gz
