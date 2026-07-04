@@ -19,21 +19,20 @@ video clips.  Each clip has a ground-truth ``label`` ("positive" / "negative"),
 video file inside ``<data-dir>/videos/``.
 
 VLM pipeline:
-  1. Extract frames at 1 FPS from the annotated ROI window.
-  2. Resize each frame to at most 480 px tall (CPU image tower constraint).
-  3. Encode as base64 JPEG and pass all frames to the VLM.
-  4. Stream the response and collect full timing + accuracy metrics.
+  1. Extract frames at 1 FPS from the annotated ROI window, resize to <=480px tall.
+  2. Drive ``Pipeline([VLMDescriptionStage(model, task, grammar=YES_NO_GRAMMAR),
+     DecisionStage])`` over a ``VideoClipMessage`` of the raw BGR frames.
+  3. Score the streamed response and collect full timing + accuracy metrics.
 
 LLM pipeline:
   1. Extract frames at 1 FPS from the annotated ROI window.
-  2. Run a detection model (YOLO V8 or Detectron2) on each frame via
-     ``prepare`` / ``run`` / ``post_proc``.  Detection spans are sub-spans
-     within the LLM model's MetricsCollector.
+  2. Run a detection model (YOLO V8 or Detectron2) on each frame via a real
+     ``ImageDetectionStage`` (per-frame spans land in the same trace).
   3. Aggregate detections across all frames (keep highest-confidence instance
-     per label; record frame count per label).
-  4. Build a structured text prompt from the aggregated detections (spatial
-     context derived from bboxes, same helpers as benchmark_llms.py).
-  5. Stream the LLM response and collect full timing + accuracy metrics.
+     per label).
+  4. Drive ``Pipeline([LLMStage(model, question, grammar=YES_NO_GRAMMAR),
+     DecisionStage])`` over the aggregated ``DetectionMessage``.
+  5. Score the streamed response and collect full timing + accuracy metrics.
 
 Model lists at the top of this file — comment out any entry to skip it.
 
@@ -46,22 +45,19 @@ Requires ``llama_server_path`` to be set in the M2A config (or pass ``--server-p
 from __future__ import annotations
 
 import argparse
-import base64
-import contextlib
 import gzip
 import json
 import logging
-import os
 import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import cv2
 import numpy as np
-from PIL import Image
+from _common import build_context, console, silence_native_output
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import (
@@ -75,59 +71,32 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from moment_to_action.benchmarking import detect_yn, extract_load_unload_ms, recall
-from moment_to_action.config import AppConfig, load_config
-from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.hardware._loaded_models._llama import LlamaModel
-from moment_to_action.metrics import MetricsCollector, SpanType
-from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
-from moment_to_action.paths import PathManager
-from moment_to_action.prompting import BENCHMARK_SYSTEM as _BENCHMARK_SYSTEM
-from moment_to_action.prompting import CHATML, PHI3
-from moment_to_action.prompting import build_detection_prompt as _build_detection_prompt
-from moment_to_action.prompting import build_payload as _build_payload
+from moment_to_action.benchmarking import extract_load_unload_ms, recall
+from moment_to_action.config import AppConfig
+from moment_to_action.hardware import ComputeUnit
+from moment_to_action.messages import DecisionMessage, DetectionMessage, RawFrameMessage
+from moment_to_action.messages.video import VideoClipMessage
+from moment_to_action.metrics import SpanType
+from moment_to_action.models import MODEL_REGISTRY, ModelID
+from moment_to_action.prompting import BENCHMARK_SYSTEM, CHATML, PHI3, YES_NO_GRAMMAR
+from moment_to_action.stages.image import ImageDetectionStage
+from moment_to_action.stages.llm import DecisionStage, LLMStage
+from moment_to_action.stages.vlm import VLMDescriptionStage
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
+    from moment_to_action.metrics import MetricsCollector, Span
     from moment_to_action.models.image.detection._types import Detection
-
-console = Console()
+    from moment_to_action.models.llm._base import LlamaGGUFModel
+    from moment_to_action.models.vlm._base import LlamaVLModel
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",
     datefmt="[%X]",
-    handlers=[RichHandler(rich_tracebacks=True, console=console)],
+    handlers=[RichHandler(rich_tracebacks=True, console=Console(stderr=True))],
 )
 
-
-@contextlib.contextmanager
-def _silence_native_output() -> Iterator[None]:
-    """Redirect OS-level stdout+stderr to /dev/null for the duration of the block.
-
-    The QAIRT runtime emits C++ chatter (e.g. "Profile Logger with name = defaultKey
-    doesn't exist!") straight to file descriptors 1/2, bypassing Python's logging and
-    corrupting the rich progress bar.
-
-    Yields:
-        None.
-    """
-    sys.stdout.flush()
-    sys.stderr.flush()
-    saved = (os.dup(1), os.dup(2))
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    try:
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
-        yield
-    finally:
-        os.dup2(saved[0], 1)
-        os.dup2(saved[1], 2)
-        os.close(devnull)
-        os.close(saved[0])
-        os.close(saved[1])
+_YES_NO_LABELS = frozenset({"yes", "no"})
 
 
 # ---------------------------------------------------------------------------
@@ -169,11 +138,6 @@ _N_CYCLES = 3
 _MAX_TOKENS = 128
 
 _MAX_FRAME_HEIGHT = 480
-
-# All COCO animal classes (used for person-animal proximity context in prompts).
-_COCO_ANIMALS: frozenset[str] = frozenset(
-    ("bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe")
-)
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +203,6 @@ def _load_clips(data_dir: Path) -> list[Clip]:
 
     Raises:
         FileNotFoundError: If annotations.json does not exist.
-        ValueError: If the JSON is malformed or clips are missing required fields.
     """
     ann_path = data_dir / "annotations.json"
     if not ann_path.exists():
@@ -292,8 +255,6 @@ def _extract_frames_1fps(
     Raises:
         RuntimeError: If the video cannot be opened.
     """
-    import cv2  # noqa: PLC0415
-
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         msg = f"Cannot open video: {video_path}"
@@ -327,8 +288,6 @@ def _resize_480p(frame: np.ndarray) -> np.ndarray:
     Returns:
         Resized frame, or original if already <= 480 px tall.
     """
-    import cv2  # noqa: PLC0415
-
     h, w = frame.shape[:2]
     if h <= _MAX_FRAME_HEIGHT:
         return frame
@@ -336,27 +295,38 @@ def _resize_480p(frame: np.ndarray) -> np.ndarray:
     return cv2.resize(frame, (int(w * scale), _MAX_FRAME_HEIGHT), interpolation=cv2.INTER_AREA)
 
 
-def _bgr_to_b64(frame: np.ndarray) -> str:
-    """Convert a BGR uint8 frame to a base64-encoded JPEG string.
+# ---------------------------------------------------------------------------
+# Detection aggregation (bench-local: no production stage aggregates across
+# a whole clip's frames into one representative detection set)
+# ---------------------------------------------------------------------------
+
+
+def _detect_frames(
+    detector: object, frames: list[np.ndarray], metrics: MetricsCollector
+) -> list[list[Detection]]:
+    """Run a real ``ImageDetectionStage`` on each frame, return per-frame detections.
 
     Args:
-        frame: BGR uint8 image array.
+        detector: Loaded ImageDetectionModel instance.
+        frames: BGR uint8 frames to run detection on.
+        metrics: The same MetricsCollector *detector* was constructed with
+            (an active trace must already be open).
 
     Returns:
-        Base64-encoded JPEG bytes as a UTF-8 string (no ``data:`` prefix).
+        List of Detection lists, one per input frame.
     """
-    import cv2  # noqa: PLC0415
-
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    img = Image.fromarray(rgb)
-    buf = BytesIO()
-    img.save(buf, format="JPEG", quality=85)
-    return base64.b64encode(buf.getvalue()).decode()
-
-
-# ---------------------------------------------------------------------------
-# Detection aggregation and prompt building
-# ---------------------------------------------------------------------------
+    stage = ImageDetectionStage(detector, metrics=metrics)  # type: ignore[arg-type]
+    results: list[list[Detection]] = []
+    for frame in frames:
+        msg = RawFrameMessage(frame=frame, timestamp=time.time())
+        try:
+            with silence_native_output():
+                (out,) = list(stage.process(iter([msg])))
+            assert isinstance(out, DetectionMessage)  # noqa: S101
+            results.append(out.detections)
+        except Exception:  # noqa: BLE001
+            results.append([])
+    return results
 
 
 def _aggregate_detections(per_frame: list[list[Detection]]) -> list[Detection]:
@@ -379,100 +349,103 @@ def _aggregate_detections(per_frame: list[list[Detection]]) -> list[Detection]:
     return list(best.values())
 
 
-def _build_llm_prompt(clip: Clip, detections: list[Detection]) -> str:
-    """Build a structured text prompt from aggregated detections.
+# ---------------------------------------------------------------------------
+# Streaming benchmark
+# ---------------------------------------------------------------------------
 
-    Thin wrapper over :func:`~moment_to_action.prompting.build_detection_prompt`
-    using the full COCO animal label set (rather than the smaller synthetic-scene
-    set) for person-animal overlap context.
+
+def _last_model_inference_span(metrics: MetricsCollector) -> Span | None:
+    """Return the most recently recorded MODEL_INFERENCE span on *metrics*.
 
     Args:
-        clip: Clip being evaluated (provides the task question).
-        detections: Aggregated representative detections from the video ROI.
+        metrics: Collector to scan.
 
     Returns:
-        Formatted prompt string ending with the binary question.
+        The last :class:`~moment_to_action.metrics.Span` of type
+        ``MODEL_INFERENCE``, or ``None`` if none have been recorded yet.
     """
-    return _build_detection_prompt(detections, clip.question, animal_labels=_COCO_ANIMALS)
+    for span in reversed(metrics.spans):
+        if span.type_ is SpanType.MODEL_INFERENCE:
+            return span
+    return None
 
 
-# ---------------------------------------------------------------------------
-# VLM scene runner
-# ---------------------------------------------------------------------------
+def _score_clip_response(
+    accumulated: str, clip: Clip, metrics: MetricsCollector, *, is_yes_no: bool, yn: str | None
+) -> dict:
+    """Build the common scoring fields shared by the VLM and LLM clip runners.
+
+    Args:
+        accumulated: Full generated response text.
+        clip: Clip being evaluated.
+        metrics: The same MetricsCollector the stage was constructed with.
+        is_yes_no: Whether a decision was attempted for this clip.
+        yn: Extracted decision ("yes"/"no"), or ``None`` if not decided.
+
+    Returns:
+        Dict of scoring/timing fields common to VLM and LLM result rows.
+    """
+    yn_correct: bool | None = None
+    if is_yes_no and yn is not None:
+        yn_correct = yn == clip.expected.lower()
+
+    span = _last_model_inference_span(metrics)
+    meta = span.metadata if span is not None else {}
+    inf_m = span.inference_metrics if span is not None else None
+
+    return {
+        "response": accumulated,
+        "response_chars": len(accumulated),
+        "yn_correct": yn_correct,
+        "recall": round(recall(accumulated, clip.recall_keywords), 4),
+        "infer_ms": round(span.latency_ms, 3) if span is not None else None,
+        "ttft_ms": meta.get("ttft_ms"),
+        "ttfyd_ms": meta.get("ttfyd_ms"),
+        "mean_itl_ms": meta.get("mean_itl_ms"),
+        "std_itl_ms": meta.get("std_itl_ms"),
+        "inference_metrics": inf_m.model_dump() if inf_m is not None else None,
+    }
 
 
 def _run_vlm_clip(
-    model: object,
+    model: LlamaVLModel,
     model_name: str,
     clip: Clip,
     cycle: int,
-    b64_frames: list[str],
-    frame_h: int,
-    frame_w: int,
+    frames: list[np.ndarray],
     metrics: MetricsCollector,
 ) -> dict:
-    """Stream one clip through a VLM and collect all metrics.
+    """Drive one clip through ``Pipeline([VLMDescriptionStage, DecisionStage])`` and score it.
 
     Args:
         model: Loaded LlamaVLModel instance.
-        model_name: Display name for the result.
+        model_name: Display name for the result row.
         clip: Clip being evaluated.
         cycle: Cycle index (1-based).
-        b64_frames: Base64-encoded JPEG frames for this clip's ROI.
-        frame_h: Height of each frame after 480p resize.
-        frame_w: Width of each frame after 480p resize.
-        metrics: Active MetricsCollector (a trace must be open).
+        frames: BGR uint8 frames for this clip's ROI (already resized to <=480px tall).
+        metrics: The same MetricsCollector *model* was constructed with.
 
     Returns:
         Result dict for this (clip, cycle).
-
-    Raises:
-        TypeError: If ``model._loaded_model`` is not a LlamaModel.
     """
-    loaded_model = getattr(model, "_loaded_model", None)
-    if not isinstance(loaded_model, LlamaModel):
-        msg = f"{model_name}: _loaded_model is not a LlamaModel"
-        raise TypeError(msg)
+    is_yes_no = clip.expected.lower() in _YES_NO_LABELS
+    grammar = YES_NO_GRAMMAR if is_yes_no else None
+    clip_msg = VideoClipMessage(frames=frames, timestamp=time.time())
 
-    prepared = model.prepare((clip.question, b64_frames))  # type: ignore[attr-defined]
+    vlm_stage = VLMDescriptionStage(model, task=clip.question, grammar=grammar, metrics=metrics)
+    gen_messages = list(vlm_stage.process(iter([clip_msg])))
+    accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
 
-    t0 = time.perf_counter_ns()
-    ttft_ms: float | None = None
-    ttfyd_ms: float | None = None
-    token_times: list[int] = []
-    accumulated = ""
-    inf_m: LlamaCppInferenceMetrics | None = None
+    yn: str | None = None
+    if is_yes_no:
+        decision_stage = DecisionStage(metrics=metrics)
+        decisions = [
+            m for m in decision_stage.process(iter(gen_messages)) if isinstance(m, DecisionMessage)
+        ]
+        if decisions:
+            yn = decisions[0].decision
 
-    with metrics.start_span(SpanType.MODEL_INFERENCE, f"{model_name}.stream") as span:
-        for token in loaded_model.stream(prepared):
-            now = time.perf_counter_ns()
-            token_times.append(now)
-            accumulated += token
-            if ttft_ms is None:
-                ttft_ms = (now - t0) / 1e6
-            if ttfyd_ms is None and detect_yn(accumulated) is not None:
-                ttfyd_ms = (now - t0) / 1e6
-
-        t_end = time.perf_counter_ns()
-        itl_ms = [(token_times[i] - token_times[i - 1]) / 1e6 for i in range(1, len(token_times))]
-        mean_itl = float(np.mean(itl_ms)) if itl_ms else 0.0
-        std_itl = float(np.std(itl_ms)) if itl_ms else 0.0
-        infer_ms = (t_end - t0) / 1e6
-
-        inf_m = loaded_model.last_inference_metrics
-        if inf_m is not None:
-            span.inference_metrics = inf_m
-
-        metrics.set_meta("ttft_ms", ttft_ms)
-        metrics.set_meta("ttfyd_ms", ttfyd_ms)
-        metrics.set_meta("mean_itl_ms", round(mean_itl, 3))
-        metrics.set_meta("std_itl_ms", round(std_itl, 3))
-
-    yn = detect_yn(accumulated)
-    yn_correct: bool | None = None
-    if yn is not None:
-        yn_correct = yn == clip.expected.lower()
-
+    frame_h, frame_w = frames[0].shape[:2]
     return {
         "model": model_name,
         "application": clip.application,
@@ -483,105 +456,54 @@ def _run_vlm_clip(
         "end_s": clip.end_s,
         "expected": clip.expected,
         "run_idx": cycle,
-        "n_frames": len(b64_frames),
+        "n_frames": len(frames),
         "frame_w": frame_w,
         "frame_h": frame_h,
-        "response": accumulated,
-        "response_chars": len(accumulated),
-        "yn_correct": yn_correct,
-        "recall": round(recall(accumulated, clip.recall_keywords), 4),
-        "infer_ms": round(infer_ms, 3),
-        "ttft_ms": round(ttft_ms, 3) if ttft_ms is not None else None,
-        "ttfyd_ms": round(ttfyd_ms, 3) if ttfyd_ms is not None else None,
-        "mean_itl_ms": round(mean_itl, 3),
-        "std_itl_ms": round(std_itl, 3),
-        "inference_metrics": inf_m.model_dump() if inf_m is not None else None,
+        **_score_clip_response(accumulated, clip, metrics, is_yes_no=is_yes_no, yn=yn),
     }
 
 
-# ---------------------------------------------------------------------------
-# LLM scene runner
-# ---------------------------------------------------------------------------
-
-
-def _run_llm_clip(  # noqa: PLR0913
-    model: object,
+def _run_llm_clip(
+    model: LlamaGGUFModel,
     model_name: str,
     clip: Clip,
     cycle: int,
     detections: list[Detection],
     n_frames: int,
-    max_tokens: int,
-    system_prompt: str,
-    template: str | None,
     metrics: MetricsCollector,
 ) -> dict:
-    """Stream one clip through an LLM and collect all metrics.
+    """Drive one clip through ``Pipeline([LLMStage, DecisionStage])`` and score it.
 
     The prompt is built from aggregated detections; no images are passed.
 
     Args:
         model: Loaded LlamaGGUFModel instance.
-        model_name: Display name for the result.
+        model_name: Display name for the result row.
         clip: Clip being evaluated.
         cycle: Cycle index (1-based).
         detections: Aggregated representative detections from the clip's ROI.
         n_frames: Number of frames that were extracted (for metadata).
-        max_tokens: Maximum tokens to generate.
-        system_prompt: System message for the prompt.
-        template: Optional chat template with ``{system}``/``{user}`` placeholders.
-        metrics: Active MetricsCollector (a trace must be open).
+        metrics: The same MetricsCollector *model* was constructed with.
 
     Returns:
         Result dict for this (clip, cycle).
-
-    Raises:
-        TypeError: If ``model._loaded_model`` is not a LlamaModel.
     """
-    loaded_model = getattr(model, "_loaded_model", None)
-    if not isinstance(loaded_model, LlamaModel):
-        msg = f"{model_name}: _loaded_model is not a LlamaModel"
-        raise TypeError(msg)
+    is_yes_no = clip.expected.lower() in _YES_NO_LABELS
+    grammar = YES_NO_GRAMMAR if is_yes_no else None
+    detection_msg = DetectionMessage(timestamp=time.time(), detections=detections)
 
-    prompt = _build_llm_prompt(clip, detections)
-    payload = _build_payload(prompt, max_tokens, system_prompt, template)
+    llm_stage = LLMStage(model, question=clip.question, grammar=grammar, metrics=metrics)
+    gen_messages = list(llm_stage.process(iter([detection_msg])))
+    accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
 
-    t0 = time.perf_counter_ns()
-    ttft_ms: float | None = None
-    ttfyd_ms: float | None = None
-    token_times: list[int] = []
-    accumulated = ""
-    inf_m: LlamaCppInferenceMetrics | None = None
-
-    with metrics.start_span(SpanType.MODEL_INFERENCE, f"{model_name}.stream") as span:
-        for token in loaded_model.stream(payload):
-            now = time.perf_counter_ns()
-            token_times.append(now)
-            accumulated += token
-            if ttft_ms is None:
-                ttft_ms = (now - t0) / 1e6
-            if ttfyd_ms is None and detect_yn(accumulated) is not None:
-                ttfyd_ms = (now - t0) / 1e6
-
-        t_end = time.perf_counter_ns()
-        itl_ms = [(token_times[i] - token_times[i - 1]) / 1e6 for i in range(1, len(token_times))]
-        mean_itl = float(np.mean(itl_ms)) if itl_ms else 0.0
-        std_itl = float(np.std(itl_ms)) if itl_ms else 0.0
-        infer_ms = (t_end - t0) / 1e6
-
-        inf_m = loaded_model.last_inference_metrics
-        if inf_m is not None:
-            span.inference_metrics = inf_m
-
-        metrics.set_meta("ttft_ms", ttft_ms)
-        metrics.set_meta("ttfyd_ms", ttfyd_ms)
-        metrics.set_meta("mean_itl_ms", round(mean_itl, 3))
-        metrics.set_meta("std_itl_ms", round(std_itl, 3))
-
-    yn = detect_yn(accumulated)
-    yn_correct: bool | None = None
-    if yn is not None:
-        yn_correct = yn == clip.expected.lower()
+    yn: str | None = None
+    if is_yes_no:
+        decision_stage = DecisionStage(metrics=metrics)
+        decisions = [
+            m for m in decision_stage.process(iter(gen_messages)) if isinstance(m, DecisionMessage)
+        ]
+        if decisions:
+            yn = decisions[0].decision
 
     return {
         "model": model_name,
@@ -594,60 +516,10 @@ def _run_llm_clip(  # noqa: PLR0913
         "expected": clip.expected,
         "run_idx": cycle,
         "n_frames": n_frames,
-        "n_detections_total": sum(len(f) for f in [detections]),
+        "n_detections_total": len(detections),
         "n_unique_labels": len({d.label for d in detections}),
-        "prompt": prompt,
-        "response": accumulated,
-        "response_chars": len(accumulated),
-        "yn_correct": yn_correct,
-        "recall": round(recall(accumulated, clip.recall_keywords), 4),
-        "infer_ms": round(infer_ms, 3),
-        "ttft_ms": round(ttft_ms, 3) if ttft_ms is not None else None,
-        "ttfyd_ms": round(ttfyd_ms, 3) if ttfyd_ms is not None else None,
-        "mean_itl_ms": round(mean_itl, 3),
-        "std_itl_ms": round(std_itl, 3),
-        "inference_metrics": inf_m.model_dump() if inf_m is not None else None,
+        **_score_clip_response(accumulated, clip, metrics, is_yes_no=is_yes_no, yn=yn),
     }
-
-
-# ---------------------------------------------------------------------------
-# Detection helper (used in LLM pipeline)
-# ---------------------------------------------------------------------------
-
-
-def _detect_frames(
-    detector: object,
-    frames: list[np.ndarray],
-    metrics: MetricsCollector,
-    detector_name: str,
-) -> list[list[Detection]]:
-    """Run the detector on each frame and return per-frame detection lists.
-
-    Each frame's prepare/run/post_proc calls are wrapped in sub-spans of the
-    provided MetricsCollector.
-
-    Args:
-        detector: Loaded ImageDetectionModel instance.
-        frames: BGR uint8 frames to run detection on.
-        metrics: Active MetricsCollector; detection spans are sub-spans.
-        detector_name: Display name used in span labels.
-
-    Returns:
-        List of Detection lists, one per input frame.
-    """
-    results: list[list[Detection]] = []
-    for i, frame in enumerate(frames):
-        span_name = f"{detector_name}.detect.frame{i}"
-        with metrics.start_span(SpanType.MODEL_INFERENCE, span_name):
-            try:
-                with _silence_native_output():
-                    prepared = detector.prepare(frame)  # type: ignore[attr-defined]
-                    raw = detector.run(prepared)  # type: ignore[attr-defined]
-                    dets: list[Detection] = detector.post_proc(raw)  # type: ignore[attr-defined]
-                results.append(dets)
-            except Exception:  # noqa: BLE001
-                results.append([])
-    return results
 
 
 # ---------------------------------------------------------------------------
@@ -656,7 +528,7 @@ def _detect_frames(
 
 
 def _run_vlm_benchmark(
-    model: object,
+    model: LlamaVLModel,
     model_name: str,
     clips: list[Clip],
     n_cycles: int,
@@ -673,7 +545,7 @@ def _run_vlm_benchmark(
         clips: Clips to evaluate.
         n_cycles: Number of repetitions per clip.
         data_dir: Root data directory; videos are at ``data_dir/videos/<clip.file>``.
-        metrics: Active MetricsCollector (a trace must be open).
+        metrics: The same MetricsCollector *model* was constructed with.
         progress: Rich Progress instance.
         clip_task_id: Task ID of the clip sub-progress bar.
 
@@ -697,11 +569,7 @@ def _run_vlm_benchmark(
                     progress.advance(clip_task_id)
                     continue
                 resized = [_resize_480p(f) for f in raw_frames]
-                b64_frames = [_bgr_to_b64(f) for f in resized]
-                frame_h, frame_w = resized[0].shape[:2]
-                row = _run_vlm_clip(
-                    model, model_name, clip, cycle, b64_frames, frame_h, frame_w, metrics
-                )
+                row = _run_vlm_clip(model, model_name, clip, cycle, resized, metrics)
             except Exception as exc:  # noqa: BLE001
                 console.print(
                     f"  [yellow]{model_name} clip={clip.id} cycle={cycle}: {exc}[/yellow]"
@@ -715,14 +583,12 @@ def _run_vlm_benchmark(
 
 
 def _run_llm_benchmark(  # noqa: PLR0913
-    model: object,
+    model: LlamaGGUFModel,
     model_name: str,
-    model_template: str | None,
     clips: list[Clip],
     n_cycles: int,
     data_dir: Path,
     detector: object,
-    detector_name: str,
     metrics: MetricsCollector,
     progress: Progress,
     clip_task_id: TaskID,
@@ -730,19 +596,17 @@ def _run_llm_benchmark(  # noqa: PLR0913
     """Run all LLM clips x n_cycles and return result rows.
 
     For each clip, frames are extracted once and detection is run once; the
-    resulting aggregated detections are reused across all cycles.  Detection
-    spans are sub-spans within ``metrics``.
+    resulting aggregated detections are reused across all cycles. Detection
+    spans (via ``ImageDetectionStage``) are recorded on the same *metrics*.
 
     Args:
         model: Loaded LlamaGGUFModel instance.
         model_name: Human-readable name for output rows.
-        model_template: Optional chat template string.
         clips: Clips to evaluate.
         n_cycles: Number of repetitions per clip.
         data_dir: Root data directory; videos are at ``data_dir/videos/<clip.file>``.
         detector: Loaded ImageDetectionModel instance for the LLM pipeline.
-        detector_name: Display name for the detector (used in span labels).
-        metrics: Active MetricsCollector (a trace must be open).
+        metrics: The same MetricsCollector *model* was constructed with.
         progress: Rich Progress instance.
         clip_task_id: Task ID of the clip sub-progress bar.
 
@@ -766,7 +630,7 @@ def _run_llm_benchmark(  # noqa: PLR0913
             progress.advance(clip_task_id, advance=n_cycles)
             continue
 
-        per_frame = _detect_frames(detector, raw_frames, metrics, detector_name)
+        per_frame = _detect_frames(detector, raw_frames, metrics)
         aggregated = _aggregate_detections(per_frame)
 
         for cycle in range(1, n_cycles + 1):
@@ -776,16 +640,7 @@ def _run_llm_benchmark(  # noqa: PLR0913
             )
             try:
                 row = _run_llm_clip(
-                    model,
-                    model_name,
-                    clip,
-                    cycle,
-                    aggregated,
-                    len(raw_frames),
-                    _MAX_TOKENS,
-                    _BENCHMARK_SYSTEM,
-                    model_template,
-                    metrics,
+                    model, model_name, clip, cycle, aggregated, len(raw_frames), metrics
                 )
             except Exception as exc:  # noqa: BLE001
                 console.print(
@@ -831,10 +686,10 @@ def _print_summary(all_rows: list[dict]) -> None:
         yn_rows = [r for r in rows if r.get("yn_correct") is not None]
         yn_acc = float(np.mean([r["yn_correct"] for r in yn_rows])) if yn_rows else float("nan")
         ttft_vals = [r["ttft_ms"] for r in rows if r.get("ttft_ms") is not None]
-        itl_vals = [r["mean_itl_ms"] for r in rows]
+        itl_vals = [r["mean_itl_ms"] for r in rows if r.get("mean_itl_ms") is not None]
         load_vals = [r["load_ms"] for r in rows if r.get("load_ms") is not None]
         unload_vals = [r["unload_ms"] for r in rows if r.get("unload_ms") is not None]
-        infer_vals = [r["infer_ms"] for r in rows]
+        infer_vals = [r["infer_ms"] for r in rows if r.get("infer_ms") is not None]
         table.add_row(
             model_name,
             kind,
@@ -850,23 +705,16 @@ def _print_summary(all_rows: list[dict]) -> None:
     console.print(table)
 
 
-def _write_json(
-    model_entries: list[dict],
-    output_path: Path,
-    *,
-    merge: bool = False,
+def _write_gzip_results(
+    model_entries: list[dict], output_path: Path, *, merge: bool = False
 ) -> None:
-    """Write benchmark results to a JSON file.
+    """Write benchmark results to a gzip-compressed JSON file.
 
-    Output is written gzip-compressed with no indentation to keep file size down.
-
-    When *merge* is ``True`` and *output_path* already exists, entries for
-    models present in *model_entries* (matched by ``(model, detector)`` pair for
-    LLM entries and by ``model`` alone for VLM entries) are replaced; others are
-    preserved.
+    Entries are matched by ``(model, detector)`` pair (LLM entries) or by
+    ``model`` alone (VLM entries, ``detector`` defaults to ``""``).
 
     Args:
-        model_entries: Per-model result dicts with ``metrics_report`` and ``runs``.
+        model_entries: Per-model result dicts with ``trace`` and ``runs``.
         output_path: Destination ``.json.gz`` path.
         merge: If ``True``, merge into any existing file rather than overwriting.
     """
@@ -970,26 +818,18 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:  # noqa: C901, PLR0912, PLR0915
     """Entry point for the real-data benchmark script."""
-    global _N_CYCLES, _MAX_TOKENS  # noqa: PLW0603
-
     args = _parse_args()
-    _N_CYCLES = args.n_cycles
-    _MAX_TOKENS = args.max_tokens
+    n_cycles: int = args.n_cycles
+    max_tokens: int = args.max_tokens
 
     data_dir = Path(args.data_dir)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     compute_unit = ComputeUnit.CPU if args.cpu else ComputeUnit.GPU
 
-    path_manager = PathManager()
-    config = load_config(path_manager.app_config_file)
-
-    from moment_to_action.qairt._manager import QairtSDKManager  # noqa: PLC0415
-
-    QairtSDKManager.from_app_config(config, path_manager).configure_env()
-
-    server_path = Path(args.server_path) if args.server_path else config.llama_server_path
-    port = args.port if args.port is not None else config.llama_server_port
+    ctx = build_context(qairt=True)
+    server_path = Path(args.server_path) if args.server_path else ctx.config.llama_server_path
+    port = args.port if args.port is not None else ctx.config.llama_server_port
 
     if server_path is None:
         console.print(
@@ -997,8 +837,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         )
         sys.exit(1)
 
-    config = AppConfig(
-        **{**config.model_dump(), "llama_server_path": server_path, "llama_server_port": port}
+    ctx.config = AppConfig(
+        **{**ctx.config.model_dump(), "llama_server_path": server_path, "llama_server_port": port}
     )
 
     try:
@@ -1032,8 +872,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     console.print(f"  data       : {data_dir}")
     console.print(f"  clips      : {len(clips)}")
     console.print(f"  apps       : {', '.join(apps)}")
-    console.print(f"  cycles     : {_N_CYCLES}")
-    console.print(f"  tokens     : {_MAX_TOKENS}")
+    console.print(f"  cycles     : {n_cycles}")
+    console.print(f"  tokens     : {max_tokens}")
     console.print(
         f"  detectors  : {', '.join(d for _, d, *_ in _LLM_DETECTORS)} (for LLM pipeline)"
     )
@@ -1068,14 +908,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
             progress.update(model_task, description=f"{model_name} (vlm)")
 
-            platform = Platform(config)
-            metrics = MetricsCollector(platform)
-            manager = ModelManager(path_manager, metrics=metrics)
             try:
-                model = manager.get_model(
-                    model_id,
-                    system_prompt=_BENCHMARK_SYSTEM,
-                    max_tokens=_MAX_TOKENS,
+                model = ctx.manager.get_model(
+                    model_id, system_prompt=BENCHMARK_SYSTEM, max_tokens=max_tokens
                 )
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [red]{model_name}: failed to get model — {exc}[/red]")
@@ -1083,16 +918,23 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 continue
 
             rows: list[dict] = []
-            with metrics.start_trace():
+            with ctx.metrics.start_trace() as trace:
                 try:
-                    model.load(platform, compute_unit)
+                    model.load(ctx.platform, compute_unit)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
                     progress.advance(model_task)
                     continue
 
                 rows = _run_vlm_benchmark(
-                    model, model_name, clips, _N_CYCLES, data_dir, metrics, progress, clip_task
+                    model,  # type: ignore[arg-type]
+                    model_name,
+                    clips,
+                    n_cycles,
+                    data_dir,
+                    ctx.metrics,
+                    progress,
+                    clip_task,
                 )
 
                 try:
@@ -1100,8 +942,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
-            report = metrics.report()
-            load_ms, unload_ms = extract_load_unload_ms(report)
+            load_ms, unload_ms = extract_load_unload_ms([trace])
             for row in rows:
                 row["kind"] = "vlm"
                 row["load_ms"] = round(load_ms, 3)
@@ -1112,7 +953,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     "kind": "vlm",
                     "load_ms": round(load_ms, 3),
                     "unload_ms": round(unload_ms, 3),
-                    "metrics_report": report.json(),
+                    "trace": trace.json(),
                     "runs": rows,
                 }
             )
@@ -1137,9 +978,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 console.rule(f"[dim]LLM x {detector_display}[/dim]")
 
                 # Load detector once and reuse across all LLM models.
-                detector_manager = ModelManager(path_manager)
                 try:
-                    detector_obj = detector_manager.get_model(
+                    detector_obj = ctx.manager.get_model(
                         detector_model_id, variant=detector_variant
                     )
                 except Exception as exc:  # noqa: BLE001
@@ -1150,10 +990,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         progress.advance(model_task)
                     continue
 
-                detector_platform = Platform(config)
                 try:
-                    with _silence_native_output():
-                        detector_obj.load(detector_platform, detector_unit)
+                    with ctx.metrics.start_trace(), silence_native_output():
+                        detector_obj.load(ctx.platform, detector_unit)
                 except Exception as exc:  # noqa: BLE001
                     console.print(
                         f"  [red]Detector {detector_display}: failed to load — {exc}[/red]"
@@ -1172,14 +1011,12 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         model_task, description=f"{model_name} (llm/{detector_display})"
                     )
 
-                    platform = Platform(config)
-                    metrics = MetricsCollector(platform)
-                    manager = ModelManager(path_manager, metrics=metrics)
                     try:
-                        model = manager.get_model(
+                        model = ctx.manager.get_model(
                             model_id,
-                            system_prompt=_BENCHMARK_SYSTEM,
-                            max_tokens=_MAX_TOKENS,
+                            system_prompt=BENCHMARK_SYSTEM,
+                            max_tokens=max_tokens,
+                            template=model_template,
                         )
                     except Exception as exc:  # noqa: BLE001
                         console.print(f"  [red]{model_name}: failed to get model — {exc}[/red]")
@@ -1187,24 +1024,22 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         continue
 
                     rows = []
-                    with metrics.start_trace():
+                    with ctx.metrics.start_trace() as trace:
                         try:
-                            model.load(platform, compute_unit)
+                            model.load(ctx.platform, compute_unit)
                         except Exception as exc:  # noqa: BLE001
                             console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
                             progress.advance(model_task)
                             continue
 
                         rows = _run_llm_benchmark(
-                            model,
+                            model,  # type: ignore[arg-type]
                             model_name,
-                            model_template,
                             clips,
-                            _N_CYCLES,
+                            n_cycles,
                             data_dir,
                             detector_obj,
-                            detector_display,
-                            metrics,
+                            ctx.metrics,
                             progress,
                             clip_task,
                         )
@@ -1214,8 +1049,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         except Exception as exc:  # noqa: BLE001
                             console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
-                    report = metrics.report()
-                    load_ms, unload_ms = extract_load_unload_ms(report)
+                    load_ms, unload_ms = extract_load_unload_ms(
+                        [trace], name_contains=type(model).__name__
+                    )
                     for row in rows:
                         row["kind"] = "llm"
                         row["detector"] = detector_display
@@ -1228,7 +1064,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                             "detector": detector_display,
                             "load_ms": round(load_ms, 3),
                             "unload_ms": round(unload_ms, 3),
-                            "metrics_report": report.json(),
+                            "trace": trace.json(),
                             "runs": rows,
                         }
                     )
@@ -1244,7 +1080,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     progress.advance(model_task)
 
                 try:
-                    with _silence_native_output():
+                    with ctx.metrics.start_trace(), silence_native_output():
                         detector_obj.unload()
                 except Exception as exc:  # noqa: BLE001
                     console.print(
@@ -1252,7 +1088,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     )
 
     if all_rows:
-        _write_json(model_entries, output_path, merge=args.merge)
+        _write_gzip_results(model_entries, output_path, merge=args.merge)
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")

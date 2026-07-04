@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from moment_to_action.hardware._loaded_models._llama import LlamaModel
 from moment_to_action.metrics import SpanType
 from moment_to_action.models._base import BaseModel
+from moment_to_action.prompting import build_payload
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -43,6 +44,9 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         input_layout: Not applicable to LLMs; expected to be ``None``.
         system_prompt: System message prepended to every completion prompt.
         max_tokens: Maximum tokens the model may generate per call.
+        template: Optional chat template format string with ``{system}``/``{user}``
+            placeholders (see :mod:`moment_to_action.prompting`, e.g. ``CHATML``,
+            ``PHI3``). ``None`` prepends the system prompt raw (no chat tokens).
     """
 
     def __init__(
@@ -56,6 +60,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         input_layout: str | None = None,
         system_prompt: str = "",
         max_tokens: int = 128,
+        template: str | None = None,
         metrics: MetricsCollector | None = None,
     ) -> None:
         """Initialise with registry metadata.
@@ -70,6 +75,8 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             input_layout: Unused for LLMs; pass ``None``.
             system_prompt: System message prepended to every completion prompt.
             max_tokens: Maximum tokens to generate per completion.
+            template: Optional chat template applied to every prompt (see
+                :mod:`moment_to_action.prompting`).
             metrics: Metrics collector used to record ``MODEL_*`` spans.
         """
         super().__init__(
@@ -84,6 +91,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         self._gguf_path = path / next(iter(backends.values()))["model"]
         self._system_prompt = system_prompt
         self._max_tokens = max_tokens
+        self._template = template
         self._loaded_model: LoadedModel | None = None
 
     def _load(self, platform: Platform, unit: ComputeUnit) -> None:
@@ -121,6 +129,10 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
     def _prepare(self, inputs: str, *, grammar: str | None = None) -> dict:
         """Format a user prompt into a ``/completion`` request body.
 
+        Applies :attr:`_template` (if set) via
+        :func:`~moment_to_action.prompting.build_payload`; otherwise the system
+        prompt is prepended raw.
+
         Args:
             inputs: User-facing text prompt.
             grammar: Optional GBNF grammar string constraining generation.
@@ -128,8 +140,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         Returns:
             Request body dict for the llama.cpp ``/completion`` endpoint.
         """
-        prompt = f"{self._system_prompt}\n{inputs}" if self._system_prompt else inputs
-        payload = {"prompt": prompt, "n_predict": self._max_tokens}
+        payload = build_payload(inputs, self._max_tokens, self._system_prompt, self._template)
         if grammar is not None:
             payload["grammar"] = grammar
         return payload

@@ -24,6 +24,7 @@ _SYSTEM = "Be concise."
 def _make_model(
     system_prompt: str = _SYSTEM,
     max_tokens: int = 64,
+    template: str | None = None,
     metrics: MetricsCollector | None = None,
 ) -> Qwen2Model:
     """Construct a Qwen2Model with test parameters."""
@@ -36,6 +37,7 @@ def _make_model(
         input_layout=None,
         system_prompt=system_prompt,
         max_tokens=max_tokens,
+        template=template,
         metrics=metrics,
     )
 
@@ -193,6 +195,21 @@ class TestLlamaGGUFModelPrepare:
         model = _make_model()
         result = model._prepare("x")
         assert "grammar" not in result
+
+    def test_prepare_applies_chat_template_when_given(self) -> None:
+        """prepare() applies the configured chat template via build_payload()."""
+        from moment_to_action.prompting import CHATML
+
+        model = _make_model(system_prompt="sys", template=CHATML)
+        result = model.prepare("hello")
+        assert "<|im_start|>system\nsys<|im_end|>" in result["prompt"]
+        assert "<|im_start|>user\nhello<|im_end|>" in result["prompt"]
+
+    def test_prepare_no_template_uses_raw_concatenation(self) -> None:
+        """prepare() without a template falls back to raw system+prompt concatenation."""
+        model = _make_model(system_prompt="sys")
+        result = model.prepare("hello")
+        assert result["prompt"] == "sys\nhello"
 
 
 @pytest.mark.unit

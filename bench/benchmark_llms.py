@@ -10,9 +10,10 @@
 # ///
 """Benchmark LLM models on application-specific classification prompts.
 
-Each scene maps to one of the five target applications (violence detection,
-fall detection, animal threat, eating detection, PPE compliance).  Every
-scene poses the binary or multi-label question the deployed system would ask.
+Each scene (``bench/_scenes.py``) maps to one of the five target applications
+(violence detection, fall detection, animal threat, eating detection, PPE
+compliance). Every scene poses the binary or multi-label question the deployed
+system would ask.
 
 Inputs are restricted to what real models actually produce:
   - Detections from YOLO: label, confidence, bounding box (pixel coordinates).
@@ -20,20 +21,26 @@ Inputs are restricted to what real models actually produce:
     from the bboxes rather than assumed from free-form natural language.
   - Audio transcript from an audio model, where the application uses audio.
 
-Two scenes per application: one positive case, one negative case.
+Each (model, scene, cycle) is driven through a real
+``Pipeline([LLMStage(model, grammar=YES_NO_GRAMMAR), DecisionStage])`` over a
+``DetectionMessage`` built from the scene — the same composition an on-device
+app would use. Yes/no scenes get the grammar (so ``DecisionStage`` can extract
+a verdict); PPE compliance scenes answer COMPLIANT/NON-COMPLIANT and are run
+without it, scored on keyword recall only.
 
 Accuracy metrics:
-  - ``yn_correct``: bool — whether the model's first word was the correct yes/no.
+  - ``yn_correct``: bool — whether the extracted decision matched the expected label
+    (``None`` for PPE scenes, which have no yes/no verdict).
   - ``recall``: float in [0, 1] — keyword recall for classification keywords.
 
-Timing metrics (streaming-derived):
+Timing metrics (streamed from ``MetricsCollector.timed_stream`` via ``LLMStage``):
   - ``ttft_ms``: time from stream start to first token.
   - ``ttfyd_ms``: time from stream start to first yes/no decision.
   - ``mean_itl_ms``, ``std_itl_ms``: inter-token latency statistics.
   - ``inference_metrics``: llama.cpp-native timing fields from the stop chunk.
 
 Usage:
-    uv run python scripts/benchmark_llms.py [--n-cycles 3] [--output results.json]
+    uv run python bench/benchmark_llms.py [--n-cycles 3] [--output results.json]
 
 Requires llama_server_path to be set in the M2A config (or pass --server-path).
 """
@@ -41,16 +48,14 @@ Requires llama_server_path to be set in the M2A config (or pass --server-path).
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from rich.console import Console
+from _common import build_context, console, write_results
+from _scenes import SCENES, Scene
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -61,23 +66,18 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from moment_to_action.benchmarking import detect_yn, extract_load_unload_ms, recall
-from moment_to_action.config import AppConfig, load_config
-from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.hardware._loaded_models._llama import LlamaModel
-from moment_to_action.metrics import MetricsCollector, SpanType
-from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
-from moment_to_action.models.image.detection._types import BoundingBox, Detection
-from moment_to_action.paths import PathManager
-from moment_to_action.prompting import BENCHMARK_SYSTEM as _BENCHMARK_SYSTEM
-from moment_to_action.prompting import CHATML, PHI3
-from moment_to_action.prompting import build_detection_prompt as _build_detection_prompt
-from moment_to_action.prompting import build_payload as _build_payload
+from moment_to_action.benchmarking import extract_load_unload_ms, recall
+from moment_to_action.config import AppConfig
+from moment_to_action.hardware import ComputeUnit
+from moment_to_action.messages import DecisionMessage, DetectionMessage
+from moment_to_action.metrics import SpanType
+from moment_to_action.models import MODEL_REGISTRY, ModelID
+from moment_to_action.prompting import BENCHMARK_SYSTEM, CHATML, PHI3, YES_NO_GRAMMAR
+from moment_to_action.stages.llm import DecisionStage, LLMStage
 
 if TYPE_CHECKING:
-    from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
-
-console = Console()
+    from moment_to_action.metrics import MetricsCollector, Span
+    from moment_to_action.models.llm._base import LlamaGGUFModel
 
 # (ModelID, display name, prompt template | None)
 _MODEL_CONFIGS: list[tuple[ModelID, str, str | None]] = [
@@ -91,274 +91,7 @@ _MODEL_CONFIGS: list[tuple[ModelID, str, str | None]] = [
 _N_CYCLES = 3
 _MAX_TOKENS = 128
 
-# Required PPE items — used to infer what is absent in PPE scenes.
-_REQUIRED_PPE: frozenset[str] = frozenset({"hard hat", "safety vest", "glove", "boot"})
-
-
-# ---------------------------------------------------------------------------
-# Scene definition
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Scene:
-    """One benchmark scene backed by YOLO-realistic inputs.
-
-    Attributes:
-        name: Short identifier used in output.
-        app: Target application name.
-        task: The binary question the system asks (used as prompt suffix).
-        detections: YOLO detections (label + confidence + bbox).  Spatial
-            context is derived from bboxes by ``_build_prompt``.
-        audio_transcript: Transcript from an audio model.  ``None`` for apps
-            that do not use audio.
-        expected_label: Correct answer token (e.g. "YES", "NO", "COMPLIANT").
-        recall_keywords: Words expected from a correct answer.  Labels that
-            appear verbatim in ``detections`` are excluded so that input-echoing
-            does not inflate recall.
-    """
-
-    name: str
-    app: str
-    task: str
-    detections: list[Detection]
-    audio_transcript: str | None
-    expected_label: str
-    recall_keywords: list[str] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# Prompt builder — derives spatial context from raw bboxes
-# ---------------------------------------------------------------------------
-
-
-def _build_prompt(scene: Scene) -> str:
-    """Build a model prompt from YOLO detections and optional audio.
-
-    Thin wrapper over :func:`~moment_to_action.prompting.build_detection_prompt`
-    that inserts the scene's audio transcript (if any) as an extra context line.
-
-    Args:
-        scene: Scene definition.
-
-    Returns:
-        Formatted prompt string ending with the binary question.
-    """
-    extra_lines = (
-        [f"Audio: {scene.audio_transcript}"] if scene.audio_transcript is not None else None
-    )
-    return _build_detection_prompt(scene.detections, scene.task, extra_lines=extra_lines)
-
-
-# ---------------------------------------------------------------------------
-# Scenes — 2 per application (positive then negative)
-# ---------------------------------------------------------------------------
-
-
-def _bb(x1: int, y1: int, x2: int, y2: int) -> BoundingBox:
-    """Shorthand BoundingBox constructor.
-
-    Args:
-        x1: Left edge.
-        y1: Top edge.
-        x2: Right edge.
-        y2: Bottom edge.
-
-    Returns:
-        BoundingBox instance.
-    """
-    return BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
-
-
-def _det(label: str, conf: float, x1: int, y1: int, x2: int, y2: int) -> Detection:
-    """Shorthand Detection constructor.
-
-    Args:
-        label: Class label.
-        conf: Confidence score.
-        x1: Left edge.
-        y1: Top edge.
-        x2: Right edge.
-        y2: Bottom edge.
-
-    Returns:
-        Detection instance.
-    """
-    return Detection(label=label, confidence=conf, bbox=_bb(x1, y1, x2, y2))
-
-
-_SCENES: list[Scene] = [
-    # --- Violence Detection -------------------------------------------------
-    # Positive: two persons with heavily overlapping bboxes, audio confirms altercation
-    Scene(
-        name="violence_fight",
-        app="violence_detection",
-        task="Is a violent incident occurring? Answer YES or NO, then one sentence of reasoning.",
-        detections=[
-            _det("person", 0.95, 80, 40, 360, 480),
-            _det("person", 0.92, 200, 30, 500, 480),  # large overlap with first person
-        ],
-        audio_transcript="shouting, impact sounds, glass breaking",
-        expected_label="YES",
-        recall_keywords=["yes", "fight", "violen", "aggress", "altercation", "physical"],
-    ),
-    # Negative: two persons at opposite sides of frame, no overlap, calm audio
-    Scene(
-        name="violence_calm",
-        app="violence_detection",
-        task="Is a violent incident occurring? Answer YES or NO, then one sentence of reasoning.",
-        detections=[
-            _det("person", 0.93, 10, 50, 200, 480),  # left side
-            _det("person", 0.90, 440, 50, 630, 480),  # right side, no overlap
-        ],
-        audio_transcript="ambient music, quiet conversation, laughter",
-        expected_label="NO",
-        recall_keywords=["no", "calm", "peaceful", "safe", "non-violent", "normal"],
-    ),
-    # --- Fall Detection -----------------------------------------------------
-    # Positive: person bbox is horizontal (width >> height), located at bottom of frame
-    Scene(
-        name="fall_detected",
-        app="fall_detection",
-        task="Has a person fallen? Answer YES or NO, then one sentence of reasoning.",
-        detections=[
-            _det("person", 0.91, 50, 390, 520, 470),  # horizontal (w=470 > h=80), bottom frame
-            _det("chair", 0.74, 300, 200, 500, 400),
-        ],
-        audio_transcript=None,
-        expected_label="YES",
-        recall_keywords=["yes", "fall", "fallen", "ground", "floor", "horizontal", "lying"],
-    ),
-    # Negative: person bbox is vertical (height >> width), centered in frame
-    Scene(
-        name="fall_standing",
-        app="fall_detection",
-        task="Has a person fallen? Answer YES or NO, then one sentence of reasoning.",
-        detections=[
-            _det("person", 0.95, 220, 40, 400, 480),  # vertical (w=180 < h=440), mid-center
-            _det("desk", 0.81, 400, 200, 640, 480),
-            _det("monitor", 0.78, 460, 60, 620, 260),
-        ],
-        audio_transcript=None,
-        expected_label="NO",
-        recall_keywords=["no", "standing", "upright", "vertical", "normal", "not fallen"],
-    ),
-    # --- Animal Threat / Attack Detection ----------------------------------
-    # Positive: dog bbox overlaps heavily with person bbox, audio confirms aggression
-    Scene(
-        name="animal_threat",
-        app="animal_threat_detection",
-        task=(
-            "Is an animal posing an immediate threat to a person? "
-            "Answer YES or NO, then one sentence of reasoning."
-        ),
-        detections=[
-            _det("person", 0.93, 150, 80, 430, 480),
-            _det("dog", 0.88, 350, 180, 620, 480),  # overlaps with person bbox
-        ],
-        audio_transcript="aggressive barking, growling",
-        expected_label="YES",
-        recall_keywords=["yes", "threat", "danger", "aggress", "attack", "immediate"],
-    ),
-    # Negative: dog bbox small and far from person (no overlap), calm audio
-    Scene(
-        name="animal_safe",
-        app="animal_threat_detection",
-        task=(
-            "Is an animal posing an immediate threat to a person? "
-            "Answer YES or NO, then one sentence of reasoning."
-        ),
-        detections=[
-            _det("person", 0.94, 80, 50, 380, 480),  # foreground, left
-            _det("dog", 0.76, 530, 320, 610, 400),  # small (background), right, no overlap
-        ],
-        audio_transcript="ambient park sounds, distant barking",
-        expected_label="NO",
-        recall_keywords=["no", "safe", "distant", "no threat", "away", "not immediate"],
-    ),
-    # --- Eating Detection (egocentric wearable) ----------------------------
-    # Positive: food items dominate foreground (large bbox area = close to camera)
-    Scene(
-        name="eating_yes",
-        app="eating_detection",
-        task=(
-            "Egocentric view from wearable camera. "
-            "Is the wearer currently eating or drinking? "
-            "Answer YES or NO, then one sentence of reasoning."
-        ),
-        detections=[
-            _det("fork", 0.89, 240, 300, 400, 440),  # foreground
-            _det("sandwich", 0.84, 140, 270, 450, 460),  # foreground
-            _det("plate", 0.91, 70, 260, 580, 470),  # large, foreground
-            _det("dining table", 0.72, 0, 410, 640, 480),  # background strip
-        ],
-        audio_transcript=None,
-        expected_label="YES",
-        recall_keywords=["yes", "eating", "meal", "consuming", "food", "fork"],
-    ),
-    # Negative: computer peripherals dominate foreground, food present but background
-    Scene(
-        name="eating_no",
-        app="eating_detection",
-        task=(
-            "Egocentric view from wearable camera. "
-            "Is the wearer currently eating or drinking? "
-            "Answer YES or NO, then one sentence of reasoning."
-        ),
-        detections=[
-            _det("keyboard", 0.93, 90, 360, 550, 470),  # foreground
-            _det("laptop", 0.88, 140, 200, 500, 400),  # midground
-            _det("monitor", 0.85, 40, 40, 600, 300),  # large background
-            _det("cup", 0.65, 575, 360, 635, 440),  # small, right corner
-        ],
-        audio_transcript=None,
-        expected_label="NO",
-        recall_keywords=["no", "working", "typing", "not eating", "computer", "keyboard"],
-    ),
-    # --- Workplace Safety / PPE Compliance ---------------------------------
-    # Positive: all required PPE items detected on or near the person
-    Scene(
-        name="ppe_compliant",
-        app="ppe_compliance",
-        task=(
-            "Is the construction worker wearing all required PPE "
-            "(hard hat, safety vest, gloves, boots)? "
-            "Answer COMPLIANT or NON-COMPLIANT, then list present and missing items."
-        ),
-        detections=[
-            _det("person", 0.96, 120, 40, 520, 480),
-            _det("hard hat", 0.91, 230, 40, 420, 140),  # top of frame, on head
-            _det("safety vest", 0.88, 140, 150, 500, 340),
-            _det("glove", 0.79, 120, 310, 230, 420),
-            _det("glove", 0.77, 410, 310, 520, 420),
-            _det("boot", 0.83, 160, 410, 290, 480),
-            _det("boot", 0.80, 350, 410, 480, 480),
-        ],
-        audio_transcript=None,
-        expected_label="COMPLIANT",
-        recall_keywords=["compliant", "hat", "vest", "glove", "boot", "all", "present"],
-    ),
-    # Negative: hard hat and gloves absent from detections
-    Scene(
-        name="ppe_violation",
-        app="ppe_compliance",
-        task=(
-            "Is the construction worker wearing all required PPE "
-            "(hard hat, safety vest, gloves, boots)? "
-            "Answer COMPLIANT or NON-COMPLIANT, then list present and missing items."
-        ),
-        detections=[
-            _det("person", 0.95, 120, 40, 520, 480),
-            _det("safety vest", 0.90, 140, 150, 500, 340),
-            _det("boot", 0.84, 160, 410, 290, 480),
-            _det("boot", 0.82, 350, 410, 480, 480),
-            # hard hat and gloves absent
-        ],
-        audio_transcript=None,
-        expected_label="NON-COMPLIANT",
-        recall_keywords=["non-compliant", "missing", "hat", "glove", "absent", "violation"],
-    ),
-]
+_YES_NO_LABELS = frozenset({"yes", "no"})
 
 
 # ---------------------------------------------------------------------------
@@ -367,81 +100,57 @@ _SCENES: list[Scene] = [
 
 
 def _run_scene(
-    model: object,
-    model_name: str,
-    scene: Scene,
-    cycle: int,
-    max_tokens: int,
-    system_prompt: str,
-    template: str | None,
-    metrics: MetricsCollector,
+    model: LlamaGGUFModel, model_name: str, scene: Scene, cycle: int, metrics: MetricsCollector
 ) -> dict:
-    """Stream one scene through the model and collect all metrics.
+    """Drive one scene through ``Pipeline([LLMStage, DecisionStage])`` and score it.
 
-    Wraps the streaming loop in a MODEL_INFERENCE span.  Within the span,
-    tracks TTFT, TTFYD, and inter-token latencies manually via perf_counter,
-    then stores them as span metadata via ``metrics.set_meta``.
+    Yes/no scenes get ``grammar=YES_NO_GRAMMAR`` so the decision is forced to
+    the first token and ``DecisionStage`` can extract it; PPE compliance
+    scenes (expecting COMPLIANT/NON-COMPLIANT) run without the grammar and are
+    scored on keyword recall only. ``metrics.timed_stream`` (inside
+    ``LLMStage``) records ``ttft_ms``/``ttfyd_ms``/``mean_itl_ms``/``std_itl_ms``
+    onto the model's ``MODEL_INFERENCE`` span as tokens arrive, independent of
+    whether the caller drains the full response — this benchmark drains fully
+    so ``recall`` can be scored against complete text, while still capturing
+    an accurate ``ttfyd_ms`` (the time an early-abort consumer would have saved).
+
+    Note: ``scene.audio_transcript`` is not yet wired in — ``LLMStage`` builds its
+    prompt from ``DetectionMessage.detections`` only, with no extra-context hook.
 
     Args:
-        model: Loaded LlamaGGUFModel or LlamaVLModel instance.
-        model_name: Display name for the result.
+        model: Loaded LlamaGGUFModel instance.
+        model_name: Display name for the result row.
         scene: Scene to evaluate.
         cycle: Cycle index (1-based).
-        max_tokens: Maximum tokens to generate.
-        system_prompt: System message for the prompt.
-        template: Optional chat template (``{system}``/``{user}`` placeholders).
-        metrics: Active MetricsCollector (a trace must be open).
+        metrics: The same MetricsCollector *model* was constructed with.
 
     Returns:
         Result dict for this (scene, cycle).
-
-    Raises:
-        RuntimeError: If ``model._loaded_model`` is not a LlamaModel.
     """
-    loaded_model = getattr(model, "_loaded_model", None)
-    if not isinstance(loaded_model, LlamaModel):
-        msg = f"{model_name}: _loaded_model is not a LlamaModel"
-        raise TypeError(msg)
+    is_yes_no = scene.expected_label.lower() in _YES_NO_LABELS
+    grammar = YES_NO_GRAMMAR if is_yes_no else None
+    detection_msg = DetectionMessage(timestamp=time.time(), detections=scene.detections)
 
-    prompt = _build_prompt(scene)
-    payload = _build_payload(prompt, max_tokens, system_prompt, template)
+    llm_stage = LLMStage(model, question=scene.task, grammar=grammar, metrics=metrics)
+    gen_messages = list(llm_stage.process(iter([detection_msg])))
+    accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
 
-    t0 = time.perf_counter_ns()
-    ttft_ms: float | None = None
-    ttfyd_ms: float | None = None
-    token_times: list[int] = []
-    accumulated = ""
-    inf_m: LlamaCppInferenceMetrics | None = None
+    yn: str | None = None
+    if is_yes_no:
+        decision_stage = DecisionStage(metrics=metrics)
+        decisions = [
+            m for m in decision_stage.process(iter(gen_messages)) if isinstance(m, DecisionMessage)
+        ]
+        if decisions:
+            yn = decisions[0].decision
 
-    with metrics.start_span(SpanType.MODEL_INFERENCE, f"{model_name}.stream") as span:
-        for token in loaded_model.stream(payload):
-            now = time.perf_counter_ns()
-            token_times.append(now)
-            accumulated += token
-            if ttft_ms is None:
-                ttft_ms = (now - t0) / 1e6
-            if ttfyd_ms is None and detect_yn(accumulated) is not None:
-                ttfyd_ms = (now - t0) / 1e6
-
-        t_end = time.perf_counter_ns()
-        itl_ms = [(token_times[i] - token_times[i - 1]) / 1e6 for i in range(1, len(token_times))]
-        mean_itl = float(np.mean(itl_ms)) if itl_ms else 0.0
-        std_itl = float(np.std(itl_ms)) if itl_ms else 0.0
-        infer_ms = (t_end - t0) / 1e6
-
-        inf_m = loaded_model.last_inference_metrics
-        if inf_m is not None:
-            span.inference_metrics = inf_m
-
-        metrics.set_meta("ttft_ms", ttft_ms)
-        metrics.set_meta("ttfyd_ms", ttfyd_ms)
-        metrics.set_meta("mean_itl_ms", round(mean_itl, 3))
-        metrics.set_meta("std_itl_ms", round(std_itl, 3))
-
-    yn = detect_yn(accumulated)
     yn_correct: bool | None = None
     if yn is not None:
         yn_correct = yn == scene.expected_label.lower()
+
+    span = _last_model_inference_span(metrics)
+    meta = span.metadata if span is not None else {}
+    inf_m = span.inference_metrics if span is not None else None
 
     return {
         "model": model_name,
@@ -453,63 +162,54 @@ def _run_scene(
         "response_chars": len(accumulated),
         "yn_correct": yn_correct,
         "recall": round(recall(accumulated, scene.recall_keywords), 4),
-        "infer_ms": round(infer_ms, 3),
-        "ttft_ms": round(ttft_ms, 3) if ttft_ms is not None else None,
-        "ttfyd_ms": round(ttfyd_ms, 3) if ttfyd_ms is not None else None,
-        "mean_itl_ms": round(mean_itl, 3),
-        "std_itl_ms": round(std_itl, 3),
+        "infer_ms": round(span.latency_ms, 3) if span is not None else None,
+        "ttft_ms": meta.get("ttft_ms"),
+        "ttfyd_ms": meta.get("ttfyd_ms"),
+        "mean_itl_ms": meta.get("mean_itl_ms"),
+        "std_itl_ms": meta.get("std_itl_ms"),
         "inference_metrics": inf_m.model_dump() if inf_m is not None else None,
     }
 
 
-def _run_benchmark(  # noqa: PLR0913
-    model: object,
-    model_name: str,
-    metrics: MetricsCollector,
-    n_cycles: int,
-    max_tokens: int,
-    system_prompt: str,
-    template: str | None,
-    progress: Progress,
-    scene_task_id: object,
+def _last_model_inference_span(metrics: MetricsCollector) -> Span | None:
+    """Return the most recently recorded MODEL_INFERENCE span on *metrics*.
+
+    Args:
+        metrics: Collector to scan.
+
+    Returns:
+        The last :class:`~moment_to_action.metrics.Span` of type
+        ``MODEL_INFERENCE``, or ``None`` if none have been recorded yet.
+    """
+    for span in reversed(metrics.spans):
+        if span.type_ is SpanType.MODEL_INFERENCE:
+            return span
+    return None
+
+
+def _run_benchmark(
+    model: LlamaGGUFModel, model_name: str, n_cycles: int, metrics: MetricsCollector
 ) -> list[dict]:
     """Run all scenes x n_cycles through a loaded model, return result rows.
 
     Args:
         model: Loaded LlamaGGUFModel instance.
         model_name: Human-readable name for output rows.
-        metrics: Active MetricsCollector (a trace must be open).
         n_cycles: Number of repetitions per scene.
-        max_tokens: Maximum tokens to generate per scene.
-        system_prompt: System message for each prompt.
-        template: Optional chat template (``{system}``/``{user}`` placeholders).
-        progress: Rich Progress instance for updating the scene sub-bar.
-        scene_task_id: Task ID of the scene sub-progress bar.
+        metrics: The same MetricsCollector *model* was constructed with.
 
     Returns:
         List of result dicts, one per (scene, cycle).
     """
-    total_steps = len(_SCENES) * n_cycles
-    progress.reset(scene_task_id, total=total_steps)  # type: ignore[arg-type]
     rows: list[dict] = []
     for cycle in range(1, n_cycles + 1):
-        for scene in _SCENES:
-            progress.update(
-                scene_task_id,  # type: ignore[arg-type]
-                description=f"  {scene.name} [{cycle}/{n_cycles}]",
-            )
+        for scene in SCENES:
             try:
-                row = _run_scene(
-                    model, model_name, scene, cycle, max_tokens, system_prompt, template, metrics
-                )
-            except Exception as exc:  # noqa: BLE001
+                rows.append(_run_scene(model, model_name, scene, cycle, metrics))
+            except Exception as exc:  # noqa: BLE001, PERF203
                 console.print(
                     f"  [yellow]{model_name} scene={scene.name} cycle={cycle}: {exc}[/yellow]"
                 )
-                progress.advance(scene_task_id)  # type: ignore[arg-type]
-                continue
-            rows.append(row)
-            progress.advance(scene_task_id)  # type: ignore[arg-type]
     return rows
 
 
@@ -530,75 +230,28 @@ def _print_summary(all_rows: list[dict]) -> None:
 
     table = Table(title="LLM Benchmark Summary", show_lines=True)
     table.add_column("Model", style="bold cyan")
-    table.add_column("Load (ms)", justify="right")
-    table.add_column("Unload (ms)", justify="right")
-    table.add_column("Infer (ms)", justify="right")
-    table.add_column("Response", justify="right")
+    table.add_column("Scenes", justify="right")
     table.add_column("Recall", justify="right", style="bold green")
-    table.add_column("YN Acc", justify="right", style="bold yellow")
+    table.add_column("YN Acc", justify="right")
     table.add_column("TTFT (ms)", justify="right")
     table.add_column("TTFYD (ms)", justify="right")
-    table.add_column("Mean ITL (ms)", justify="right")
 
     for model_name, rows in sorted(groups.items()):
-        avg_recall = float(np.mean([r["recall"] for r in rows]))
+        recalls = [r["recall"] for r in rows]
         yn_rows = [r for r in rows if r["yn_correct"] is not None]
-        yn_acc = float(np.mean([r["yn_correct"] for r in yn_rows])) if yn_rows else float("nan")
+        yn_acc = np.mean([r["yn_correct"] for r in yn_rows]) if yn_rows else float("nan")
         ttft_vals = [r["ttft_ms"] for r in rows if r["ttft_ms"] is not None]
         ttfyd_vals = [r["ttfyd_ms"] for r in rows if r["ttfyd_ms"] is not None]
-        itl_vals = [r["mean_itl_ms"] for r in rows]
-        load_vals = [r["load_ms"] for r in rows if r.get("load_ms") is not None]
-        unload_vals = [r["unload_ms"] for r in rows if r.get("unload_ms") is not None]
-        infer_vals = [r["infer_ms"] for r in rows]
-        resp_vals = [r["response_chars"] for r in rows]
         table.add_row(
             model_name,
-            f"{float(np.mean(load_vals)):.0f}" if load_vals else "n/a",
-            f"{float(np.mean(unload_vals)):.0f}" if unload_vals else "n/a",
-            f"{float(np.mean(infer_vals)):.0f}" if infer_vals else "n/a",
-            f"{float(np.mean(resp_vals)):.0f}" if resp_vals else "n/a",
-            f"{avg_recall:.3f}",
+            str(len(rows)),
+            f"{np.mean(recalls):.3f}",
             f"{yn_acc:.3f}" if yn_rows else "n/a",
-            f"{float(np.mean(ttft_vals)):.1f}" if ttft_vals else "n/a",
-            f"{float(np.mean(ttfyd_vals)):.1f}" if ttfyd_vals else "n/a",
-            f"{float(np.mean(itl_vals)):.1f}" if itl_vals else "n/a",
+            f"{np.mean(ttft_vals):.1f}" if ttft_vals else "n/a",
+            f"{np.mean(ttfyd_vals):.1f}" if ttfyd_vals else "n/a",
         )
 
     console.print(table)
-
-
-def _write_json(model_entries: list[dict], output_path: Path, *, merge: bool = False) -> None:
-    """Write benchmark results to a JSON file.
-
-    When *merge* is ``True`` and *output_path* already exists, entries for models
-    present in *model_entries* are replaced and entries for models not in the current
-    run are preserved.  When *merge* is ``False`` (default) the file is overwritten.
-
-    Each entry in ``model_entries`` contains a single model's ``metrics_report``
-    (once, not duplicated per row) plus a ``runs`` list of per-scene result dicts.
-
-    Args:
-        model_entries: Per-model result dicts, each containing ``metrics_report`` and ``runs``.
-        output_path: Destination JSON path.
-        merge: If ``True``, merge into any existing file rather than overwriting.
-    """
-    existing_models: list[dict] = []
-    if merge and output_path.exists():
-        try:
-            existing = json.loads(output_path.read_text())
-            existing_models = existing.get("models", [])
-        except (json.JSONDecodeError, OSError):
-            existing_models = []
-
-    new_names = {e["model"] for e in model_entries}
-    merged = [e for e in existing_models if e["model"] not in new_names] + model_entries
-
-    output = {
-        "script": "benchmark_llms",
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        "models": merged,
-    }
-    output_path.write_text(json.dumps(output, indent=2))
 
 
 # ---------------------------------------------------------------------------
@@ -664,18 +317,15 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:  # noqa: C901, PLR0915
     """Entry point for the LLM benchmark script."""
-    global _N_CYCLES, _MAX_TOKENS  # noqa: PLW0603
-
     args = _parse_args()
-    _N_CYCLES = args.n_cycles
-    _MAX_TOKENS = args.max_tokens
+    n_cycles: int = args.n_cycles
+    max_tokens: int = args.max_tokens
     output_path = Path(args.output)
     compute_unit = ComputeUnit.CPU if args.cpu else ComputeUnit.GPU
 
-    path_manager = PathManager()
-    config = load_config(path_manager.app_config_file)
-    server_path = Path(args.server_path) if args.server_path else config.llama_server_path
-    port = args.port if args.port is not None else config.llama_server_port
+    ctx = build_context()
+    server_path = Path(args.server_path) if args.server_path else ctx.config.llama_server_path
+    port = args.port if args.port is not None else ctx.config.llama_server_port
 
     if server_path is None:
         console.print(
@@ -683,8 +333,8 @@ def main() -> None:  # noqa: C901, PLR0915
         )
         sys.exit(1)
 
-    config = AppConfig(
-        **{**config.model_dump(), "llama_server_path": server_path, "llama_server_port": port}
+    ctx.config = AppConfig(
+        **{**ctx.config.model_dump(), "llama_server_path": server_path, "llama_server_port": port}
     )
 
     model_filter = set(args.models.split(",")) if args.models else None
@@ -694,12 +344,12 @@ def main() -> None:  # noqa: C901, PLR0915
         console.print("[red]No models selected by filter. Exiting.[/red]")
         sys.exit(1)
 
-    apps = sorted({s.app for s in _SCENES})
+    apps = sorted({s.app for s in SCENES})
     console.rule("[bold]M2A LLM Benchmark[/bold]")
     console.print(f"  apps   : {', '.join(apps)}")
-    console.print(f"  scenes : {len(_SCENES)}")
-    console.print(f"  cycles : {_N_CYCLES}")
-    console.print(f"  tokens : {_MAX_TOKENS}")
+    console.print(f"  scenes : {len(SCENES)}")
+    console.print(f"  cycles : {n_cycles}")
+    console.print(f"  tokens : {max_tokens}")
     console.print(f"  output : {output_path}")
     console.print(f"  models : {', '.join(c[1] for c in configs)}")
     console.print(f"  server : {server_path}:{port}")
@@ -718,7 +368,6 @@ def main() -> None:  # noqa: C901, PLR0915
         console=console,
     ) as progress:
         model_task = progress.add_task("models", total=len(configs))
-        scene_task = progress.add_task("  (waiting)", total=None)
 
         for model_id, model_name, model_template in configs:
             if model_id not in MODEL_REGISTRY:
@@ -728,14 +377,12 @@ def main() -> None:  # noqa: C901, PLR0915
 
             progress.update(model_task, description=model_name)
 
-            platform = Platform(config)
-            metrics = MetricsCollector(platform)
-            manager = ModelManager(path_manager, metrics=metrics)
             try:
-                model = manager.get_model(
+                model = ctx.manager.get_model(
                     model_id,
-                    system_prompt=_BENCHMARK_SYSTEM,
-                    max_tokens=_MAX_TOKENS,
+                    system_prompt=BENCHMARK_SYSTEM,
+                    max_tokens=max_tokens,
+                    template=model_template,
                 )
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [red]{model_name}: failed to get model — {exc}[/red]")
@@ -743,33 +390,22 @@ def main() -> None:  # noqa: C901, PLR0915
                 continue
 
             rows: list[dict] = []
-            with metrics.start_trace():
+            with ctx.metrics.start_trace() as trace:
                 try:
-                    model.load(platform, compute_unit)
+                    model.load(ctx.platform, compute_unit)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                     progress.advance(model_task)
                     continue
 
-                rows = _run_benchmark(
-                    model,
-                    model_name,
-                    metrics,
-                    _N_CYCLES,
-                    _MAX_TOKENS,
-                    _BENCHMARK_SYSTEM,
-                    model_template,
-                    progress,
-                    scene_task,
-                )
+                rows = _run_benchmark(model, model_name, n_cycles, ctx.metrics)  # type: ignore[arg-type]
 
                 try:
                     model.unload()
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
-            report = metrics.report()
-            load_ms, unload_ms = extract_load_unload_ms(report)
+            load_ms, unload_ms = extract_load_unload_ms([trace])
             for row in rows:
                 row["load_ms"] = round(load_ms, 3)
                 row["unload_ms"] = round(unload_ms, 3)
@@ -778,7 +414,7 @@ def main() -> None:  # noqa: C901, PLR0915
                     "model": model_name,
                     "load_ms": round(load_ms, 3),
                     "unload_ms": round(unload_ms, 3),
-                    "metrics_report": report.json(),
+                    "trace": trace.json(),
                     "runs": rows,
                 }
             )
@@ -793,7 +429,13 @@ def main() -> None:  # noqa: C901, PLR0915
             progress.advance(model_task)
 
     if all_rows:
-        _write_json(model_entries, output_path, merge=args.merge)
+        write_results(
+            model_entries,
+            output_path,
+            script="benchmark_llms",
+            key_fn=lambda e: e["model"],
+            merge=args.merge,
+        )
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")

@@ -16,8 +16,13 @@ reports per-image AP50 accuracy.  All latency data is captured via
 MetricsCollector and included in the JSON output (load, preproc, inference,
 postproc, and unload spans with hardware resource samples).
 
+Each (model, backend, cycle, image) is driven through a real
+``Pipeline([ImageDetectionStage(model)])`` over a ``RawFrameMessage`` — this is
+the same composition an on-device app would use, just fed COCO frames instead
+of a live camera.
+
 Usage:
-    uv run python scripts/benchmark_detectors.py [--n-images 50] [--output benchmark_results.json]
+    uv run python bench/benchmark_detectors.py [--n-images 50] [--output benchmark_results.json]
 
 Requires QAI_HUB_API_TOKEN or QAI_HUB_API_KEY for npu backend; npu is skipped
 gracefully when the environment is not configured or the backend is unavailable.
@@ -26,18 +31,15 @@ gracefully when the environment is not configured or the backend is unavailable.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
-import os
 import sys
-from datetime import datetime, timezone
+import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import cv2
 import httpx
 import numpy as np
-from rich.console import Console
+from _common import BenchContext, build_context, console, silence_native_output, write_results
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -49,18 +51,12 @@ from rich.progress import (
 )
 from rich.table import Table
 
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
 from moment_to_action.benchmarking import ap50
-from moment_to_action.config import AppConfig, load_config
-from moment_to_action.hardware import ComputeUnit, Platform
-from moment_to_action.metrics import MetricsCollector
-from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
-from moment_to_action.paths import PathManager
-from moment_to_action.qairt import QairtSDKManager
-
-console = Console()
+from moment_to_action.hardware import ComputeUnit
+from moment_to_action.messages import DetectionMessage, RawFrameMessage
+from moment_to_action.models import MODEL_REGISTRY, ModelID
+from moment_to_action.pipeline import Pipeline
+from moment_to_action.stages.image import ImageDetectionStage
 
 _COCO_ANNOTATIONS_URL = "http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
 _COCO_IMAGE_URL_TEMPLATE = "http://images.cocodataset.org/val2017/{filename}"
@@ -88,7 +84,7 @@ _BACKENDS: list[tuple[str, ComputeUnit]] = [
 _N_CYCLES = 3
 
 # Sub progress bar tracking per-image progress within the current run.  Set in
-# main() so the nested _run_cycle can advance it without threading it through
+# main() so the nested run helpers can advance it without threading it through
 # every call.
 _IMG_PROGRESS: Progress | None = None
 _IMG_TASK: TaskID | None = None
@@ -98,40 +94,6 @@ def _advance_image() -> None:
     """Advance the per-image sub progress bar by one, if it is active."""
     if _IMG_PROGRESS is not None and _IMG_TASK is not None:
         _IMG_PROGRESS.advance(_IMG_TASK)
-
-
-# ---------------------------------------------------------------------------
-# Native log suppression
-# ---------------------------------------------------------------------------
-
-
-@contextlib.contextmanager
-def _silence_native_output() -> Iterator[None]:
-    """Redirect OS-level stdout+stderr to /dev/null for the duration of the block.
-
-    The QAIRT runtime emits C++ logger chatter (e.g. "Profile Logger with name =
-    defaultKey doesn't exist!") straight to file descriptors 1/2, bypassing
-    Python's logging and corrupting the rich progress bar.  Wrapping the QAIRT
-    calls (load/run/unload) in this redirects those fds to /dev/null and restores
-    them afterwards, so only Python-level output reaches the terminal.
-
-    Yields:
-        None.
-    """
-    sys.stdout.flush()
-    sys.stderr.flush()
-    saved = (os.dup(1), os.dup(2))
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    try:
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
-        yield
-    finally:
-        os.dup2(saved[0], 1)
-        os.dup2(saved[1], 2)
-        os.close(devnull)
-        os.close(saved[0])
-        os.close(saved[1])
 
 
 # ---------------------------------------------------------------------------
@@ -237,8 +199,8 @@ def _download_images(image_infos: list[dict], cache_dir: Path) -> list[Path]:
 # ---------------------------------------------------------------------------
 
 
-def _run_benchmark(  # noqa: PLR0913
-    path_manager: PathManager,
+def _run_benchmark(
+    ctx: BenchContext,
     model_id: ModelID,
     variant: str,
     model_name: str,
@@ -246,16 +208,15 @@ def _run_benchmark(  # noqa: PLR0913
     unit: ComputeUnit,
     images: list[np.ndarray],
     gt_by_image: list[list[list[float]]],
-    config: AppConfig,
 ) -> list[dict]:
     """Run one (model, backend, N_CYCLES) benchmark and return per-cycle result rows.
 
     Each row covers one (model, backend, cycle) combination and contains per-image
-    AP50 values plus the full MetricsReport JSON (load + preproc + infer + postproc
-    + unload spans with hardware resource samples).
+    AP50 values plus this cycle's trace JSON (load + preproc + infer + postproc +
+    unload spans with hardware resource samples).
 
     Args:
-        path_manager: PathManager used to resolve/download the model files.
+        ctx: Shared bench context (one MetricsCollector/ModelManager for the run).
         model_id: Model to benchmark.
         variant: Registry variant key to load (qcs DLC variant on-device).
         model_name: Human-readable model name for output rows.
@@ -263,34 +224,30 @@ def _run_benchmark(  # noqa: PLR0913
         unit: Compute unit to benchmark.
         images: List of BGR uint8 frames.
         gt_by_image: List of GT box lists per image ``[[x1,y1,x2,y2], …]``.
-        config: Application config passed to :class:`Platform`.
 
     Returns:
         List of dicts, one per (model, backend, cycle).
     """
     rows: list[dict] = []
 
-    platform = Platform(config)
-    if unit not in platform.supported_units:
+    if unit not in ctx.platform.supported_units:
         console.print(
             f"  [yellow]Skip {model_name}/{backend_name}: {backend_name} not available "
             f"on this platform.[/yellow]"
         )
         return rows
 
-    metrics = MetricsCollector(platform)
-    manager = ModelManager(path_manager, metrics=metrics)
     try:
-        model = manager.get_model(model_id, variant=variant, unit=unit)
+        model = ctx.manager.get_model(model_id, variant=variant, unit=unit)
     except Exception as exc:  # noqa: BLE001
         console.print(f"  [yellow]Skip {model_name}/{backend_name} ({variant}): {exc}[/yellow]")
         return rows
 
     for cycle in range(1, _N_CYCLES + 1):
-        with metrics.start_trace():
+        with ctx.metrics.start_trace() as trace:
             cycle_row = _run_cycle(
+                ctx=ctx,
                 model=model,
-                platform=platform,
                 unit=unit,
                 model_name=model_name,
                 backend_name=backend_name,
@@ -299,15 +256,15 @@ def _run_benchmark(  # noqa: PLR0913
                 gt_by_image=gt_by_image,
             )
         if cycle_row is not None:
-            cycle_row["metrics_report"] = metrics.report().json()
+            cycle_row["trace"] = trace.json()
             rows.append(cycle_row)
 
     return rows
 
 
 def _run_cycle(
+    ctx: BenchContext,
     model: object,
-    platform: Platform,
     unit: ComputeUnit,
     model_name: str,
     backend_name: str,
@@ -317,14 +274,15 @@ def _run_cycle(
 ) -> dict | None:
     """Run one load → per-image infer → unload cycle inside an active trace.
 
+    Per-image inference goes through a real ``Pipeline([ImageDetectionStage(model)])``
+    over a ``RawFrameMessage``, exercising the same composition an on-device app uses.
     All latency data is captured via MetricsCollector spans (MODEL_LOAD,
-    MODEL_PREPROCESS, MODEL_INFERENCE, MODEL_POST_PROCESS, MODEL_UNLOAD) on the
-    collector the model was constructed with, and included in the trace, which
-    is serialized to the output JSON via ``metrics.report().json()``.
+    MODEL_PREPROCESS, MODEL_INFERENCE, MODEL_POST_PROCESS, MODEL_UNLOAD, STAGE) on
+    the collector the model was constructed with.
 
     Args:
+        ctx: Shared bench context.
         model: Unloaded detection model instance.
-        platform: Platform to load the model onto.
         unit: Compute unit to use.
         model_name: Model name for output rows.
         backend_name: Backend name for output rows.
@@ -336,8 +294,8 @@ def _run_cycle(
         Cycle row dict, or ``None`` if load failed.
     """
     try:
-        with _silence_native_output():
-            model.load(platform, unit)  # type: ignore[attr-defined]
+        with silence_native_output():
+            model.load(ctx.platform, unit)  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(
             f"  [yellow]Load failed {model_name}/{backend_name} cycle {cycle}: {exc}[/yellow]"
@@ -345,10 +303,15 @@ def _run_cycle(
         _safe_unload(model)
         return None
 
+    pipeline = Pipeline(
+        [ImageDetectionStage(model, metrics=ctx.metrics)],  # type: ignore[arg-type]
+        metrics=ctx.metrics,
+    )
+
     image_results: list[dict] = []
     for img_idx, (frame, gt_boxes_raw) in enumerate(zip(images, gt_by_image, strict=True)):
         result = _process_image(
-            model=model,
+            pipeline=pipeline,
             frame=frame,
             gt_boxes_raw=gt_boxes_raw,
             model_name=model_name,
@@ -377,14 +340,14 @@ def _safe_unload(model: object) -> None:
         model: The model to unload (must have an ``unload()`` method).
     """
     try:
-        with _silence_native_output():
+        with silence_native_output():
             model.unload()  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(f"  [yellow]Unload failed: {exc}[/yellow]")
 
 
 def _process_image(
-    model: object,
+    pipeline: Pipeline,
     frame: np.ndarray,
     gt_boxes_raw: list[list[float]],
     model_name: str,
@@ -392,14 +355,10 @@ def _process_image(
     img_idx: int,
     cycle: int,
 ) -> dict | None:
-    """Run prepare/infer/post/AP50 for one image, returning a result dict or None on error.
-
-    Latency is captured via MetricsCollector spans created inside prepare/run/post_proc,
-    using the collector the model was constructed with.
-    AP50 accuracy is computed against ground-truth boxes and stored in the result dict.
+    """Run one frame through the detection pipeline and compute its AP50.
 
     Args:
-        model: Loaded detection model.
+        pipeline: ``Pipeline([ImageDetectionStage(model)])`` for the loaded model.
         frame: BGR uint8 image.
         gt_boxes_raw: Ground-truth boxes ``[[x1,y1,x2,y2], …]`` for this image.
         model_name: Model name for the output row.
@@ -411,10 +370,11 @@ def _process_image(
         A result dict with ``image_idx`` and ``ap50``, or ``None`` if inference failed.
     """
     try:
-        prepared = model.prepare(frame)  # type: ignore[attr-defined]
-        with _silence_native_output():
-            raw = model.run(prepared)  # type: ignore[attr-defined]
-        detections = model.post_proc(raw)  # type: ignore[attr-defined]
+        source = iter([RawFrameMessage(frame=frame, timestamp=time.time())])
+        with silence_native_output():
+            (out,) = list(pipeline.run(source))
+        assert isinstance(out, DetectionMessage)  # noqa: S101  # ImageDetectionStage guarantees this
+        detections = out.detections
 
         pred_boxes = np.array(
             [[d.bbox.x1, d.bbox.y1, d.bbox.x2, d.bbox.y2] for d in detections],
@@ -542,41 +502,6 @@ def _load_coco_images(
     return images, gt_boxes_list
 
 
-def _write_json(all_rows: list[dict], output_path: Path) -> None:
-    """Write benchmark results to a JSON file.
-
-    Args:
-        all_rows: All cycle result rows from the benchmark.
-        output_path: Destination JSON path.
-    """
-    output = {
-        "script": "benchmark_detectors",
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        "runs": all_rows,
-    }
-    output_path.write_text(json.dumps(output, indent=2))
-
-
-def _configure_qairt() -> None:
-    """Set up the QAIRT SDK environment (QAIRT_SDK_ROOT etc.) for DLC loading.
-
-    Mirrors the ``m2a`` CLI root callback: without this, ``load_model_dlc``
-    raises "QAIRT SDK is not available" even when the SDK is installed, because
-    the environment variables are never exported into this process.
-    """
-    path_manager = PathManager()
-    config = load_config(path_manager.app_config_file)
-    if config.qairt_sdk_path is None:
-        console.print(
-            "  [yellow]QAIRT SDK path not configured — DLC backends may be unavailable.[/yellow]"
-        )
-        return
-    try:
-        QairtSDKManager.from_app_config(config, path_manager).configure_env()
-    except RuntimeError as exc:
-        console.print(f"  [yellow]QAIRT env setup failed: {exc}[/yellow]")
-
-
 def main() -> None:  # noqa: PLR0915
     """Entry point for the benchmark script."""
     global _IMG_PROGRESS, _IMG_TASK
@@ -601,10 +526,7 @@ def main() -> None:  # noqa: PLR0915
         console.print("[red]No model/backend selected by filters. Exiting.[/red]")
         sys.exit(1)
 
-    path_manager = PathManager()
-    config = load_config(path_manager.app_config_file)
-    _configure_qairt()
-
+    ctx = build_context(qairt=True)
     images, gt_boxes_list = _load_coco_images(n_images)
 
     if not images:
@@ -613,7 +535,6 @@ def main() -> None:  # noqa: PLR0915
 
     console.print(f"  Loaded {len(images)} images.\n")
 
-    path_manager = PathManager()
     all_rows: list[dict] = []
 
     with Progress(
@@ -647,7 +568,7 @@ def main() -> None:  # noqa: PLR0915
                 )
                 try:
                     rows = _run_benchmark(
-                        path_manager=path_manager,
+                        ctx=ctx,
                         model_id=model_id,
                         variant=variant,
                         model_name=model_name,
@@ -655,7 +576,6 @@ def main() -> None:  # noqa: PLR0915
                         unit=unit,
                         images=images,
                         gt_by_image=gt_boxes_list,
-                        config=config,
                     )
                     all_rows.extend(rows)
                 except Exception as exc:  # noqa: BLE001
@@ -663,7 +583,7 @@ def main() -> None:  # noqa: PLR0915
                 progress.advance(task)
 
     if all_rows:
-        _write_json(all_rows, output_path)
+        write_results(all_rows, output_path, script="benchmark_detectors", entries_key="runs")
         console.print(f"\n[green]Results written to {output_path}[/green]")
     else:
         console.print("[yellow]No results produced.[/yellow]")
