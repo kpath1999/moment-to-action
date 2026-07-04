@@ -52,6 +52,7 @@ from rich.table import Table
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+from moment_to_action.benchmarking import ap50
 from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.metrics import MetricsCollector
@@ -85,7 +86,6 @@ _BACKENDS: list[tuple[str, ComputeUnit]] = [
 ]
 
 _N_CYCLES = 3
-_IOU_THRESHOLD_AP50 = 0.5
 
 # Sub progress bar tracking per-image progress within the current run.  Set in
 # main() so the nested _run_cycle can advance it without threading it through
@@ -230,83 +230,6 @@ def _download_images(image_infos: list[dict], cache_dir: Path) -> list[Path]:
                 progress.advance(task)
 
     return paths
-
-
-# ---------------------------------------------------------------------------
-# AP50 computation (pure numpy)
-# ---------------------------------------------------------------------------
-
-
-def _iou(box_a: np.ndarray, boxes_b: np.ndarray) -> np.ndarray:
-    """Compute IoU between one box and an array of boxes.
-
-    Args:
-        box_a: Shape ``(4,)`` array ``[x1, y1, x2, y2]``.
-        boxes_b: Shape ``(N, 4)`` array.
-
-    Returns:
-        IoU values, shape ``(N,)``.
-    """
-    x1 = np.maximum(box_a[0], boxes_b[:, 0])
-    y1 = np.maximum(box_a[1], boxes_b[:, 1])
-    x2 = np.minimum(box_a[2], boxes_b[:, 2])
-    y2 = np.minimum(box_a[3], boxes_b[:, 3])
-    inter = np.maximum(0.0, x2 - x1) * np.maximum(0.0, y2 - y1)
-    area_a = (box_a[2] - box_a[0]) * (box_a[3] - box_a[1])
-    area_b = (boxes_b[:, 2] - boxes_b[:, 0]) * (boxes_b[:, 3] - boxes_b[:, 1])
-    union = area_a + area_b - inter
-    return inter / (union + 1e-6)
-
-
-def _ap50(
-    pred_boxes: np.ndarray,
-    pred_scores: np.ndarray,
-    gt_boxes: np.ndarray,
-) -> float:
-    """Compute AP50 for a single image (IoU threshold 0.5).
-
-    Args:
-        pred_boxes: ``(N, 4)`` predicted boxes ``[x1, y1, x2, y2]``.
-        pred_scores: ``(N,)`` confidence scores.
-        gt_boxes: ``(M, 4)`` ground-truth boxes ``[x1, y1, x2, y2]``.
-
-    Returns:
-        Average precision at IoU≥0.5.
-    """
-    if len(gt_boxes) == 0:
-        return 1.0 if len(pred_boxes) == 0 else 0.0
-    if len(pred_boxes) == 0:
-        return 0.0
-
-    order = np.argsort(pred_scores)[::-1]
-    pred_boxes = pred_boxes[order]
-
-    matched = np.zeros(len(gt_boxes), dtype=bool)
-    tp = np.zeros(len(pred_boxes))
-    fp = np.zeros(len(pred_boxes))
-
-    for i, pb in enumerate(pred_boxes):
-        ious = _iou(pb, gt_boxes)
-        best = int(np.argmax(ious))
-        if ious[best] >= _IOU_THRESHOLD_AP50 and not matched[best]:
-            tp[i] = 1
-            matched[best] = True
-        else:
-            fp[i] = 1
-
-    cum_tp = np.cumsum(tp)
-    cum_fp = np.cumsum(fp)
-    n_gt = float(len(gt_boxes))
-    precision = cum_tp / (cum_tp + cum_fp + 1e-6)
-    recall = cum_tp / n_gt
-
-    # Interpolated AP
-    ap = 0.0
-    prev_r = 0.0
-    for p, r in zip(precision, recall, strict=True):
-        ap += p * (r - prev_r)
-        prev_r = r
-    return float(ap)
 
 
 # ---------------------------------------------------------------------------
@@ -499,7 +422,7 @@ def _process_image(
         ).reshape(-1, 4)
         pred_scores = np.array([d.confidence for d in detections], dtype=np.float32)
         gt_boxes = np.array(gt_boxes_raw, dtype=np.float32).reshape(-1, 4)
-        ap = _ap50(pred_boxes, pred_scores, gt_boxes)
+        ap = ap50(pred_boxes, pred_scores, gt_boxes)
     except Exception as exc:  # noqa: BLE001
         console.print(
             f"  [yellow]Image {img_idx} failed {model_name}/{backend_name} "

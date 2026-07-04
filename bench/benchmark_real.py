@@ -52,7 +52,6 @@ import gzip
 import json
 import logging
 import os
-import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -76,19 +75,23 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from moment_to_action.benchmarking import detect_yn, extract_load_unload_ms, recall
 from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.hardware._loaded_models._llama import LlamaModel
 from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.paths import PathManager
+from moment_to_action.prompting import BENCHMARK_SYSTEM as _BENCHMARK_SYSTEM
+from moment_to_action.prompting import CHATML, PHI3
+from moment_to_action.prompting import build_detection_prompt as _build_detection_prompt
+from moment_to_action.prompting import build_payload as _build_payload
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
-    from moment_to_action.metrics._types import MetricsReport
-    from moment_to_action.models.image.detection._types import BoundingBox, Detection
+    from moment_to_action.models.image.detection._types import Detection
 
 console = Console()
 
@@ -131,14 +134,6 @@ def _silence_native_output() -> Iterator[None]:
 # Model lists — comment out any entry to skip it
 # ---------------------------------------------------------------------------
 
-# Prompt templates for LLM chat formats.
-_CHATML = (
-    "<|im_start|>system\n{system}<|im_end|>\n"
-    "<|im_start|>user\n{user}<|im_end|>\n"
-    "<|im_start|>assistant\n"
-)
-_PHI3 = "<|system|>\n{system}<|end|>\n<|user|>\n{user}<|end|>\n<|assistant|>\n"
-
 # (ModelID, display name)
 _VLM_CONFIGS: list[tuple[ModelID, str]] = [
     (ModelID.MOONDREAM2, "moondream2"),
@@ -154,13 +149,13 @@ _VLM_CONFIGS: list[tuple[ModelID, str]] = [
 
 # (ModelID, display name, prompt template | None)
 _LLM_CONFIGS: list[tuple[ModelID, str, str | None]] = [
-    (ModelID.QWEN3_0_6B, "qwen3_0_6b", _CHATML),
-    (ModelID.QWEN3_1_7B, "qwen3_1_7b", _CHATML),
-    (ModelID.GEMMA3_270M_IT, "gemma3_270m", _CHATML),
-    (ModelID.GEMMA3_1B_IT, "gemma3_1b", _CHATML),
-    (ModelID.QWEN2_1_5B_INSTRUCT, "qwen2_1_5b", _CHATML),
-    (ModelID.QWEN3_4B, "qwen3_4b", _CHATML),
-    (ModelID.PHI35_MINI_INSTRUCT, "phi35_mini", _PHI3),
+    (ModelID.QWEN3_0_6B, "qwen3_0_6b", CHATML),
+    (ModelID.QWEN3_1_7B, "qwen3_1_7b", CHATML),
+    (ModelID.GEMMA3_270M_IT, "gemma3_270m", CHATML),
+    (ModelID.GEMMA3_1B_IT, "gemma3_1b", CHATML),
+    (ModelID.QWEN2_1_5B_INSTRUCT, "qwen2_1_5b", CHATML),
+    (ModelID.QWEN3_4B, "qwen3_4b", CHATML),
+    (ModelID.PHI35_MINI_INSTRUCT, "phi35_mini", PHI3),
 ]
 
 # Detectors used for the LLM pipeline — comment out any to skip.
@@ -173,20 +168,6 @@ _LLM_DETECTORS: list[tuple[ModelID, str, ComputeUnit, str]] = [
 _N_CYCLES = 3
 _MAX_TOKENS = 128
 
-_BENCHMARK_SYSTEM = (
-    "You are a scene analysis AI. Answer the user's question directly and concisely. "
-    "Lead with your direct answer, then give one sentence of reasoning."
-)
-
-# Standard assumed frame dimensions for spatial context derivation.
-_FRAME_W = 640
-_FRAME_H = 480
-
-# Thresholds for spatial context derivation (same as benchmark_llms.py).
-_DEPTH_FG_THRESH = 0.25
-_DEPTH_MG_THRESH = 0.08
-_OVERLAP_THRESH = 0.05
-_MIN_PAIR = 2
 _MAX_FRAME_HEIGHT = 480
 
 # All COCO animal classes (used for person-animal proximity context in prompts).
@@ -374,87 +355,6 @@ def _bgr_to_b64(frame: np.ndarray) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Spatial helpers (ported from benchmark_llms.py)
-# ---------------------------------------------------------------------------
-
-
-def _area(b: BoundingBox) -> float:
-    """Compute bounding box area in pixels.
-
-    Args:
-        b: Bounding box.
-
-    Returns:
-        Area in pixels.
-    """
-    return (b.x2 - b.x1) * (b.y2 - b.y1)
-
-
-def _iou(a: BoundingBox, b: BoundingBox) -> float:
-    """Compute intersection-over-union between two bounding boxes.
-
-    Args:
-        a: First bounding box.
-        b: Second bounding box.
-
-    Returns:
-        IoU in [0, 1].
-    """
-    ix1, iy1 = max(a.x1, b.x1), max(a.y1, b.y1)
-    ix2, iy2 = min(a.x2, b.x2), min(a.y2, b.y2)
-    if ix2 <= ix1 or iy2 <= iy1:
-        return 0.0
-    inter = (ix2 - ix1) * (iy2 - iy1)
-    union = _area(a) + _area(b) - inter
-    return inter / union if union > 0 else 0.0
-
-
-def _frame_zone(b: BoundingBox) -> str:
-    """Return a natural-language frame zone for a bounding box centroid.
-
-    Args:
-        b: Bounding box.
-
-    Returns:
-        String like "bottom-left", "mid-center", etc.
-    """
-    cx = (b.x1 + b.x2) / 2
-    cy = (b.y1 + b.y2) / 2
-    h = "left" if cx < _FRAME_W / 3 else ("right" if cx > 2 * _FRAME_W / 3 else "center")
-    v = "top" if cy < _FRAME_H / 3 else ("bottom" if cy > 2 * _FRAME_H / 3 else "mid")
-    return f"{v}-{h}"
-
-
-def _depth(b: BoundingBox) -> str:
-    """Return foreground/midground/background based on bbox area fraction.
-
-    Args:
-        b: Bounding box.
-
-    Returns:
-        "foreground", "midground", or "background".
-    """
-    frac = _area(b) / (_FRAME_W * _FRAME_H)
-    if frac > _DEPTH_FG_THRESH:
-        return "foreground"
-    if frac > _DEPTH_MG_THRESH:
-        return "midground"
-    return "background"
-
-
-def _is_horizontal(b: BoundingBox) -> bool:
-    """Return True when the bounding box is wider than it is tall.
-
-    Args:
-        b: Bounding box.
-
-    Returns:
-        True if width > height.
-    """
-    return (b.x2 - b.x1) > (b.y2 - b.y1)
-
-
-# ---------------------------------------------------------------------------
 # Detection aggregation and prompt building
 # ---------------------------------------------------------------------------
 
@@ -482,8 +382,9 @@ def _aggregate_detections(per_frame: list[list[Detection]]) -> list[Detection]:
 def _build_llm_prompt(clip: Clip, detections: list[Detection]) -> str:
     """Build a structured text prompt from aggregated detections.
 
-    Spatial features (overlap, orientation, foreground/background) are derived
-    from bounding box coordinates.
+    Thin wrapper over :func:`~moment_to_action.prompting.build_detection_prompt`
+    using the full COCO animal label set (rather than the smaller synthetic-scene
+    set) for person-animal overlap context.
 
     Args:
         clip: Clip being evaluated (provides the task question).
@@ -492,131 +393,7 @@ def _build_llm_prompt(clip: Clip, detections: list[Detection]) -> str:
     Returns:
         Formatted prompt string ending with the binary question.
     """
-    lines: list[str] = [f"Task: {clip.question}", ""]
-
-    det_lines: list[str] = []
-    for d in detections:
-        zone = _frame_zone(d.bbox)
-        dep = _depth(d.bbox)
-        parts = [f"{d.label} (conf {d.confidence:.2f}, {zone}, {dep}"]
-        if d.label == "person" and _is_horizontal(d.bbox):
-            parts.append(", horizontal orientation")
-        parts.append(")")
-        det_lines.append("".join(parts))
-    lines.append("Detections:\n" + "\n".join(f"  - {dl}" for dl in det_lines))
-
-    persons = [d for d in detections if d.label == "person"]
-    animals = [d for d in detections if d.label in _COCO_ANIMALS]
-
-    if len(persons) >= _MIN_PAIR:
-        max_person_iou = max(
-            _iou(persons[i].bbox, persons[j].bbox)
-            for i in range(len(persons))
-            for j in range(i + 1, len(persons))
-        )
-        overlap_desc = "overlapping" if max_person_iou > _OVERLAP_THRESH else "non-overlapping"
-        lines.append(f"Person bounding boxes: {overlap_desc} (max IoU={max_person_iou:.2f})")
-
-    if persons and animals:
-        max_pa_iou = max(_iou(p.bbox, a.bbox) for p in persons for a in animals)
-        pa_desc = "overlapping with person" if max_pa_iou > _OVERLAP_THRESH else "not overlapping"
-        lines.append(f"Animal bounding box: {pa_desc} (max IoU with person={max_pa_iou:.2f})")
-
-    lines.append("")
-    lines.append(clip.question)
-    return "\n".join(lines)
-
-
-def _build_payload(
-    prompt: str,
-    max_tokens: int,
-    system_prompt: str,
-    template: str | None,
-) -> dict:
-    """Build a llama.cpp /completion request dict for text-only inference.
-
-    Args:
-        prompt: User prompt text.
-        max_tokens: Maximum tokens to generate.
-        system_prompt: System message text.
-        template: Optional format string with ``{system}`` / ``{user}`` placeholders.
-
-    Returns:
-        ``/completion`` request body dict.
-    """
-    if template is not None:
-        full_prompt = template.format(system=system_prompt, user=prompt)
-    else:
-        full_prompt = f"{system_prompt}\n{prompt}" if system_prompt else prompt
-    return {"prompt": full_prompt, "n_predict": max_tokens}
-
-
-# ---------------------------------------------------------------------------
-# Metrics helpers
-# ---------------------------------------------------------------------------
-
-
-def _recall(response: str, keywords: list[str]) -> float:
-    """Compute keyword recall: fraction of expected keywords found in the response.
-
-    Args:
-        response: Text generated by the model.
-        keywords: Words expected from a correct answer.
-
-    Returns:
-        Fraction in [0, 1] of keywords found (case-insensitive).
-    """
-    if not keywords:
-        return 1.0
-    resp_lower = response.lower()
-    found = sum(1 for kw in keywords if kw.lower() in resp_lower)
-    return found / len(keywords)
-
-
-def _detect_yn(text: str) -> str | None:
-    """Return "yes" or "no" if the response contains a yes/no decision, else ``None``.
-
-    Args:
-        text: Accumulated model response so far.
-
-    Returns:
-        "yes", "no", or ``None`` if not yet decidable.
-    """
-    cleaned = text.strip().lower()
-    words = cleaned.split()
-    if words and words[0].rstrip(".,!?;:") in {"yes", "no"}:
-        return words[0].rstrip(".,!?;:")
-    m = re.search(r"\banswer\s*:\s*(yes|no)\b", cleaned)
-    if m:
-        return m.group(1)
-    return None
-
-
-def _extract_load_unload_ms(report: MetricsReport, name_contains: str = "") -> tuple[float, float]:
-    """Extract load and unload latencies from a completed MetricsReport.
-
-    When the trace contains spans from multiple models (e.g. detector + LLM),
-    pass *name_contains* to restrict matching to spans whose name includes that
-    substring (e.g. ``"LlamaGGUFModel"``).
-
-    Args:
-        report: A completed MetricsReport.
-        name_contains: Optional substring filter on span name.
-
-    Returns:
-        Tuple of (load_ms, unload_ms); 0.0 for any span not found.
-    """
-    load_ms = 0.0
-    unload_ms = 0.0
-    for trace in report.traces:
-        for span in trace.spans:
-            if name_contains and name_contains not in (span.name or ""):
-                continue
-            if span.type_ == SpanType.MODEL_LOAD:
-                load_ms = span.latency_ms
-            elif span.type_ == SpanType.MODEL_UNLOAD:
-                unload_ms = span.latency_ms
-    return load_ms, unload_ms
+    return _build_detection_prompt(detections, clip.question, animal_labels=_COCO_ANIMALS)
 
 
 # ---------------------------------------------------------------------------
@@ -673,7 +450,7 @@ def _run_vlm_clip(
             accumulated += token
             if ttft_ms is None:
                 ttft_ms = (now - t0) / 1e6
-            if ttfyd_ms is None and _detect_yn(accumulated) is not None:
+            if ttfyd_ms is None and detect_yn(accumulated) is not None:
                 ttfyd_ms = (now - t0) / 1e6
 
         t_end = time.perf_counter_ns()
@@ -691,7 +468,7 @@ def _run_vlm_clip(
         metrics.set_meta("mean_itl_ms", round(mean_itl, 3))
         metrics.set_meta("std_itl_ms", round(std_itl, 3))
 
-    yn = _detect_yn(accumulated)
+    yn = detect_yn(accumulated)
     yn_correct: bool | None = None
     if yn is not None:
         yn_correct = yn == clip.expected.lower()
@@ -712,7 +489,7 @@ def _run_vlm_clip(
         "response": accumulated,
         "response_chars": len(accumulated),
         "yn_correct": yn_correct,
-        "recall": round(_recall(accumulated, clip.recall_keywords), 4),
+        "recall": round(recall(accumulated, clip.recall_keywords), 4),
         "infer_ms": round(infer_ms, 3),
         "ttft_ms": round(ttft_ms, 3) if ttft_ms is not None else None,
         "ttfyd_ms": round(ttfyd_ms, 3) if ttfyd_ms is not None else None,
@@ -783,7 +560,7 @@ def _run_llm_clip(  # noqa: PLR0913
             accumulated += token
             if ttft_ms is None:
                 ttft_ms = (now - t0) / 1e6
-            if ttfyd_ms is None and _detect_yn(accumulated) is not None:
+            if ttfyd_ms is None and detect_yn(accumulated) is not None:
                 ttfyd_ms = (now - t0) / 1e6
 
         t_end = time.perf_counter_ns()
@@ -801,7 +578,7 @@ def _run_llm_clip(  # noqa: PLR0913
         metrics.set_meta("mean_itl_ms", round(mean_itl, 3))
         metrics.set_meta("std_itl_ms", round(std_itl, 3))
 
-    yn = _detect_yn(accumulated)
+    yn = detect_yn(accumulated)
     yn_correct: bool | None = None
     if yn is not None:
         yn_correct = yn == clip.expected.lower()
@@ -823,7 +600,7 @@ def _run_llm_clip(  # noqa: PLR0913
         "response": accumulated,
         "response_chars": len(accumulated),
         "yn_correct": yn_correct,
-        "recall": round(_recall(accumulated, clip.recall_keywords), 4),
+        "recall": round(recall(accumulated, clip.recall_keywords), 4),
         "infer_ms": round(infer_ms, 3),
         "ttft_ms": round(ttft_ms, 3) if ttft_ms is not None else None,
         "ttfyd_ms": round(ttfyd_ms, 3) if ttfyd_ms is not None else None,
@@ -1324,7 +1101,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
             report = metrics.report()
-            load_ms, unload_ms = _extract_load_unload_ms(report)
+            load_ms, unload_ms = extract_load_unload_ms(report)
             for row in rows:
                 row["kind"] = "vlm"
                 row["load_ms"] = round(load_ms, 3)
@@ -1438,7 +1215,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                             console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
                     report = metrics.report()
-                    load_ms, unload_ms = _extract_load_unload_ms(report)
+                    load_ms, unload_ms = extract_load_unload_ms(report)
                     for row in rows:
                         row["kind"] = "llm"
                         row["detector"] = detector_display

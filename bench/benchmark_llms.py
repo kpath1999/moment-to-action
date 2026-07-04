@@ -61,6 +61,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from moment_to_action.benchmarking import detect_yn, extract_load_unload_ms, recall
 from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit, Platform
 from moment_to_action.hardware._loaded_models._llama import LlamaModel
@@ -68,133 +69,30 @@ from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.models import MODEL_REGISTRY, ModelID, ModelManager
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.paths import PathManager
+from moment_to_action.prompting import BENCHMARK_SYSTEM as _BENCHMARK_SYSTEM
+from moment_to_action.prompting import CHATML, PHI3
+from moment_to_action.prompting import build_detection_prompt as _build_detection_prompt
+from moment_to_action.prompting import build_payload as _build_payload
 
 if TYPE_CHECKING:
     from moment_to_action.hardware._metrics import LlamaCppInferenceMetrics
-    from moment_to_action.metrics._types import MetricsReport
 
 console = Console()
 
-# Prompt templates for models that require specific chat formats.
-# Applied in _build_payload; None means raw system\nuser concatenation.
-# {system} and {user} are replaced with the system prompt and user prompt respectively.
-_CHATML = (
-    "<|im_start|>system\n{system}<|im_end|>\n"
-    "<|im_start|>user\n{user}<|im_end|>\n"
-    "<|im_start|>assistant\n"
-)
-_PHI3 = "<|system|>\n{system}<|end|>\n<|user|>\n{user}<|end|>\n<|assistant|>\n"
-
 # (ModelID, display name, prompt template | None)
 _MODEL_CONFIGS: list[tuple[ModelID, str, str | None]] = [
-    (ModelID.QWEN2_1_5B_INSTRUCT, "qwen2_1_5b", _CHATML),
-    (ModelID.QWEN2_7B_INSTRUCT, "qwen2_7b", _CHATML),
-    (ModelID.QWEN3_4B, "qwen3_4b", _CHATML),
-    (ModelID.PHI35_MINI_INSTRUCT, "phi35_mini", _PHI3),
-    (ModelID.MOONDREAM2, "moondream2", _CHATML),
+    (ModelID.QWEN2_1_5B_INSTRUCT, "qwen2_1_5b", CHATML),
+    (ModelID.QWEN2_7B_INSTRUCT, "qwen2_7b", CHATML),
+    (ModelID.QWEN3_4B, "qwen3_4b", CHATML),
+    (ModelID.PHI35_MINI_INSTRUCT, "phi35_mini", PHI3),
+    (ModelID.MOONDREAM2, "moondream2", CHATML),
 ]
 
 _N_CYCLES = 3
 _MAX_TOKENS = 128
 
-_BENCHMARK_SYSTEM = (
-    "You are a scene analysis AI. Answer the user's question directly and concisely. "
-    "Lead with your direct answer, then give one sentence of reasoning."
-)
-
 # Required PPE items — used to infer what is absent in PPE scenes.
 _REQUIRED_PPE: frozenset[str] = frozenset({"hard hat", "safety vest", "glove", "boot"})
-
-# Standard frame dimensions assumed for bbox context derivation.
-_FRAME_W = 640
-_FRAME_H = 480
-
-# Thresholds for spatial context derivation.
-_DEPTH_FG_THRESH = 0.25  # bbox area fraction → foreground
-_DEPTH_MG_THRESH = 0.08  # bbox area fraction → midground (else background)
-_OVERLAP_THRESH = 0.05  # IoU above this → "overlapping"
-_MIN_PAIR = 2  # minimum persons to compute pairwise IoU
-
-
-# ---------------------------------------------------------------------------
-# Spatial helpers — derive context from raw YOLO bbox output
-# ---------------------------------------------------------------------------
-
-
-def _area(b: BoundingBox) -> float:
-    """Compute bounding box area in pixels.
-
-    Args:
-        b: Bounding box.
-
-    Returns:
-        Area in pixels.
-    """
-    return (b.x2 - b.x1) * (b.y2 - b.y1)
-
-
-def _iou(a: BoundingBox, b: BoundingBox) -> float:
-    """Compute intersection-over-union between two bounding boxes.
-
-    Args:
-        a: First bounding box.
-        b: Second bounding box.
-
-    Returns:
-        IoU in [0, 1].
-    """
-    ix1, iy1 = max(a.x1, b.x1), max(a.y1, b.y1)
-    ix2, iy2 = min(a.x2, b.x2), min(a.y2, b.y2)
-    if ix2 <= ix1 or iy2 <= iy1:
-        return 0.0
-    inter = (ix2 - ix1) * (iy2 - iy1)
-    union = _area(a) + _area(b) - inter
-    return inter / union if union > 0 else 0.0
-
-
-def _frame_zone(b: BoundingBox) -> str:
-    """Return a natural-language frame zone for a bounding box centroid.
-
-    Args:
-        b: Bounding box.
-
-    Returns:
-        String like "bottom-left", "mid-center", etc.
-    """
-    cx = (b.x1 + b.x2) / 2
-    cy = (b.y1 + b.y2) / 2
-    h = "left" if cx < _FRAME_W / 3 else ("right" if cx > 2 * _FRAME_W / 3 else "center")
-    v = "top" if cy < _FRAME_H / 3 else ("bottom" if cy > 2 * _FRAME_H / 3 else "mid")
-    return f"{v}-{h}"
-
-
-def _depth(b: BoundingBox) -> str:
-    """Return foreground/midground/background based on bbox area fraction.
-
-    Args:
-        b: Bounding box.
-
-    Returns:
-        "foreground", "midground", or "background".
-    """
-    frac = _area(b) / (_FRAME_W * _FRAME_H)
-    if frac > _DEPTH_FG_THRESH:
-        return "foreground"
-    if frac > _DEPTH_MG_THRESH:
-        return "midground"
-    return "background"
-
-
-def _is_horizontal(b: BoundingBox) -> bool:
-    """Return True when the bounding box is wider than it is tall.
-
-    Args:
-        b: Bounding box.
-
-    Returns:
-        True if width > height.
-    """
-    return (b.x2 - b.x1) > (b.y2 - b.y1)
 
 
 # ---------------------------------------------------------------------------
@@ -237,10 +135,8 @@ class Scene:
 def _build_prompt(scene: Scene) -> str:
     """Build a model prompt from YOLO detections and optional audio.
 
-    Spatial features (overlap, orientation, foreground/background) are derived
-    from bounding box coordinates rather than assumed from free text.  No
-    language appears in the prompt that could not be computed from real YOLO
-    output.
+    Thin wrapper over :func:`~moment_to_action.prompting.build_detection_prompt`
+    that inserts the scene's audio transcript (if any) as an extra context line.
 
     Args:
         scene: Scene definition.
@@ -248,45 +144,10 @@ def _build_prompt(scene: Scene) -> str:
     Returns:
         Formatted prompt string ending with the binary question.
     """
-    lines: list[str] = [f"Task: {scene.task}", ""]
-
-    # --- per-detection lines ---
-    det_lines: list[str] = []
-    for d in scene.detections:
-        zone = _frame_zone(d.bbox)
-        depth = _depth(d.bbox)
-        parts = [f"{d.label} (conf {d.confidence:.2f}, {zone}, {depth}"]
-        if d.label == "person" and _is_horizontal(d.bbox):
-            parts.append(", horizontal orientation")
-        parts.append(")")
-        det_lines.append("".join(parts))
-    lines.append("Detections:\n" + "\n".join(f"  - {dl}" for dl in det_lines))
-
-    # --- derived pairwise context ---
-    persons = [d for d in scene.detections if d.label == "person"]
-    animals = [d for d in scene.detections if d.label in ("dog", "cat", "bear", "wolf")]
-
-    if len(persons) >= _MIN_PAIR:
-        max_person_iou = max(
-            _iou(persons[i].bbox, persons[j].bbox)
-            for i in range(len(persons))
-            for j in range(i + 1, len(persons))
-        )
-        overlap_desc = "overlapping" if max_person_iou > _OVERLAP_THRESH else "non-overlapping"
-        lines.append(f"Person bounding boxes: {overlap_desc} (max IoU={max_person_iou:.2f})")
-
-    if persons and animals:
-        max_pa_iou = max(_iou(p.bbox, a.bbox) for p in persons for a in animals)
-        pa_desc = "overlapping with person" if max_pa_iou > _OVERLAP_THRESH else "not overlapping"
-        lines.append(f"Animal bounding box: {pa_desc} (max IoU with person={max_pa_iou:.2f})")
-
-    # --- audio ---
-    if scene.audio_transcript is not None:
-        lines.append(f"Audio: {scene.audio_transcript}")
-
-    lines.append("")
-    lines.append(scene.task)
-    return "\n".join(lines)
+    extra_lines = (
+        [f"Audio: {scene.audio_transcript}"] if scene.audio_transcript is not None else None
+    )
+    return _build_detection_prompt(scene.detections, scene.task, extra_lines=extra_lines)
 
 
 # ---------------------------------------------------------------------------
@@ -501,104 +362,8 @@ _SCENES: list[Scene] = [
 
 
 # ---------------------------------------------------------------------------
-# Metrics helpers
-# ---------------------------------------------------------------------------
-
-
-def _recall(response: str, keywords: list[str]) -> float:
-    """Compute keyword recall: fraction of expected classification keywords found.
-
-    Args:
-        response: Text generated by the model.
-        keywords: Words expected from a correct answer (not from the input labels).
-
-    Returns:
-        Fraction in [0, 1] of keywords found (case-insensitive).
-    """
-    if not keywords:
-        return 1.0
-    resp_lower = response.lower()
-    found = sum(1 for kw in keywords if kw.lower() in resp_lower)
-    return found / len(keywords)
-
-
-def _detect_yn(text: str) -> str | None:
-    """Return "yes" or "no" if the text contains a yes/no answer, else ``None``.
-
-    Matches several formats:
-    - Leading word: ``"YES, because..."`` / ``"No."``
-    - Labelled: ``"Answer: YES"`` / ``"Answer: No"``
-
-    Args:
-        text: Accumulated model response so far.
-
-    Returns:
-        "yes", "no", or ``None`` if not yet decidable.
-    """
-    import re  # noqa: PLC0415
-
-    cleaned = text.strip().lower()
-    # Leading yes/no (with optional punctuation)
-    words = cleaned.split()
-    if words and words[0].rstrip(".,!?;:") in {"yes", "no"}:
-        return words[0].rstrip(".,!?;:")
-    # "Answer: yes/no" pattern
-    m = re.search(r"\banswer\s*:\s*(yes|no)\b", cleaned)
-    if m:
-        return m.group(1)
-    return None
-
-
-# ---------------------------------------------------------------------------
 # Streaming benchmark
 # ---------------------------------------------------------------------------
-
-
-def _build_payload(prompt: str, max_tokens: int, system_prompt: str, template: str | None) -> dict:
-    """Build a llama.cpp ``/completion`` request dict for text-only inference.
-
-    Works for both LlamaGGUFModel and LlamaVLModel (text-only mode), bypassing
-    ``model._prepare()`` so Moondream can be used without passing image tuples.
-
-    If *template* is provided it must contain ``{system}`` and ``{user}`` placeholders
-    which are substituted with *system_prompt* and *prompt* respectively.  Use this for
-    models that require specific chat tokens (ChatML, Phi-3, …).  When *template* is
-    ``None`` the system prompt is prepended raw (system + newline + prompt).
-
-    Args:
-        prompt: User prompt text.
-        max_tokens: Maximum tokens to generate.
-        system_prompt: System message text.
-        template: Optional format string with ``{system}`` / ``{user}`` placeholders.
-
-    Returns:
-        ``/completion`` request body dict.
-    """
-    if template is not None:
-        full_prompt = template.format(system=system_prompt, user=prompt)
-    else:
-        full_prompt = f"{system_prompt}\n{prompt}" if system_prompt else prompt
-    return {"prompt": full_prompt, "n_predict": max_tokens}
-
-
-def _extract_load_unload_ms(report: MetricsReport) -> tuple[float, float]:
-    """Extract load and unload latencies from a completed metrics report.
-
-    Args:
-        report: A completed MetricsReport whose trace spans are accessible.
-
-    Returns:
-        Tuple of (load_ms, unload_ms).  Returns 0.0 for any span not found.
-    """
-    load_ms = 0.0
-    unload_ms = 0.0
-    for trace in report.traces:
-        for span in trace.spans:
-            if span.type_ == SpanType.MODEL_LOAD:
-                load_ms = span.latency_ms
-            elif span.type_ == SpanType.MODEL_UNLOAD:
-                unload_ms = span.latency_ms
-    return load_ms, unload_ms
 
 
 def _run_scene(
@@ -655,7 +420,7 @@ def _run_scene(
             accumulated += token
             if ttft_ms is None:
                 ttft_ms = (now - t0) / 1e6
-            if ttfyd_ms is None and _detect_yn(accumulated) is not None:
+            if ttfyd_ms is None and detect_yn(accumulated) is not None:
                 ttfyd_ms = (now - t0) / 1e6
 
         t_end = time.perf_counter_ns()
@@ -673,7 +438,7 @@ def _run_scene(
         metrics.set_meta("mean_itl_ms", round(mean_itl, 3))
         metrics.set_meta("std_itl_ms", round(std_itl, 3))
 
-    yn = _detect_yn(accumulated)
+    yn = detect_yn(accumulated)
     yn_correct: bool | None = None
     if yn is not None:
         yn_correct = yn == scene.expected_label.lower()
@@ -687,7 +452,7 @@ def _run_scene(
         "response": accumulated,
         "response_chars": len(accumulated),
         "yn_correct": yn_correct,
-        "recall": round(_recall(accumulated, scene.recall_keywords), 4),
+        "recall": round(recall(accumulated, scene.recall_keywords), 4),
         "infer_ms": round(infer_ms, 3),
         "ttft_ms": round(ttft_ms, 3) if ttft_ms is not None else None,
         "ttfyd_ms": round(ttfyd_ms, 3) if ttfyd_ms is not None else None,
@@ -1004,7 +769,7 @@ def main() -> None:  # noqa: C901, PLR0915
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
             report = metrics.report()
-            load_ms, unload_ms = _extract_load_unload_ms(report)
+            load_ms, unload_ms = extract_load_unload_ms(report)
             for row in rows:
                 row["load_ms"] = round(load_ms, 3)
                 row["unload_ms"] = round(unload_ms, 3)
