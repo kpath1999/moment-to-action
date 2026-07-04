@@ -8,7 +8,11 @@ import numpy as np
 import pytest
 
 from moment_to_action.messages import DetectionMessage
-from moment_to_action.messages.llm import ReasoningMessage
+from moment_to_action.messages.llm import (
+    DecisionMessage,
+    DecisionReasoningMessage,
+    GenerationMessage,
+)
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import FrameTensorMessage, VideoClipMessage
 from moment_to_action.messages.vlm import ClassificationMessage
@@ -182,46 +186,101 @@ class TestDetectionMessage:
 
 
 @pytest.mark.unit
-class TestReasoningMessage:
-    """Tests for ReasoningMessage."""
+class TestGenerationMessage:
+    """Tests for GenerationMessage."""
 
-    def test_reasoning_construction(self) -> None:
-        """Test ReasoningMessage construction."""
+    def test_generation_construction(self) -> None:
+        """Test GenerationMessage construction."""
         timestamp = time.time()
-        response = "The image shows a dog sitting on a bench."
+        text = "The image shows a dog sitting on a bench."
         prompt = "Describe what you see in this image."
-        msg = ReasoningMessage(
+        msg = GenerationMessage(
             timestamp=timestamp,
-            response=response,
+            text=text,
             prompt=prompt,
+            type="response",
         )
         assert msg.timestamp == timestamp
-        assert msg.response == response
+        assert msg.text == text
         assert msg.prompt == prompt
+        assert msg.type == "response"
+        assert msg.done is False
 
-    def test_reasoning_field_access(self) -> None:
-        """Test field access on ReasoningMessage."""
+    def test_generation_field_access(self) -> None:
+        """Test field access on GenerationMessage."""
         timestamp = time.time()
-        msg = ReasoningMessage(
+        msg = GenerationMessage(
             timestamp=timestamp,
-            response="Response text",
+            text="Some text",
             prompt="Prompt text",
+            type="think",
         )
         assert hasattr(msg, "timestamp")
-        assert hasattr(msg, "response")
+        assert hasattr(msg, "text")
         assert hasattr(msg, "prompt")
+        assert hasattr(msg, "type")
+        assert hasattr(msg, "done")
         assert hasattr(msg, "latency_ms")
 
-    def test_reasoning_with_long_response(self) -> None:
-        """Test ReasoningMessage with long response text."""
+    def test_generation_with_long_text(self) -> None:
+        """Test GenerationMessage with long accumulated text."""
         timestamp = time.time()
-        long_response = "A" * 10000
-        msg = ReasoningMessage(
+        long_text = "A" * 10000
+        msg = GenerationMessage(
             timestamp=timestamp,
-            response=long_response,
+            text=long_text,
             prompt="Short prompt",
+            type="response",
         )
-        assert len(msg.response) == 10000
+        assert len(msg.text) == 10000
+
+    def test_generation_done_true_on_terminal_message(self) -> None:
+        """done=True marks the terminal message for a prompt."""
+        msg = GenerationMessage(
+            timestamp=time.time(),
+            text="final text",
+            prompt="p",
+            type="response",
+            done=True,
+        )
+        assert msg.done is True
+
+
+@pytest.mark.unit
+class TestDecisionMessage:
+    """Tests for DecisionMessage."""
+
+    def test_decision_construction(self) -> None:
+        """Test DecisionMessage construction with a yes decision."""
+        msg = DecisionMessage(timestamp=time.time(), decision="yes", prompt="Is this safe?")
+        assert msg.decision == "yes"
+        assert msg.prompt == "Is this safe?"
+
+    def test_decision_no(self) -> None:
+        """Test DecisionMessage construction with a no decision."""
+        msg = DecisionMessage(timestamp=time.time(), decision="no", prompt="Is this safe?")
+        assert msg.decision == "no"
+
+
+@pytest.mark.unit
+class TestDecisionReasoningMessage:
+    """Tests for DecisionReasoningMessage."""
+
+    def test_decision_reasoning_construction(self) -> None:
+        """Test DecisionReasoningMessage construction."""
+        msg = DecisionReasoningMessage(
+            timestamp=time.time(), text="because of X", prompt="Is this safe?"
+        )
+        assert msg.text == "because of X"
+        assert msg.prompt == "Is this safe?"
+        assert msg.done is False
+
+    def test_decision_reasoning_done(self) -> None:
+        """done=True marks the terminal rationale message."""
+        msg = DecisionReasoningMessage(
+            timestamp=time.time(), text="final reasoning", prompt="p", done=True
+        )
+        assert msg.done is True
 
 
 @pytest.mark.unit
@@ -317,17 +376,18 @@ class TestMessageModelCopy:
         assert updated_msg.latency_ms == 25.0
         assert len(updated_msg.detections) == 1
 
-    def test_reasoning_message_model_copy(self) -> None:
-        """Test model_copy on ReasoningMessage."""
+    def test_generation_message_model_copy(self) -> None:
+        """Test model_copy on GenerationMessage."""
         timestamp = time.time()
-        msg = ReasoningMessage(
+        msg = GenerationMessage(
             timestamp=timestamp,
-            response="Test response",
+            text="Test response",
             prompt="Test prompt",
+            type="response",
         )
         updated_msg = msg.model_copy(update={"latency_ms": 150.5})
         assert updated_msg.latency_ms == 150.5
-        assert updated_msg.response == "Test response"
+        assert updated_msg.text == "Test response"
 
     def test_classification_message_model_copy(self) -> None:
         """Test model_copy on ClassificationMessage."""

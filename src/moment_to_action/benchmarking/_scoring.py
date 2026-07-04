@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 import numpy as np
 
@@ -26,7 +27,7 @@ def recall(response: str, keywords: list[str]) -> float:
     return found / len(keywords)
 
 
-def detect_yn(text: str) -> str | None:
+def detect_yn(text: str) -> Literal["yes", "no"] | None:
     """Return "yes" or "no" if *text* contains a yes/no answer, else ``None``.
 
     Matches two formats:
@@ -41,11 +42,13 @@ def detect_yn(text: str) -> str | None:
     """
     cleaned = text.strip().lower()
     words = cleaned.split()
-    if words and words[0].rstrip(".,!?;:") in {"yes", "no"}:
-        return words[0].rstrip(".,!?;:")
+    if words:
+        leading = words[0].rstrip(".,!?;:")
+        if leading in {"yes", "no"}:
+            return "yes" if leading == "yes" else "no"
     m = re.search(r"\banswer\s*:\s*(yes|no)\b", cleaned)
     if m:
-        return m.group(1)
+        return "yes" if m.group(1) == "yes" else "no"
     return None
 
 

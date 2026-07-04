@@ -97,27 +97,35 @@ class Stage(ABC):
         buf: deque[Message] = deque(maxlen=self._window)
         new_since_emit = 0
         emitted_once = False
-        for msg in stream:
-            if self._drop is not None and self._drop(msg):
-                continue
-
-            buf.append(msg)
-            new_since_emit += 1
-            items = list(buf)
-
-            if self._ready is not None:
-                if not self._ready(items):
-                    continue
-            else:
-                if len(items) < self._window:
-                    continue
-                if emitted_once and new_since_emit < self._stride:
+        try:
+            for msg in stream:
+                if self._drop is not None and self._drop(msg):
                     continue
 
-            new_since_emit = 0
-            emitted_once = True
-            with self._metrics.start_span(SpanType.STAGE, self.name):
-                yield from self._process(items)
+                buf.append(msg)
+                new_since_emit += 1
+                items = list(buf)
+
+                if self._ready is not None:
+                    if not self._ready(items):
+                        continue
+                else:
+                    if len(items) < self._window:
+                        continue
+                    if emitted_once and new_since_emit < self._stride:
+                        continue
+
+                new_since_emit = 0
+                emitted_once = True
+                with self._metrics.start_span(SpanType.STAGE, self.name):
+                    yield from self._process(items)
+        finally:
+            # `for msg in stream` (unlike `yield from`) does not forward close()/throw()
+            # to *stream* automatically. Closing it explicitly here cascades an early
+            # abort (GeneratorExit) up through every upstream stage in the chain.
+            close = getattr(stream, "close", None)
+            if close is not None:
+                close()
 
     @abstractmethod
     def _process(self, items: list[Message]) -> Iterator[Message]:

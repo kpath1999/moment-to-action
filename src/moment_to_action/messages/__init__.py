@@ -18,7 +18,7 @@ from moment_to_action.models.image.detection._types import BoundingBox, Detectio
 from ._image_classification import ImageClassificationMessage
 from .audio import AudioTensorMessage
 from .detection import DetectionMessage
-from .llm import ReasoningMessage
+from .llm import DecisionMessage, DecisionReasoningMessage, GenerationMessage
 from .sensor import RawFrameMessage
 from .video import FrameTensorMessage, VideoClipMessage
 from .vlm import ClassificationMessage
@@ -31,7 +31,9 @@ Message: TypeAlias = (
     | FrameTensorMessage
     | VideoClipMessage
     | DetectionMessage
-    | ReasoningMessage
+    | GenerationMessage
+    | DecisionMessage
+    | DecisionReasoningMessage
     | ClassificationMessage
     | ImageClassificationMessage
 )
@@ -40,12 +42,14 @@ __all__ = [
     "AudioTensorMessage",
     "BoundingBox",
     "ClassificationMessage",
+    "DecisionMessage",
+    "DecisionReasoningMessage",
     "Detection",
     "DetectionMessage",
     "FrameTensorMessage",
+    "GenerationMessage",
     "ImageClassificationMessage",
     "Message",
     "RawFrameMessage",
-    "ReasoningMessage",
     "VideoClipMessage",
 ]

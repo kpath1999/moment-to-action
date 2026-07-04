@@ -194,6 +194,47 @@ class TestStage:
         gen.close()
         assert closed is True
 
+    def test_generator_exit_cascades_through_multiple_stages(self) -> None:
+        """Closing the last stage's generator closes every upstream stage's generator too.
+
+        `for msg in stream` (used to pull from the upstream stage) does not
+        automatically forward close()/throw() the way `yield from` does, so
+        Stage.process() must explicitly close its upstream `stream` on exit —
+        this is what makes early-abort (e.g. stopping LLM generation once a
+        decision fires) actually reach all the way back to the source.
+        """
+        upstream_closed = False
+        downstream_closed = False
+
+        class UpstreamStage(Stage):
+            def _process(self, items: list[Message]) -> Iterator[Message]:
+                nonlocal upstream_closed
+                try:
+                    for item in items:
+                        yield item
+                        yield item
+                finally:
+                    upstream_closed = True
+
+        class DownstreamStage(Stage):
+            def _process(self, items: list[Message]) -> Iterator[Message]:
+                nonlocal downstream_closed
+                try:
+                    yield from items
+                finally:
+                    downstream_closed = True
+
+        upstream = UpstreamStage()
+        downstream = DownstreamStage()
+        frames = [_make_frame(float(i)) for i in range(3)]
+
+        gen = downstream.process(upstream.process(iter(frames)))
+        next(gen)
+        gen.close()
+
+        assert downstream_closed is True
+        assert upstream_closed is True
+
     def test_multi_stage_pipeline_flows_through(self) -> None:
         """Chaining process() calls the way Pipeline does still flows messages through."""
         from moment_to_action.pipeline import Pipeline

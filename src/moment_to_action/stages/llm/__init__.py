@@ -1,6 +1,8 @@
-"""LLM pipeline stages — language model reasoning."""
+"""LLM pipeline stages — streaming language-model generation and yes/no decisions."""
 
 from __future__ import annotations
 
-# Placeholder for now
-__all__ = []
+from ._decision import DecisionStage
+from ._llm import LLMStage
+
+__all__ = ["DecisionStage", "LLMStage"]

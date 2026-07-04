@@ -71,7 +71,10 @@ Entry point `m2a` (`pyproject.toml` `[project.scripts]`) → `moment_to_action._
 ### Stages, by category
 
 - `stages.image` — `ImageStage` (marker base), `ImageDetectionStage`, `ImageClassificationStage`. Both use `window=1` with a `drop` predicate that discards non-`RawFrameMessage` input and dropped frames (`frame is None`).
-- `stages.llm`, `stages.vlm`, `stages.video`, `stages.audio` — placeholders (`__all__ = []`); frame/clip windowing is base `Stage` config (`window=N, stride=…`), not a dedicated buffering stage.
+- `stages.llm` — `LLMStage` (streams a `LlamaGGUFModel`'s response to a detection-derived prompt as `GenerationMessage` partials, splitting `<think>...</think>` via an internal `_ThinkResponseRouter`) and `DecisionStage` (a separate downstream stage — not a subclass — that reads a grammar-constrained `GenerationMessage` stream and emits a `DecisionMessage` the moment `YES`/`NO` is unambiguous, then `DecisionReasoningMessage` partials; a verdict-only sink can stop pulling right after `DecisionMessage` to abort the rest of generation).
+- `stages.vlm` — `VLMDescriptionStage` (streams a `LlamaVLModel`'s response over base64-JPEG-encoded frames from a `RawFrameMessage`/`VideoClipMessage`; no think phase, always `type="response"`). Frame encoding lives in `stages/vlm/_encode.py`.
+- `stages.video`, `stages.audio` — placeholders (`__all__ = []`); frame/clip windowing is base `Stage` config (`window=N, stride=…`), not a dedicated buffering stage.
+- `prompting.YES_NO_GRAMMAR` — GBNF grammar forcing a leading `YES`/`NO` token; pass to `LLMStage(..., grammar=YES_NO_GRAMMAR)` so `DecisionStage` can read the verdict unambiguously as soon as it arrives. Both `LlamaGGUFModel.stream`/`LlamaVLModel.stream` accept an optional `grammar: str | None` forwarded straight into the llama.cpp `/completion` payload.
 
 ## Conventions
 
