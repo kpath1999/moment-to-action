@@ -63,31 +63,40 @@ freshly built pipeline holds no device resources yet.
 
 ## Loading, running, unloading
 
-Only one pipeline may be loaded (holding device resources) at a time.
+`load_pipeline`/`unload_pipeline`/`remove_pipeline`/`metrics_report` take the
+`PipelineHandle` itself, not a name — `build()` already gave you one; use
+`get_pipeline(name)` to look one up again later (e.g. in a different function
+that only has the name). Only one pipeline may be loaded (holding device
+resources) at a time.
 
 ```python
-app.load_pipeline("fall-detector")          # acquires device resources
+app.load_pipeline(handle)                # acquires device resources
 
-for msg in handle.run(sensor.stream()):     # drive it
+for msg in handle.run(sensor.stream()):  # drive it
     ...
 
-app.unload_pipeline("fall-detector")        # releases resources, keeps registration
-app.load_pipeline("fall-detector")          # reload later without rebuilding stages
-app.remove_pipeline("fall-detector")        # unloads (if needed) and discards it
+app.unload_pipeline(handle)              # releases resources, keeps registration
+app.load_pipeline(handle)                # reload later without rebuilding stages
+app.remove_pipeline(handle)              # unloads (if needed) and discards it
+
+# looking a handle up again elsewhere:
+handle = app.get_pipeline("fall-detector")
 ```
 
-- `load_pipeline(name)` raises `RuntimeError` if a *different* pipeline is
+- `load_pipeline(handle)` raises `RuntimeError` if a *different* pipeline is
   already active — unload it first.
-- `unload_pipeline(name=None)` defaults to the active pipeline. It releases
+- `unload_pipeline(handle=None)` defaults to the active pipeline. It releases
   device resources but keeps the pipeline registered, so `load_pipeline` can
   bring it back without reconstructing any stage or model.
-- `remove_pipeline(name)` is the only thing that actually deletes a
+- `remove_pipeline(handle)` is the only thing that actually deletes a
   registration (unloading first if it was loaded).
+- All four raise `ValueError` if the handle isn't registered on this app
+  (e.g. already removed, or built by a different `Moment2Action`).
 
 ## Metrics
 
 ```python
-report = app.metrics_report("fall-detector")  # defaults to the active pipeline
+report = app.metrics_report(handle)  # or app.metrics_report() for the active pipeline
 ```
 
 Returns that pipeline's own `MetricsReport` — each pipeline has an isolated

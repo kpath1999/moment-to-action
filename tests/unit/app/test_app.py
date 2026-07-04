@@ -54,107 +54,124 @@ class TestMoment2Action:
         handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
         assert handle.loaded is False
 
+    def test_get_pipeline_returns_registered_handle(self, app: Moment2Action) -> None:
+        """get_pipeline() looks a previously built handle up by name."""
+        built = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        assert app.get_pipeline("p1") is built
+
+    def test_get_pipeline_unknown_name_raises(self, app: Moment2Action) -> None:
+        """get_pipeline() on an unregistered name raises KeyError."""
+        with pytest.raises(KeyError):
+            app.get_pipeline("missing")
+
     def test_load_pipeline_loads_and_activates(self, app: Moment2Action) -> None:
-        """load_pipeline() loads the named pipeline and returns its handle."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        handle = app.load_pipeline("p1")
+        """load_pipeline() loads the given handle and returns it."""
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        result = app.load_pipeline(handle)
+        assert result is handle
         assert handle.loaded is True
 
-    def test_load_pipeline_unknown_name_raises(self, app: Moment2Action) -> None:
-        """load_pipeline() on an unregistered name raises KeyError."""
-        with pytest.raises(KeyError):
-            app.load_pipeline("missing")
+    def test_load_pipeline_unregistered_handle_raises(self, app: Moment2Action) -> None:
+        """load_pipeline() on a handle not registered on this app raises ValueError."""
+        other_app = Moment2Action()
+        foreign = other_app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        with pytest.raises(ValueError, match="not registered"):
+            app.load_pipeline(foreign)
 
     def test_load_pipeline_while_another_active_raises(self, app: Moment2Action) -> None:
         """load_pipeline() raises if a different pipeline is already active."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        app.new_pipeline("p2").add_stage(_NoModelStage).build()
-        app.load_pipeline("p1")
+        h1 = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        h2 = app.new_pipeline("p2").add_stage(_NoModelStage).build()
+        app.load_pipeline(h1)
         with pytest.raises(RuntimeError, match="already active"):
-            app.load_pipeline("p2")
+            app.load_pipeline(h2)
 
-    def test_load_pipeline_same_name_twice_is_idempotent_call(self, app: Moment2Action) -> None:
-        """Calling load_pipeline() again for the currently-active pipeline is allowed."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        app.load_pipeline("p1")
-        # Re-entering load_pipeline for the same active name should not raise the
-        # "different pipeline active" error (PipelineHandle.load itself guards
-        # against double-loading).
+    def test_load_pipeline_same_handle_twice_raises(self, app: Moment2Action) -> None:
+        """Loading the same already-loaded handle again raises RuntimeError."""
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        app.load_pipeline(handle)
+        # PipelineHandle.load() itself guards against double-loading.
         with pytest.raises(RuntimeError, match="already loaded"):
-            app.load_pipeline("p1")
+            app.load_pipeline(handle)
 
     def test_unload_pipeline_defaults_to_active(self, app: Moment2Action) -> None:
-        """unload_pipeline() with no name unloads the currently active pipeline."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        handle = app.load_pipeline("p1")
+        """unload_pipeline() with no handle unloads the currently active pipeline."""
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        app.load_pipeline(handle)
         app.unload_pipeline()
         assert handle.loaded is False
 
     def test_unload_pipeline_keeps_registration(self, app: Moment2Action) -> None:
         """unload_pipeline() does not remove the pipeline from tracking."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        app.load_pipeline("p1")
-        app.unload_pipeline("p1")
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        app.load_pipeline(handle)
+        app.unload_pipeline(handle)
         # Still registered: load_pipeline works again without re-building.
-        handle = app.load_pipeline("p1")
+        app.load_pipeline(handle)
         assert handle.loaded is True
 
     def test_unload_pipeline_no_active_raises(self, app: Moment2Action) -> None:
-        """unload_pipeline() with no name and nothing active raises RuntimeError."""
+        """unload_pipeline() with no handle and nothing active raises RuntimeError."""
         with pytest.raises(RuntimeError, match="No pipeline is currently active"):
             app.unload_pipeline()
 
-    def test_unload_pipeline_unknown_name_raises(self, app: Moment2Action) -> None:
-        """unload_pipeline() on an unregistered name raises KeyError."""
-        with pytest.raises(KeyError):
-            app.unload_pipeline("missing")
+    def test_unload_pipeline_unregistered_handle_raises(self, app: Moment2Action) -> None:
+        """unload_pipeline() on a handle not registered on this app raises ValueError."""
+        other_app = Moment2Action()
+        foreign = other_app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        with pytest.raises(ValueError, match="not registered"):
+            app.unload_pipeline(foreign)
 
     def test_remove_pipeline_unloads_and_deletes(self, app: Moment2Action) -> None:
         """remove_pipeline() unloads (if loaded) and fully discards the registration."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        app.load_pipeline("p1")
-        app.remove_pipeline("p1")
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        app.load_pipeline(handle)
+        app.remove_pipeline(handle)
         with pytest.raises(KeyError):
-            app.load_pipeline("p1")
+            app.get_pipeline("p1")
 
     def test_remove_pipeline_allows_name_reuse(self, app: Moment2Action) -> None:
         """After remove_pipeline(), the same name can be registered again."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        app.remove_pipeline("p1")
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        app.remove_pipeline(handle)
         app.new_pipeline("p1").add_stage(_NoModelStage).build()  # should not raise
 
-    def test_remove_pipeline_unknown_name_raises(self, app: Moment2Action) -> None:
-        """remove_pipeline() on an unregistered name raises KeyError."""
-        with pytest.raises(KeyError):
-            app.remove_pipeline("missing")
+    def test_remove_pipeline_unregistered_handle_raises(self, app: Moment2Action) -> None:
+        """remove_pipeline() on a handle not registered on this app raises ValueError."""
+        other_app = Moment2Action()
+        foreign = other_app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        with pytest.raises(ValueError, match="not registered"):
+            app.remove_pipeline(foreign)
 
     def test_metrics_report_defaults_to_active(self, app: Moment2Action) -> None:
-        """metrics_report() with no name reports on the currently active pipeline."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        app.load_pipeline("p1")
+        """metrics_report() with no handle reports on the currently active pipeline."""
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        app.load_pipeline(handle)
         report = app.metrics_report()
         assert report is not None
 
-    def test_metrics_report_by_name(self, app: Moment2Action) -> None:
-        """metrics_report(name) reports on that specific pipeline, active or not."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        report = app.metrics_report("p1")
+    def test_metrics_report_by_handle(self, app: Moment2Action) -> None:
+        """metrics_report(handle) reports on that specific pipeline, active or not."""
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        report = app.metrics_report(handle)
         assert report is not None
 
     def test_metrics_report_no_active_raises(self, app: Moment2Action) -> None:
-        """metrics_report() with no name and nothing active raises RuntimeError."""
+        """metrics_report() with no handle and nothing active raises RuntimeError."""
         with pytest.raises(RuntimeError, match="No pipeline is currently active"):
             app.metrics_report()
 
-    def test_metrics_report_unknown_name_raises(self, app: Moment2Action) -> None:
-        """metrics_report(name) on an unregistered name raises KeyError."""
-        with pytest.raises(KeyError):
-            app.metrics_report("missing")
+    def test_metrics_report_unregistered_handle_raises(self, app: Moment2Action) -> None:
+        """metrics_report(handle) on a handle not registered on this app raises ValueError."""
+        other_app = Moment2Action()
+        foreign = other_app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        with pytest.raises(ValueError, match="not registered"):
+            app.metrics_report(foreign)
 
     def test_close_unloads_active_pipeline(self, app: Moment2Action) -> None:
         """close() unloads the active pipeline if one exists."""
-        app.new_pipeline("p1").add_stage(_NoModelStage).build()
-        handle = app.load_pipeline("p1")
+        handle = app.new_pipeline("p1").add_stage(_NoModelStage).build()
+        app.load_pipeline(handle)
         app.close()
         assert handle.loaded is False
 
@@ -166,8 +183,8 @@ class TestMoment2Action:
         """Using Moment2Action as a context manager closes the active pipeline on exit."""
         with app as ctx_app:
             assert ctx_app is app
-            ctx_app.new_pipeline("p1").add_stage(_NoModelStage).build()
-            handle = ctx_app.load_pipeline("p1")
+            handle = ctx_app.new_pipeline("p1").add_stage(_NoModelStage).build()
+            ctx_app.load_pipeline(handle)
         assert handle.loaded is False
 
     def test_qairt_flag_configures_env_when_sdk_path_missing(self) -> None:

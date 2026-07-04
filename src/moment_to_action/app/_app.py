@@ -35,8 +35,8 @@ class Moment2Action:
     and every pipeline built through it. Hides ``PathManager``, ``ModelManager``, and the raw
     :class:`~moment_to_action.pipeline.Pipeline` — build pipelines with
     :meth:`new_pipeline`/:meth:`~moment_to_action.app._builder.PipelineBuilder.add_stage`, then
-    load/run/unload them by name. Only one pipeline may be loaded (holding device resources) at
-    a time.
+    load/run/unload them via their handle (:meth:`get_pipeline` looks one up by name). Only one
+    pipeline may be loaded (holding device resources) at a time.
     """
 
     def __init__(self, config: AppConfig | None = None, *, qairt: bool = False) -> None:
@@ -98,93 +98,119 @@ class Moment2Action:
         """
         self._pipelines[handle.name] = handle
 
-    def load_pipeline(self, name: str) -> PipelineHandle:
-        """Load every stage of a registered pipeline and make it the active one.
+    def _check_registered(self, handle: PipelineHandle) -> None:
+        """Verify *handle* is still registered on this app under its own name.
 
         Args:
-            name: Name of a pipeline previously registered via :meth:`new_pipeline`.
+            handle: Handle to verify.
+
+        Raises:
+            ValueError: If *handle* isn't the (or isn't a) pipeline registered
+                under its name — e.g. it was already removed, or belongs to a
+                different app.
+        """
+        if self._pipelines.get(handle.name) is not handle:
+            msg = f"Pipeline handle {handle.name!r} is not registered on this app."
+            raise ValueError(msg)
+
+    def get_pipeline(self, name: str) -> PipelineHandle:
+        """Look up a previously built pipeline by name.
+
+        Args:
+            name: Name passed to :meth:`new_pipeline` when it was built.
 
         Returns:
-            The now-loaded ``PipelineHandle``.
+            The registered ``PipelineHandle``.
 
         Raises:
             KeyError: If *name* is not a registered pipeline.
-            RuntimeError: If a different pipeline is already active.
         """
         if name not in self._pipelines:
             msg = f"No pipeline registered under {name!r}."
             raise KeyError(msg)
-        if self._active_pipeline is not None and self._active_pipeline != name:
+        return self._pipelines[name]
+
+    def load_pipeline(self, handle: PipelineHandle) -> PipelineHandle:
+        """Load every stage of *handle* and make it the active pipeline.
+
+        Args:
+            handle: A pipeline handle from ``PipelineBuilder.build()`` or
+                :meth:`get_pipeline`.
+
+        Returns:
+            *handle*, now loaded.
+
+        Raises:
+            ValueError: If *handle* isn't registered on this app.
+            RuntimeError: If a different pipeline is already active.
+        """
+        self._check_registered(handle)
+        if self._active_pipeline is not None and self._active_pipeline != handle.name:
             msg = (
                 f"Pipeline {self._active_pipeline!r} is already active — "
                 "call unload_pipeline() first."
             )
             raise RuntimeError(msg)
-        handle = self._pipelines[name]
         handle.load(self._platform)
-        self._active_pipeline = name
+        self._active_pipeline = handle.name
         return handle
 
-    def unload_pipeline(self, name: str | None = None) -> None:
+    def unload_pipeline(self, handle: PipelineHandle | None = None) -> None:
         """Unload a pipeline's stages without deleting its registration.
 
         Args:
-            name: Pipeline to unload. Defaults to the currently active pipeline.
+            handle: Pipeline to unload. Defaults to the currently active pipeline.
 
         Raises:
-            RuntimeError: If *name* is ``None`` and no pipeline is active.
-            KeyError: If *name* is not a registered pipeline.
+            RuntimeError: If *handle* is ``None`` and no pipeline is active.
+            ValueError: If *handle* isn't registered on this app.
         """
-        if name is None:
+        if handle is None:
             if self._active_pipeline is None:
                 msg = "No pipeline is currently active."
                 raise RuntimeError(msg)
-            name = self._active_pipeline
-        if name not in self._pipelines:
-            msg = f"No pipeline registered under {name!r}."
-            raise KeyError(msg)
-        self._pipelines[name].unload()
-        if self._active_pipeline == name:
+            handle = self._pipelines[self._active_pipeline]
+        else:
+            self._check_registered(handle)
+        handle.unload()
+        if self._active_pipeline == handle.name:
             self._active_pipeline = None
 
-    def remove_pipeline(self, name: str) -> None:
+    def remove_pipeline(self, handle: PipelineHandle) -> None:
         """Unload (if loaded) and fully discard a pipeline's registration.
 
         Args:
-            name: Pipeline to remove.
+            handle: Pipeline to remove.
 
         Raises:
-            KeyError: If *name* is not a registered pipeline.
+            ValueError: If *handle* isn't registered on this app.
         """
-        if name not in self._pipelines:
-            msg = f"No pipeline registered under {name!r}."
-            raise KeyError(msg)
-        if self._pipelines[name].loaded:
-            self.unload_pipeline(name)
-        del self._pipelines[name]
+        self._check_registered(handle)
+        if handle.loaded:
+            self.unload_pipeline(handle)
+        del self._pipelines[handle.name]
 
-    def metrics_report(self, name: str | None = None) -> MetricsReport:
+    def metrics_report(self, handle: PipelineHandle | None = None) -> MetricsReport:
         """Return a pipeline's own metrics report.
 
         Args:
-            name: Pipeline to report on. Defaults to the currently active pipeline.
+            handle: Pipeline to report on. Defaults to the currently active pipeline.
 
         Returns:
             The report generated by that pipeline's own metrics collector.
 
         Raises:
-            RuntimeError: If *name* is ``None`` and no pipeline is active.
-            KeyError: If *name* is not a registered pipeline.
+            RuntimeError: If *handle* is ``None`` and no pipeline is active.
+            ValueError: If *handle* isn't registered on this app.
         """
-        if name is None:
+        if handle is None:
             if self._active_pipeline is None:
                 msg = "No pipeline is currently active."
                 raise RuntimeError(msg)
-            name = self._active_pipeline
-        if name not in self._pipelines:
-            msg = f"No pipeline registered under {name!r}."
-            raise KeyError(msg)
-        return self._pipelines[name].metrics_report()
+            handle = self._pipelines[self._active_pipeline]
+        else:
+            self._check_registered(handle)
+        return handle.metrics_report()
 
     def close(self) -> None:
         """Unload the active pipeline, if any."""

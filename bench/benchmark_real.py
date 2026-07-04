@@ -897,6 +897,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             progress.update(model_task, description=f"{model_name} (vlm)")
             pipeline_name = f"vlm-{model_name}"
 
+            handle: PipelineHandle | None = None
             try:
                 handle = (
                     app.new_pipeline(pipeline_name)
@@ -910,10 +911,11 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     .add_stage(DecisionStage)
                     .build()
                 )
-                app.load_pipeline(pipeline_name)
+                app.load_pipeline(handle)
             except Exception as exc:  # noqa: BLE001
                 console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
-                app.remove_pipeline(pipeline_name)
+                if handle is not None:
+                    app.remove_pipeline(handle)
                 progress.advance(model_task)
                 continue
 
@@ -921,10 +923,10 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 handle, model_name, clips, n_cycles, data_dir, progress, clip_task
             )
 
-            app.unload_pipeline(pipeline_name)
-            report = app.metrics_report(pipeline_name)
+            app.unload_pipeline(handle)
+            report = app.metrics_report(handle)
             load_ms, unload_ms = extract_load_unload_ms(report.traces)
-            app.remove_pipeline(pipeline_name)
+            app.remove_pipeline(handle)
 
             for row in rows:
                 row["kind"] = "vlm"
@@ -970,6 +972,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     )
                     pipeline_name = f"llm-{model_name}-{detector_display}"
 
+                    handle = None
                     try:
                         handle = (
                             app.new_pipeline(pipeline_name)
@@ -993,10 +996,11 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                             .add_stage(DecisionStage)
                             .build()
                         )
-                        app.load_pipeline(pipeline_name)
+                        app.load_pipeline(handle)
                     except Exception as exc:  # noqa: BLE001
                         console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
-                        app.remove_pipeline(pipeline_name)
+                        if handle is not None:
+                            app.remove_pipeline(handle)
                         progress.advance(model_task)
                         continue
 
@@ -1004,13 +1008,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         handle, model_name, clips, n_cycles, data_dir, progress, clip_task
                     )
 
-                    app.unload_pipeline(pipeline_name)
-                    report = app.metrics_report(pipeline_name)
+                    app.unload_pipeline(handle)
+                    report = app.metrics_report(handle)
                     llm_class_name = MODEL_REGISTRY[model_id].model_class.__name__
                     load_ms, unload_ms = extract_load_unload_ms(
                         report.traces, name_contains=llm_class_name
                     )
-                    app.remove_pipeline(pipeline_name)
+                    app.remove_pipeline(handle)
 
                     for row in rows:
                         row["kind"] = "llm"

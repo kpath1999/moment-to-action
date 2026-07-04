@@ -88,7 +88,7 @@ class PipelineBuilder:
         """Freeze the accumulated stages into an unloaded, registered PipelineHandle.
 
         Does not load any stage and does not make the pipeline active — call
-        ``Moment2Action.load_pipeline(name)`` to do that.
+        ``Moment2Action.load_pipeline(handle)`` (the returned handle) to do that.
 
         Returns:
             The newly registered, unloaded ``PipelineHandle``.
