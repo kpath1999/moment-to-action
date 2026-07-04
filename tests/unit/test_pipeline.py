@@ -2,12 +2,53 @@
 
 from __future__ import annotations
 
-from unittest import mock
+from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 
 from moment_to_action.messages.sensor import RawFrameMessage
+from moment_to_action.metrics import MetricsCollector, NullMetricsCollector, SpanType
 from moment_to_action.pipeline import Pipeline
+from moment_to_action.stages._base import Stage
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from moment_to_action.messages import Message
+
+
+def _make_frame(timestamp: float = 0.0) -> RawFrameMessage:
+    """Build a RawFrameMessage for testing."""
+    return RawFrameMessage(
+        frame=np.zeros((480, 640, 3), dtype=np.uint8),
+        source="test_source",
+        width=640,
+        height=480,
+        timestamp=timestamp,
+    )
+
+
+class _RecordingStage(Stage):
+    """A stage that records the inputs it receives and passes them through."""
+
+    def __init__(self, **kwargs: object) -> None:
+        """Initialize and track received inputs for assertions."""
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self.received: list[Message] = []
+
+    def _process(self, items: list[Message]) -> Iterator[Message]:
+        """Record and pass through each buffered item."""
+        self.received.extend(items)
+        yield from items
+
+
+class _DroppingStage(Stage):
+    """A stage that drops every message, short-circuiting the pipeline."""
+
+    def _process(self, items: list[Message]) -> Iterator[Message]:
+        """Yield nothing."""
+        yield from ()
 
 
 @pytest.mark.unit
@@ -15,143 +56,114 @@ class TestPipeline:
     """Tests for Pipeline class."""
 
     @pytest.fixture
-    def sample_message(self) -> RawFrameMessage:
-        """Create a sample RawFrameMessage for testing."""
-        import time
+    def sample_messages(self) -> list[RawFrameMessage]:
+        """Create sample RawFrameMessages for testing."""
+        return [_make_frame(float(i)) for i in range(3)]
 
-        import numpy as np
-
-        return RawFrameMessage(
-            frame=np.zeros((480, 640, 3), dtype=np.uint8),
-            source="test_source",
-            width=640,
-            height=480,
-            timestamp=time.time(),
-        )
-
-    def test_pipeline_run_with_mock_stages_in_order(self, sample_message: RawFrameMessage) -> None:
-        """Test Pipeline.run() executes stages in order and passes messages through."""
-        # Create three mock stages
-        stage1 = mock.MagicMock()
-        stage2 = mock.MagicMock()
-        stage3 = mock.MagicMock()
-
-        # Each stage returns a modified message to pass to the next
-        result_msg1 = sample_message.model_copy(update={"latency_ms": 10.0})
-        result_msg2 = sample_message.model_copy(update={"latency_ms": 20.0})
-        result_msg3 = sample_message.model_copy(update={"latency_ms": 30.0})
-
-        stage1.process.return_value = result_msg1
-        stage2.process.return_value = result_msg2
-        stage3.process.return_value = result_msg3
-
-        pipeline = Pipeline([stage1, stage2, stage3])
-        result = pipeline.run(sample_message)
-
-        # Verify all stages were called
-        stage1.process.assert_called_once()
-        stage2.process.assert_called_once()
-        stage3.process.assert_called_once()
-
-        # Verify final result is from last stage
-        assert result == result_msg3
-        assert result.latency_ms == 30.0
-
-    def test_pipeline_none_short_circuit(self, sample_message: RawFrameMessage) -> None:
-        """Test that None from a stage stops pipeline and returns None."""
-        stage1 = mock.MagicMock()
-        stage2 = mock.MagicMock()
-        stage3 = mock.MagicMock()
-
-        # Stage1 processes normally, Stage2 returns None (stops pipeline)
-        result_msg1 = sample_message.model_copy(update={"latency_ms": 10.0})
-        stage1.process.return_value = result_msg1
-        stage2.process.return_value = None  # This stops the pipeline
-        stage3.process.return_value = sample_message
-
-        pipeline = Pipeline([stage1, stage2, stage3])
-        result = pipeline.run(sample_message)
-
-        # Verify result is None
-        assert result is None
-
-        # Verify Stage3 was never called (pipeline short-circuited)
-        stage1.process.assert_called_once()
-        stage2.process.assert_called_once()
-        stage3.process.assert_not_called()
-
-    def test_pipeline_metrics_forwarding(self, sample_message: RawFrameMessage) -> None:
-        """Test that MetricsCollector is forwarded to all stages."""
-        stage1 = mock.MagicMock()
-        stage2 = mock.MagicMock()
-        metrics_mock = mock.MagicMock()
-
-        result_msg = sample_message.model_copy(update={"latency_ms": 15.0})
-        stage1.process.return_value = result_msg
-        stage2.process.return_value = result_msg
+    def test_pipeline_run_with_stages_in_order(
+        self, sample_messages: list[RawFrameMessage]
+    ) -> None:
+        """Pipeline.run() chains stages in order and passes messages through."""
+        stage1 = _RecordingStage()
+        stage2 = _RecordingStage()
 
         pipeline = Pipeline([stage1, stage2])
-        pipeline.run(sample_message, metrics=metrics_mock)
+        results = list(pipeline.run(iter(sample_messages)))
 
-        # Verify metrics was passed to both stages
-        call_args1 = stage1.process.call_args
-        call_args2 = stage2.process.call_args
+        assert stage1.received == sample_messages
+        assert stage2.received == sample_messages
+        assert results == sample_messages
 
-        assert call_args1.kwargs["metrics"] is metrics_mock
-        assert call_args2.kwargs["metrics"] is metrics_mock
+    def test_pipeline_drop_short_circuits_downstream_stages(
+        self, sample_messages: list[RawFrameMessage]
+    ) -> None:
+        """A stage that yields nothing stops messages from reaching later stages."""
+        stage1 = _RecordingStage()
+        stage2 = _DroppingStage()
+        stage3 = _RecordingStage()
 
-    def test_pipeline_empty_returns_input_unchanged(self, sample_message: RawFrameMessage) -> None:
-        """Test that empty pipeline (no stages) returns input message unchanged."""
+        pipeline = Pipeline([stage1, stage2, stage3])
+        results = list(pipeline.run(iter(sample_messages)))
+
+        assert results == []
+        assert stage1.received == sample_messages
+        assert stage3.received == []
+
+    def test_pipeline_metrics_span_is_recorded(
+        self, sample_messages: list[RawFrameMessage]
+    ) -> None:
+        """Pipeline.run() records a SpanType.PIPELINE span on the provided collector."""
+        metrics = MetricsCollector(session_id="test_pipeline_metrics")
+        pipeline = Pipeline([_RecordingStage()], metrics=metrics)
+
+        with metrics.start_trace():
+            list(pipeline.run(iter(sample_messages)))
+
+        pipeline_spans = [s for s in metrics.spans if s.type_ is SpanType.PIPELINE]
+        assert len(pipeline_spans) == 1
+        assert pipeline_spans[0].name == "Pipeline Run"
+
+    def test_pipeline_empty_returns_input_unchanged(
+        self, sample_messages: list[RawFrameMessage]
+    ) -> None:
+        """An empty pipeline (no stages) yields the input messages unchanged."""
         pipeline = Pipeline([])
-        result = pipeline.run(sample_message)
-
-        # Result should be the same message object
-        assert result == sample_message
-        assert result is sample_message
+        results = list(pipeline.run(iter(sample_messages)))
+        assert results == sample_messages
 
     def test_pipeline_properties(self) -> None:
-        """Test Pipeline properties (stages)."""
-        stage1 = mock.MagicMock()
-        stage2 = mock.MagicMock()
-
+        """Pipeline.stages returns the constructed stage list."""
+        stage1 = _RecordingStage()
+        stage2 = _RecordingStage()
         pipeline = Pipeline([stage1, stage2])
-
         assert pipeline.stages == [stage1, stage2]
 
-    def test_pipeline_none_metrics_is_optional(self, sample_message: RawFrameMessage) -> None:
-        """Test that MetricsCollector is optional (default NullMetricsCollector is passed)."""
-        from moment_to_action.metrics import NullMetricsCollector
+    def test_pipeline_none_metrics_defaults_to_null_collector(self) -> None:
+        """Pipeline() without metrics defaults to a NullMetricsCollector."""
+        pipeline = Pipeline([], metrics=None)
+        assert isinstance(pipeline._metrics, NullMetricsCollector)
 
-        stage1 = mock.MagicMock()
-        result_msg = sample_message.model_copy(update={"latency_ms": 10.0})
-        stage1.process.return_value = result_msg
-
-        # Create pipeline and run with metrics=None
-        pipeline = Pipeline([stage1])
-        pipeline.run(sample_message, metrics=None)
-
-        # Verify a NullMetricsCollector was passed to stage
-        call_args = stage1.process.call_args
-        assert isinstance(call_args.kwargs["metrics"], NullMetricsCollector)
-
-    def test_pipeline_message_flow_through_stages(self, sample_message: RawFrameMessage) -> None:
-        """Test that message flows correctly through multiple stages."""
-        # Create stages that modify the latency to track flow
-        stage1 = mock.MagicMock()
-        stage2 = mock.MagicMock()
-
-        msg_after_stage1 = sample_message.model_copy(update={"latency_ms": 5.0})
-        msg_after_stage2 = sample_message.model_copy(update={"latency_ms": 10.0})
-
-        stage1.process.return_value = msg_after_stage1
-        stage2.process.return_value = msg_after_stage2
+    def test_pipeline_message_flow_through_stages(
+        self, sample_messages: list[RawFrameMessage]
+    ) -> None:
+        """Messages flow from stage1's output into stage2's input in order."""
+        stage1 = _RecordingStage()
+        stage2 = _RecordingStage()
 
         pipeline = Pipeline([stage1, stage2])
-        result = pipeline.run(sample_message)
+        list(pipeline.run(iter(sample_messages)))
 
-        # Verify stage2 received the output from stage1
-        stage2_input = stage2.process.call_args[0][0]
-        assert stage2_input == msg_after_stage1
+        assert stage2.received == stage1.received
 
-        # Verify final result is from stage2
-        assert result == msg_after_stage2
+    def test_pipeline_run_is_lazy(self, sample_messages: list[RawFrameMessage]) -> None:
+        """Pipeline.run() must not pull from the source until the consumer iterates."""
+        stage = _RecordingStage()
+        pipeline = Pipeline([stage])
+
+        gen = pipeline.run(iter(sample_messages))
+        assert stage.received == []
+        next(gen)
+        assert stage.received == [sample_messages[0]]
+
+    def test_pipeline_generator_exit_propagates_to_stages(
+        self, sample_messages: list[RawFrameMessage]
+    ) -> None:
+        """Breaking the consumer loop closes the pipeline generator via GeneratorExit."""
+        closed = False
+
+        class ExitTrackingStage(Stage):
+            def _process(self, items: list[Message]) -> Iterator[Message]:
+                nonlocal closed
+                try:
+                    for item in items:
+                        yield item
+                        yield item
+                finally:
+                    closed = True
+
+        pipeline = Pipeline([ExitTrackingStage()])
+        gen = pipeline.run(iter(sample_messages))
+        next(gen)
+        gen.close()
+
+        assert closed is True

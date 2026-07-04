@@ -40,23 +40,23 @@ Markers (registered in `tests/conftest.py` and `pyproject.toml`):
 
 ## Architecture
 
-Data flows one direction: **Sensor → Message → Pipeline → Stages → Message out**.
+Data flows one direction through a **lazy generator chain**: **Sensor → Message stream → Pipeline → Stages → Message stream out**. Stages are generator transformers, not single-shot functions — a stage's `process()` pulls from its input iterator and yields to its output iterator, so the whole pipeline is one composed generator. Breaking out of the consumer loop propagates `GeneratorExit` up through every stage, aborting any in-flight upstream work (e.g. stops LLM token generation the moment a downstream stage stops pulling).
 
 ```
-BaseSensor.read() ─► Message ─► Pipeline.run(msg, metrics=…)
-                                  ├─► Stage[0].process(msg, metrics)
-                                  ├─► Stage[1].process(msg, metrics)
-                                  └─► Stage[N] → Message | None
+sensor.stream() ─► Iterator[Message] ─► Pipeline.run(source)
+                                          ├─► Stage[0].process(stream)  (window/stride/ready/drop)
+                                          ├─► Stage[1].process(stream)
+                                          └─► Stage[N] → Iterator[Message]  (0..N per input)
 ```
 
 ### Core types
 
-- **`Pipeline`** (`pipeline.py`) — holds ordered `list[Stage]`. Any stage returning `None` short-circuits the rest. Wraps the whole run in a `SpanType.PIPELINE` metrics span.
-- **`Stage`** (`stages/_base.py`) — ABC. Subclasses implement `_process(msg, metrics) -> Message | None`. The base `process()` wraps `_process` in a `SpanType.STAGE` span, stamps `latency_ms` on the result via `model_copy`, and logs. Stages do **not** store their index.
+- **`Pipeline`** (`pipeline.py`) — holds ordered `list[Stage]`; `run(source: Iterator[Message]) -> Generator[Message, None, None]` chains each stage's `process()` onto the previous stage's output and lazily yields from the last one. Wraps the whole drain in a `SpanType.PIPELINE` metrics span (stays open across the entire generator's lifetime). `metrics` is a constructor-only dependency — pass the same `MetricsCollector` instance used to construct every stage/model in the pipeline so spans nest under one trace.
+- **`Stage`** (`stages/_base.py`) — ABC. `__init__(*, window=1, stride=None, ready=None, drop=None, metrics=None)` configures buffering: `window` is how many recent messages are buffered before `_process` runs; `stride` (defaults to `window`) gates how many new messages are required between subsequent emissions once the buffer is full; `ready(items) -> bool` fully overrides the count/stride emit check for custom conditions (e.g. scene boundaries); `drop(msg) -> bool` discards unwanted inputs before they buffer. Subclasses implement `_process(items: list[Message]) -> Iterator[Message]` (0..N outputs — this is what makes token streaming and multi-frame windowing possible without a separate buffering stage). The base `process()` owns windowing and opens a `SpanType.STAGE` span per emission; it does **not** post-stamp `latency_ms` on results (that would require draining a streamed multi-yield `_process`, which defeats streaming) — authoritative per-emission timing lives in the metrics report instead.
 - **Messages** (`messages/`) — immutable Pydantic `BaseModel` subclasses inheriting `BaseMessage` (`timestamp`, `latency_ms`). `messages.Message` is a `TypeAlias` union of every concrete message type — use it for `isinstance` and exhaustive `match`.
-- **`MetricsCollector`** (`metrics/`) — optional; `Pipeline`/`Stage` fall back to `NullMetricsCollector` when none is passed, so stage code never null-checks. Public types come from `_types.py` (`Span`, `SpanType`, `Trace`, `MetricsReport`); collector logic lives in `_collector.py`.
+- **`MetricsCollector`** (`metrics/`) — constructor dependency threaded through `ModelManager` → models → `Stage`/`Pipeline`; `None` defaults to a per-instance `NullMetricsCollector` so everything stays standalone-constructable (useful for tests) without null-checks in stage/model code. `timed_stream(tokens, *, yn_predicate=None)` wraps a token generator, stamping `ttft_ms`/`mean_itl_ms`/`std_itl_ms` (and `ttfyd_ms` if `yn_predicate` fires) onto the currently open span in a `finally` block, so metrics are recorded even if the caller closes the generator early. Public types come from `_types.py` (`Span`, `SpanType`, `Trace`, `MetricsReport`); collector logic lives in `_collector.py`.
 - **`ComputeBackend`** (`hardware/`) — the *only* allowed entry point to inference runtimes. Detects platform at construction, picks an `InferenceBackend` subclass under `hardware/_platforms/<chip>/`. Model handles are opaque `object`s. **Nothing outside `hardware/` may import LiteRT / ONNX / SNPE directly.**
-- **`ModelManager`** + `MODEL_REGISTRY` (`models/`) — resolves model IDs to download sources (`HuggingFaceSource`, `VendoredSource`) and writes them into the model cache.
+- **`ModelManager`** + `MODEL_REGISTRY` (`models/`) — resolves model IDs to download sources (`HuggingFaceSource`, `VendoredSource`) and writes them into the model cache. Takes a `metrics` collector at construction and forwards it into every model built via `get_model()`.
 - **`PathManager`** (`paths/`) — only legitimate way to get filesystem paths. Wraps `platformdirs` versioned dirs. `path_mgr.cache` → `CacheManager` (+ `models` submanager); `path_mgr.data` → `DataManager`; `path_mgr.logs_dir`; `path_mgr.app_config_file`. **Do not create app data directories manually.** See `docs/paths.md`.
 - **`AppConfig`** (`config.py`) — pydantic model persisted as JSON at `path_mgr.app_config_file`. `load_config()` writes defaults on first run and re-normalizes on every load.
 
@@ -70,11 +70,11 @@ Entry point `m2a` (`pyproject.toml` `[project.scripts]`) → `moment_to_action._
 
 ### Stages, by category
 
-- `stages.video` — `PreprocessorStage`, `YOLOStage`, `ClipBufferStage`
-- `stages.vlm` — `MobileCLIPStage`, `SmolVLM2Stage`
-- `stages.llm` — `ReasoningStage`
-- `stages.audio` — placeholder
-- `stages/_preprocess.py` — generic `BasePreprocessor[InputT, OutputT]`. Subclasses call `self._dispatch(fn, *args)` (not `fn(*args)`) so DSP/CPU routing works when a Hexagon backend lands.
+- `stages.image` — `ImageStage` (marker base), `ImageDetectionStage`, `ImageClassificationStage`. Both use `window=1` with a `drop` predicate that discards non-`RawFrameMessage` input and dropped frames (`frame is None`).
+- `stages.llm` — `LLMStage` (streams a `LlamaGGUFModel`'s response to a detection-derived prompt as `GenerationMessage` partials, splitting `<think>...</think>` via an internal `_ThinkResponseRouter`) and `DecisionStage` (a separate downstream stage — not a subclass — that reads a grammar-constrained `GenerationMessage` stream and emits a `DecisionMessage` the moment `YES`/`NO` is unambiguous, then `DecisionReasoningMessage` partials; a verdict-only sink can stop pulling right after `DecisionMessage` to abort the rest of generation).
+- `stages.vlm` — `VLMDescriptionStage` (streams a `LlamaVLModel`'s response over base64-JPEG-encoded frames from a `RawFrameMessage`/`VideoClipMessage`; no think phase, always `type="response"`). Frame encoding lives in `stages/vlm/_encode.py`.
+- `stages.video`, `stages.audio` — placeholders (`__all__ = []`); frame/clip windowing is base `Stage` config (`window=N, stride=…`), not a dedicated buffering stage.
+- `prompting.YES_NO_GRAMMAR` — GBNF grammar forcing a leading `YES`/`NO` token; pass to `LLMStage(..., grammar=YES_NO_GRAMMAR)` so `DecisionStage` can read the verdict unambiguously as soon as it arrives. Both `LlamaGGUFModel.stream`/`LlamaVLModel.stream` accept an optional `grammar: str | None` forwarded straight into the llama.cpp `/completion` payload.
 
 ## Conventions
 

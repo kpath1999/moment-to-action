@@ -53,7 +53,7 @@ class TestImageClassificationStage:
     ) -> None:
         """_process returns an ImageClassificationMessage for a valid frame."""
         stage = ImageClassificationStage(model=mock_model)
-        result = stage.process(raw_frame_msg)
+        (result,) = list(stage.process(iter([raw_frame_msg])))
         assert isinstance(result, ImageClassificationMessage)
 
     def test_classifications_forwarded(
@@ -64,7 +64,7 @@ class TestImageClassificationStage:
     ) -> None:
         """Returned message contains the classifications from post_proc."""
         stage = ImageClassificationStage(model=mock_model)
-        result = stage.process(raw_frame_msg)
+        (result,) = list(stage.process(iter([raw_frame_msg])))
         assert isinstance(result, ImageClassificationMessage)
         assert result.classifications == [sample_classification]
 
@@ -73,34 +73,34 @@ class TestImageClassificationStage:
     ) -> None:
         """_process calls prepare, run, and post_proc in order."""
         stage = ImageClassificationStage(model=mock_model)
-        stage.process(raw_frame_msg)
+        list(stage.process(iter([raw_frame_msg])))
         mock_model.prepare.assert_called_once()
         mock_model.run.assert_called_once()
         mock_model.post_proc.assert_called_once()
 
-    def test_non_frame_message_returns_none(self, mock_model: MagicMock) -> None:
-        """_process returns None for non-RawFrameMessage input."""
+    def test_non_frame_message_yields_nothing(self, mock_model: MagicMock) -> None:
+        """_process yields nothing for non-RawFrameMessage input."""
         stage = ImageClassificationStage(model=mock_model)
         other_msg = FrameTensorMessage(
             tensor=np.zeros((1, 3, 224, 224), dtype=np.float32),
             original_size=(640, 480),
             timestamp=time.time(),
         )
-        result = stage.process(other_msg)
-        assert result is None
+        results = list(stage.process(iter([other_msg])))
+        assert results == []
 
-    def test_none_frame_returns_none(self, mock_model: MagicMock) -> None:
-        """_process returns None when RawFrameMessage.frame is None."""
+    def test_none_frame_yields_nothing(self, mock_model: MagicMock) -> None:
+        """_process yields nothing when RawFrameMessage.frame is None."""
         stage = ImageClassificationStage(model=mock_model)
         msg = RawFrameMessage(frame=None, timestamp=time.time())
-        result = stage.process(msg)
-        assert result is None
+        results = list(stage.process(iter([msg])))
+        assert results == []
 
     def test_timestamp_preserved(
         self, mock_model: MagicMock, raw_frame_msg: RawFrameMessage
     ) -> None:
         """Output message timestamp matches input message timestamp."""
         stage = ImageClassificationStage(model=mock_model)
-        result = stage.process(raw_frame_msg)
+        (result,) = list(stage.process(iter([raw_frame_msg])))
         assert isinstance(result, ImageClassificationMessage)
         assert result.timestamp == raw_frame_msg.timestamp

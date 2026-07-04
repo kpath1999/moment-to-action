@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import logging
+import math
 import time
 import typing as t
 from datetime import datetime, timedelta, timezone
@@ -46,6 +47,8 @@ from ._types import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Generator, Iterable
+
     from moment_to_action.hardware import Platform
 
 logger = logging.getLogger(__name__)
@@ -377,6 +380,63 @@ class MetricsCollector:
                 slow_traces=[trace for trace in traces if trace.latency > self.latency_budget],
             )
 
+    def timed_stream(
+        self,
+        tokens: Iterable[str],
+        *,
+        yn_predicate: Callable[[str], object] | None = None,
+    ) -> Generator[str, None, None]:
+        """Yield each token from *tokens* straight through, timing it onto the current span.
+
+        Stamps ``ttft_ms`` (time to first token), ``mean_itl_ms``/``std_itl_ms``
+        (inter-token latency across the remaining tokens), and — if
+        *yn_predicate* is given — ``ttfyd_ms`` (time to first yes/no decision:
+        the first token index at which ``yn_predicate(accumulated_text)`` is
+        truthy) onto ``current_span``'s metadata. Recording happens in a
+        ``finally`` block so metrics are still captured if the caller closes
+        the generator early (e.g. aborting generation once a decision fires).
+
+        Args:
+            tokens: Iterable of token strings to pass through, typically a
+                model's ``stream()`` generator.
+            yn_predicate: Optional predicate over the accumulated text so far;
+                the first token where it returns a truthy value stamps
+                ``ttfyd_ms``.
+
+        Yields:
+            Each token from *tokens*, unchanged.
+        """
+        accumulated = ""
+        itls_ms: list[float] = []
+        ttft_ms: float | None = None
+        ttfyd_ms: float | None = None
+        start_ns = time.perf_counter_ns()
+        last_ns = start_ns
+        try:
+            for token in tokens:
+                now_ns = time.perf_counter_ns()
+                if ttft_ms is None:
+                    ttft_ms = (now_ns - start_ns) / 1_000_000
+                else:
+                    itls_ms.append((now_ns - last_ns) / 1_000_000)
+                last_ns = now_ns
+
+                accumulated += token
+                if ttfyd_ms is None and yn_predicate is not None and yn_predicate(accumulated):
+                    ttfyd_ms = (now_ns - start_ns) / 1_000_000
+
+                yield token
+        finally:
+            if ttft_ms is not None:
+                self.set_meta("ttft_ms", ttft_ms)
+            if ttfyd_ms is not None:
+                self.set_meta("ttfyd_ms", ttfyd_ms)
+            if itls_ms:
+                mean_itl_ms = sum(itls_ms) / len(itls_ms)
+                variance = sum((x - mean_itl_ms) ** 2 for x in itls_ms) / len(itls_ms)
+                self.set_meta("mean_itl_ms", mean_itl_ms)
+                self.set_meta("std_itl_ms", math.sqrt(variance))
+
 
 class NullMetricsCollector(MetricsCollector):
     """A no-op metrics collector that ignores all spans and traces."""
@@ -441,3 +501,12 @@ class NullMetricsCollector(MetricsCollector):
             traces=[],
             slow_traces=[],
         )
+
+    def timed_stream(
+        self,
+        tokens: Iterable[str],
+        *,
+        yn_predicate: Callable[[str], object] | None = None,  # noqa: ARG002
+    ) -> Generator[str, None, None]:
+        """No-op passthrough — yields each token without recording any timing."""
+        yield from tokens

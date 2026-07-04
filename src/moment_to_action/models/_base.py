@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 import warnings
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from typing_extensions import Self
 
-from moment_to_action.metrics import MetricsCollector, NullMetricsCollector, SpanType
+from moment_to_action.metrics import NullMetricsCollector, SpanType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -20,8 +19,7 @@ if TYPE_CHECKING:
 
     from moment_to_action.hardware import Platform
     from moment_to_action.hardware._types import ComputeUnit, DataType, ModelType
-
-logger = logging.getLogger(__name__)
+    from moment_to_action.metrics import MetricsCollector
 
 _InputT = TypeVar("_InputT")
 _PreparedT = TypeVar("_PreparedT")
@@ -65,6 +63,7 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str | None = None,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         """Initialize with variant name, path, model type, backend table, and input layout.
 
@@ -79,6 +78,10 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
             input_layout: Input tensor memory layout, ``"NCHW"`` or ``"NHWC"``,
                 or ``None`` for model types that do not require a spatial layout
                 (e.g. language models).
+            metrics: Metrics collector used to record ``MODEL_*`` spans for
+                every load/prepare/run/post_proc/unload call. Pass the same
+                instance used elsewhere in the pipeline so spans nest under
+                the same trace. Defaults to a per-instance ``NullMetricsCollector``.
         """
         self._variant = variant
         self._path = path
@@ -87,6 +90,7 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         self._backends = backends
         self._input_layout = input_layout
         self._platform: Platform | None = None
+        self._metrics = metrics or NullMetricsCollector()
 
     @property
     def path(self) -> Path:
@@ -173,40 +177,29 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         """
         ...
 
-    def prepare(self, inputs: _InputT, *, metrics: MetricsCollector | None = None) -> _PreparedT:
-        """Preprocess raw inputs, recording a ``MODEL_PREPROCESS`` span in *metrics*.
+    def prepare(self, inputs: _InputT) -> _PreparedT:
+        """Preprocess raw inputs, recording a ``MODEL_PREPROCESS`` span.
 
         Wraps :meth:`_prepare` in a :attr:`~moment_to_action.metrics.SpanType.MODEL_PREPROCESS`
-        span.  When *metrics* is ``None``, a warning is logged and a
-        :class:`~moment_to_action.metrics.NullMetricsCollector` is used.
+        span on the collector passed at construction.
 
         Args:
             inputs: Raw input to preprocess.
-            metrics: Active collector with an open trace to record the span.
 
         Returns:
             Preprocessed data ready to pass to :meth:`run`.
         """
-        if metrics is None:
-            logger.warning(
-                "%s.prepare() called without a MetricsCollector;"
-                " preprocess latency will not be recorded",
-                type(self).__name__,
-            )
-            metrics = NullMetricsCollector()
-        with metrics.start_span(SpanType.MODEL_PREPROCESS, f"{type(self).__name__}.prepare"):
+        with self._metrics.start_span(SpanType.MODEL_PREPROCESS, f"{type(self).__name__}.prepare"):
             return self._prepare(inputs)
 
-    def run(self, prepared: _PreparedT, *, metrics: MetricsCollector | None = None) -> _RawOutputT:
-        """Run forward pass, recording a ``MODEL_INFERENCE`` span in *metrics*.
+    def run(self, prepared: _PreparedT) -> _RawOutputT:
+        """Run forward pass, recording a ``MODEL_INFERENCE`` span.
 
         Wraps :meth:`_run` in a :attr:`~moment_to_action.metrics.SpanType.MODEL_INFERENCE`
-        span.  When *metrics* is ``None``, a warning is logged and a
-        :class:`~moment_to_action.metrics.NullMetricsCollector` is used.
+        span on the collector passed at construction.
 
         Args:
             prepared: Output of :meth:`prepare`.
-            metrics: Active collector with an open trace to record the span.
 
         Returns:
             Raw model output to pass to :meth:`post_proc`.
@@ -214,41 +207,25 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         Raises:
             RuntimeError: If the model has not been loaded.
         """
-        if metrics is None:
-            logger.warning(
-                "%s.run() called without a MetricsCollector;"
-                " inference latency will not be recorded",
-                type(self).__name__,
-            )
-            metrics = NullMetricsCollector()
-        with metrics.start_span(SpanType.MODEL_INFERENCE, f"{type(self).__name__}.run"):
+        with self._metrics.start_span(SpanType.MODEL_INFERENCE, f"{type(self).__name__}.run"):
             return self._run(prepared)
 
-    def post_proc(
-        self, raw: _RawOutputT, *, metrics: MetricsCollector | None = None
-    ) -> list[_ResultT]:
-        """Decode raw model output, recording a ``MODEL_POST_PROCESS`` span in *metrics*.
+    def post_proc(self, raw: _RawOutputT) -> list[_ResultT]:
+        """Decode raw model output, recording a ``MODEL_POST_PROCESS`` span.
 
         Wraps :meth:`_post_proc` in a
-        :attr:`~moment_to_action.metrics.SpanType.MODEL_POST_PROCESS` span.  When
-        *metrics* is ``None``, a warning is logged and a
-        :class:`~moment_to_action.metrics.NullMetricsCollector` is used.
+        :attr:`~moment_to_action.metrics.SpanType.MODEL_POST_PROCESS` span on the
+        collector passed at construction.
 
         Args:
             raw: Output returned by :meth:`run`.
-            metrics: Active collector with an open trace to record the span.
 
         Returns:
             List of structured results (element type narrowed by subclasses).
         """
-        if metrics is None:
-            logger.warning(
-                "%s.post_proc() called without a MetricsCollector;"
-                " post-process latency will not be recorded",
-                type(self).__name__,
-            )
-            metrics = NullMetricsCollector()
-        with metrics.start_span(SpanType.MODEL_POST_PROCESS, f"{type(self).__name__}.post_proc"):
+        with self._metrics.start_span(
+            SpanType.MODEL_POST_PROCESS, f"{type(self).__name__}.post_proc"
+        ):
             return self._post_proc(raw)
 
     @abstractmethod
@@ -297,83 +274,52 @@ class BaseModel(ABC, Generic[_InputT, _PreparedT, _RawOutputT, _ResultT]):
         """
         ...
 
-    def load(
-        self, platform: Platform, unit: ComputeUnit, *, metrics: MetricsCollector | None = None
-    ) -> None:
-        """Load model weights, recording a ``MODEL_LOAD`` span in *metrics*.
+    def load(self, platform: Platform, unit: ComputeUnit) -> None:
+        """Load model weights, recording a ``MODEL_LOAD`` span.
 
         Wraps :meth:`_load` in a :attr:`~moment_to_action.metrics.SpanType.MODEL_LOAD`
-        metrics span.  When *metrics* is ``None``, a warning is logged and a
-        :class:`~moment_to_action.metrics.NullMetricsCollector` is used so the call
-        is still instrumented (no-op spans).
+        metrics span on the collector passed at construction.
 
         Args:
             platform: The hardware platform to load the model onto.
             unit: The compute unit to target (e.g. ``ComputeUnit.CPU``).
-            metrics: Active collector to record the load span.  Pass the same
-                collector used for the surrounding pipeline run so load latency
-                appears in the same :class:`~moment_to_action.metrics.Trace`.
 
         Raises:
             RuntimeError: If the model is already loaded.
             ValueError: If *unit* is not available on *platform*.
         """
-        if metrics is None:
-            logger.warning(
-                "%s.load() called without a MetricsCollector; load latency will not be recorded",
-                type(self).__name__,
-            )
-            metrics = NullMetricsCollector()
-        with metrics.start_span(SpanType.MODEL_LOAD, f"{type(self).__name__}.load"):
+        with self._metrics.start_span(SpanType.MODEL_LOAD, f"{type(self).__name__}.load"):
             self._load(platform, unit)
 
-    def unload(self, *, metrics: MetricsCollector | None = None) -> None:
-        """Release backend resources, recording a ``MODEL_UNLOAD`` span in *metrics*.
+    def unload(self) -> None:
+        """Release backend resources, recording a ``MODEL_UNLOAD`` span.
 
         Wraps :meth:`_unload` in a :attr:`~moment_to_action.metrics.SpanType.MODEL_UNLOAD`
-        metrics span.  When *metrics* is ``None``, a warning is logged and a
-        :class:`~moment_to_action.metrics.NullMetricsCollector` is used.  When *metrics*
-        is provided but no trace is currently active, a transient trace is opened
-        automatically.
-
-        Args:
-            metrics: Active collector to record the unload span.
-
+        metrics span on the collector passed at construction.
         """
-        if metrics is None:
-            logger.warning(
-                "%s.unload() called without a MetricsCollector;"
-                " unload latency will not be recorded",
-                type(self).__name__,
-            )
-            metrics = NullMetricsCollector()
-        with metrics.start_span(SpanType.MODEL_UNLOAD, f"{type(self).__name__}.unload"):
+        with self._metrics.start_span(SpanType.MODEL_UNLOAD, f"{type(self).__name__}.unload"):
             self._unload()
 
     @contextlib.contextmanager
-    def loaded(
-        self, platform: Platform, unit: ComputeUnit, *, metrics: MetricsCollector | None = None
-    ) -> Iterator[Self]:
+    def loaded(self, platform: Platform, unit: ComputeUnit) -> Iterator[Self]:
         """Context manager: load, yield self, then unload — even on exception.
 
         Args:
             platform: The hardware platform to load onto.
             unit: The compute unit to target.
-            metrics: Collector to record ``MODEL_LOAD`` and ``MODEL_UNLOAD`` spans.
-                Passed through to :meth:`load` and :meth:`unload`.
 
         Yields:
             This model instance, ready for inference.
 
         Example:
-            >>> with model.loaded(platform, ComputeUnit.CPU, metrics=collector) as m:
+            >>> with model.loaded(platform, ComputeUnit.CPU) as m:
             ...     result = m.post_proc(m.run(m.prepare(frame)))
         """
-        self.load(platform, unit, metrics=metrics)
+        self.load(platform, unit)
         try:
             yield self
         finally:
-            self.unload(metrics=metrics)
+            self.unload()
 
     def __enter__(self) -> Self:
         """Return self for use in a ``with`` block.

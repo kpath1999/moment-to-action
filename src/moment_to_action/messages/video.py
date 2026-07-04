@@ -20,8 +20,8 @@ class FrameTensorMessage(BaseMessage):
 class VideoClipMessage(BaseMessage):
     """A temporal window of raw frames captured from a live stream or file.
 
-    Populated by :class:`~moment_to_action.stages.video.ClipBufferStage`.
-    Consumed by vision-language model stages (e.g. SmolVLM2).
+    Assembled by a windowed stage (``Stage(window=clip_len, stride=...)``)
+    consuming raw frames. Consumed by vision-language model stages.
 
     All frames share the same spatial dimensions (width x height) and are
     stored in capture order (oldest first).

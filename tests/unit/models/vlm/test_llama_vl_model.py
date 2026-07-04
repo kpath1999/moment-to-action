@@ -28,6 +28,7 @@ _SYSTEM = "You are a vision AI."
 def _make_model(
     system_prompt: str = _SYSTEM,
     max_tokens: int = 64,
+    metrics: MetricsCollector | None = None,
 ) -> Qwen25VLModel:
     """Construct a Qwen25VLModel with test parameters."""
     return Qwen25VLModel(
@@ -39,6 +40,7 @@ def _make_model(
         input_layout=None,
         system_prompt=system_prompt,
         max_tokens=max_tokens,
+        metrics=metrics,
     )
 
 
@@ -155,6 +157,18 @@ class TestLlamaVLModelPrepare:
         result = model.prepare(("x", []))  # type: ignore[arg-type]
         assert result["n_predict"] == 999
 
+    def test_prepare_includes_grammar_when_given(self) -> None:
+        """_prepare() includes a 'grammar' key when a GBNF grammar is passed."""
+        model = _make_model()
+        result = model._prepare(("x", []), grammar='root ::= "YES" | "NO"')
+        assert result["grammar"] == 'root ::= "YES" | "NO"'
+
+    def test_prepare_omits_grammar_by_default(self) -> None:
+        """_prepare() omits the 'grammar' key when none is passed."""
+        model = _make_model()
+        result = model._prepare(("x", []))
+        assert "grammar" not in result
+
     def test_prepare_img_tags_in_prompt(self) -> None:
         """prepare() includes [img-N] tags in the prompt for each image."""
         model = _make_model(system_prompt="")
@@ -176,7 +190,12 @@ class TestLlamaVLModelStream:
     """Tests for LlamaVLModel.stream()."""
 
     def _load_with_mock_llama(
-        self, model: Qwen25VLModel, tokens: list[str], inf_m: LlamaCppInferenceMetrics | None = None
+        self,
+        model: Qwen25VLModel,
+        tokens: list[str],
+        inf_m: LlamaCppInferenceMetrics | None = None,
+        *,
+        collector: MetricsCollector | None = None,
     ) -> LlamaModel:
         """Load model with a mock LlamaModel whose stream() yields given tokens."""
         mock_loaded = MagicMock(spec=LlamaModel)
@@ -184,7 +203,11 @@ class TestLlamaVLModelStream:
         mock_loaded.last_inference_metrics = inf_m
         mock_platform = MagicMock()
         mock_platform.load_llama_cpp.return_value = mock_loaded
-        model.load(mock_platform, ComputeUnit.CPU)
+        if collector is not None:
+            with collector.start_trace():
+                model.load(mock_platform, ComputeUnit.CPU)
+        else:
+            model.load(mock_platform, ComputeUnit.CPU)
         return mock_loaded
 
     def test_stream_raises_when_not_loaded(self) -> None:
@@ -195,18 +218,20 @@ class TestLlamaVLModelStream:
 
     def test_stream_yields_tokens(self) -> None:
         """stream() yields all tokens from the underlying LlamaModel.stream()."""
-        model = _make_model(system_prompt="", max_tokens=32)
-        self._load_with_mock_llama(model, ["Hello", " world"])
-
         platform = MagicMock()
         collector = MetricsCollector(platform)
+        model = _make_model(system_prompt="", max_tokens=32, metrics=collector)
+        self._load_with_mock_llama(model, ["Hello", " world"], collector=collector)
+
         with collector.start_trace():
-            tokens = list(model.stream(("describe", ["b64img"]), metrics=collector))
+            tokens = list(model.stream(("describe", ["b64img"])))
         assert tokens == ["Hello", " world"]
 
     def test_stream_attaches_inference_metrics_to_span(self) -> None:
         """stream() attaches inference_metrics to MODEL_INFERENCE span after exhaustion."""
-        model = _make_model()
+        platform = MagicMock()
+        collector = MetricsCollector(platform)
+        model = _make_model(metrics=collector)
         inf_m = LlamaCppInferenceMetrics(
             prompt_n=3,
             prompt_ms=15.0,
@@ -217,12 +242,10 @@ class TestLlamaVLModelStream:
             predicted_per_token_ms=50.0,
             predicted_per_second=20.0,
         )
-        self._load_with_mock_llama(model, ["tok1"], inf_m)
+        self._load_with_mock_llama(model, ["tok1"], inf_m, collector=collector)
 
-        platform = MagicMock()
-        collector = MetricsCollector(platform)
         with collector.start_trace():
-            list(model.stream(("prompt", ["b64"]), metrics=collector))
+            list(model.stream(("prompt", ["b64"])))
 
         stream_spans = [s for s in collector.spans if "stream" in s.name]
         assert len(stream_spans) == 1

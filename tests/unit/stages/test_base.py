@@ -2,251 +2,250 @@
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 
 from moment_to_action.messages.sensor import RawFrameMessage
+from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.stages._base import Stage
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from moment_to_action.messages import Message
-    from moment_to_action.metrics import MetricsCollector
+
+
+def _make_frame(timestamp: float = 0.0) -> RawFrameMessage:
+    """Build a RawFrameMessage with a fixed-size frame for testing."""
+    return RawFrameMessage(
+        frame=np.zeros((480, 640, 3), dtype=np.uint8),
+        source="test",
+        width=640,
+        height=480,
+        timestamp=timestamp,
+    )
+
+
+class _PassthroughStage(Stage):
+    """A concrete stage that passes each message through unchanged."""
+
+    def _process(self, items: list[Message]) -> Iterator[Message]:
+        """Yield each buffered item unchanged."""
+        yield from items
+
+
+class _CountingWindowStage(Stage):
+    """A stage that yields the number of items in each buffered window."""
+
+    def __init__(self, **kwargs: object) -> None:
+        """Initialize and track emitted windows for assertions."""
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+        self.emitted_windows: list[list[Message]] = []
+
+    def _process(self, items: list[Message]) -> Iterator[Message]:
+        """Record the window and yield nothing."""
+        self.emitted_windows.append(items)
+        yield from ()
 
 
 @pytest.mark.unit
 class TestStage:
     """Tests for Stage base class."""
 
-    @pytest.fixture
-    def sample_message(self) -> RawFrameMessage:
-        """Create a sample message for testing."""
-        return RawFrameMessage(
-            frame=np.zeros((480, 640, 3), dtype=np.uint8),
-            source="test",
-            width=640,
-            height=480,
-            timestamp=time.time(),
-        )
-
-    @pytest.fixture
-    def concrete_stage_class(self) -> type[Stage]:
-        """Create a concrete Stage subclass for testing."""
-
-        class ConcreteStage(Stage):
-            """A concrete stage that passes through the message unchanged."""
-
-            def _process(
-                self,
-                msg: Message,
-                _metrics: MetricsCollector,
-            ) -> Message | None:
-                # Simulate some minimal work
-                time.sleep(0.001)
-                return msg
-
-        return ConcreteStage
-
-    def test_stage_name_property_returns_class_name(
-        self, concrete_stage_class: type[Stage]
-    ) -> None:
+    def test_stage_name_property_returns_class_name(self) -> None:
         """Test that Stage.name property returns the class name."""
-        stage = concrete_stage_class()
-        assert stage.name == "ConcreteStage"
+        stage = _PassthroughStage()
+        assert stage.name == "_PassthroughStage"
 
-    def test_stage_process_stamps_latency_on_result(
-        self, sample_message: RawFrameMessage, concrete_stage_class: type[Stage]
-    ) -> None:
-        """Test that Stage.process() stamps latency_ms on the result."""
-        stage = concrete_stage_class()
+    def test_process_is_lazy_generator(self) -> None:
+        """process() must return a generator, not eagerly consume the input stream."""
+        calls: list[int] = []
 
-        # Verify initial message has latency_ms = 0.0
-        assert sample_message.latency_ms == 0.0
+        def source() -> Iterator[Message]:
+            for i in range(3):
+                calls.append(i)
+                yield _make_frame(float(i))
 
-        # Process the message
-        result = stage.process(sample_message)
+        stage = _PassthroughStage()
+        gen = stage.process(source())
+        assert calls == []  # nothing pulled yet
+        next(gen)
+        assert calls == [0]
 
-        # Verify result is not None
-        assert result is not None
+    def test_window_one_emits_every_message(self) -> None:
+        """Default window=1 emits once per input message."""
+        stage = _PassthroughStage()
+        frames = [_make_frame(float(i)) for i in range(3)]
+        results = list(stage.process(iter(frames)))
+        assert results == frames
 
-        # Verify latency_ms was stamped. With a real metrics collector (not NullMetricsCollector),
-        # it should be measurable. We check with a real MetricsCollector to avoid rounding issues
-        from moment_to_action.metrics import MetricsCollector
+    def test_window_buffers_before_emitting(self) -> None:
+        """window=N withholds emission until N messages have been buffered."""
+        stage = _CountingWindowStage(window=3)
+        frames = [_make_frame(float(i)) for i in range(3)]
+        list(stage.process(iter(frames[:2])))
+        assert stage.emitted_windows == []
 
-        metrics = MetricsCollector(session_id="test_stage_latency")
-        with metrics.start_trace():
-            result_with_metrics = stage.process(sample_message, metrics=metrics)
+        stage2 = _CountingWindowStage(window=3)
+        list(stage2.process(iter(frames)))
+        assert len(stage2.emitted_windows) == 1
+        assert stage2.emitted_windows[0] == frames
 
-        assert result_with_metrics is not None
-        # Should be at least 1ms due to sleep in ConcreteStage._process
-        assert result_with_metrics.latency_ms >= 1.0
+    def test_stride_gates_subsequent_emissions(self) -> None:
+        """After the first full window, stride new messages are required per emission."""
+        stage = _CountingWindowStage(window=2, stride=2)
+        frames = [_make_frame(float(i)) for i in range(5)]
+        list(stage.process(iter(frames)))
+        # First emission once full (frames[0:2]); then every 2 new frames.
+        assert len(stage.emitted_windows) == 2
+        assert stage.emitted_windows[0] == frames[0:2]
+        assert stage.emitted_windows[1] == frames[2:4]
 
-    def test_stage_process_logs_to_metrics_collector(
-        self, sample_message: RawFrameMessage, concrete_stage_class: type[Stage]
-    ) -> None:
-        """Test that Stage.process() creates a span in the MetricsCollector if provided."""
-        from moment_to_action.metrics import MetricsCollector
+    def test_stride_one_emits_every_new_frame_once_full(self) -> None:
+        """stride=1 slides the window on every new frame once full."""
+        stage = _CountingWindowStage(window=2, stride=1)
+        frames = [_make_frame(float(i)) for i in range(4)]
+        list(stage.process(iter(frames)))
+        assert len(stage.emitted_windows) == 3
+        assert stage.emitted_windows[0] == frames[0:2]
+        assert stage.emitted_windows[1] == frames[1:3]
+        assert stage.emitted_windows[2] == frames[2:4]
 
-        stage = concrete_stage_class()
-        # Create a real metrics collector to track spans
-        metrics = MetricsCollector(session_id="test_stage")
+    def test_ready_predicate_overrides_count_based_emit(self) -> None:
+        """A custom ready predicate fully controls emission, bypassing stride."""
+        stage = _CountingWindowStage(window=5, ready=lambda items: len(items) >= 1)
+        frames = [_make_frame(float(i)) for i in range(3)]
+        list(stage.process(iter(frames)))
+        assert len(stage.emitted_windows) == 3
 
-        # Process with metrics - should create a STAGE span internally
-        with metrics.start_trace():
-            result = stage.process(sample_message, metrics=metrics)
+    def test_ready_predicate_false_skips_emission(self) -> None:
+        """A ready predicate returning False withholds emission for that message."""
+        stage = _CountingWindowStage(window=5, ready=lambda items: len(items) >= 2)
+        frames = [_make_frame(float(i)) for i in range(3)]
+        list(stage.process(iter(frames)))
+        # Only the 2nd and 3rd messages satisfy len(items) >= 2.
+        assert len(stage.emitted_windows) == 2
 
-        # Verify processing worked
-        assert result is not None
-        assert result.latency_ms > 0.0
+    def test_drop_predicate_discards_before_buffering(self) -> None:
+        """Messages matching the drop predicate never reach _process."""
+        stage = _CountingWindowStage(window=1, drop=lambda m: m.timestamp < 0)
+        frames = [_make_frame(-1.0), _make_frame(1.0)]
+        list(stage.process(iter(frames)))
+        assert len(stage.emitted_windows) == 1
+        assert stage.emitted_windows[0][0].timestamp == 1.0
 
-        # Verify we have a trace with a pipeline span and stage span
-        report = metrics.report()
-        assert len(report.traces) > 0
-        # The trace should have spans for both pipeline and stage (created internally)
-        trace = report.traces[0]
-        assert len(trace.spans) > 0  # Should have at least a stage span
-
-    def test_stage_process_returns_none_propagation(self) -> None:
-        """Test that Stage.process() returns None if _process returns None."""
+    def test_process_returns_nothing_when_process_yields_nothing(self) -> None:
+        """A stage whose _process yields no messages produces an empty output stream."""
 
         class NoneStage(Stage):
-            """A stage that returns None."""
+            def _process(self, items: list[Message]) -> Iterator[Message]:
+                yield from ()
 
-            def _process(
-                self,
-                _msg: Message,
-                _metrics: MetricsCollector,
-            ) -> Message | None:
-                return None
+        results = list(NoneStage().process(iter([_make_frame()])))
+        assert results == []
 
-        import time
+    def test_window_less_than_one_raises(self) -> None:
+        """Window < 1 raises ValueError."""
+        with pytest.raises(ValueError, match="window"):
+            _PassthroughStage(window=0)
 
-        message = RawFrameMessage(
-            frame=np.zeros((480, 640, 3), dtype=np.uint8),
-            source="test",
-            width=640,
-            height=480,
-            timestamp=time.time(),
-        )
+    def test_stride_less_than_one_raises(self) -> None:
+        """An explicit stride < 1 raises ValueError."""
+        with pytest.raises(ValueError, match="stride"):
+            _PassthroughStage(stride=0)
 
-        stage = NoneStage()
-        result = stage.process(message)
+    def test_process_records_stage_span_in_metrics(self) -> None:
+        """Each emission is wrapped in a SpanType.STAGE span on the provided collector."""
+        metrics = MetricsCollector(session_id="test_stage_spans")
+        stage = _PassthroughStage(metrics=metrics)
+        with metrics.start_trace():
+            list(stage.process(iter([_make_frame()])))
 
-        # Verify result is None
-        assert result is None
+        stage_spans = [s for s in metrics.spans if s.type_ is SpanType.STAGE]
+        assert len(stage_spans) == 1
+        assert stage_spans[0].name == "_PassthroughStage"
 
-    def test_stage_process_no_metrics_optional(
-        self, sample_message: RawFrameMessage, concrete_stage_class: type[Stage]
-    ) -> None:
-        """Test that Stage.process() works without MetricsCollector."""
-        stage = concrete_stage_class()
+    def test_process_works_without_metrics(self) -> None:
+        """Stage is standalone-constructable and usable without a MetricsCollector."""
+        stage = _PassthroughStage()
+        results = list(stage.process(iter([_make_frame()])))
+        assert len(results) == 1
 
-        # Process with metrics=None (should not raise)
-        result = stage.process(sample_message, metrics=None)
+    def test_generator_exit_propagates_on_early_break(self) -> None:
+        """Breaking out of a consumer loop closes the stage's generator (GeneratorExit)."""
+        closed = False
 
-        # Verify latency was still stamped (even if ~0 with NullMetricsCollector)
-        assert result is not None
-        # NullMetricsCollector can give negative values due to rounding, so just check it's a number
-        assert isinstance(result.latency_ms, float)
+        class ExitTrackingStage(Stage):
+            def _process(self, items: list[Message]) -> Iterator[Message]:
+                nonlocal closed
+                try:
+                    for item in items:
+                        yield item
+                        yield item  # yield twice so we can break mid-emission
+                finally:
+                    closed = True
 
-    def test_stage_process_stage_index_passed_correctly(
-        self, sample_message: RawFrameMessage
-    ) -> None:
-        """Test that Stage.process() works correctly in a pipeline context."""
+        stage = ExitTrackingStage()
+        frames = [_make_frame(float(i)) for i in range(3)]
+        gen = stage.process(iter(frames))
+        next(gen)  # pull the first output only
+        gen.close()
+        assert closed is True
+
+    def test_generator_exit_cascades_through_multiple_stages(self) -> None:
+        """Closing the last stage's generator closes every upstream stage's generator too.
+
+        `for msg in stream` (used to pull from the upstream stage) does not
+        automatically forward close()/throw() the way `yield from` does, so
+        Stage.process() must explicitly close its upstream `stream` on exit —
+        this is what makes early-abort (e.g. stopping LLM generation once a
+        decision fires) actually reach all the way back to the source.
+        """
+        upstream_closed = False
+        downstream_closed = False
+
+        class UpstreamStage(Stage):
+            def _process(self, items: list[Message]) -> Iterator[Message]:
+                nonlocal upstream_closed
+                try:
+                    for item in items:
+                        yield item
+                        yield item
+                finally:
+                    upstream_closed = True
+
+        class DownstreamStage(Stage):
+            def _process(self, items: list[Message]) -> Iterator[Message]:
+                nonlocal downstream_closed
+                try:
+                    yield from items
+                finally:
+                    downstream_closed = True
+
+        upstream = UpstreamStage()
+        downstream = DownstreamStage()
+        frames = [_make_frame(float(i)) for i in range(3)]
+
+        gen = downstream.process(upstream.process(iter(frames)))
+        next(gen)
+        gen.close()
+
+        assert downstream_closed is True
+        assert upstream_closed is True
+
+    def test_multi_stage_pipeline_flows_through(self) -> None:
+        """Chaining process() calls the way Pipeline does still flows messages through."""
         from moment_to_action.pipeline import Pipeline
 
-        class MockedStage(Stage):
-            def _process(
-                self,
-                msg: Message,
-                _metrics: MetricsCollector,
-            ) -> Message | None:
-                return msg
-
-        # Create a pipeline with multiple stages
-        stage1 = MockedStage()
-        stage2 = MockedStage()
-        pipeline = Pipeline([stage1, stage2])
-
-        # Run through pipeline with a real metrics collector to get accurate timing
-        from moment_to_action.metrics import MetricsCollector
+        stage1 = _PassthroughStage()
+        stage2 = _PassthroughStage()
 
         metrics = MetricsCollector(session_id="test_pipeline_stage_order")
+        pipeline = Pipeline([stage1, stage2], metrics=metrics)
+        frames = [_make_frame(float(i)) for i in range(2)]
         with metrics.start_trace():
-            result = pipeline.run(sample_message, metrics=metrics)
+            results = list(pipeline.run(iter(frames)))
 
-        # Verify all stages processed correctly
-        assert result is not None
-        # Latency should be measurable with a real metrics collector
-        assert result.latency_ms >= 0.0  # Allow for rounding
-
-    def test_stage_process_preserves_message_data(self, concrete_stage_class: type[Stage]) -> None:
-        """Test that Stage.process() preserves message data except latency_ms."""
-        original_message = RawFrameMessage(
-            frame=np.ones((480, 640, 3), dtype=np.uint8) * 100,
-            source="test_source",
-            width=640,
-            height=480,
-            timestamp=12345.0,
-        )
-
-        stage = concrete_stage_class()
-        result = stage.process(original_message)
-
-        # Verify data is preserved
-        assert result is not None
-        assert isinstance(result, RawFrameMessage)
-        assert result.source == "test_source"
-        assert result.width == 640
-        assert result.height == 480
-        assert result.timestamp == 12345.0
-        assert result.frame is not None
-        assert original_message.frame is not None
-        assert np.array_equal(result.frame, original_message.frame)
-
-    def test_stage_process_timing_accuracy(self, sample_message: RawFrameMessage) -> None:
-        """Test that Stage.process() measures latency accurately."""
-
-        class SlowStage(Stage):
-            def _process(
-                self,
-                msg: Message,
-                _metrics: MetricsCollector,
-            ) -> Message | None:
-                time.sleep(0.05)  # 50ms
-                return msg
-
-        stage = SlowStage()
-
-        # Use a real metrics collector to get accurate timing
-        from moment_to_action.metrics import MetricsCollector
-
-        metrics = MetricsCollector(session_id="test_stage_timing")
-        with metrics.start_trace():
-            result = stage.process(sample_message, metrics=metrics)
-
-        # Verify latency is approximately 50ms (allow 10ms margin)
-        assert result is not None
-        assert 40.0 <= result.latency_ms <= 100.0
-
-    def test_stage_process_returns_same_message_type(
-        self, concrete_stage_class: type[Stage]
-    ) -> None:
-        """Test that Stage.process() returns the same message type."""
-        import time
-
-        message = RawFrameMessage(
-            frame=np.zeros((480, 640, 3), dtype=np.uint8),
-            source="test",
-            width=640,
-            height=480,
-            timestamp=time.time(),
-        )
-
-        stage = concrete_stage_class()
-        result = stage.process(message)
-
-        # Verify type is preserved
-        assert isinstance(result, RawFrameMessage)
+        assert results == frames
