@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
     from moment_to_action.hardware import LoadedModel, Platform
     from moment_to_action.hardware._types import ComputeUnit, DataType
+    from moment_to_action.metrics import MetricsCollector
 
 _MNV2_INPUT_SIZE = 224
 _MNV2_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -62,6 +63,7 @@ class MobileNetV2Model(ImageClassificationModel):
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str = "NCHW",
+        metrics: MetricsCollector | None = None,
     ) -> None:
         """Initialize an unloaded MobileNetV2Model.
 
@@ -76,9 +78,16 @@ class MobileNetV2Model(ImageClassificationModel):
                 the explicit ``unit`` argument.
             input_layout: Input tensor layout (unused by MobileNet V2, which
                 always preprocesses to NCHW; accepted for interface uniformity).
+            metrics: Metrics collector used to record ``MODEL_*`` spans.
         """
         super().__init__(
-            variant, path, model_type, data_type, backends=backends, input_layout=input_layout
+            variant,
+            path,
+            model_type,
+            data_type,
+            backends=backends,
+            input_layout=input_layout,
+            metrics=metrics,
         )
         self._top_k = top_k
         self._handle: LoadedModel | None = None

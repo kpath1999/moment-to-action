@@ -24,6 +24,7 @@ _SYSTEM = "Be concise."
 def _make_model(
     system_prompt: str = _SYSTEM,
     max_tokens: int = 64,
+    metrics: MetricsCollector | None = None,
 ) -> Qwen2Model:
     """Construct a Qwen2Model with test parameters."""
     return Qwen2Model(
@@ -35,6 +36,7 @@ def _make_model(
         input_layout=None,
         system_prompt=system_prompt,
         max_tokens=max_tokens,
+        metrics=metrics,
     )
 
 
@@ -180,6 +182,18 @@ class TestLlamaGGUFModelPrepare:
         result = model.prepare("x")
         assert result["n_predict"] == 999
 
+    def test_prepare_includes_grammar_when_given(self) -> None:
+        """_prepare() includes a 'grammar' key when a GBNF grammar is passed."""
+        model = _make_model()
+        result = model._prepare("x", grammar='root ::= "YES" | "NO"')
+        assert result["grammar"] == 'root ::= "YES" | "NO"'
+
+    def test_prepare_omits_grammar_by_default(self) -> None:
+        """_prepare() omits the 'grammar' key when none is passed."""
+        model = _make_model()
+        result = model._prepare("x")
+        assert "grammar" not in result
+
 
 @pytest.mark.unit
 class TestLlamaGGUFModelRun:
@@ -216,7 +230,9 @@ class TestLlamaGGUFModelRun:
 
     def test_run_attaches_inference_metrics_to_span(self) -> None:
         """run() attaches LlamaCppInferenceMetrics to the MODEL_INFERENCE span."""
-        model = _make_model()
+        platform = MagicMock()
+        collector = MetricsCollector(platform)
+        model = _make_model(metrics=collector)
         inf_m = LlamaCppInferenceMetrics(
             prompt_n=5,
             prompt_ms=25.0,
@@ -230,12 +246,10 @@ class TestLlamaGGUFModelRun:
         mock_loaded = self._make_llama_loaded_model(inf_m)
         mock_platform = MagicMock()
         mock_platform.load_llama_cpp.return_value = mock_loaded
-        model.load(mock_platform, ComputeUnit.CPU)
 
-        platform = MagicMock()
-        collector = MetricsCollector(platform)
         with collector.start_trace():
-            model.run({"prompt": "x", "n_predict": 10}, metrics=collector)
+            model.load(mock_platform, ComputeUnit.CPU)
+            model.run({"prompt": "x", "n_predict": 10})
 
         inference_spans = [s for s in collector.spans if "run" in s.name]
         assert len(inference_spans) == 1
@@ -243,17 +257,17 @@ class TestLlamaGGUFModelRun:
 
     def test_run_no_inference_metrics_when_not_llama_model(self) -> None:
         """run() does not fail and span.inference_metrics is None for non-LlamaModel."""
-        model = _make_model()
+        platform = MagicMock()
+        collector = MetricsCollector(platform)
+        model = _make_model(metrics=collector)
         mock_loaded = MagicMock()  # not spec=LlamaModel
         mock_loaded.run.return_value = "hi"
         mock_platform = MagicMock()
         mock_platform.load_llama_cpp.return_value = mock_loaded
-        model.load(mock_platform, ComputeUnit.CPU)
 
-        platform = MagicMock()
-        collector = MetricsCollector(platform)
         with collector.start_trace():
-            result = model.run({"prompt": "x"}, metrics=collector)
+            model.load(mock_platform, ComputeUnit.CPU)
+            result = model.run({"prompt": "x"})
         assert result == "hi"
 
 
@@ -287,21 +301,23 @@ class TestLlamaGGUFModelStream:
 
     def test_stream_yields_tokens(self) -> None:
         """stream() yields all tokens from the underlying LlamaModel.stream()."""
-        model = _make_model(system_prompt="sys", max_tokens=32)
+        platform = MagicMock()
+        collector = MetricsCollector(platform)
+        model = _make_model(system_prompt="sys", max_tokens=32, metrics=collector)
         mock_loaded = self._make_loaded_llama(["Hello", " world"])
         mock_platform = MagicMock()
         mock_platform.load_llama_cpp.return_value = mock_loaded
-        model.load(mock_platform, ComputeUnit.CPU)
 
-        platform = MagicMock()
-        collector = MetricsCollector(platform)
         with collector.start_trace():
-            tokens = list(model.stream("hi", metrics=collector))
+            model.load(mock_platform, ComputeUnit.CPU)
+            tokens = list(model.stream("hi"))
         assert tokens == ["Hello", " world"]
 
     def test_stream_attaches_inference_metrics_to_span(self) -> None:
         """stream() attaches inference_metrics to MODEL_INFERENCE span after exhaustion."""
-        model = _make_model()
+        platform = MagicMock()
+        collector = MetricsCollector(platform)
+        model = _make_model(metrics=collector)
         inf_m = LlamaCppInferenceMetrics(
             prompt_n=3,
             prompt_ms=15.0,
@@ -315,12 +331,10 @@ class TestLlamaGGUFModelStream:
         mock_loaded = self._make_loaded_llama(["tok1", "tok2"], inf_m)
         mock_platform = MagicMock()
         mock_platform.load_llama_cpp.return_value = mock_loaded
-        model.load(mock_platform, ComputeUnit.CPU)
 
-        platform = MagicMock()
-        collector = MetricsCollector(platform)
         with collector.start_trace():
-            list(model.stream("prompt", metrics=collector))
+            model.load(mock_platform, ComputeUnit.CPU)
+            list(model.stream("prompt"))
 
         stream_spans = [s for s in collector.spans if "stream" in s.name]
         assert len(stream_spans) == 1

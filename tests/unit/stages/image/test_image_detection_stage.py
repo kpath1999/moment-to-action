@@ -13,6 +13,7 @@ from moment_to_action.hardware import DataType, ModelType
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import FrameTensorMessage
+from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.stages.image._base import ImageStage
@@ -22,9 +23,16 @@ from moment_to_action.stages.image._detection import ImageDetectionStage
 class _StubDetectionModel(ImageDetectionModel):
     """Minimal concrete detection model for span-recording tests."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, metrics: MetricsCollector | None = None) -> None:
         """Initialize with fixed output."""
-        super().__init__("default", Path("/x"), ModelType.ONNX, DataType.FP32, backends={})
+        super().__init__(
+            "default",
+            Path("/x"),
+            ModelType.ONNX,
+            DataType.FP32,
+            backends={},
+            metrics=metrics,
+        )
         self._platform = MagicMock()
 
     def _load(self, platform: object, unit: object) -> None:
@@ -120,7 +128,7 @@ class TestImageDetectionStage:
     ) -> None:
         """Valid RawFrameMessage with frame → DetectionMessage with expected detections."""
         stage = ImageDetectionStage(model=mock_model)
-        result = stage.process(raw_frame_msg)
+        (result,) = list(stage.process(iter([raw_frame_msg])))
 
         assert isinstance(result, DetectionMessage)
         assert len(result.detections) == 1
@@ -134,7 +142,7 @@ class TestImageDetectionStage:
     ) -> None:
         """Verify prepare → run → post_proc call chain is correct."""
         stage = ImageDetectionStage(model=mock_model)
-        stage.process(raw_frame_msg)
+        list(stage.process(iter([raw_frame_msg])))
 
         mock_model.prepare.assert_called_once()
         assert raw_frame_msg.frame is not None
@@ -142,35 +150,29 @@ class TestImageDetectionStage:
         assert mock_model.run.call_args[0][0] is mock_model.prepare.return_value
         assert mock_model.post_proc.call_args[0][0] is mock_model.run.return_value
 
-    def test_wrong_message_type_returns_none_and_warns(
-        self, mock_model: MagicMock, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Non-RawFrameMessage input must return None and log a warning."""
-        import logging
-
+    def test_wrong_message_type_yields_nothing(self, mock_model: MagicMock) -> None:
+        """Non-RawFrameMessage input must be dropped before it reaches _process."""
         stage = ImageDetectionStage(model=mock_model)
         wrong_msg = FrameTensorMessage(
             tensor=np.zeros((1, 3, 640, 640), dtype=np.float32),
             original_size=(640, 480),
             timestamp=time.time(),
         )
-        with caplog.at_level(logging.WARNING):
-            result = stage.process(wrong_msg)
+        results = list(stage.process(iter([wrong_msg])))
 
-        assert result is None
+        assert results == []
         mock_model.prepare.assert_not_called()
-        assert any("RawFrameMessage" in r.message for r in caplog.records)
 
-    def test_dropped_frame_returns_none(
+    def test_dropped_frame_yields_nothing(
         self,
         mock_model: MagicMock,
         dropped_frame_msg: RawFrameMessage,
     ) -> None:
-        """RawFrameMessage with frame=None must return None without calling model."""
+        """RawFrameMessage with frame=None must be dropped without calling model."""
         stage = ImageDetectionStage(model=mock_model)
-        result = stage.process(dropped_frame_msg)
+        results = list(stage.process(iter([dropped_frame_msg])))
 
-        assert result is None
+        assert results == []
         mock_model.prepare.assert_not_called()
 
     def test_empty_detections_returns_detection_message(
@@ -181,7 +183,7 @@ class TestImageDetectionStage:
         """Model returning empty list → DetectionMessage with empty detections list."""
         mock_model.post_proc.return_value = []
         stage = ImageDetectionStage(model=mock_model)
-        result = stage.process(raw_frame_msg)
+        (result,) = list(stage.process(iter([raw_frame_msg])))
 
         assert isinstance(result, DetectionMessage)
         assert result.detections == []
@@ -193,11 +195,11 @@ class TestImageDetectionStage:
         """Happy path records prepare, run, and post_proc spans in metrics."""
         from moment_to_action.metrics import MetricsCollector, SpanType
 
-        stub = _StubDetectionModel()
-        stage = ImageDetectionStage(model=stub)
         metrics = MetricsCollector(session_id="test_detection_spans")
+        stub = _StubDetectionModel(metrics=metrics)
+        stage = ImageDetectionStage(model=stub, metrics=metrics)
         with metrics.start_trace():
-            stage.process(raw_frame_msg, metrics=metrics)
+            list(stage.process(iter([raw_frame_msg])))
 
         span_names = {s.name for s in metrics.spans}
         span_types = {s.type_ for s in metrics.spans}
@@ -215,7 +217,7 @@ class TestImageDetectionStage:
     ) -> None:
         """Output DetectionMessage.timestamp must match input message timestamp."""
         stage = ImageDetectionStage(model=mock_model)
-        result = stage.process(raw_frame_msg)
+        (result,) = list(stage.process(iter([raw_frame_msg])))
 
         assert isinstance(result, DetectionMessage)
         assert result.timestamp == raw_frame_msg.timestamp

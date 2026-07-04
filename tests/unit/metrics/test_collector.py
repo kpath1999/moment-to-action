@@ -865,3 +865,89 @@ class TestResourceSampling:
 
         # No resource samples should be collected without a backend
         assert len(trace.resource_usage_samples) == 0
+
+
+@pytest.mark.unit
+class TestTimedStream:
+    """Tests for MetricsCollector.timed_stream()."""
+
+    def test_yields_tokens_unchanged(self, collector: MetricsCollector) -> None:
+        """timed_stream() yields every token from the source iterable, unchanged."""
+        with collector.start_trace(), collector.start_span(SpanType.MODEL_INFERENCE, "infer"):
+            tokens = list(collector.timed_stream(["a", "b", "c"]))
+        assert tokens == ["a", "b", "c"]
+
+    def test_stamps_ttft_and_itl_on_current_span(self, collector: MetricsCollector) -> None:
+        """timed_stream() stamps ttft_ms and mean/std itl on the currently open span."""
+        with (
+            collector.start_trace(),
+            collector.start_span(SpanType.MODEL_INFERENCE, "infer") as span,
+        ):
+            list(collector.timed_stream(["a", "b", "c"]))
+
+        assert span.metadata["ttft_ms"] >= 0.0
+        assert span.metadata["mean_itl_ms"] >= 0.0
+        assert span.metadata["std_itl_ms"] >= 0.0
+
+    def test_single_token_has_no_itl(self, collector: MetricsCollector) -> None:
+        """A single-token stream has ttft_ms but no itl (no inter-token gap to measure)."""
+        with (
+            collector.start_trace(),
+            collector.start_span(SpanType.MODEL_INFERENCE, "infer") as span,
+        ):
+            list(collector.timed_stream(["only"]))
+
+        assert "ttft_ms" in span.metadata
+        assert "mean_itl_ms" not in span.metadata
+
+    def test_empty_stream_stamps_nothing(self, collector: MetricsCollector) -> None:
+        """An empty token stream stamps no metadata at all."""
+        with (
+            collector.start_trace(),
+            collector.start_span(SpanType.MODEL_INFERENCE, "infer") as span,
+        ):
+            list(collector.timed_stream([]))
+
+        assert span.metadata == {}
+
+    def test_yn_predicate_stamps_ttfyd(self, collector: MetricsCollector) -> None:
+        """yn_predicate firing on accumulated text stamps ttfyd_ms."""
+        with (
+            collector.start_trace(),
+            collector.start_span(SpanType.MODEL_INFERENCE, "infer") as span,
+        ):
+            list(
+                collector.timed_stream(
+                    ["YE", "S", " because"], yn_predicate=lambda acc: acc.startswith("YES")
+                )
+            )
+
+        assert "ttfyd_ms" in span.metadata
+
+    def test_yn_predicate_never_firing_omits_ttfyd(self, collector: MetricsCollector) -> None:
+        """ttfyd_ms is not stamped when yn_predicate never returns truthy."""
+        with (
+            collector.start_trace(),
+            collector.start_span(SpanType.MODEL_INFERENCE, "infer") as span,
+        ):
+            list(collector.timed_stream(["a", "b"], yn_predicate=lambda _acc: False))
+
+        assert "ttfyd_ms" not in span.metadata
+
+    def test_metrics_recorded_on_early_close(self, collector: MetricsCollector) -> None:
+        """Closing the generator early still records ttft via the finally block."""
+        with (
+            collector.start_trace(),
+            collector.start_span(SpanType.MODEL_INFERENCE, "infer") as span,
+        ):
+            gen = collector.timed_stream(iter(["a", "b", "c"]))
+            next(gen)
+            gen.close()
+
+        assert "ttft_ms" in span.metadata
+
+    def test_null_metrics_collector_passes_through(self) -> None:
+        """NullMetricsCollector.timed_stream() is a no-op passthrough."""
+        null_collector = NullMetricsCollector()
+        tokens = list(null_collector.timed_stream(["x", "y"], yn_predicate=lambda _acc: True))
+        assert tokens == ["x", "y"]

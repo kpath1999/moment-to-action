@@ -941,7 +941,6 @@ def main() -> None:  # noqa: C901, PLR0915
     console.print(f"  device : {'CPU' if args.cpu else 'GPU'}")
     console.print()
 
-    manager = ModelManager(path_manager)
     all_rows: list[dict] = []
     model_entries: list[dict] = []
 
@@ -966,6 +965,7 @@ def main() -> None:  # noqa: C901, PLR0915
 
             platform = Platform(config)
             metrics = MetricsCollector(platform)
+            manager = ModelManager(path_manager, metrics=metrics)
             try:
                 model = manager.get_model(
                     model_id,
@@ -980,7 +980,7 @@ def main() -> None:  # noqa: C901, PLR0915
             rows: list[dict] = []
             with metrics.start_trace():
                 try:
-                    model.load(platform, compute_unit, metrics=metrics)
+                    model.load(platform, compute_unit)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                     progress.advance(model_task)
@@ -999,7 +999,7 @@ def main() -> None:  # noqa: C901, PLR0915
                 )
 
                 try:
-                    model.unload(metrics=metrics)
+                    model.unload()
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 

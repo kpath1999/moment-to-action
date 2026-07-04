@@ -16,6 +16,7 @@ from moment_to_action.models.image.detection._types import BoundingBox, Detectio
 if TYPE_CHECKING:
     from moment_to_action.hardware import LoadedModel, Platform
     from moment_to_action.hardware._types import ComputeUnit, DataType
+    from moment_to_action.metrics import MetricsCollector
 
 _YOLO_OUTPUT_NAME = "output0"
 _YOLO_INPUT_SIZE = 640
@@ -314,6 +315,7 @@ class YOLOModel(ImageDetectionModel):
         *,
         backends: dict[ComputeUnit, dict[str, str]],
         input_layout: str = "NCHW",
+        metrics: MetricsCollector | None = None,
     ) -> None:
         """Initialize an unloaded YOLOModel.
 
@@ -328,9 +330,16 @@ class YOLOModel(ImageDetectionModel):
                 the explicit ``unit`` argument.
             input_layout: ``"NCHW"`` or ``"NHWC"``.  QCS6490 AI Hub DLC exports
                 use ``"NHWC"``; all other variants use ``"NCHW"`` (default).
+            metrics: Metrics collector used to record ``MODEL_*`` spans.
         """
         super().__init__(
-            variant, path, model_type, data_type, backends=backends, input_layout=input_layout
+            variant,
+            path,
+            model_type,
+            data_type,
+            backends=backends,
+            input_layout=input_layout,
+            metrics=metrics,
         )
         self._confidence_threshold = confidence_threshold
         self._handle: LoadedModel | None = None

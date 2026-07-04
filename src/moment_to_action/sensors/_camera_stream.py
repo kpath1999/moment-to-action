@@ -120,9 +120,9 @@ class CameraStreamSensor(BaseSensor):
 
         Returns:
             A :class:`~moment_to_action.messages.sensor.RawFrameMessage`.
-            ``frame`` is ``None`` when the device drops a frame; the
-            pipeline should handle this gracefully (e.g. :class:`ClipBufferStage`
-            simply discards ``None`` frames).
+            ``frame`` is ``None`` when the device drops a frame; consuming
+            stages should handle this gracefully (e.g. via a ``drop``
+            predicate that discards ``None`` frames before buffering).
 
         Raises:
             OSError: If the sensor has not been opened via :meth:`open`.

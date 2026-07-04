@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from moment_to_action.hardware._types import ComputeUnit
+    from moment_to_action.metrics import MetricsCollector
     from moment_to_action.paths import PathManager
     from moment_to_action.paths._cache._models import CachedModelInfo, ModelCacheContents
 
@@ -30,6 +31,7 @@ class ModelManager:
         *,
         registry: dict[ModelID, ModelInfo] = MODEL_REGISTRY,
         show_progress: bool = True,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         """Initialize the ModelManager with a given registry.
 
@@ -37,10 +39,13 @@ class ModelManager:
             path_manager: An instance of PathManager to handle file paths.
             registry: A dictionary mapping ModelIDs to their ModelInfo. Defaults to MODEL_REGISTRY.
             show_progress: Whether to show progress bars during downloads.
+            metrics: Metrics collector forwarded to every model constructed via
+                :meth:`get_model`, so all models share one collector instance.
         """
         self._registry = registry
         self._path_manager = path_manager
         self._show_progress = show_progress
+        self._metrics = metrics
 
     def _get_model_info(self, model: ModelID) -> ModelInfo:
         """Retrieve the ModelInfo for a given ModelID."""
@@ -270,6 +275,7 @@ class ModelManager:
             variant_obj.data_type,
             backends=variant_obj.backends,
             input_layout=variant_obj.input_layout,
+            metrics=self._metrics,
             **model_kwargs,
         )
 

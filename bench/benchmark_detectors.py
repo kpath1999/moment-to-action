@@ -315,7 +315,7 @@ def _ap50(
 
 
 def _run_benchmark(  # noqa: PLR0913
-    manager: ModelManager,
+    path_manager: PathManager,
     model_id: ModelID,
     variant: str,
     model_name: str,
@@ -332,7 +332,7 @@ def _run_benchmark(  # noqa: PLR0913
     + unload spans with hardware resource samples).
 
     Args:
-        manager: ModelManager used to resolve/download/instantiate the model.
+        path_manager: PathManager used to resolve/download the model files.
         model_id: Model to benchmark.
         variant: Registry variant key to load (qcs DLC variant on-device).
         model_name: Human-readable model name for output rows.
@@ -355,13 +355,13 @@ def _run_benchmark(  # noqa: PLR0913
         )
         return rows
 
+    metrics = MetricsCollector(platform)
+    manager = ModelManager(path_manager, metrics=metrics)
     try:
         model = manager.get_model(model_id, variant=variant, unit=unit)
     except Exception as exc:  # noqa: BLE001
         console.print(f"  [yellow]Skip {model_name}/{backend_name} ({variant}): {exc}[/yellow]")
         return rows
-
-    metrics = MetricsCollector(platform)
 
     for cycle in range(1, _N_CYCLES + 1):
         with metrics.start_trace():
@@ -374,7 +374,6 @@ def _run_benchmark(  # noqa: PLR0913
                 cycle=cycle,
                 images=images,
                 gt_by_image=gt_by_image,
-                metrics=metrics,
             )
         if cycle_row is not None:
             cycle_row["metrics_report"] = metrics.report().json()
@@ -383,7 +382,7 @@ def _run_benchmark(  # noqa: PLR0913
     return rows
 
 
-def _run_cycle(  # noqa: PLR0913
+def _run_cycle(
     model: object,
     platform: Platform,
     unit: ComputeUnit,
@@ -392,14 +391,13 @@ def _run_cycle(  # noqa: PLR0913
     cycle: int,
     images: list[np.ndarray],
     gt_by_image: list[list[list[float]]],
-    metrics: MetricsCollector,
 ) -> dict | None:
     """Run one load → per-image infer → unload cycle inside an active trace.
 
     All latency data is captured via MetricsCollector spans (MODEL_LOAD,
-    MODEL_PREPROCESS, MODEL_INFERENCE, MODEL_POST_PROCESS, MODEL_UNLOAD) and
-    included in the trace, which is serialized to the output JSON via
-    ``metrics.report().json()``.
+    MODEL_PREPROCESS, MODEL_INFERENCE, MODEL_POST_PROCESS, MODEL_UNLOAD) on the
+    collector the model was constructed with, and included in the trace, which
+    is serialized to the output JSON via ``metrics.report().json()``.
 
     Args:
         model: Unloaded detection model instance.
@@ -410,14 +408,13 @@ def _run_cycle(  # noqa: PLR0913
         cycle: Cycle index (1-based).
         images: List of BGR uint8 frames.
         gt_by_image: Ground-truth boxes per image.
-        metrics: Active MetricsCollector (a trace must be open).
 
     Returns:
         Cycle row dict, or ``None`` if load failed.
     """
     try:
         with _silence_native_output():
-            model.load(platform, unit, metrics=metrics)  # type: ignore[attr-defined]
+            model.load(platform, unit)  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(
             f"  [yellow]Load failed {model_name}/{backend_name} cycle {cycle}: {exc}[/yellow]"
@@ -435,13 +432,12 @@ def _run_cycle(  # noqa: PLR0913
             backend_name=backend_name,
             img_idx=img_idx,
             cycle=cycle,
-            metrics=metrics,
         )
         if result is not None:
             image_results.append(result)
         _advance_image()
 
-    _safe_unload(model, metrics=metrics)
+    _safe_unload(model)
 
     return {
         "model": model_name,
@@ -451,19 +447,15 @@ def _run_cycle(  # noqa: PLR0913
     }
 
 
-def _safe_unload(
-    model: object,
-    metrics: MetricsCollector | None = None,
-) -> None:
+def _safe_unload(model: object) -> None:
     """Unload a model, swallowing any error so the benchmark can continue.
 
     Args:
         model: The model to unload (must have an ``unload()`` method).
-        metrics: Collector to record the unload span (passed through to ``unload()``).
     """
     try:
         with _silence_native_output():
-            model.unload(metrics=metrics)  # type: ignore[attr-defined]
+            model.unload()  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         console.print(f"  [yellow]Unload failed: {exc}[/yellow]")
 
@@ -476,11 +468,11 @@ def _process_image(
     backend_name: str,
     img_idx: int,
     cycle: int,
-    metrics: MetricsCollector,
 ) -> dict | None:
     """Run prepare/infer/post/AP50 for one image, returning a result dict or None on error.
 
-    Latency is captured via MetricsCollector spans created inside prepare/run/post_proc.
+    Latency is captured via MetricsCollector spans created inside prepare/run/post_proc,
+    using the collector the model was constructed with.
     AP50 accuracy is computed against ground-truth boxes and stored in the result dict.
 
     Args:
@@ -491,16 +483,15 @@ def _process_image(
         backend_name: Backend name for the output row.
         img_idx: Index of this image.
         cycle: Current benchmark cycle.
-        metrics: MetricsCollector for spans.
 
     Returns:
         A result dict with ``image_idx`` and ``ap50``, or ``None`` if inference failed.
     """
     try:
-        prepared = model.prepare(frame, metrics=metrics)  # type: ignore[attr-defined]
+        prepared = model.prepare(frame)  # type: ignore[attr-defined]
         with _silence_native_output():
-            raw = model.run(prepared, metrics=metrics)  # type: ignore[attr-defined]
-        detections = model.post_proc(raw, metrics=metrics)  # type: ignore[attr-defined]
+            raw = model.run(prepared)  # type: ignore[attr-defined]
+        detections = model.post_proc(raw)  # type: ignore[attr-defined]
 
         pred_boxes = np.array(
             [[d.bbox.x1, d.bbox.y1, d.bbox.x2, d.bbox.y2] for d in detections],
@@ -699,7 +690,7 @@ def main() -> None:  # noqa: PLR0915
 
     console.print(f"  Loaded {len(images)} images.\n")
 
-    manager = ModelManager(PathManager())
+    path_manager = PathManager()
     all_rows: list[dict] = []
 
     with Progress(
@@ -733,7 +724,7 @@ def main() -> None:  # noqa: PLR0915
                 )
                 try:
                     rows = _run_benchmark(
-                        manager=manager,
+                        path_manager=path_manager,
                         model_id=model_id,
                         variant=variant,
                         model_name=model_name,

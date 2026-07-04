@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from moment_to_action.hardware._loaded_models._llama import LlamaModel
-from moment_to_action.metrics import NullMetricsCollector, SpanType
+from moment_to_action.metrics import SpanType
 from moment_to_action.models._base import BaseModel
 
 if TYPE_CHECKING:
@@ -56,6 +56,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         input_layout: str | None = None,
         system_prompt: str = "",
         max_tokens: int = 128,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         """Initialise with registry metadata.
 
@@ -69,6 +70,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             input_layout: Unused for LLMs; pass ``None``.
             system_prompt: System message prepended to every completion prompt.
             max_tokens: Maximum tokens to generate per completion.
+            metrics: Metrics collector used to record ``MODEL_*`` spans.
         """
         super().__init__(
             variant,
@@ -77,6 +79,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             data_type,
             backends=backends,
             input_layout=input_layout,
+            metrics=metrics,
         )
         self._gguf_path = path / next(iter(backends.values()))["model"]
         self._system_prompt = system_prompt
@@ -115,17 +118,21 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             self._loaded_model = None
         self._platform = None
 
-    def _prepare(self, inputs: str) -> dict:
+    def _prepare(self, inputs: str, *, grammar: str | None = None) -> dict:
         """Format a user prompt into a ``/completion`` request body.
 
         Args:
             inputs: User-facing text prompt.
+            grammar: Optional GBNF grammar string constraining generation.
 
         Returns:
             Request body dict for the llama.cpp ``/completion`` endpoint.
         """
         prompt = f"{self._system_prompt}\n{inputs}" if self._system_prompt else inputs
-        return {"prompt": prompt, "n_predict": self._max_tokens}
+        payload = {"prompt": prompt, "n_predict": self._max_tokens}
+        if grammar is not None:
+            payload["grammar"] = grammar
+        return payload
 
     def _run(self, prepared: dict) -> str:
         """Send the completion request and return the generated text.
@@ -144,7 +151,7 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
             raise RuntimeError(msg)
         return str(self._loaded_model.run(prepared))
 
-    def run(self, prepared: dict, *, metrics: MetricsCollector | None = None) -> str:
+    def run(self, prepared: dict) -> str:
         """Run forward pass, recording a ``MODEL_INFERENCE`` span and attaching llama.cpp metrics.
 
         Overrides :meth:`~moment_to_action.models._base.BaseModel.run` to capture
@@ -153,7 +160,6 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
 
         Args:
             prepared: Output of :meth:`prepare`.
-            metrics: Active collector with an open trace to record the span.
 
         Returns:
             Generated text content.
@@ -161,14 +167,9 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         Raises:
             RuntimeError: If the model has not been loaded.
         """
-        if metrics is None:
-            logger.warning(
-                "%s.run() called without a MetricsCollector;"
-                " inference latency will not be recorded",
-                type(self).__name__,
-            )
-            metrics = NullMetricsCollector()
-        with metrics.start_span(SpanType.MODEL_INFERENCE, f"{type(self).__name__}.run") as span:
+        with self._metrics.start_span(
+            SpanType.MODEL_INFERENCE, f"{type(self).__name__}.run"
+        ) as span:
             result = self._run(prepared)
             if isinstance(self._loaded_model, LlamaModel):
                 inf_m = self._loaded_model.last_inference_metrics
@@ -176,22 +177,23 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
                     span.inference_metrics = inf_m
         return result
 
-    def stream(
-        self, inputs: str, *, metrics: MetricsCollector | None = None
-    ) -> Generator[str, None, None]:
+    def stream(self, inputs: str, *, grammar: str | None = None) -> Generator[str, None, None]:
         """Stream generated tokens, recording a ``MODEL_INFERENCE`` span.
 
         Wraps :meth:`~moment_to_action.hardware._loaded_models._llama.LlamaModel.stream`
         in a ``MODEL_INFERENCE`` metrics span.  The span closes after the generator is
-        exhausted; :class:`~moment_to_action.hardware.LlamaCppInferenceMetrics`
-        from the stop chunk are attached to the span's ``inference_metrics`` field.
+        exhausted or closed early; :class:`~moment_to_action.hardware.LlamaCppInferenceMetrics`
+        from the stop chunk are attached to the span's ``inference_metrics`` field when the
+        stream runs to completion.
 
-        The caller **must drain the generator completely** (or call ``close()`` on it)
-        for the span to close and inference metrics to be recorded.
+        The span opens on the first ``next()`` call and closes when the generator is
+        exhausted or ``.close()``d — including via ``GeneratorExit`` when a downstream
+        consumer stops pulling early.
 
         Args:
             inputs: User prompt string (system prompt is prepended by :meth:`_prepare`).
-            metrics: Active collector with an open trace to record the span.
+            grammar: Optional GBNF grammar string constraining generation (e.g. forcing
+                a leading ``YES``/``NO`` token). ``None`` preserves unconstrained generation.
 
         Yields:
             String token chunks as they arrive from llama-server.
@@ -202,23 +204,20 @@ class LlamaGGUFModel(BaseModel[str, dict, str, str]):
         if self._loaded_model is None:
             msg = f"{type(self).__name__} is not loaded; call load() first"
             raise RuntimeError(msg)
-        if metrics is None:
-            logger.warning(
-                "%s.stream() called without a MetricsCollector;"
-                " inference latency will not be recorded",
-                type(self).__name__,
-            )
-            metrics = NullMetricsCollector()
-        prepared = self._prepare(inputs)
+        prepared = self._prepare(inputs, grammar=grammar)
         if not isinstance(self._loaded_model, LlamaModel):
             msg = f"{type(self).__name__}: streaming requires a LlamaModel loaded model"
             raise TypeError(msg)
         loaded = self._loaded_model
-        with metrics.start_span(SpanType.MODEL_INFERENCE, f"{type(self).__name__}.stream") as span:
-            yield from loaded.stream(prepared)
-            inf_m = loaded.last_inference_metrics
-            if inf_m is not None:
-                span.inference_metrics = inf_m
+        with self._metrics.start_span(
+            SpanType.MODEL_INFERENCE, f"{type(self).__name__}.stream"
+        ) as span:
+            try:
+                yield from loaded.stream(prepared)
+            finally:
+                inf_m = loaded.last_inference_metrics
+                if inf_m is not None:
+                    span.inference_metrics = inf_m
 
     def _post_proc(self, raw: str) -> list[str]:
         """Wrap the generated text in a list for pipeline compatibility.

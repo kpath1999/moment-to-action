@@ -657,7 +657,7 @@ def _run_vlm_clip(
         msg = f"{model_name}: _loaded_model is not a LlamaModel"
         raise TypeError(msg)
 
-    prepared = model.prepare((clip.question, b64_frames), metrics=metrics)  # type: ignore[attr-defined]
+    prepared = model.prepare((clip.question, b64_frames))  # type: ignore[attr-defined]
 
     t0 = time.perf_counter_ns()
     ttft_ms: float | None = None
@@ -864,9 +864,9 @@ def _detect_frames(
         with metrics.start_span(SpanType.MODEL_INFERENCE, span_name):
             try:
                 with _silence_native_output():
-                    prepared = detector.prepare(frame, metrics=metrics)  # type: ignore[attr-defined]
-                    raw = detector.run(prepared, metrics=metrics)  # type: ignore[attr-defined]
-                    dets: list[Detection] = detector.post_proc(raw, metrics=metrics)  # type: ignore[attr-defined]
+                    prepared = detector.prepare(frame)  # type: ignore[attr-defined]
+                    raw = detector.run(prepared)  # type: ignore[attr-defined]
+                    dets: list[Detection] = detector.post_proc(raw)  # type: ignore[attr-defined]
                 results.append(dets)
             except Exception:  # noqa: BLE001
                 results.append([])
@@ -1267,7 +1267,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     console.print(f"  device     : {'CPU' if args.cpu else 'GPU'}")
     console.print()
 
-    manager = ModelManager(path_manager)
     all_rows: list[dict] = []
     model_entries: list[dict] = []
 
@@ -1294,6 +1293,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
             platform = Platform(config)
             metrics = MetricsCollector(platform)
+            manager = ModelManager(path_manager, metrics=metrics)
             try:
                 model = manager.get_model(
                     model_id,
@@ -1308,7 +1308,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             rows: list[dict] = []
             with metrics.start_trace():
                 try:
-                    model.load(platform, compute_unit, metrics=metrics)
+                    model.load(platform, compute_unit)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
                     progress.advance(model_task)
@@ -1319,7 +1319,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 )
 
                 try:
-                    model.unload(metrics=metrics)
+                    model.unload()
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
@@ -1360,8 +1360,11 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 console.rule(f"[dim]LLM x {detector_display}[/dim]")
 
                 # Load detector once and reuse across all LLM models.
+                detector_manager = ModelManager(path_manager)
                 try:
-                    detector_obj = manager.get_model(detector_model_id, variant=detector_variant)
+                    detector_obj = detector_manager.get_model(
+                        detector_model_id, variant=detector_variant
+                    )
                 except Exception as exc:  # noqa: BLE001
                     console.print(
                         f"  [red]Detector {detector_display}: failed to get — {exc}[/red]"
@@ -1392,6 +1395,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         model_task, description=f"{model_name} (llm/{detector_display})"
                     )
 
+                    platform = Platform(config)
+                    metrics = MetricsCollector(platform)
+                    manager = ModelManager(path_manager, metrics=metrics)
                     try:
                         model = manager.get_model(
                             model_id,
@@ -1403,12 +1409,10 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         progress.advance(model_task)
                         continue
 
-                    platform = Platform(config)
-                    metrics = MetricsCollector(platform)
                     rows = []
                     with metrics.start_trace():
                         try:
-                            model.load(platform, compute_unit, metrics=metrics)
+                            model.load(platform, compute_unit)
                         except Exception as exc:  # noqa: BLE001
                             console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
                             progress.advance(model_task)
@@ -1429,7 +1433,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                         )
 
                         try:
-                            model.unload(metrics=metrics)
+                            model.unload()
                         except Exception as exc:  # noqa: BLE001
                             console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 

@@ -578,7 +578,7 @@ def _run_scene(
         msg = f"{model_name}: _loaded_model is not a LlamaModel"
         raise TypeError(msg)
 
-    prepared = model.prepare((scene.task, b64_frames), metrics=metrics)
+    prepared = model.prepare((scene.task, b64_frames))
 
     t0 = time.perf_counter_ns()
     ttft_ms: float | None = None
@@ -915,7 +915,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             _save_frames(scene, b64_frames, frames_dir)
         console.print(f"[green]Frames saved to {frames_dir}[/green]\n")
 
-    manager = ModelManager(path_manager)
     all_rows: list[dict] = []
     model_entries: list[dict] = []
 
@@ -940,6 +939,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
             platform = Platform(config)
             metrics = MetricsCollector(platform)
+            manager = ModelManager(path_manager, metrics=metrics)
             try:
                 model = manager.get_model(
                     model_id,
@@ -954,7 +954,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             rows: list[dict] = []
             with metrics.start_trace():
                 try:
-                    model.load(platform, compute_unit, metrics=metrics)
+                    model.load(platform, compute_unit)
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [red]{model_name}: failed to start — {exc}[/red]")
                     progress.advance(model_task)
@@ -972,7 +972,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 )
 
                 try:
-                    model.unload(metrics=metrics)
+                    model.unload()
                 except Exception as exc:  # noqa: BLE001
                     console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
 
