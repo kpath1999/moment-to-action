@@ -73,7 +73,7 @@ class TestDecisionStage:
     def test_emits_decision_once_response_is_unambiguous(self) -> None:
         """A DecisionMessage is emitted as soon as YES/NO is unambiguous."""
         model = _FakeLlamaGGUFModel(["YES", ", because of reasons"])
-        llm_stage = LLMStage(model, question="Q?", grammar=YES_NO_GRAMMAR)
+        llm_stage = LLMStage(model, grammar=YES_NO_GRAMMAR)
         decision_stage = DecisionStage()
 
         stream = decision_stage.process(llm_stage.process(iter([_detection_msg()])))
@@ -86,7 +86,7 @@ class TestDecisionStage:
     def test_emits_reasoning_after_decision(self) -> None:
         """DecisionReasoningMessage partials follow the DecisionMessage."""
         model = _FakeLlamaGGUFModel(["YES", ", because of reasons"])
-        llm_stage = LLMStage(model, question="Q?", grammar=YES_NO_GRAMMAR)
+        llm_stage = LLMStage(model, grammar=YES_NO_GRAMMAR)
         decision_stage = DecisionStage()
 
         stream = decision_stage.process(llm_stage.process(iter([_detection_msg()])))
@@ -100,7 +100,7 @@ class TestDecisionStage:
     def test_no_decision_yields_nothing(self) -> None:
         """No DecisionMessage is emitted while the decision is still ambiguous."""
         model = _FakeLlamaGGUFModel(["I", " am", " thinking"])
-        llm_stage = LLMStage(model, question="Q?")
+        llm_stage = LLMStage(model)
         decision_stage = DecisionStage()
 
         stream = decision_stage.process(llm_stage.process(iter([_detection_msg()])))
@@ -111,7 +111,7 @@ class TestDecisionStage:
     def test_non_response_type_message_dropped(self) -> None:
         """A GenerationMessage in the 'think' phase is dropped, not misread as a decision."""
         model = _FakeLlamaGGUFModel(["<think>", "YES seems right", "</think>", "NO"])
-        llm_stage = LLMStage(model, question="Q?")
+        llm_stage = LLMStage(model)
         decision_stage = DecisionStage()
 
         stream = decision_stage.process(llm_stage.process(iter([_detection_msg()])))
@@ -131,7 +131,7 @@ class TestDecisionStage:
     def test_decision_state_reset_after_done(self) -> None:
         """Once a prompt's stream completes, its decided-state is cleared for reuse."""
         model = _FakeLlamaGGUFModel(["YES", " ok"])
-        llm_stage = LLMStage(model, question="Q?")
+        llm_stage = LLMStage(model)
         decision_stage = DecisionStage()
 
         list(decision_stage.process(llm_stage.process(iter([_detection_msg()]))))
@@ -153,7 +153,7 @@ class TestEarlyAbort:
         """
         model = _FakeLlamaGGUFModel(["YES", " because", " of", " many", " reasons", " here"])
         metrics = MetricsCollector(session_id="test_early_abort")
-        llm_stage = LLMStage(model, question="Q?", grammar=YES_NO_GRAMMAR, metrics=metrics)
+        llm_stage = LLMStage(model, grammar=YES_NO_GRAMMAR, metrics=metrics)
         decision_stage = DecisionStage(metrics=metrics)
         pipeline = Pipeline([llm_stage, decision_stage], metrics=metrics)
 

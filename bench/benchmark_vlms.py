@@ -303,9 +303,9 @@ def _run_scene(
     """
     is_yes_no = scene.expected_label.lower() in _YES_NO_LABELS
     grammar = YES_NO_GRAMMAR if is_yes_no else None
-    clip_msg = VideoClipMessage(frames=frames, timestamp=0.0)
+    clip_msg = VideoClipMessage(frames=frames, timestamp=0.0, question=scene.task)
 
-    vlm_stage = VLMDescriptionStage(model, task=scene.task, grammar=grammar, metrics=metrics)
+    vlm_stage = VLMDescriptionStage(model, grammar=grammar, metrics=metrics)
     gen_messages = list(vlm_stage.process(iter([clip_msg])))
     accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
 

@@ -24,6 +24,7 @@ from moment_to_action.metrics import NullMetricsCollector, SpanType
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
 
+    from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
 
@@ -80,6 +81,22 @@ class Stage(ABC):
     def name(self) -> str:
         """Return the class name as the stage identifier."""
         return self.__class__.__name__
+
+    def load(self, platform: Platform, unit: ComputeUnit | None = None) -> None:  # noqa: B027
+        """Acquire any device resources this stage needs.
+
+        No-op by default; stages that wrap a model override this to load it.
+
+        Args:
+            platform: The hardware platform to load onto.
+            unit: The compute unit to target. Ignored by stages with no model.
+        """
+
+    def unload(self) -> None:  # noqa: B027
+        """Release any device resources this stage acquired.
+
+        No-op by default; stages that wrap a model override this to unload it.
+        """
 
     def process(self, stream: Iterator[Message]) -> Generator[Message, None, None]:
         """Lazily consume *stream*, buffering/windowing and delegating to ``_process``.

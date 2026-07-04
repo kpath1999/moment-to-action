@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -69,8 +70,10 @@ class TestVLMDescriptionStage:
     def test_single_frame_message_yields_messages(self) -> None:
         """A RawFrameMessage with a valid frame streams a description."""
         model = _FakeLlamaVLModel(["A", " dog"])
-        stage = VLMDescriptionStage(model, task="Describe this scene.")
-        msg = RawFrameMessage(frame=_frame(), timestamp=time.time())
+        stage = VLMDescriptionStage(model)
+        msg = RawFrameMessage(
+            frame=_frame(), timestamp=time.time(), question="Describe this scene."
+        )
 
         results = list(stage.process(iter([msg])))
 
@@ -83,8 +86,8 @@ class TestVLMDescriptionStage:
     def test_dropped_raw_frame_yields_nothing(self) -> None:
         """A RawFrameMessage with frame=None is dropped."""
         model = _FakeLlamaVLModel(["tok"])
-        stage = VLMDescriptionStage(model, task="Q?")
-        msg = RawFrameMessage(frame=None, timestamp=time.time())
+        stage = VLMDescriptionStage(model)
+        msg = RawFrameMessage(frame=None, timestamp=time.time(), question="Q?")
         results = list(stage.process(iter([msg])))
         assert results == []
         assert model.last_inputs is None
@@ -92,8 +95,10 @@ class TestVLMDescriptionStage:
     def test_video_clip_message_passes_all_frames(self) -> None:
         """A VideoClipMessage's frames are all base64-encoded and passed to the model."""
         model = _FakeLlamaVLModel(["desc"])
-        stage = VLMDescriptionStage(model, task="Describe.")
-        clip = VideoClipMessage(frames=[_frame(), _frame(), _frame()], timestamp=time.time())
+        stage = VLMDescriptionStage(model)
+        clip = VideoClipMessage(
+            frames=[_frame(), _frame(), _frame()], timestamp=time.time(), question="Describe."
+        )
 
         list(stage.process(iter([clip])))
 
@@ -105,7 +110,7 @@ class TestVLMDescriptionStage:
     def test_non_frame_message_yields_nothing(self) -> None:
         """A DetectionMessage (wrong type) is dropped."""
         model = _FakeLlamaVLModel(["tok"])
-        stage = VLMDescriptionStage(model, task="Q?")
+        stage = VLMDescriptionStage(model)
         msg = DetectionMessage(timestamp=time.time(), detections=[])
         results = list(stage.process(iter([msg])))
         assert results == []
@@ -113,17 +118,25 @@ class TestVLMDescriptionStage:
     def test_grammar_forwarded(self) -> None:
         """The configured grammar is forwarded to model.stream()."""
         model = _FakeLlamaVLModel(["tok"])
-        stage = VLMDescriptionStage(model, task="Q?", grammar="root ::= .*")
-        list(stage.process(iter([RawFrameMessage(frame=_frame(), timestamp=time.time())])))
+        stage = VLMDescriptionStage(model, grammar="root ::= .*")
+        list(
+            stage.process(
+                iter([RawFrameMessage(frame=_frame(), timestamp=time.time(), question="Q?")])
+            )
+        )
         assert model.last_grammar == "root ::= .*"
 
     def test_metrics_span_recorded(self) -> None:
         """Processing records a STAGE span via the metrics collector."""
         model = _FakeLlamaVLModel(["a", "b"])
         metrics = MetricsCollector(session_id="test_vlm_stage")
-        stage = VLMDescriptionStage(model, task="Q?", metrics=metrics)
+        stage = VLMDescriptionStage(model, metrics=metrics)
         with metrics.start_trace():
-            list(stage.process(iter([RawFrameMessage(frame=_frame(), timestamp=time.time())])))
+            list(
+                stage.process(
+                    iter([RawFrameMessage(frame=_frame(), timestamp=time.time(), question="Q?")])
+                )
+            )
 
         stage_spans = [s for s in metrics.spans if s.type_ is SpanType.STAGE]
         assert len(stage_spans) == 1
@@ -131,8 +144,32 @@ class TestVLMDescriptionStage:
     def test_early_close_closes_model_stream(self) -> None:
         """Breaking early closes the underlying VLM stream generator."""
         model = _FakeLlamaVLModel(["a", "b", "c"])
-        stage = VLMDescriptionStage(model, task="Q?")
-        gen = stage.process(iter([RawFrameMessage(frame=_frame(), timestamp=time.time())]))
+        stage = VLMDescriptionStage(model)
+        gen = stage.process(
+            iter([RawFrameMessage(frame=_frame(), timestamp=time.time(), question="Q?")])
+        )
         next(gen)
         gen.close()
         assert model.closed is True
+
+    def test_load_calls_model_load(self) -> None:
+        """load() forwards platform and unit to the wrapped model."""
+        model = MagicMock(spec=LlamaVLModel)
+        stage = VLMDescriptionStage(model)
+        platform = MagicMock()
+        stage.load(platform, ComputeUnit.CPU)
+        model.load.assert_called_once_with(platform, ComputeUnit.CPU)
+
+    def test_load_without_unit_raises(self) -> None:
+        """load() without a compute unit raises ValueError."""
+        model = MagicMock(spec=LlamaVLModel)
+        stage = VLMDescriptionStage(model)
+        with pytest.raises(ValueError, match="compute unit"):
+            stage.load(MagicMock())
+
+    def test_unload_calls_model_unload(self) -> None:
+        """unload() delegates to the wrapped model."""
+        model = MagicMock(spec=LlamaVLModel)
+        stage = VLMDescriptionStage(model)
+        stage.unload()
+        model.unload.assert_called_once()

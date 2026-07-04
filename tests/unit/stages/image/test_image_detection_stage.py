@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from moment_to_action.hardware import DataType, ModelType
+from moment_to_action.hardware import ComputeUnit, DataType, ModelType
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import FrameTensorMessage
@@ -221,3 +221,36 @@ class TestImageDetectionStage:
 
         assert isinstance(result, DetectionMessage)
         assert result.timestamp == raw_frame_msg.timestamp
+
+    def test_question_passed_through(
+        self,
+        mock_model: MagicMock,
+    ) -> None:
+        """Output DetectionMessage.question must match the input message's question."""
+        msg = RawFrameMessage(
+            frame=np.zeros((480, 640, 3), dtype=np.uint8), timestamp=1.0, question="Is this safe?"
+        )
+        stage = ImageDetectionStage(model=mock_model)
+        (result,) = list(stage.process(iter([msg])))
+
+        assert isinstance(result, DetectionMessage)
+        assert result.question == "Is this safe?"
+
+    def test_load_calls_model_load(self, mock_model: MagicMock) -> None:
+        """load() forwards platform and unit to the wrapped model."""
+        stage = ImageDetectionStage(model=mock_model)
+        platform = MagicMock()
+        stage.load(platform, ComputeUnit.CPU)
+        mock_model.load.assert_called_once_with(platform, ComputeUnit.CPU)
+
+    def test_load_without_unit_raises(self, mock_model: MagicMock) -> None:
+        """load() without a compute unit raises ValueError."""
+        stage = ImageDetectionStage(model=mock_model)
+        with pytest.raises(ValueError, match="compute unit"):
+            stage.load(MagicMock())
+
+    def test_unload_calls_model_unload(self, mock_model: MagicMock) -> None:
+        """unload() delegates to the wrapped model."""
+        stage = ImageDetectionStage(model=mock_model)
+        stage.unload()
+        mock_model.unload.assert_called_once()

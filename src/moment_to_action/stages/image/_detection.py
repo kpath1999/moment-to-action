@@ -11,6 +11,7 @@ from moment_to_action.stages.image._base import ImageStage
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
     from moment_to_action.models.image.detection._base import ImageDetectionModel
@@ -47,6 +48,25 @@ class ImageDetectionStage(ImageStage):
         super().__init__(window=1, drop=_is_undroppable_frame, metrics=metrics)
         self._model = model
 
+    def load(self, platform: Platform, unit: ComputeUnit | None = None) -> None:
+        """Load the wrapped model onto *platform*.
+
+        Args:
+            platform: The hardware platform to load onto.
+            unit: The compute unit to target.
+
+        Raises:
+            ValueError: If *unit* is ``None``.
+        """
+        if unit is None:
+            msg = "ImageDetectionStage.load requires a compute unit"
+            raise ValueError(msg)
+        self._model.load(platform, unit)
+
+    def unload(self) -> None:
+        """Unload the wrapped model."""
+        self._model.unload()
+
     def _process(self, items: list[Message]) -> Iterator[Message]:
         """Run detection on the buffered frame.
 
@@ -66,4 +86,6 @@ class ImageDetectionStage(ImageStage):
         raw = self._model.run(prepared)
         detections = self._model.post_proc(raw)
 
-        yield DetectionMessage(timestamp=msg.timestamp, detections=detections)
+        yield DetectionMessage(
+            timestamp=msg.timestamp, detections=detections, question=msg.question
+        )

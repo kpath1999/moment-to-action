@@ -129,9 +129,11 @@ def _run_scene(
     """
     is_yes_no = scene.expected_label.lower() in _YES_NO_LABELS
     grammar = YES_NO_GRAMMAR if is_yes_no else None
-    detection_msg = DetectionMessage(timestamp=time.time(), detections=scene.detections)
+    detection_msg = DetectionMessage(
+        timestamp=time.time(), detections=scene.detections, question=scene.task
+    )
 
-    llm_stage = LLMStage(model, question=scene.task, grammar=grammar, metrics=metrics)
+    llm_stage = LLMStage(model, grammar=grammar, metrics=metrics)
     gen_messages = list(llm_stage.process(iter([detection_msg])))
     accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
 

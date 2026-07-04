@@ -15,13 +15,14 @@ if TYPE_CHECKING:
 
     import numpy as np
 
+    from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
     from moment_to_action.models.vlm._base import LlamaVLModel
 
 
-def _frames_from(msg: Message) -> list[np.ndarray] | None:
-    """Extract the raw BGR frame list carried by *msg*, or ``None`` if unusable.
+def _frames_and_question_from(msg: Message) -> tuple[list[np.ndarray], str] | None:
+    """Extract the raw BGR frames and question carried by *msg*, or ``None`` if unusable.
 
     Args:
         msg: Incoming message — a single-frame
@@ -29,18 +30,18 @@ def _frames_from(msg: Message) -> list[np.ndarray] | None:
             multi-frame :class:`~moment_to_action.messages.video.VideoClipMessage`.
 
     Returns:
-        A list of BGR uint8 frames, or ``None`` if *msg* is not a usable
+        A ``(frames, question)`` pair, or ``None`` if *msg* is not a usable
         frame-carrying message (wrong type, or a dropped ``RawFrameMessage``).
     """
     if isinstance(msg, RawFrameMessage):
-        return None if msg.frame is None else [msg.frame]
+        return None if msg.frame is None else ([msg.frame], msg.question)
     if isinstance(msg, VideoClipMessage):
-        return msg.frames
+        return msg.frames, msg.question
     return None
 
 
 class VLMDescriptionStage(Stage):
-    """Streams a vision-language model's response to a fixed task over raw frames.
+    """Streams a vision-language model's response to a task over raw frames.
 
     Consumes a :class:`~moment_to_action.messages.sensor.RawFrameMessage` (single
     frame) or :class:`~moment_to_action.messages.video.VideoClipMessage` (multiple
@@ -51,36 +52,52 @@ class VLMDescriptionStage(Stage):
     VLMs have no ``<think>`` phase, so every message has ``type="response"``.
 
     *system_prompt* and *max_tokens* are configured on *model* at construction
-    (``ModelManager.get_model(..., system_prompt=..., max_tokens=...)``); this
-    stage only adds the per-instance *task* and optional *grammar*.
+    (``ModelManager.get_model(..., system_prompt=..., max_tokens=...)``); the
+    per-message task comes from the incoming message's ``question`` field, so one
+    loaded model/stage instance can serve any question — it isn't fixed at
+    construction.
     """
 
     def __init__(
         self,
         model: LlamaVLModel,
         *,
-        task: str,
         grammar: str | None = None,
         metrics: MetricsCollector | None = None,
     ) -> None:
-        """Initialize the stage with a vision-language model and its fixed task.
+        """Initialize the stage with a vision-language model.
 
         Args:
             model: A loaded :class:`~moment_to_action.models.vlm._base.LlamaVLModel`.
-            task: The question/instruction posed to the model for every incoming
-                clip (this stage always asks the same task; build one
-                ``VLMDescriptionStage`` per application/question).
             grammar: Optional GBNF grammar constraining generation.
             metrics: Metrics collector used to time this stage and record
                 per-token ttft/itl via ``MetricsCollector.timed_stream``.
         """
         super().__init__(window=1, metrics=metrics)
         self._model = model
-        self._task = task
         self._grammar = grammar
 
+    def load(self, platform: Platform, unit: ComputeUnit | None = None) -> None:
+        """Load the wrapped model onto *platform*.
+
+        Args:
+            platform: The hardware platform to load onto.
+            unit: The compute unit to target.
+
+        Raises:
+            ValueError: If *unit* is ``None``.
+        """
+        if unit is None:
+            msg = "VLMDescriptionStage.load requires a compute unit"
+            raise ValueError(msg)
+        self._model.load(platform, unit)
+
+    def unload(self) -> None:
+        """Unload the wrapped model."""
+        self._model.unload()
+
     def _process(self, items: list[Message]) -> Iterator[Message]:
-        """Stream the model's response to the fixed task over the incoming frames.
+        """Stream the model's response to the incoming frames' question.
 
         Args:
             items: Single-element window containing the incoming frame-carrying
@@ -91,19 +108,20 @@ class VLMDescriptionStage(Stage):
             objects, one per token, followed by a final ``done=True`` message.
         """
         msg = items[0]
-        frames = _frames_from(msg)
-        if frames is None:
+        extracted = _frames_and_question_from(msg)
+        if extracted is None:
             return
+        frames, question = extracted
 
         b64_frames = [bgr_to_b64(frame) for frame in frames]
         text = ""
         for token in self._metrics.timed_stream(
-            self._model.stream((self._task, b64_frames), grammar=self._grammar)
+            self._model.stream((question, b64_frames), grammar=self._grammar)
         ):
             text += token
             yield GenerationMessage(
                 timestamp=msg.timestamp,
-                prompt=self._task,
+                prompt=question,
                 text=text,
                 type="response",
                 done=False,
@@ -111,7 +129,7 @@ class VLMDescriptionStage(Stage):
 
         yield GenerationMessage(
             timestamp=msg.timestamp,
-            prompt=self._task,
+            prompt=question,
             text=text,
             type="response",
             done=True,

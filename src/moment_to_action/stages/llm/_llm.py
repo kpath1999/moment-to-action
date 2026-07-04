@@ -13,6 +13,7 @@ from moment_to_action.stages._base import Stage
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
     from moment_to_action.models.llm._base import LlamaGGUFModel
@@ -112,25 +113,24 @@ class LLMStage(Stage):
     underlying model stream via ``GeneratorExit``, aborting the rest of generation.
 
     *system_prompt* and *max_tokens* are configured on *model* at construction
-    (``ModelManager.get_model(..., system_prompt=..., max_tokens=...)``); this
-    stage only adds the per-instance *question* and optional *grammar*.
+    (``ModelManager.get_model(..., system_prompt=..., max_tokens=...)``); the
+    per-message *question* comes from
+    :attr:`~moment_to_action.messages.detection.DetectionMessage.question`, so one
+    loaded model/stage instance can serve any question — it isn't fixed at
+    construction.
     """
 
     def __init__(
         self,
         model: LlamaGGUFModel,
         *,
-        question: str,
         grammar: str | None = None,
         metrics: MetricsCollector | None = None,
     ) -> None:
-        """Initialize the stage with a language model and its fixed question.
+        """Initialize the stage with a language model.
 
         Args:
             model: A loaded :class:`~moment_to_action.models.llm._base.LlamaGGUFModel`.
-            question: The binary/task question appended after the detection context
-                built from each incoming message (this stage always asks the same
-                question; build one ``LLMStage`` per application/question).
             grammar: Optional GBNF grammar constraining generation (e.g.
                 :data:`~moment_to_action.prompting.YES_NO_GRAMMAR`).
             metrics: Metrics collector used to time this stage and record
@@ -138,8 +138,26 @@ class LLMStage(Stage):
         """
         super().__init__(window=1, metrics=metrics)
         self._model = model
-        self._question = question
         self._grammar = grammar
+
+    def load(self, platform: Platform, unit: ComputeUnit | None = None) -> None:
+        """Load the wrapped model onto *platform*.
+
+        Args:
+            platform: The hardware platform to load onto.
+            unit: The compute unit to target.
+
+        Raises:
+            ValueError: If *unit* is ``None``.
+        """
+        if unit is None:
+            msg = "LLMStage.load requires a compute unit"
+            raise ValueError(msg)
+        self._model.load(platform, unit)
+
+    def unload(self) -> None:
+        """Unload the wrapped model."""
+        self._model.unload()
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
         """Stream the model's response to the detection-derived prompt.
@@ -156,7 +174,7 @@ class LLMStage(Stage):
         if not isinstance(msg, DetectionMessage):
             return
 
-        prompt = build_detection_prompt(msg.detections, self._question)
+        prompt = build_detection_prompt(msg.detections, msg.question)
         router = _ThinkResponseRouter()
         think, resp = "", ""
 

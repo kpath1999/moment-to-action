@@ -42,6 +42,9 @@ class VideoClipMessage(BaseMessage):
     fps: float = 0.0
     """Capture frame-rate reported by the sensor; ``0.0`` when unknown."""
 
+    question: str = ""
+    """Task question for a downstream VLM stage. Lets one loaded model serve any question."""
+
     @property
     def num_frames(self) -> int:
         """Number of frames in the clip."""

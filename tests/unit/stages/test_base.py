@@ -59,6 +59,16 @@ class TestStage:
         stage = _PassthroughStage()
         assert stage.name == "_PassthroughStage"
 
+    def test_default_load_is_noop(self) -> None:
+        """Base Stage.load() does nothing and requires no platform setup."""
+        stage = _PassthroughStage()
+        stage.load(platform=None)  # type: ignore[arg-type]
+
+    def test_default_unload_is_noop(self) -> None:
+        """Base Stage.unload() does nothing."""
+        stage = _PassthroughStage()
+        stage.unload()
+
     def test_process_is_lazy_generator(self) -> None:
         """process() must return a generator, not eagerly consume the input stream."""
         calls: list[int] = []

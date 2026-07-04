@@ -21,3 +21,7 @@ class RawFrameMessage(BaseMessage):
 
     height: int = 0
     """Frame height in pixels; ``0`` when unknown."""
+
+    question: str = ""
+    """Task question for a downstream LLM/VLM stage. Threaded through detection
+    stages onto their output messages so one loaded model can serve any question."""
