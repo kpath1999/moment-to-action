@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Literal
 
 from moment_to_action.benchmarking import detect_yn
 from moment_to_action.messages.detection import DetectionMessage
-from moment_to_action.messages.llm import GenerationMessage
+from moment_to_action.messages.llm import EndOfGenerationMessage, GenerationMessage
 from moment_to_action.prompting import build_detection_prompt
 from moment_to_action.stages._base import Stage
 
@@ -168,7 +168,8 @@ class LLMStage(Stage):
 
         Yields:
             Partial :class:`~moment_to_action.messages.llm.GenerationMessage`
-            objects, one per token, followed by a final ``done=True`` message.
+            objects, one per token, a final one with the complete response text,
+            then an :class:`~moment_to_action.messages.llm.EndOfGenerationMessage`.
         """
         msg = items[0]
         if not isinstance(msg, DetectionMessage):
@@ -192,7 +193,6 @@ class LLMStage(Stage):
                 prompt=prompt,
                 text=think if phase == "think" else resp,
                 type=phase,
-                done=False,
             )
 
         yield GenerationMessage(
@@ -200,5 +200,5 @@ class LLMStage(Stage):
             prompt=prompt,
             text=resp,
             type="response",
-            done=True,
         )
+        yield EndOfGenerationMessage(timestamp=msg.timestamp, prompt=prompt)

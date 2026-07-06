@@ -11,7 +11,7 @@ import pytest
 
 from moment_to_action.hardware import ComputeUnit, DataType, ModelType
 from moment_to_action.messages.detection import DetectionMessage
-from moment_to_action.messages.llm import GenerationMessage
+from moment_to_action.messages.llm import EndOfGenerationMessage, GenerationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.models.llm._base import LlamaGGUFModel
@@ -149,28 +149,30 @@ class TestLLMStage:
     """Tests for LLMStage."""
 
     def test_yields_partial_and_final_messages(self) -> None:
-        """Each token yields a partial GenerationMessage, ending with done=True."""
+        """Each token yields a partial GenerationMessage, ending with EndOfGenerationMessage."""
         model = _FakeLlamaGGUFModel(["Hello", " world"])
         stage = LLMStage(model)
         msg = _detection_msg(question="Is this safe?")
 
         results = list(stage.process(iter([msg])))
 
-        assert len(results) == 3  # 2 partials + 1 final
-        assert all(isinstance(r, GenerationMessage) for r in results)
+        assert len(results) == 4  # 2 partials + 1 final content message + end-of-generation
+        gen_msgs = results[:3]
+        assert all(isinstance(r, GenerationMessage) for r in gen_msgs)
+        assert isinstance(results[3], EndOfGenerationMessage)
         assert _gen(results[0]).text == "Hello"
-        assert _gen(results[0]).done is False
         assert _gen(results[1]).text == "Hello world"
         assert _gen(results[2]).text == "Hello world"
-        assert _gen(results[2]).done is True
-        assert all(_gen(r).type == "response" for r in results)
+        assert all(_gen(r).type == "response" for r in gen_msgs)
 
     def test_no_think_block_stays_response_throughout(self) -> None:
         """A model with no <think> block emits type='response' for every message."""
         model = _FakeLlamaGGUFModel(["plain", " text"])
         stage = LLMStage(model)
         results = list(stage.process(iter([_detection_msg(question="Q?")])))
-        assert all(_gen(r).type == "response" for r in results)
+        gen_msgs = [r for r in results if isinstance(r, GenerationMessage)]
+        assert gen_msgs
+        assert all(_gen(r).type == "response" for r in gen_msgs)
 
     def test_think_block_split_into_think_then_response(self) -> None:
         """A <think>...</think> block is routed to type='think' then type='response'."""

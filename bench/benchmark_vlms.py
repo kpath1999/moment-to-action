@@ -71,7 +71,7 @@ from rich.table import Table
 from moment_to_action.benchmarking import extract_load_unload_ms, recall
 from moment_to_action.config import AppConfig
 from moment_to_action.hardware import ComputeUnit
-from moment_to_action.messages import DecisionMessage, VideoClipMessage
+from moment_to_action.messages import DecisionMessage, GenerationMessage, VideoClipMessage
 from moment_to_action.metrics import SpanType
 from moment_to_action.models import MODEL_REGISTRY, ModelID
 from moment_to_action.prompting import BENCHMARK_SYSTEM, YES_NO_GRAMMAR
@@ -307,7 +307,8 @@ def _run_scene(
 
     vlm_stage = VLMDescriptionStage(model, grammar=grammar, metrics=metrics)
     gen_messages = list(vlm_stage.process(iter([clip_msg])))
-    accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
+    gen_texts = [m for m in gen_messages if isinstance(m, GenerationMessage)]
+    accumulated = gen_texts[-1].text if gen_texts else ""
 
     yn: str | None = None
     if is_yes_no:

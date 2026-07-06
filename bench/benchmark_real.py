@@ -33,18 +33,20 @@ VLM pipeline — one real, chained ``Moment2Action`` pipeline per model:
   3. Score the streamed response and collect full timing + accuracy metrics.
 
 LLM pipeline — one ``Moment2Action`` pipeline per (detector, LLM) pair holding both
-models loaded together; the per-clip frame count varies, so the detection ->
-aggregation -> LLM hop can't be expressed as a single chained ``run()`` (aggregation
-window size isn't known until each clip's frames are extracted). The detection and
-LLM/decision stages are pulled off the loaded pipeline and driven directly, wrapped
-in ``handle.trace()`` so their spans still land on this pipeline's own metrics:
+models loaded together:
+``[ImageDetectionStage, DetectionAggregationStage, LLMStage, DecisionStage]``.
   1. Extract frames at 1 FPS from the annotated ROI window.
-  2. Run the pipeline's ``ImageDetectionStage`` on each frame.
-  3. Aggregate detections across all frames via a freshly built
-     ``DetectionAggregationStage(window=len(frames))`` (keep highest-confidence
-     instance per label) — the aggregated ``DetectionMessage`` carries ``clip.question``.
-  4. Run the pipeline's ``LLMStage``/``DecisionStage`` on the aggregated message.
-  5. Score the streamed response and collect full timing + accuracy metrics.
+  2. Stream each frame through ``ImageDetectionStage`` then
+     ``DetectionAggregationStage`` (chained directly, one frame at a time — see
+     ``_detect_and_aggregate``), followed by an ``EndOfClipMessage`` that tells
+     the aggregation stage to flush its running highest-confidence-per-label
+     accumulation as one aggregated ``DetectionMessage`` (carrying ``clip.question``).
+  3. Run the pipeline's ``LLMStage``/``DecisionStage`` on the aggregated message —
+     driven directly (not via one chained ``run()``) only because ``DecisionStage``
+     doesn't forward the raw ``GenerationMessage`` text this benchmark needs to
+     score recall against; both are wrapped in ``handle.trace()`` so their spans
+     still land on this pipeline's own metrics.
+  4. Score the streamed response and collect full timing + accuracy metrics.
 
 Model lists at the top of this file — comment out any entry to skip it.
 
@@ -58,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import itertools
 import json
 import logging
 import sys
@@ -87,7 +90,13 @@ from moment_to_action import Moment2Action
 from moment_to_action.benchmarking import extract_load_unload_ms, recall
 from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit
-from moment_to_action.messages import DecisionMessage, DetectionMessage, RawFrameMessage
+from moment_to_action.messages import (
+    DecisionMessage,
+    DetectionMessage,
+    GenerationMessage,
+    RawFrameMessage,
+)
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.video import VideoClipMessage
 from moment_to_action.metrics import SpanType
 from moment_to_action.models import MODEL_REGISTRY, ModelID
@@ -98,7 +107,10 @@ from moment_to_action.stages.llm import DecisionStage, LLMStage
 from moment_to_action.stages.vlm import VLMDescriptionStage
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from moment_to_action.app import PipelineHandle
+    from moment_to_action.messages import Message
     from moment_to_action.metrics import Span, Trace
     from moment_to_action.models.image.detection._types import Detection
 
@@ -391,7 +403,8 @@ def _run_vlm_clip(
 
     with handle.trace() as trace:
         gen_messages = list(vlm_stage.process(iter([clip_msg])))
-        accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
+        gen_texts = [m for m in gen_messages if isinstance(m, GenerationMessage)]
+        accumulated = gen_texts[-1].text if gen_texts else ""
 
         yn: str | None = None
         if is_yes_no:
@@ -437,7 +450,8 @@ def _run_llm_clip(
     ``handle.trace()`` so spans land on this pipeline's own metrics.
 
     Args:
-        handle: Loaded pipeline: ``[ImageDetectionStage, LLMStage, DecisionStage]``.
+        handle: Loaded pipeline:
+            ``[ImageDetectionStage, DetectionAggregationStage, LLMStage, DecisionStage]``.
         model_name: Display name for the result row.
         clip: Clip being evaluated.
         cycle: Cycle index (1-based).
@@ -448,14 +462,15 @@ def _run_llm_clip(
         Result dict for this (clip, cycle).
     """
     is_yes_no = clip.expected.lower() in _YES_NO_LABELS
-    _, llm_stage, decision_stage = handle.stages
+    _, _, llm_stage, decision_stage = handle.stages
     detection_msg = DetectionMessage(
         timestamp=time.time(), detections=detections, question=clip.question
     )
 
     with handle.trace() as trace:
         gen_messages = list(llm_stage.process(iter([detection_msg])))
-        accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
+        gen_texts = [m for m in gen_messages if isinstance(m, GenerationMessage)]
+        accumulated = gen_texts[-1].text if gen_texts else ""
 
         yn: str | None = None
         if is_yes_no:
@@ -487,10 +502,16 @@ def _run_llm_clip(
 def _detect_and_aggregate(
     handle: PipelineHandle, frames: list[np.ndarray], question: str
 ) -> list[Detection]:
-    """Run this pipeline's detection stage on each frame, then aggregate.
+    """Stream this pipeline's frames through detection then aggregation, real time.
+
+    Chains ``ImageDetectionStage.process()`` straight into
+    ``DetectionAggregationStage.process()`` (the same way ``Pipeline.run()`` chains
+    stages internally) — one frame at a time, no buffering the whole clip. An
+    ``EndOfClipMessage`` after the last frame tells the aggregation stage to flush.
 
     Args:
-        handle: Loaded pipeline whose first stage is an ``ImageDetectionStage``.
+        handle: Loaded pipeline whose first two stages are
+            ``[ImageDetectionStage, DetectionAggregationStage]``.
         frames: BGR uint8 frames to run detection on.
         question: Question to stamp onto every frame (carried through to the
             aggregated ``DetectionMessage``).
@@ -498,16 +519,13 @@ def _detect_and_aggregate(
     Returns:
         Aggregated, representative ``Detection`` list for the whole clip.
     """
-    detection_stage = handle.stages[0]
-    per_frame_msgs: list[DetectionMessage] = []
-    for frame in frames:
-        msg = RawFrameMessage(frame=frame, timestamp=time.time(), question=question)
-        (out,) = list(detection_stage.process(iter([msg])))
-        assert isinstance(out, DetectionMessage)  # noqa: S101
-        per_frame_msgs.append(out)
+    detection_stage, aggregation_stage, _, _ = handle.stages
+    frame_msgs: Iterator[Message] = (
+        RawFrameMessage(frame=frame, timestamp=time.time(), question=question) for frame in frames
+    )
+    stream = itertools.chain(frame_msgs, [EndOfClipMessage(timestamp=time.time())])
 
-    aggregation_stage = DetectionAggregationStage(window=len(frames))
-    (aggregated,) = list(aggregation_stage.process(iter(per_frame_msgs)))
+    (aggregated,) = list(aggregation_stage.process(detection_stage.process(stream)))
     assert isinstance(aggregated, DetectionMessage)  # noqa: S101
     return aggregated.detections
 
@@ -982,6 +1000,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                                 variant=detector_variant,
                                 compute_unit=detector_unit,
                             )
+                            .add_stage(DetectionAggregationStage)
                             .add_stage(
                                 LLMStage,
                                 model_id=model_id,

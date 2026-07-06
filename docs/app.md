@@ -110,22 +110,52 @@ with Moment2Action() as app:
 # equivalent to calling app.close(), which unloads the active pipeline
 ```
 
+## Bounded streams: `EndOfClipMessage` / `EndOfGenerationMessage`
+
+A stage that must accumulate across a bounded run of messages (e.g. "every
+frame in this clip") doesn't need to know the run's length up front, and
+doesn't need a boolean flag bolted onto every payload message. Instead, the
+producer sends a dedicated sentinel message after the last real one — a
+control message with no payload, matched by `isinstance`, not a field:
+
+- `EndOfClipMessage` — sent after the last frame of a clip.
+  `DetectionAggregationStage` keeps a running highest-confidence-per-label
+  accumulation as instance state (`window=1`, real time, no buffering) and
+  flushes it as one `DetectionMessage` when it sees this sentinel.
+  `ImageDetectionStage` passes it through unchanged (it isn't a frame, so its
+  drop predicate has to special-case it) so it reaches the aggregation stage.
+- `EndOfGenerationMessage` — sent by `LLMStage`/`VLMDescriptionStage` after
+  the last `GenerationMessage` for a prompt, replacing what used to be a
+  `done=True` flag on the terminal message. `DecisionStage` forwards it
+  unchanged after its own last `DecisionReasoningMessage`, since the
+  (stripped) reasoning stream shares the same lifecycle as the generation
+  it's derived from.
+
+Stages that don't care about a given sentinel just don't match it in their
+`isinstance` dispatch — no `done`/`is_last` field to check on every message
+they do care about.
+
 ## When a single `run()` isn't enough
 
-`Pipeline`/`Stage` have no way to flush a partial buffer at the end of a
-finite stream, so a windowed stage whose window size depends on the input
-(e.g. "however many frames this clip has") can't be baked into one pipeline
-built ahead of time. When you hit that, pull stages off the loaded handle and
-drive them directly, wrapped in `handle.trace()` so their spans still land on
-that pipeline's own metrics:
+Even with the sentinel-driven design above, `benchmark_real.py`'s LLM path
+still can't be one chained `handle.run()` call end to end: `DecisionStage`
+doesn't forward the raw `GenerationMessage` stream it reads (only the
+extracted `DecisionMessage`/`DecisionReasoningMessage`), and this benchmark
+needs the full raw text to score recall against. When you hit a case like
+that, pull stages off the loaded handle and drive them directly, wrapped in
+`handle.trace()` so their spans still land on that pipeline's own metrics:
 
 ```python
-detection_stage, llm_stage, decision_stage = handle.stages
+detection_stage, aggregation_stage, llm_stage, decision_stage = handle.stages
+
+# detection -> aggregation chains naturally, one frame at a time:
+aggregated = aggregation_stage.process(detection_stage.process(frame_stream))
 
 with handle.trace():
-    per_frame = [detection_stage.process(iter([frame_msg])) for frame_msg in frames]
-    # ... aggregate, then feed into llm_stage / decision_stage directly
+    gen_messages = list(llm_stage.process(iter([aggregated_msg])))
+    # keep gen_messages for the raw text, then also run decision_stage on it
+    decisions = decision_stage.process(iter(gen_messages))
 ```
 
-See `bench/benchmark_real.py` for a full example (`_detect_and_aggregate`,
+See `bench/benchmark_real.py` for the full example (`_detect_and_aggregate`,
 `_run_llm_clip`).

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.stages.image._base import ImageStage
@@ -18,7 +19,9 @@ if TYPE_CHECKING:
 
 
 def _is_undroppable_frame(msg: Message) -> bool:
-    """Drop predicate: discard anything that is not a usable ``RawFrameMessage``."""
+    """Drop predicate: discard anything that is not a usable frame or ``EndOfClipMessage``."""
+    if isinstance(msg, EndOfClipMessage):
+        return False
     return not isinstance(msg, RawFrameMessage) or msg.frame is None
 
 
@@ -31,7 +34,9 @@ class ImageDetectionStage(ImageStage):
     :class:`~moment_to_action.messages.detection.DetectionMessage`.
 
     Drops any other message type or a frame that is ``None`` (dropped frame)
-    before it reaches ``_process``.
+    before it reaches ``_process``, except
+    :class:`~moment_to_action.messages.control.EndOfClipMessage`, which is passed
+    through unchanged so a downstream aggregation stage can see clip boundaries.
     """
 
     def __init__(
@@ -68,17 +73,22 @@ class ImageDetectionStage(ImageStage):
         self._model.unload()
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
-        """Run detection on the buffered frame.
+        """Run detection on the buffered frame, or pass an EndOfClipMessage through.
 
         Args:
             items: Single-element window containing the incoming
-                :class:`~moment_to_action.messages.sensor.RawFrameMessage`.
+                :class:`~moment_to_action.messages.sensor.RawFrameMessage` or
+                :class:`~moment_to_action.messages.control.EndOfClipMessage`.
 
         Yields:
             A :class:`~moment_to_action.messages.detection.DetectionMessage` with
-            detection results.
+            detection results, or the incoming ``EndOfClipMessage`` unchanged.
         """
         msg = items[0]
+        if isinstance(msg, EndOfClipMessage):
+            yield msg
+            return
+
         assert isinstance(msg, RawFrameMessage)  # noqa: S101  # guaranteed by drop predicate
         assert msg.frame is not None  # noqa: S101  # guaranteed by drop predicate
 

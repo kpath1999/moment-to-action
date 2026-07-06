@@ -10,7 +10,11 @@ import pytest
 
 from moment_to_action.hardware import ComputeUnit, DataType, ModelType
 from moment_to_action.messages.detection import DetectionMessage
-from moment_to_action.messages.llm import DecisionMessage, DecisionReasoningMessage
+from moment_to_action.messages.llm import (
+    DecisionMessage,
+    DecisionReasoningMessage,
+    EndOfGenerationMessage,
+)
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models.llm._base import LlamaGGUFModel
@@ -94,8 +98,8 @@ class TestDecisionStage:
 
         reasoning = [r for r in results if isinstance(r, DecisionReasoningMessage)]
         assert reasoning
-        assert reasoning[-1].done is True
         assert "because of reasons" in reasoning[-1].text
+        assert isinstance(results[-1], EndOfGenerationMessage)
 
     def test_no_decision_yields_nothing(self) -> None:
         """No DecisionMessage is emitted while the decision is still ambiguous."""

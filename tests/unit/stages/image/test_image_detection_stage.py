@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, DataType, ModelType
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import FrameTensorMessage
@@ -254,3 +255,19 @@ class TestImageDetectionStage:
         stage = ImageDetectionStage(model=mock_model)
         stage.unload()
         mock_model.unload.assert_called_once()
+
+    def test_end_of_clip_message_passed_through_unchanged(self, mock_model: MagicMock) -> None:
+        """An EndOfClipMessage is yielded unchanged, without touching the model."""
+        stage = ImageDetectionStage(model=mock_model)
+        end_msg = EndOfClipMessage(timestamp=42.0)
+
+        (result,) = list(stage.process(iter([end_msg])))
+
+        assert result is end_msg
+        mock_model.prepare.assert_not_called()
+
+    def test_end_of_clip_message_not_dropped(self, mock_model: MagicMock) -> None:
+        """The drop predicate lets EndOfClipMessage through to _process."""
+        stage = ImageDetectionStage(model=mock_model)
+        results = list(stage.process(iter([EndOfClipMessage(timestamp=1.0)])))
+        assert len(results) == 1

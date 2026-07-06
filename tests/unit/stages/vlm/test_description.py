@@ -12,7 +12,7 @@ import pytest
 
 from moment_to_action.hardware import ComputeUnit, DataType, ModelType
 from moment_to_action.messages.detection import DetectionMessage
-from moment_to_action.messages.llm import GenerationMessage
+from moment_to_action.messages.llm import EndOfGenerationMessage, GenerationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import VideoClipMessage
 from moment_to_action.metrics import MetricsCollector, SpanType
@@ -77,11 +77,12 @@ class TestVLMDescriptionStage:
 
         results = list(stage.process(iter([msg])))
 
-        assert len(results) == 3  # 2 partials + final
-        assert all(isinstance(r, GenerationMessage) for r in results)
-        assert all(_gen(r).type == "response" for r in results)
-        assert _gen(results[-1]).done is True
-        assert _gen(results[-1]).text == "A dog"
+        assert len(results) == 4  # 2 partials + final content message + end-of-generation
+        gen_msgs = results[:3]
+        assert all(isinstance(r, GenerationMessage) for r in gen_msgs)
+        assert all(_gen(r).type == "response" for r in gen_msgs)
+        assert isinstance(results[-1], EndOfGenerationMessage)
+        assert _gen(gen_msgs[-1]).text == "A dog"
 
     def test_dropped_raw_frame_yields_nothing(self) -> None:
         """A RawFrameMessage with frame=None is dropped."""

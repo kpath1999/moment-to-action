@@ -8,12 +8,14 @@ from ._base import BaseMessage
 
 
 class GenerationMessage(BaseMessage):
-    """One partial or final chunk of a streaming LLM generation.
+    """One chunk of a streaming LLM generation.
 
     Emitted by :class:`~moment_to_action.stages.llm.LLMStage` once per token: ``text``
     is the accumulated text of the current ``type`` phase up to and including this
     token (not just the new token), so each message is a complete snapshot of that
-    phase so far. ``done`` is ``True`` only on the terminal message for a prompt.
+    phase so far. The stream for one prompt always ends with an
+    :class:`EndOfGenerationMessage` carrying the same ``prompt``, rather than a
+    ``done`` flag on the last content message.
     """
 
     prompt: str
@@ -29,8 +31,21 @@ class GenerationMessage(BaseMessage):
     has ``type="response"``.
     """
 
-    done: bool = False
-    """True only on the terminal message for this prompt."""
+
+class EndOfGenerationMessage(BaseMessage):
+    """Sentinel marking the end of one prompt's streamed generation.
+
+    Emitted once, after the last :class:`GenerationMessage` for a given
+    ``prompt``, by :class:`~moment_to_action.stages.llm.LLMStage` /
+    :class:`~moment_to_action.stages.vlm.VLMDescriptionStage`.
+    :class:`~moment_to_action.stages.llm.DecisionStage` forwards it unchanged,
+    since its filtered/stripped reasoning stream shares the same lifecycle as the
+    raw generation it's derived from — so this single sentinel also marks the end
+    of the corresponding :class:`DecisionReasoningMessage` stream.
+    """
+
+    prompt: str
+    """The exact prompt whose generation just ended."""
 
 
 class DecisionMessage(BaseMessage):
@@ -44,13 +59,17 @@ class DecisionMessage(BaseMessage):
 
 
 class DecisionReasoningMessage(BaseMessage):
-    """The free-text rationale following a yes/no decision, streamed incrementally."""
+    """The free-text rationale following a yes/no decision, streamed incrementally.
+
+    The stream for one prompt ends when an :class:`EndOfGenerationMessage` carrying
+    the same ``prompt`` arrives (forwarded by
+    :class:`~moment_to_action.stages.llm.DecisionStage` from the underlying
+    generation it's reasoning over), rather than a ``done`` flag on the last
+    rationale message.
+    """
 
     text: str
     """Accumulated rationale text up to this token."""
 
     prompt: str
     """The exact prompt that produced this rationale."""
-
-    done: bool = False
-    """True only on the terminal message for this prompt."""
