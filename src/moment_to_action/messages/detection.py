@@ -18,4 +18,4 @@ class DetectionMessage(BaseMessage):
     """
 
     detections: list[Detection]
-    question: str = ""
+    question: str = ""  # TODO(nikola-quest): this feels jank, we only need it for the benches rn

@@ -42,7 +42,7 @@ class VideoClipMessage(BaseMessage):
     fps: float = 0.0
     """Capture frame-rate reported by the sensor; ``0.0`` when unknown."""
 
-    question: str = ""
+    question: str = ""  # TODO(nikola-quest): this feels jank, we only need it for the benches rn
     """Task question for a downstream VLM stage. Lets one loaded model serve any question."""
 
     @property
