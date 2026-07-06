@@ -121,26 +121,3 @@ class TestPipelineHandle:
         )
         report = handle.metrics_report()
         assert report.session_id == "handle_test"
-
-    def test_trace_wraps_metrics_start_trace(self) -> None:
-        """trace() opens a real trace usable for manual stage.process() calls."""
-        metrics = MetricsCollector(session_id="handle_test")
-        stage = _PassthroughStage(metrics=metrics)
-        handle = PipelineHandle(
-            name="p", pipeline=Pipeline([stage], metrics=metrics), metrics=metrics, stage_units=[]
-        )
-
-        with handle.trace():
-            list(stage.process(iter([_msg()])))
-
-        report = handle.metrics_report()
-        assert len(report.traces) == 1
-
-    def test_stages_property_returns_pipeline_stages(self) -> None:
-        """Stages exposes the wrapped Pipeline's stage list."""
-        metrics = MetricsCollector(session_id="handle_test")
-        stage = _PassthroughStage(metrics=metrics)
-        handle = PipelineHandle(
-            name="p", pipeline=Pipeline([stage], metrics=metrics), metrics=metrics, stage_units=[]
-        )
-        assert handle.stages == [stage]

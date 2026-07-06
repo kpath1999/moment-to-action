@@ -139,4 +139,4 @@ class TestPipelineBuilder:
 
         handle = builder.build()
 
-        assert len(handle.stages) == 2
+        assert len(handle._pipeline.stages) == 2

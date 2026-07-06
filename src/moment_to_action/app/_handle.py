@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 import attrs
@@ -12,7 +11,7 @@ if TYPE_CHECKING:
 
     from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
-    from moment_to_action.metrics import MetricsCollector, MetricsReport, Trace
+    from moment_to_action.metrics import MetricsCollector, MetricsReport
     from moment_to_action.pipeline import Pipeline
     from moment_to_action.stages._base import Stage
 
@@ -35,17 +34,6 @@ class PipelineHandle:
     _stage_units: list[tuple[Stage, ComputeUnit | None]]
     loaded: bool = False
     """Whether this pipeline's stages currently hold loaded device resources."""
-
-    @property
-    def stages(self) -> list[Stage]:
-        """Return this pipeline's stages, in order.
-
-        Exposed for cases where a single chained ``run()`` can't express the
-        needed data flow (e.g. an out-of-band, per-invocation aggregation step
-        between two stages) and the caller must drive individual stages directly
-        while still benefiting from this pipeline's shared load/unload/metrics.
-        """
-        return self._pipeline.stages
 
     def load(self, platform: Platform) -> None:
         """Load every stage in this pipeline onto *platform*.
@@ -74,22 +62,6 @@ class PipelineHandle:
     def metrics_report(self) -> MetricsReport:
         """Return this pipeline's own metrics report."""
         return self._metrics.report()
-
-    @contextlib.contextmanager
-    def trace(self) -> Generator[Trace, None, None]:
-        """Open a trace for manually driving this pipeline's stages outside ``run()``.
-
-        Use when a single chained ``run()`` can't express the needed data flow
-        (e.g. an out-of-band aggregation step with a per-invocation window between
-        two stages) and the caller must call ``stage.process()`` directly — wrap
-        those calls in this so their ``STAGE``/``MODEL_*`` spans land on this
-        pipeline's own trace/report, exactly as ``run()`` would.
-
-        Yields:
-            The newly opened :class:`~moment_to_action.metrics.Trace`.
-        """
-        with self._metrics.start_trace() as trace:
-            yield trace
 
     def run(self, source: Iterator[Message]) -> Generator[Message, None, None]:
         """Run messages from *source* through this pipeline.

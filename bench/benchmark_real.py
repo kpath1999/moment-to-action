@@ -42,19 +42,15 @@ VLM pipeline — one real, chained ``Moment2Action`` pipeline per model:
 LLM pipeline — one ``Moment2Action`` pipeline per (detector, LLM) pair holding both
 models loaded together:
 ``[ImageDetectionStage, DetectionAggregationStage, LLMStage, DecisionStage]``.
-  1. Extract frames at 1 FPS from the annotated ROI window.
-  2. Stream each frame through ``ImageDetectionStage`` then
-     ``DetectionAggregationStage`` (chained directly, one frame at a time — see
-     ``_detect_and_aggregate``), followed by an ``EndOfClipMessage`` that tells
-     the aggregation stage to flush its running highest-confidence-per-label
-     accumulation as one aggregated ``DetectionMessage`` (carrying ``clip.question``).
-     Done once per clip and reused across every cycle.
-  3. Run the pipeline's ``LLMStage``/``DecisionStage`` on the aggregated message,
-     chained together directly rather than via one ``handle.run()`` — running
-     the *whole* pipeline per cycle would redundantly rerun detection, which
-     already happened once in step 2. Wrapped in ``handle.trace()`` so spans
-     still land on this pipeline's own metrics.
-  4. Score the response and collect full timing + accuracy metrics.
+  1. Extract frames at 1 FPS from the annotated ROI window (once per clip).
+  2. For every cycle, stream the frames plus a trailing ``EndOfClipMessage``
+     through the whole pipeline via one chained ``handle.run()`` call:
+     ``ImageDetectionStage`` -> ``DetectionAggregationStage`` (flushes its
+     running highest-confidence-per-label accumulation into one aggregated
+     ``DetectionMessage`` on the sentinel) -> ``LLMStage`` -> ``DecisionStage``.
+     Detection and aggregation rerun fresh every cycle along with the LLM
+     generation — nothing is cached across cycles.
+  3. Score the response and collect full timing + accuracy metrics.
 
 Model lists at the top of this file — comment out any entry to skip it.
 
@@ -101,7 +97,6 @@ from moment_to_action.hardware import ComputeUnit
 from moment_to_action.messages import (
     DecisionMessage,
     DecisionReasoningMessage,
-    DetectionMessage,
     RawFrameMessage,
 )
 from moment_to_action.messages.control import EndOfClipMessage
@@ -120,7 +115,6 @@ if TYPE_CHECKING:
     from moment_to_action.app import PipelineHandle
     from moment_to_action.messages import Message
     from moment_to_action.metrics import Span, Trace
-    from moment_to_action.models.image.detection._types import Detection
 
 logging.basicConfig(
     level=logging.INFO,
@@ -467,17 +461,13 @@ def _run_llm_clip(
     model_name: str,
     clip: Clip,
     cycle: int,
-    detections: list[Detection],
-    n_frames: int,
+    frames: list[np.ndarray],
 ) -> dict:
-    """Drive one clip through the loaded LLM+Decision stages and score it.
+    """Drive one clip through the loaded detection+aggregation+LLM+Decision pipeline.
 
-    The prompt is built from aggregated detections; no images are passed. Pulls
-    ``LLMStage``/``DecisionStage`` directly off *handle* rather than one chained
-    ``handle.run()`` — detection+aggregation already ran once for this clip (see
-    ``_detect_and_aggregate``) and *detections* is reused across every cycle, so
-    running the full pipeline again per cycle would redundantly rerun detection.
-    Wrapped in ``handle.trace()`` so spans land on this pipeline's own metrics.
+    A single chained ``handle.run()`` call, same as ``_run_vlm_clip`` — detection
+    and aggregation rerun fresh on every cycle along with the LLM generation,
+    rather than caching the aggregated detections across cycles.
 
     Args:
         handle: Loaded pipeline:
@@ -485,20 +475,20 @@ def _run_llm_clip(
         model_name: Display name for the result row.
         clip: Clip being evaluated.
         cycle: Cycle index (1-based).
-        detections: Aggregated representative detections from the clip's ROI.
-        n_frames: Number of frames that were extracted (for metadata).
+        frames: BGR uint8 frames for this clip's ROI.
 
     Returns:
         Result dict for this (clip, cycle).
     """
     is_yes_no = clip.expected.lower() in _YES_NO_LABELS
-    _, _, llm_stage, decision_stage = handle.stages
-    detection_msg = DetectionMessage(
-        timestamp=time.time(), detections=detections, question=clip.question
+    frame_msgs: Iterator[Message] = (
+        RawFrameMessage(frame=frame, timestamp=time.time(), question=clip.question)
+        for frame in frames
     )
+    stream = itertools.chain(frame_msgs, [EndOfClipMessage(timestamp=time.time())])
 
-    with handle.trace() as trace:
-        results = list(decision_stage.process(llm_stage.process(iter([detection_msg]))))
+    results = list(handle.run(stream))
+    trace = handle.metrics_report().traces[-1]
 
     yn: str | None = None
     if is_yes_no:
@@ -518,42 +508,9 @@ def _run_llm_clip(
         "end_s": clip.end_s,
         "expected": clip.expected,
         "run_idx": cycle,
-        "n_frames": n_frames,
-        "n_detections_total": len(detections),
-        "n_unique_labels": len({d.label for d in detections}),
+        "n_frames": len(frames),
         **_score_clip_response(accumulated, clip, trace, is_yes_no=is_yes_no, yn=yn),
     }
-
-
-def _detect_and_aggregate(
-    handle: PipelineHandle, frames: list[np.ndarray], question: str
-) -> list[Detection]:
-    """Stream this pipeline's frames through detection then aggregation, real time.
-
-    Chains ``ImageDetectionStage.process()`` straight into
-    ``DetectionAggregationStage.process()`` (the same way ``Pipeline.run()`` chains
-    stages internally) — one frame at a time, no buffering the whole clip. An
-    ``EndOfClipMessage`` after the last frame tells the aggregation stage to flush.
-
-    Args:
-        handle: Loaded pipeline whose first two stages are
-            ``[ImageDetectionStage, DetectionAggregationStage]``.
-        frames: BGR uint8 frames to run detection on.
-        question: Question to stamp onto every frame (carried through to the
-            aggregated ``DetectionMessage``).
-
-    Returns:
-        Aggregated, representative ``Detection`` list for the whole clip.
-    """
-    detection_stage, aggregation_stage, _, _ = handle.stages
-    frame_msgs: Iterator[Message] = (
-        RawFrameMessage(frame=frame, timestamp=time.time(), question=question) for frame in frames
-    )
-    stream = itertools.chain(frame_msgs, [EndOfClipMessage(timestamp=time.time())])
-
-    (aggregated,) = list(aggregation_stage.process(detection_stage.process(stream)))
-    assert isinstance(aggregated, DetectionMessage)  # noqa: S101
-    return aggregated.detections
 
 
 # ---------------------------------------------------------------------------
@@ -625,11 +582,13 @@ def _run_llm_benchmark(
 ) -> list[dict]:
     """Run all LLM clips x n_cycles and return result rows.
 
-    For each clip, frames are extracted once and detection is run once; the
-    resulting aggregated detections are reused across all cycles.
+    Frames are extracted once per clip; detection, aggregation, and generation
+    all rerun fresh for every cycle via one chained ``handle.run()`` call
+    (see ``_run_llm_clip``).
 
     Args:
-        handle: Loaded pipeline: ``[ImageDetectionStage, LLMStage, DecisionStage]``.
+        handle: Loaded pipeline:
+            ``[ImageDetectionStage, DetectionAggregationStage, LLMStage, DecisionStage]``.
         model_name: Human-readable name for output rows.
         clips: Clips to evaluate.
         n_cycles: Number of repetitions per clip.
@@ -657,21 +616,13 @@ def _run_llm_benchmark(
             progress.advance(clip_task_id, advance=n_cycles)
             continue
 
-        try:
-            with handle.trace():
-                aggregated = _detect_and_aggregate(handle, raw_frames, clip.question)
-        except Exception as exc:  # noqa: BLE001
-            console.print(f"  [yellow]{clip.id}: detection failed — {exc}[/yellow]")
-            progress.advance(clip_task_id, advance=n_cycles)
-            continue
-
         for cycle in range(1, n_cycles + 1):
             progress.update(
                 clip_task_id,
                 description=f"  {clip.id} [{cycle}/{n_cycles}]",
             )
             try:
-                row = _run_llm_clip(handle, model_name, clip, cycle, aggregated, len(raw_frames))
+                row = _run_llm_clip(handle, model_name, clip, cycle, raw_frames)
             except Exception as exc:  # noqa: BLE001
                 console.print(
                     f"  [yellow]{model_name} clip={clip.id} cycle={cycle}: {exc}[/yellow]"

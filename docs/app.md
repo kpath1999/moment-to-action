@@ -138,36 +138,3 @@ before starting the next, so there's never more than one run's sentinel live
 to disambiguate. Stages that don't care about it just don't match it in their
 `isinstance` dispatch — no `done`/`is_last` field to check on every message
 they do care about.
-
-## When a single `run()` isn't enough
-
-Even with the sentinel-driven design above, `benchmark_real.py`'s LLM path
-still can't be one chained `handle.run()` call for every clip+cycle: detection
-is expensive and only needs to happen once per clip, then the same aggregated
-detections are reused across every cycle of that clip — but `run()` always
-drives the pipeline from its first stage, so calling it per cycle would
-redundantly rerun detection each time. When part of a pipeline is expensive
-to rerun like this, pull stages off the loaded handle and drive them
-directly, wrapped in `handle.trace()` so their spans still land on that
-pipeline's own metrics:
-
-```python
-detection_stage, aggregation_stage, llm_stage, decision_stage = handle.stages
-
-# once per clip: detection -> aggregation chains naturally, one frame at a time
-aggregated = aggregation_stage.process(detection_stage.process(frame_stream))
-
-# once per cycle, reusing the same aggregated_msg: llm -> decision chains directly
-with handle.trace():
-    results = list(decision_stage.process(llm_stage.process(iter([aggregated_msg]))))
-```
-
-Note this isn't about `DecisionStage` swallowing the raw `GenerationMessage`
-text — `DecisionReasoningMessage.text` (the raw text minus the `YES`/`NO`
-prefix) scores identically for keyword recall, so there's no need to keep the
-raw generation stream around separately (see `_accumulated_from_decision`).
-The VLM path has no such expensive-to-rerun stage, so it *does* use one
-chained `handle.run()` per clip+cycle (see `_run_vlm_clip`).
-
-See `bench/benchmark_real.py` for the full example (`_detect_and_aggregate`,
-`_run_llm_clip`).
