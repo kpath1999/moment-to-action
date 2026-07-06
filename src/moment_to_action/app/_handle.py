@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import attrs
-
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
@@ -16,7 +14,6 @@ if TYPE_CHECKING:
     from moment_to_action.stages._base import Stage
 
 
-@attrs.define
 class PipelineHandle:
     """A named pipeline built by :class:`~moment_to_action.app._builder.PipelineBuilder`.
 
@@ -26,14 +23,28 @@ class PipelineHandle:
     resources without reconstructing any stage or model.
     """
 
-    name: str
-    """Name this pipeline is registered under."""
+    def __init__(
+        self,
+        name: str,
+        pipeline: Pipeline,
+        metrics: MetricsCollector,
+        stage_units: list[tuple[Stage, ComputeUnit | None]],
+    ) -> None:
+        """Initialize the handle around an already-built, unloaded Pipeline.
 
-    _pipeline: Pipeline
-    _metrics: MetricsCollector
-    _stage_units: list[tuple[Stage, ComputeUnit | None]]
-    loaded: bool = False
-    """Whether this pipeline's stages currently hold loaded device resources."""
+        Args:
+            name: Name this pipeline is registered under.
+            pipeline: The wrapped :class:`~moment_to_action.pipeline.Pipeline`.
+            metrics: This pipeline's own metrics collector (shared by every
+                stage/model constructed for it).
+            stage_units: ``(Stage, ComputeUnit)`` pairs, one per stage, used by
+                :meth:`load`/:meth:`unload` to acquire/release device resources.
+        """
+        self.name = name
+        self._pipeline = pipeline
+        self._metrics = metrics
+        self._stage_units = stage_units
+        self.loaded = False
 
     def load(self, platform: Platform) -> None:
         """Load every stage in this pipeline onto *platform*.

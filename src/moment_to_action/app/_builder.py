@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import attrs
 from typing_extensions import Self
 
 from moment_to_action.models import DEFAULT_VARIANT_KEY
@@ -23,7 +22,6 @@ if TYPE_CHECKING:
     from ._app import Moment2Action
 
 
-@attrs.define
 class PipelineBuilder:
     """Fluent builder that constructs stages/models for one named pipeline.
 
@@ -33,12 +31,30 @@ class PipelineBuilder:
     :meth:`add_stage` shares one trace scoped to just this pipeline.
     """
 
-    _app: Moment2Action
-    _name: str
-    _metrics: MetricsCollector
-    _model_manager: ModelManager
-    _stages: list[Stage] = attrs.field(factory=list)
-    _stage_units: list[tuple[Stage, ComputeUnit | None]] = attrs.field(factory=list)
+    def __init__(
+        self,
+        app: Moment2Action,
+        name: str,
+        metrics: MetricsCollector,
+        model_manager: ModelManager,
+    ) -> None:
+        """Initialize the builder with the app it registers into and its own resources.
+
+        Args:
+            app: The :class:`~moment_to_action.app._app.Moment2Action` this pipeline
+                will be registered on once built.
+            name: Name this pipeline will be registered under.
+            metrics: Metrics collector shared by every stage/model added via
+                :meth:`add_stage`.
+            model_manager: Model manager used to resolve models for stages added
+                with ``model_id=``.
+        """
+        self._app = app
+        self._name = name
+        self._metrics = metrics
+        self._model_manager = model_manager
+        self._stages: list[Stage] = []
+        self._stage_units: list[tuple[Stage, ComputeUnit | None]] = []
 
     def add_stage(
         self,
