@@ -12,6 +12,10 @@ class DetectionMessage(BaseMessage):
 
     Attributes:
         detections: All detections returned by the model (may be empty).
+        question: The task question to pose to a downstream LLM stage about
+            these detections. Carried through from the originating frame
+            message so one loaded ``LLMStage`` can serve any question.
     """
 
     detections: list[Detection]
+    question: str = ""  # TODO(#158): this feels jank, we only need it for the benches rn

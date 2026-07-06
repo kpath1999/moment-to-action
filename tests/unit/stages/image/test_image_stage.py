@@ -19,4 +19,4 @@ class TestImageStage:
     def test_image_stage_is_abstract(self) -> None:
         """ImageStage cannot be instantiated directly (no _process implementation)."""
         with pytest.raises(TypeError):
-            ImageStage()  # type: ignore[abstract]
+            ImageStage()  # type: ignore[abstract, call-arg]

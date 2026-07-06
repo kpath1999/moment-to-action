@@ -8,12 +8,14 @@ from ._base import BaseMessage
 
 
 class GenerationMessage(BaseMessage):
-    """One partial or final chunk of a streaming LLM generation.
+    """One chunk of a streaming LLM generation.
 
     Emitted by :class:`~moment_to_action.stages.llm.LLMStage` once per token: ``text``
     is the accumulated text of the current ``type`` phase up to and including this
     token (not just the new token), so each message is a complete snapshot of that
-    phase so far. ``done`` is ``True`` only on the terminal message for a prompt.
+    phase so far. The stream for one prompt always ends with an
+    :class:`~moment_to_action.messages.control.EndOfClipMessage`, rather than a
+    ``done`` flag on the last content message.
     """
 
     prompt: str
@@ -29,9 +31,6 @@ class GenerationMessage(BaseMessage):
     has ``type="response"``.
     """
 
-    done: bool = False
-    """True only on the terminal message for this prompt."""
-
 
 class DecisionMessage(BaseMessage):
     """A yes/no decision extracted from a grammar-constrained LLM generation."""
@@ -44,13 +43,17 @@ class DecisionMessage(BaseMessage):
 
 
 class DecisionReasoningMessage(BaseMessage):
-    """The free-text rationale following a yes/no decision, streamed incrementally."""
+    """The free-text rationale following a yes/no decision, streamed incrementally.
+
+    The stream for one prompt ends when an
+    :class:`~moment_to_action.messages.control.EndOfClipMessage` arrives (forwarded
+    by :class:`~moment_to_action.stages.llm.DecisionStage` from the underlying
+    generation it's reasoning over), rather than a ``done`` flag on the last
+    rationale message.
+    """
 
     text: str
     """Accumulated rationale text up to this token."""
 
     prompt: str
     """The exact prompt that produced this rationale."""
-
-    done: bool = False
-    """True only on the terminal message for this prompt."""

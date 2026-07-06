@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from moment_to_action.benchmarking import detect_yn
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.llm import (
     DecisionMessage,
     DecisionReasoningMessage,
@@ -49,7 +50,10 @@ class DecisionStage(Stage):
     grammar-forced leading ``YES``/``NO`` is unambiguous in the accumulated
     response text, emits a :class:`~moment_to_action.messages.llm.DecisionMessage`
     immediately, then forwards the remaining response text as
-    :class:`~moment_to_action.messages.llm.DecisionReasoningMessage` partials.
+    :class:`~moment_to_action.messages.llm.DecisionReasoningMessage` partials. The
+    upstream :class:`~moment_to_action.messages.control.EndOfClipMessage` is
+    forwarded unchanged — the reasoning stream shares its lifecycle, so this one
+    sentinel also marks the end of the reasoning for that prompt.
 
     A sink that only needs the verdict can stop pulling right after the
     ``DecisionMessage`` — the resulting ``GeneratorExit`` aborts the rest of
@@ -66,19 +70,28 @@ class DecisionStage(Stage):
         self._decided_prompts: set[str] = set()
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
-        """Interpret one buffered ``GenerationMessage`` partial.
+        """Interpret one buffered ``GenerationMessage`` partial, or forward end-of-generation.
 
         Args:
             items: Single-element window containing the incoming
-                :class:`~moment_to_action.messages.llm.GenerationMessage`.
+                :class:`~moment_to_action.messages.llm.GenerationMessage` or
+                :class:`~moment_to_action.messages.control.EndOfClipMessage`.
 
         Yields:
             A :class:`~moment_to_action.messages.llm.DecisionMessage` the first
             time a decision becomes unambiguous for this prompt, followed by
             zero or more :class:`~moment_to_action.messages.llm.DecisionReasoningMessage`
-            partials on this and subsequent calls for the same prompt.
+            partials on this and subsequent calls for the same prompt, and finally
+            the incoming ``EndOfClipMessage`` forwarded unchanged.
         """
         msg = items[0]
+        if isinstance(msg, EndOfClipMessage):
+            # One pipeline processes one prompt's generation to completion before the
+            # next, so there's never more than one entry to clear here.
+            self._decided_prompts.clear()
+            yield msg
+            return
+
         if not isinstance(msg, GenerationMessage) or msg.type != "response":
             return
 
@@ -94,8 +107,4 @@ class DecisionStage(Stage):
             timestamp=msg.timestamp,
             text=_strip_decision_prefix(msg.text),
             prompt=msg.prompt,
-            done=msg.done,
         )
-
-        if msg.done:
-            self._decided_prompts.discard(msg.prompt)

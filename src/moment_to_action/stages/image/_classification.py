@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from moment_to_action.messages._image_classification import ImageClassificationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
+from moment_to_action.models.image.classification._base import ImageClassificationModel
 from moment_to_action.stages.image._base import ImageStage
 
 if TYPE_CHECKING:
@@ -13,7 +14,6 @@ if TYPE_CHECKING:
 
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
-    from moment_to_action.models.image.classification._base import ImageClassificationModel
 
 
 def _is_undroppable_frame(msg: Message) -> bool:
@@ -21,7 +21,7 @@ def _is_undroppable_frame(msg: Message) -> bool:
     return not isinstance(msg, RawFrameMessage) or msg.frame is None
 
 
-class ImageClassificationStage(ImageStage):
+class ImageClassificationStage(ImageStage[ImageClassificationModel]):
     """Pipeline stage that runs image classification on a raw frame.
 
     Wraps any :class:`~moment_to_action.models.image.classification._base.ImageClassificationModel`
@@ -36,17 +36,18 @@ class ImageClassificationStage(ImageStage):
     def __init__(
         self, model: ImageClassificationModel, *, metrics: MetricsCollector | None = None
     ) -> None:
-        """Initialize the stage with a classification model.
+        """Initialize the stage with an unloaded classification model.
 
         Args:
-            model: An
+            model: An unloaded
                 :class:`~moment_to_action.models.image.classification._base.ImageClassificationModel`
-                instance.  The caller must call ``model.load(backend)`` before passing
-                it here.
+                — call :meth:`load` (or ``model.load()``) before processing.
             metrics: Metrics collector used to time this stage's execution.
+
+        Raises:
+            ValueError: If *model* is already loaded.
         """
-        super().__init__(window=1, drop=_is_undroppable_frame, metrics=metrics)
-        self._model = model
+        super().__init__(model, window=1, drop=_is_undroppable_frame, metrics=metrics)
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
         """Run classification on the buffered frame.

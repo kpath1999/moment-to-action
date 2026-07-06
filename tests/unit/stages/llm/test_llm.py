@@ -5,10 +5,12 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, DataType, ModelType
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.llm import GenerationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
@@ -51,9 +53,9 @@ class _FakeLlamaGGUFModel(LlamaGGUFModel):
             self.closed = True
 
 
-def _detection_msg(timestamp: float = 1.0) -> DetectionMessage:
+def _detection_msg(timestamp: float = 1.0, question: str = "") -> DetectionMessage:
     """Build an empty-detections DetectionMessage for testing."""
-    return DetectionMessage(timestamp=timestamp, detections=[])
+    return DetectionMessage(timestamp=timestamp, detections=[], question=question)
 
 
 def _gen(msg: Message) -> GenerationMessage:
@@ -148,34 +150,36 @@ class TestLLMStage:
     """Tests for LLMStage."""
 
     def test_yields_partial_and_final_messages(self) -> None:
-        """Each token yields a partial GenerationMessage, ending with done=True."""
+        """Each token yields a partial GenerationMessage, ending with EndOfClipMessage."""
         model = _FakeLlamaGGUFModel(["Hello", " world"])
-        stage = LLMStage(model, question="Is this safe?")
-        msg = _detection_msg()
+        stage = LLMStage(model)
+        msg = _detection_msg(question="Is this safe?")
 
         results = list(stage.process(iter([msg])))
 
-        assert len(results) == 3  # 2 partials + 1 final
-        assert all(isinstance(r, GenerationMessage) for r in results)
+        assert len(results) == 4  # 2 partials + 1 final content message + end-of-generation
+        gen_msgs = results[:3]
+        assert all(isinstance(r, GenerationMessage) for r in gen_msgs)
+        assert isinstance(results[3], EndOfClipMessage)
         assert _gen(results[0]).text == "Hello"
-        assert _gen(results[0]).done is False
         assert _gen(results[1]).text == "Hello world"
         assert _gen(results[2]).text == "Hello world"
-        assert _gen(results[2]).done is True
-        assert all(_gen(r).type == "response" for r in results)
+        assert all(_gen(r).type == "response" for r in gen_msgs)
 
     def test_no_think_block_stays_response_throughout(self) -> None:
         """A model with no <think> block emits type='response' for every message."""
         model = _FakeLlamaGGUFModel(["plain", " text"])
-        stage = LLMStage(model, question="Q?")
-        results = list(stage.process(iter([_detection_msg()])))
-        assert all(_gen(r).type == "response" for r in results)
+        stage = LLMStage(model)
+        results = list(stage.process(iter([_detection_msg(question="Q?")])))
+        gen_msgs = [r for r in results if isinstance(r, GenerationMessage)]
+        assert gen_msgs
+        assert all(_gen(r).type == "response" for r in gen_msgs)
 
     def test_think_block_split_into_think_then_response(self) -> None:
         """A <think>...</think> block is routed to type='think' then type='response'."""
         model = _FakeLlamaGGUFModel(["<think>", "reasoning", "</think>", "YES"])
-        stage = LLMStage(model, question="Q?")
-        results = list(stage.process(iter([_detection_msg()])))
+        stage = LLMStage(model)
+        results = list(stage.process(iter([_detection_msg(question="Q?")])))
 
         think_msgs = [r for r in results if isinstance(r, GenerationMessage) and r.type == "think"]
         resp_msgs = [
@@ -189,29 +193,29 @@ class TestLLMStage:
     def test_prompt_includes_question(self) -> None:
         """The prompt built from the DetectionMessage includes the configured question."""
         model = _FakeLlamaGGUFModel(["tok"])
-        stage = LLMStage(model, question="Is this violent?")
-        list(stage.process(iter([_detection_msg()])))
+        stage = LLMStage(model)
+        list(stage.process(iter([_detection_msg(question="Is this violent?")])))
         assert model.last_prompt is not None
         assert "Is this violent?" in model.last_prompt
 
     def test_grammar_forwarded_to_model_stream(self) -> None:
         """The configured grammar is forwarded to model.stream()."""
         model = _FakeLlamaGGUFModel(["YES"])
-        stage = LLMStage(model, question="Q?", grammar='root ::= "YES" | "NO"')
-        list(stage.process(iter([_detection_msg()])))
+        stage = LLMStage(model, grammar='root ::= "YES" | "NO"')
+        list(stage.process(iter([_detection_msg(question="Q?")])))
         assert model.last_grammar == 'root ::= "YES" | "NO"'
 
     def test_no_grammar_by_default(self) -> None:
         """Without an explicit grammar, None is forwarded to model.stream()."""
         model = _FakeLlamaGGUFModel(["tok"])
-        stage = LLMStage(model, question="Q?")
-        list(stage.process(iter([_detection_msg()])))
+        stage = LLMStage(model)
+        list(stage.process(iter([_detection_msg(question="Q?")])))
         assert model.last_grammar is None
 
     def test_non_detection_message_dropped(self) -> None:
         """A non-DetectionMessage input yields nothing and never touches the model."""
         model = _FakeLlamaGGUFModel(["tok"])
-        stage = LLMStage(model, question="Q?")
+        stage = LLMStage(model)
         other = RawFrameMessage(frame=None, timestamp=time.time())
         results = list(stage.process(iter([other])))
         assert results == []
@@ -221,9 +225,9 @@ class TestLLMStage:
         """Streaming through the stage records ttft_ms via timed_stream on the model span."""
         model = _FakeLlamaGGUFModel(["a", "b"])
         metrics = MetricsCollector(session_id="test_llm_stage")
-        stage = LLMStage(model, question="Q?", metrics=metrics)
+        stage = LLMStage(model, metrics=metrics)
         with metrics.start_trace():
-            list(stage.process(iter([_detection_msg()])))
+            list(stage.process(iter([_detection_msg(question="Q?")])))
 
         stage_spans = [s for s in metrics.spans if s.type_ is SpanType.STAGE]
         assert len(stage_spans) == 1
@@ -232,8 +236,33 @@ class TestLLMStage:
     def test_model_stream_closed_on_early_break(self) -> None:
         """Breaking out of the consumer loop closes the model's underlying generator."""
         model = _FakeLlamaGGUFModel(["a", "b", "c"])
-        stage = LLMStage(model, question="Q?")
-        gen = stage.process(iter([_detection_msg()]))
+        stage = LLMStage(model)
+        gen = stage.process(iter([_detection_msg(question="Q?")]))
         next(gen)
         gen.close()
         assert model.closed is True
+
+    def test_load_calls_model_load(self) -> None:
+        """load() forwards platform and unit to the wrapped model."""
+        model = MagicMock(spec=LlamaGGUFModel)
+        model.is_loaded = False
+        stage = LLMStage(model)
+        platform = MagicMock()
+        stage.load(platform, ComputeUnit.CPU)
+        model.load.assert_called_once_with(platform, ComputeUnit.CPU)
+
+    def test_load_without_unit_raises(self) -> None:
+        """load() without a compute unit raises ValueError."""
+        model = MagicMock(spec=LlamaGGUFModel)
+        model.is_loaded = False
+        stage = LLMStage(model)
+        with pytest.raises(ValueError, match="compute unit"):
+            stage.load(MagicMock())
+
+    def test_unload_calls_model_unload(self) -> None:
+        """unload() delegates to the wrapped model."""
+        model = MagicMock(spec=LlamaGGUFModel)
+        model.is_loaded = False
+        stage = LLMStage(model)
+        stage.unload()
+        model.unload.assert_called_once()

@@ -204,7 +204,6 @@ class TestGenerationMessage:
         assert msg.text == text
         assert msg.prompt == prompt
         assert msg.type == "response"
-        assert msg.done is False
 
     def test_generation_field_access(self) -> None:
         """Test field access on GenerationMessage."""
@@ -219,7 +218,6 @@ class TestGenerationMessage:
         assert hasattr(msg, "text")
         assert hasattr(msg, "prompt")
         assert hasattr(msg, "type")
-        assert hasattr(msg, "done")
         assert hasattr(msg, "latency_ms")
 
     def test_generation_with_long_text(self) -> None:
@@ -233,17 +231,6 @@ class TestGenerationMessage:
             type="response",
         )
         assert len(msg.text) == 10000
-
-    def test_generation_done_true_on_terminal_message(self) -> None:
-        """done=True marks the terminal message for a prompt."""
-        msg = GenerationMessage(
-            timestamp=time.time(),
-            text="final text",
-            prompt="p",
-            type="response",
-            done=True,
-        )
-        assert msg.done is True
 
 
 @pytest.mark.unit
@@ -273,14 +260,6 @@ class TestDecisionReasoningMessage:
         )
         assert msg.text == "because of X"
         assert msg.prompt == "Is this safe?"
-        assert msg.done is False
-
-    def test_decision_reasoning_done(self) -> None:
-        """done=True marks the terminal rationale message."""
-        msg = DecisionReasoningMessage(
-            timestamp=time.time(), text="final reasoning", prompt="p", done=True
-        )
-        assert msg.done is True
 
 
 @pytest.mark.unit

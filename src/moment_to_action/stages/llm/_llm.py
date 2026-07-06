@@ -5,17 +5,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 from moment_to_action.benchmarking import detect_yn
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.llm import GenerationMessage
+from moment_to_action.models.llm._base import LlamaGGUFModel
 from moment_to_action.prompting import build_detection_prompt
-from moment_to_action.stages._base import Stage
+from moment_to_action.stages._base import ModelStage
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
-    from moment_to_action.models.llm._base import LlamaGGUFModel
 
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
@@ -100,7 +101,7 @@ class _ThinkResponseRouter:
             self._phase = "response" if self._phase == "think" else "think"
 
 
-class LLMStage(Stage):
+class LLMStage(ModelStage[LlamaGGUFModel]):
     """Streams a language model's response to a detection-derived prompt.
 
     Consumes a :class:`~moment_to_action.messages.detection.DetectionMessage` and
@@ -112,33 +113,34 @@ class LLMStage(Stage):
     underlying model stream via ``GeneratorExit``, aborting the rest of generation.
 
     *system_prompt* and *max_tokens* are configured on *model* at construction
-    (``ModelManager.get_model(..., system_prompt=..., max_tokens=...)``); this
-    stage only adds the per-instance *question* and optional *grammar*.
+    (``ModelManager.get_model(..., system_prompt=..., max_tokens=...)``); the
+    per-message *question* comes from
+    :attr:`~moment_to_action.messages.detection.DetectionMessage.question`, so one
+    loaded model/stage instance can serve any question — it isn't fixed at
+    construction.
     """
 
     def __init__(
         self,
         model: LlamaGGUFModel,
         *,
-        question: str,
         grammar: str | None = None,
         metrics: MetricsCollector | None = None,
     ) -> None:
-        """Initialize the stage with a language model and its fixed question.
+        """Initialize the stage with an unloaded language model.
 
         Args:
-            model: A loaded :class:`~moment_to_action.models.llm._base.LlamaGGUFModel`.
-            question: The binary/task question appended after the detection context
-                built from each incoming message (this stage always asks the same
-                question; build one ``LLMStage`` per application/question).
+            model: An unloaded :class:`~moment_to_action.models.llm._base.LlamaGGUFModel`
+                — call :meth:`load` (or ``model.load()``) before processing.
             grammar: Optional GBNF grammar constraining generation (e.g.
                 :data:`~moment_to_action.prompting.YES_NO_GRAMMAR`).
             metrics: Metrics collector used to time this stage and record
                 per-token ttft/itl via ``MetricsCollector.timed_stream``.
+
+        Raises:
+            ValueError: If *model* is already loaded.
         """
-        super().__init__(window=1, metrics=metrics)
-        self._model = model
-        self._question = question
+        super().__init__(model, window=1, metrics=metrics)
         self._grammar = grammar
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
@@ -150,13 +152,14 @@ class LLMStage(Stage):
 
         Yields:
             Partial :class:`~moment_to_action.messages.llm.GenerationMessage`
-            objects, one per token, followed by a final ``done=True`` message.
+            objects, one per token, a final one with the complete response text,
+            then an :class:`~moment_to_action.messages.control.EndOfClipMessage`.
         """
         msg = items[0]
         if not isinstance(msg, DetectionMessage):
             return
 
-        prompt = build_detection_prompt(msg.detections, self._question)
+        prompt = build_detection_prompt(msg.detections, msg.question)
         router = _ThinkResponseRouter()
         think, resp = "", ""
 
@@ -174,7 +177,6 @@ class LLMStage(Stage):
                 prompt=prompt,
                 text=think if phase == "think" else resp,
                 type=phase,
-                done=False,
             )
 
         yield GenerationMessage(
@@ -182,5 +184,5 @@ class LLMStage(Stage):
             prompt=prompt,
             text=resp,
             type="response",
-            done=True,
         )
+        yield EndOfClipMessage(timestamp=msg.timestamp)

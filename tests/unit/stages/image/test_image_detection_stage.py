@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-from moment_to_action.hardware import DataType, ModelType
+from moment_to_action.hardware import ComputeUnit, DataType, ModelType
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import FrameTensorMessage
@@ -18,6 +20,9 @@ from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.models.image.detection._types import BoundingBox, Detection
 from moment_to_action.stages.image._base import ImageStage
 from moment_to_action.stages.image._detection import ImageDetectionStage
+
+if TYPE_CHECKING:
+    from moment_to_action.hardware import Platform
 
 
 class _StubDetectionModel(ImageDetectionModel):
@@ -33,10 +38,10 @@ class _StubDetectionModel(ImageDetectionModel):
             backends={},
             metrics=metrics,
         )
-        self._platform = MagicMock()
 
-    def _load(self, platform: object, unit: object) -> None:
-        """No-op load."""
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
+        """Record the platform so is_loaded reflects the real load state."""
+        self._platform = platform
 
     def _unload(self) -> None:
         """No-op unload."""
@@ -82,6 +87,7 @@ class TestImageDetectionStage:
     def mock_model(self, sample_detection: Detection) -> MagicMock:
         """Return a mock ImageDetectionModel with reasonable defaults."""
         model = MagicMock(spec=ImageDetectionModel)
+        model.is_loaded = False
         model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
         model.run.return_value = [
             np.zeros((1, 1, 4), dtype=np.float32),
@@ -199,6 +205,7 @@ class TestImageDetectionStage:
         stub = _StubDetectionModel(metrics=metrics)
         stage = ImageDetectionStage(model=stub, metrics=metrics)
         with metrics.start_trace():
+            stage.load(MagicMock(), ComputeUnit.CPU)
             list(stage.process(iter([raw_frame_msg])))
 
         span_names = {s.name for s in metrics.spans}
@@ -221,3 +228,52 @@ class TestImageDetectionStage:
 
         assert isinstance(result, DetectionMessage)
         assert result.timestamp == raw_frame_msg.timestamp
+
+    def test_question_passed_through(
+        self,
+        mock_model: MagicMock,
+    ) -> None:
+        """Output DetectionMessage.question must match the input message's question."""
+        msg = RawFrameMessage(
+            frame=np.zeros((480, 640, 3), dtype=np.uint8), timestamp=1.0, question="Is this safe?"
+        )
+        stage = ImageDetectionStage(model=mock_model)
+        (result,) = list(stage.process(iter([msg])))
+
+        assert isinstance(result, DetectionMessage)
+        assert result.question == "Is this safe?"
+
+    def test_load_calls_model_load(self, mock_model: MagicMock) -> None:
+        """load() forwards platform and unit to the wrapped model."""
+        stage = ImageDetectionStage(model=mock_model)
+        platform = MagicMock()
+        stage.load(platform, ComputeUnit.CPU)
+        mock_model.load.assert_called_once_with(platform, ComputeUnit.CPU)
+
+    def test_load_without_unit_raises(self, mock_model: MagicMock) -> None:
+        """load() without a compute unit raises ValueError."""
+        stage = ImageDetectionStage(model=mock_model)
+        with pytest.raises(ValueError, match="compute unit"):
+            stage.load(MagicMock())
+
+    def test_unload_calls_model_unload(self, mock_model: MagicMock) -> None:
+        """unload() delegates to the wrapped model."""
+        stage = ImageDetectionStage(model=mock_model)
+        stage.unload()
+        mock_model.unload.assert_called_once()
+
+    def test_end_of_clip_message_passed_through_unchanged(self, mock_model: MagicMock) -> None:
+        """An EndOfClipMessage is yielded unchanged, without touching the model."""
+        stage = ImageDetectionStage(model=mock_model)
+        end_msg = EndOfClipMessage(timestamp=42.0)
+
+        (result,) = list(stage.process(iter([end_msg])))
+
+        assert result is end_msg
+        mock_model.prepare.assert_not_called()
+
+    def test_end_of_clip_message_not_dropped(self, mock_model: MagicMock) -> None:
+        """The drop predicate lets EndOfClipMessage through to _process."""
+        stage = ImageDetectionStage(model=mock_model)
+        results = list(stage.process(iter([EndOfClipMessage(timestamp=1.0)])))
+        assert len(results) == 1

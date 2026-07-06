@@ -18,21 +18,39 @@ video clips.  Each clip has a ground-truth ``label`` ("positive" / "negative"),
 ``start_s`` / ``end_s`` timestamps that window the ROI, and a relative path to the
 video file inside ``<data-dir>/videos/``.
 
-VLM pipeline:
-  1. Extract frames at 1 FPS from the annotated ROI window, resize to <=480px tall.
-  2. Drive ``Pipeline([VLMDescriptionStage(model, task, grammar=YES_NO_GRAMMAR),
-     DecisionStage])`` over a ``VideoClipMessage`` of the raw BGR frames.
-  3. Score the streamed response and collect full timing + accuracy metrics.
+Both pipelines are driven through :class:`~moment_to_action.Moment2Action` — one
+pipeline per model (VLM) or per (detector, LLM) pair, loaded once and reused
+across every clip and cycle. The per-clip ``question`` rides on the message
+(``DetectionMessage.question`` / ``VideoClipMessage.question``) rather than being
+fixed at stage construction, so one loaded model serves every application's
+question without reloading.
 
-LLM pipeline:
-  1. Extract frames at 1 FPS from the annotated ROI window.
-  2. Run a detection model (YOLO V8 or Detectron2) on each frame via a real
-     ``ImageDetectionStage`` (per-frame spans land in the same trace).
-  3. Aggregate detections across all frames (keep highest-confidence instance
-     per label).
-  4. Drive ``Pipeline([LLMStage(model, question, grammar=YES_NO_GRAMMAR),
-     DecisionStage])`` over the aggregated ``DetectionMessage``.
-  5. Score the streamed response and collect full timing + accuracy metrics.
+Both clip runners score ``recall()`` against ``DecisionReasoningMessage.text``
+(the raw generation with the leading ``YES``/``NO`` stripped) rather than the
+raw ``GenerationMessage`` stream — ``recall_keywords`` are content words, never
+"yes"/"no", so this scores identically to the raw text without needing to keep
+the intermediate token stream around (see ``_accumulated_from_decision``).
+
+VLM pipeline — one real, chained ``Moment2Action`` pipeline per model:
+  1. Extract frames at 1 FPS from the annotated ROI window, resize to <=480px tall.
+  2. ``app.new_pipeline(...).add_stage(VLMDescriptionStage, ..., grammar=YES_NO_GRAMMAR)
+     .add_stage(DecisionStage).build()``, loaded once, run once per
+     ``VideoClipMessage(frames, question=clip.question)`` via one chained
+     ``handle.run()`` call.
+  3. Score the response and collect full timing + accuracy metrics.
+
+LLM pipeline — one ``Moment2Action`` pipeline per (detector, LLM) pair holding both
+models loaded together:
+``[ImageDetectionStage, DetectionAggregationStage, LLMStage, DecisionStage]``.
+  1. Extract frames at 1 FPS from the annotated ROI window (once per clip).
+  2. For every cycle, stream the frames plus a trailing ``EndOfClipMessage``
+     through the whole pipeline via one chained ``handle.run()`` call:
+     ``ImageDetectionStage`` -> ``DetectionAggregationStage`` (flushes its
+     running highest-confidence-per-label accumulation into one aggregated
+     ``DetectionMessage`` on the sentinel) -> ``LLMStage`` -> ``DecisionStage``.
+     Detection and aggregation rerun fresh every cycle along with the LLM
+     generation — nothing is cached across cycles.
+  3. Score the response and collect full timing + accuracy metrics.
 
 Model lists at the top of this file — comment out any entry to skip it.
 
@@ -46,6 +64,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import itertools
 import json
 import logging
 import sys
@@ -57,7 +76,7 @@ from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
-from _common import build_context, console, silence_native_output
+from _common import console
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import (
@@ -71,23 +90,31 @@ from rich.progress import (
 )
 from rich.table import Table
 
+from moment_to_action import Moment2Action
 from moment_to_action.benchmarking import extract_load_unload_ms, recall
-from moment_to_action.config import AppConfig
+from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit
-from moment_to_action.messages import DecisionMessage, DetectionMessage, RawFrameMessage
+from moment_to_action.messages import (
+    DecisionMessage,
+    DecisionReasoningMessage,
+    RawFrameMessage,
+)
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.video import VideoClipMessage
 from moment_to_action.metrics import SpanType
 from moment_to_action.models import MODEL_REGISTRY, ModelID
+from moment_to_action.paths import PathManager
 from moment_to_action.prompting import BENCHMARK_SYSTEM, CHATML, PHI3, YES_NO_GRAMMAR
-from moment_to_action.stages.image import ImageDetectionStage
+from moment_to_action.stages.image import DetectionAggregationStage, ImageDetectionStage
 from moment_to_action.stages.llm import DecisionStage, LLMStage
 from moment_to_action.stages.vlm import VLMDescriptionStage
 
 if TYPE_CHECKING:
-    from moment_to_action.metrics import MetricsCollector, Span
-    from moment_to_action.models.image.detection._types import Detection
-    from moment_to_action.models.llm._base import LlamaGGUFModel
-    from moment_to_action.models.vlm._base import LlamaVLModel
+    from collections.abc import Iterator
+
+    from moment_to_action.app import PipelineHandle
+    from moment_to_action.messages import Message
+    from moment_to_action.metrics import Span, Trace
 
 logging.basicConfig(
     level=logging.INFO,
@@ -296,89 +323,35 @@ def _resize_480p(frame: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Detection aggregation (bench-local: no production stage aggregates across
-# a whole clip's frames into one representative detection set)
-# ---------------------------------------------------------------------------
-
-
-def _detect_frames(
-    detector: object, frames: list[np.ndarray], metrics: MetricsCollector
-) -> list[list[Detection]]:
-    """Run a real ``ImageDetectionStage`` on each frame, return per-frame detections.
-
-    Args:
-        detector: Loaded ImageDetectionModel instance.
-        frames: BGR uint8 frames to run detection on.
-        metrics: The same MetricsCollector *detector* was constructed with
-            (an active trace must already be open).
-
-    Returns:
-        List of Detection lists, one per input frame.
-    """
-    stage = ImageDetectionStage(detector, metrics=metrics)  # type: ignore[arg-type]
-    results: list[list[Detection]] = []
-    for frame in frames:
-        msg = RawFrameMessage(frame=frame, timestamp=time.time())
-        try:
-            with silence_native_output():
-                (out,) = list(stage.process(iter([msg])))
-            assert isinstance(out, DetectionMessage)  # noqa: S101
-            results.append(out.detections)
-        except Exception:  # noqa: BLE001
-            results.append([])
-    return results
-
-
-def _aggregate_detections(per_frame: list[list[Detection]]) -> list[Detection]:
-    """Aggregate per-frame detections into a single representative set.
-
-    For each unique label, keeps the instance with the highest confidence
-    across all frames.
-
-    Args:
-        per_frame: List of detection lists, one per extracted frame.
-
-    Returns:
-        List of representative Detection objects, one per unique label.
-    """
-    best: dict[str, Detection] = {}
-    for frame_dets in per_frame:
-        for det in frame_dets:
-            if det.label not in best or det.confidence > best[det.label].confidence:
-                best[det.label] = det
-    return list(best.values())
-
-
-# ---------------------------------------------------------------------------
 # Streaming benchmark
 # ---------------------------------------------------------------------------
 
 
-def _last_model_inference_span(metrics: MetricsCollector) -> Span | None:
-    """Return the most recently recorded MODEL_INFERENCE span on *metrics*.
+def _last_model_inference_span(trace: Trace) -> Span | None:
+    """Return the most recently recorded MODEL_INFERENCE span on *trace*.
 
     Args:
-        metrics: Collector to scan.
+        trace: Trace to scan (typically one clip's evaluation).
 
     Returns:
         The last :class:`~moment_to_action.metrics.Span` of type
-        ``MODEL_INFERENCE``, or ``None`` if none have been recorded yet.
+        ``MODEL_INFERENCE``, or ``None`` if none were recorded.
     """
-    for span in reversed(metrics.spans):
+    for span in reversed(trace.spans):
         if span.type_ is SpanType.MODEL_INFERENCE:
             return span
     return None
 
 
 def _score_clip_response(
-    accumulated: str, clip: Clip, metrics: MetricsCollector, *, is_yes_no: bool, yn: str | None
+    accumulated: str, clip: Clip, trace: Trace, *, is_yes_no: bool, yn: str | None
 ) -> dict:
     """Build the common scoring fields shared by the VLM and LLM clip runners.
 
     Args:
         accumulated: Full generated response text.
         clip: Clip being evaluated.
-        metrics: The same MetricsCollector the stage was constructed with.
+        trace: This clip's evaluation trace.
         is_yes_no: Whether a decision was attempted for this clip.
         yn: Extracted decision ("yes"/"no"), or ``None`` if not decided.
 
@@ -389,7 +362,7 @@ def _score_clip_response(
     if is_yes_no and yn is not None:
         yn_correct = yn == clip.expected.lower()
 
-    span = _last_model_inference_span(metrics)
+    span = _last_model_inference_span(trace)
     meta = span.metadata if span is not None else {}
     inf_m = span.inference_metrics if span is not None else None
 
@@ -407,43 +380,63 @@ def _score_clip_response(
     }
 
 
+def _accumulated_from_decision(yn: str | None, reasoning: list[DecisionReasoningMessage]) -> str:
+    """Reconstruct scorable response text from a DecisionStage's output.
+
+    ``DecisionReasoningMessage.text`` is the raw generation with the leading
+    ``YES``/``NO`` token stripped (see ``_strip_decision_prefix`` in
+    ``DecisionStage``); ``recall_keywords`` are content words, never "yes"/"no",
+    so scoring ``recall()`` against this reconstruction matches scoring it
+    against the raw generated text.
+
+    Args:
+        yn: Extracted decision ("yes"/"no"), or ``None`` if not decided.
+        reasoning: ``DecisionReasoningMessage`` partials for this clip; only the
+            last (most complete) one is used.
+
+    Returns:
+        Reconstructed response text, e.g. ``"YES, because ..."``.
+    """
+    text = reasoning[-1].text if reasoning else ""
+    return f"{yn.upper()}, {text}" if yn else text
+
+
 def _run_vlm_clip(
-    model: LlamaVLModel,
+    handle: PipelineHandle,
     model_name: str,
     clip: Clip,
     cycle: int,
     frames: list[np.ndarray],
-    metrics: MetricsCollector,
 ) -> dict:
-    """Drive one clip through ``Pipeline([VLMDescriptionStage, DecisionStage])`` and score it.
+    """Drive one clip through the loaded VLM+Decision pipeline and score it.
+
+    A single chained ``handle.run()`` call — the VLM+Decision pipeline has no
+    stage worth caching across cycles, so there's no reason to drive it in
+    pieces (see ``_run_llm_clip`` for the one that does).
 
     Args:
-        model: Loaded LlamaVLModel instance.
+        handle: Loaded pipeline: ``[VLMDescriptionStage, DecisionStage]``.
         model_name: Display name for the result row.
         clip: Clip being evaluated.
         cycle: Cycle index (1-based).
         frames: BGR uint8 frames for this clip's ROI (already resized to <=480px tall).
-        metrics: The same MetricsCollector *model* was constructed with.
 
     Returns:
         Result dict for this (clip, cycle).
     """
     is_yes_no = clip.expected.lower() in _YES_NO_LABELS
-    grammar = YES_NO_GRAMMAR if is_yes_no else None
-    clip_msg = VideoClipMessage(frames=frames, timestamp=time.time())
+    clip_msg = VideoClipMessage(frames=frames, timestamp=time.time(), question=clip.question)
 
-    vlm_stage = VLMDescriptionStage(model, task=clip.question, grammar=grammar, metrics=metrics)
-    gen_messages = list(vlm_stage.process(iter([clip_msg])))
-    accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
+    results = list(handle.run(iter([clip_msg])))
+    trace = handle.metrics_report().traces[-1]
 
     yn: str | None = None
     if is_yes_no:
-        decision_stage = DecisionStage(metrics=metrics)
-        decisions = [
-            m for m in decision_stage.process(iter(gen_messages)) if isinstance(m, DecisionMessage)
-        ]
+        decisions = [m for m in results if isinstance(m, DecisionMessage)]
         if decisions:
             yn = decisions[0].decision
+    reasoning = [m for m in results if isinstance(m, DecisionReasoningMessage)]
+    accumulated = _accumulated_from_decision(yn, reasoning)
 
     frame_h, frame_w = frames[0].shape[:2]
     return {
@@ -459,51 +452,51 @@ def _run_vlm_clip(
         "n_frames": len(frames),
         "frame_w": frame_w,
         "frame_h": frame_h,
-        **_score_clip_response(accumulated, clip, metrics, is_yes_no=is_yes_no, yn=yn),
+        **_score_clip_response(accumulated, clip, trace, is_yes_no=is_yes_no, yn=yn),
     }
 
 
 def _run_llm_clip(
-    model: LlamaGGUFModel,
+    handle: PipelineHandle,
     model_name: str,
     clip: Clip,
     cycle: int,
-    detections: list[Detection],
-    n_frames: int,
-    metrics: MetricsCollector,
+    frames: list[np.ndarray],
 ) -> dict:
-    """Drive one clip through ``Pipeline([LLMStage, DecisionStage])`` and score it.
+    """Drive one clip through the loaded detection+aggregation+LLM+Decision pipeline.
 
-    The prompt is built from aggregated detections; no images are passed.
+    A single chained ``handle.run()`` call, same as ``_run_vlm_clip`` — detection
+    and aggregation rerun fresh on every cycle along with the LLM generation,
+    rather than caching the aggregated detections across cycles.
 
     Args:
-        model: Loaded LlamaGGUFModel instance.
+        handle: Loaded pipeline:
+            ``[ImageDetectionStage, DetectionAggregationStage, LLMStage, DecisionStage]``.
         model_name: Display name for the result row.
         clip: Clip being evaluated.
         cycle: Cycle index (1-based).
-        detections: Aggregated representative detections from the clip's ROI.
-        n_frames: Number of frames that were extracted (for metadata).
-        metrics: The same MetricsCollector *model* was constructed with.
+        frames: BGR uint8 frames for this clip's ROI.
 
     Returns:
         Result dict for this (clip, cycle).
     """
     is_yes_no = clip.expected.lower() in _YES_NO_LABELS
-    grammar = YES_NO_GRAMMAR if is_yes_no else None
-    detection_msg = DetectionMessage(timestamp=time.time(), detections=detections)
+    frame_msgs: Iterator[Message] = (
+        RawFrameMessage(frame=frame, timestamp=time.time(), question=clip.question)
+        for frame in frames
+    )
+    stream = itertools.chain(frame_msgs, [EndOfClipMessage(timestamp=time.time())])
 
-    llm_stage = LLMStage(model, question=clip.question, grammar=grammar, metrics=metrics)
-    gen_messages = list(llm_stage.process(iter([detection_msg])))
-    accumulated = gen_messages[-1].text if gen_messages else ""  # type: ignore[union-attr]
+    results = list(handle.run(stream))
+    trace = handle.metrics_report().traces[-1]
 
     yn: str | None = None
     if is_yes_no:
-        decision_stage = DecisionStage(metrics=metrics)
-        decisions = [
-            m for m in decision_stage.process(iter(gen_messages)) if isinstance(m, DecisionMessage)
-        ]
+        decisions = [m for m in results if isinstance(m, DecisionMessage)]
         if decisions:
             yn = decisions[0].decision
+    reasoning = [m for m in results if isinstance(m, DecisionReasoningMessage)]
+    accumulated = _accumulated_from_decision(yn, reasoning)
 
     return {
         "model": model_name,
@@ -515,10 +508,8 @@ def _run_llm_clip(
         "end_s": clip.end_s,
         "expected": clip.expected,
         "run_idx": cycle,
-        "n_frames": n_frames,
-        "n_detections_total": len(detections),
-        "n_unique_labels": len({d.label for d in detections}),
-        **_score_clip_response(accumulated, clip, metrics, is_yes_no=is_yes_no, yn=yn),
+        "n_frames": len(frames),
+        **_score_clip_response(accumulated, clip, trace, is_yes_no=is_yes_no, yn=yn),
     }
 
 
@@ -528,24 +519,22 @@ def _run_llm_clip(
 
 
 def _run_vlm_benchmark(
-    model: LlamaVLModel,
+    handle: PipelineHandle,
     model_name: str,
     clips: list[Clip],
     n_cycles: int,
     data_dir: Path,
-    metrics: MetricsCollector,
     progress: Progress,
     clip_task_id: TaskID,
 ) -> list[dict]:
     """Run all VLM clips x n_cycles and return result rows.
 
     Args:
-        model: Loaded LlamaVLModel instance.
+        handle: Loaded pipeline: ``[VLMDescriptionStage, DecisionStage]``.
         model_name: Human-readable name for output rows.
         clips: Clips to evaluate.
         n_cycles: Number of repetitions per clip.
         data_dir: Root data directory; videos are at ``data_dir/videos/<clip.file>``.
-        metrics: The same MetricsCollector *model* was constructed with.
         progress: Rich Progress instance.
         clip_task_id: Task ID of the clip sub-progress bar.
 
@@ -569,7 +558,7 @@ def _run_vlm_benchmark(
                     progress.advance(clip_task_id)
                     continue
                 resized = [_resize_480p(f) for f in raw_frames]
-                row = _run_vlm_clip(model, model_name, clip, cycle, resized, metrics)
+                row = _run_vlm_clip(handle, model_name, clip, cycle, resized)
             except Exception as exc:  # noqa: BLE001
                 console.print(
                     f"  [yellow]{model_name} clip={clip.id} cycle={cycle}: {exc}[/yellow]"
@@ -582,31 +571,28 @@ def _run_vlm_benchmark(
     return rows
 
 
-def _run_llm_benchmark(  # noqa: PLR0913
-    model: LlamaGGUFModel,
+def _run_llm_benchmark(
+    handle: PipelineHandle,
     model_name: str,
     clips: list[Clip],
     n_cycles: int,
     data_dir: Path,
-    detector: object,
-    metrics: MetricsCollector,
     progress: Progress,
     clip_task_id: TaskID,
 ) -> list[dict]:
     """Run all LLM clips x n_cycles and return result rows.
 
-    For each clip, frames are extracted once and detection is run once; the
-    resulting aggregated detections are reused across all cycles. Detection
-    spans (via ``ImageDetectionStage``) are recorded on the same *metrics*.
+    Frames are extracted once per clip; detection, aggregation, and generation
+    all rerun fresh for every cycle via one chained ``handle.run()`` call
+    (see ``_run_llm_clip``).
 
     Args:
-        model: Loaded LlamaGGUFModel instance.
+        handle: Loaded pipeline:
+            ``[ImageDetectionStage, DetectionAggregationStage, LLMStage, DecisionStage]``.
         model_name: Human-readable name for output rows.
         clips: Clips to evaluate.
         n_cycles: Number of repetitions per clip.
         data_dir: Root data directory; videos are at ``data_dir/videos/<clip.file>``.
-        detector: Loaded ImageDetectionModel instance for the LLM pipeline.
-        metrics: The same MetricsCollector *model* was constructed with.
         progress: Rich Progress instance.
         clip_task_id: Task ID of the clip sub-progress bar.
 
@@ -630,18 +616,13 @@ def _run_llm_benchmark(  # noqa: PLR0913
             progress.advance(clip_task_id, advance=n_cycles)
             continue
 
-        per_frame = _detect_frames(detector, raw_frames, metrics)
-        aggregated = _aggregate_detections(per_frame)
-
         for cycle in range(1, n_cycles + 1):
             progress.update(
                 clip_task_id,
                 description=f"  {clip.id} [{cycle}/{n_cycles}]",
             )
             try:
-                row = _run_llm_clip(
-                    model, model_name, clip, cycle, aggregated, len(raw_frames), metrics
-                )
+                row = _run_llm_clip(handle, model_name, clip, cycle, raw_frames)
             except Exception as exc:  # noqa: BLE001
                 console.print(
                     f"  [yellow]{model_name} clip={clip.id} cycle={cycle}: {exc}[/yellow]"
@@ -714,7 +695,7 @@ def _write_gzip_results(
     ``model`` alone (VLM entries, ``detector`` defaults to ``""``).
 
     Args:
-        model_entries: Per-model result dicts with ``trace`` and ``runs``.
+        model_entries: Per-model result dicts with ``load_ms``/``unload_ms`` and ``runs``.
         output_path: Destination ``.json.gz`` path.
         merge: If ``True``, merge into any existing file rather than overwriting.
     """
@@ -827,9 +808,10 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     output_path.parent.mkdir(parents=True, exist_ok=True)
     compute_unit = ComputeUnit.CPU if args.cpu else ComputeUnit.GPU
 
-    ctx = build_context(qairt=True)
-    server_path = Path(args.server_path) if args.server_path else ctx.config.llama_server_path
-    port = args.port if args.port is not None else ctx.config.llama_server_port
+    path_manager = PathManager()
+    config = load_config(path_manager.app_config_file)
+    server_path = Path(args.server_path) if args.server_path else config.llama_server_path
+    port = args.port if args.port is not None else config.llama_server_port
 
     if server_path is None:
         console.print(
@@ -837,9 +819,10 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         )
         sys.exit(1)
 
-    ctx.config = AppConfig(
-        **{**ctx.config.model_dump(), "llama_server_path": server_path, "llama_server_port": port}
+    config = AppConfig(
+        **{**config.model_dump(), "llama_server_path": server_path, "llama_server_port": port}
     )
+    app = Moment2Action(config, qairt=True)
 
     try:
         clips = _load_clips(data_dir)
@@ -907,42 +890,39 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 continue
 
             progress.update(model_task, description=f"{model_name} (vlm)")
+            pipeline_name = f"vlm-{model_name}"
 
+            handle: PipelineHandle | None = None
             try:
-                model = ctx.manager.get_model(
-                    model_id, system_prompt=BENCHMARK_SYSTEM, max_tokens=max_tokens
+                handle = (
+                    app.new_pipeline(pipeline_name)
+                    .add_stage(
+                        VLMDescriptionStage,
+                        model_id=model_id,
+                        model_kwargs={"system_prompt": BENCHMARK_SYSTEM, "max_tokens": max_tokens},
+                        grammar=YES_NO_GRAMMAR,
+                        compute_unit=compute_unit,
+                    )
+                    .add_stage(DecisionStage)
+                    .build()
                 )
+                app.load_pipeline(handle)
             except Exception as exc:  # noqa: BLE001
-                console.print(f"  [red]{model_name}: failed to get model — {exc}[/red]")
+                console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
+                if handle is not None:
+                    app.remove_pipeline(handle)
                 progress.advance(model_task)
                 continue
 
-            rows: list[dict] = []
-            with ctx.metrics.start_trace() as trace:
-                try:
-                    model.load(ctx.platform, compute_unit)
-                except Exception as exc:  # noqa: BLE001
-                    console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
-                    progress.advance(model_task)
-                    continue
+            rows = _run_vlm_benchmark(
+                handle, model_name, clips, n_cycles, data_dir, progress, clip_task
+            )
 
-                rows = _run_vlm_benchmark(
-                    model,  # type: ignore[arg-type]
-                    model_name,
-                    clips,
-                    n_cycles,
-                    data_dir,
-                    ctx.metrics,
-                    progress,
-                    clip_task,
-                )
+            app.unload_pipeline(handle)
+            report = app.metrics_report(handle)
+            load_ms, unload_ms = extract_load_unload_ms(report.traces)
+            app.remove_pipeline(handle)
 
-                try:
-                    model.unload()
-                except Exception as exc:  # noqa: BLE001
-                    console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
-
-            load_ms, unload_ms = extract_load_unload_ms([trace])
             for row in rows:
                 row["kind"] = "vlm"
                 row["load_ms"] = round(load_ms, 3)
@@ -953,7 +933,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     "kind": "vlm",
                     "load_ms": round(load_ms, 3),
                     "unload_ms": round(unload_ms, 3),
-                    "trace": trace.json(),
                     "runs": rows,
                 }
             )
@@ -977,30 +956,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             ) in _LLM_DETECTORS:
                 console.rule(f"[dim]LLM x {detector_display}[/dim]")
 
-                # Load detector once and reuse across all LLM models.
-                try:
-                    detector_obj = ctx.manager.get_model(
-                        detector_model_id, variant=detector_variant
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    console.print(
-                        f"  [red]Detector {detector_display}: failed to get — {exc}[/red]"
-                    )
-                    for _ in llm_configs:
-                        progress.advance(model_task)
-                    continue
-
-                try:
-                    with ctx.metrics.start_trace(), silence_native_output():
-                        detector_obj.load(ctx.platform, detector_unit)
-                except Exception as exc:  # noqa: BLE001
-                    console.print(
-                        f"  [red]Detector {detector_display}: failed to load — {exc}[/red]"
-                    )
-                    for _ in llm_configs:
-                        progress.advance(model_task)
-                    continue
-
                 for model_id, model_name, model_template in llm_configs:
                     if model_id not in MODEL_REGISTRY:
                         console.print(f"  [yellow]{model_name} not in registry, skipping.[/yellow]")
@@ -1010,48 +965,53 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     progress.update(
                         model_task, description=f"{model_name} (llm/{detector_display})"
                     )
+                    pipeline_name = f"llm-{model_name}-{detector_display}"
 
+                    handle = None
                     try:
-                        model = ctx.manager.get_model(
-                            model_id,
-                            system_prompt=BENCHMARK_SYSTEM,
-                            max_tokens=max_tokens,
-                            template=model_template,
+                        handle = (
+                            app.new_pipeline(pipeline_name)
+                            .add_stage(
+                                ImageDetectionStage,
+                                model_id=detector_model_id,
+                                variant=detector_variant,
+                                compute_unit=detector_unit,
+                            )
+                            .add_stage(DetectionAggregationStage)
+                            .add_stage(
+                                LLMStage,
+                                model_id=model_id,
+                                model_kwargs={
+                                    "system_prompt": BENCHMARK_SYSTEM,
+                                    "max_tokens": max_tokens,
+                                    "template": model_template,
+                                },
+                                grammar=YES_NO_GRAMMAR,
+                                compute_unit=compute_unit,
+                            )
+                            .add_stage(DecisionStage)
+                            .build()
                         )
+                        app.load_pipeline(handle)
                     except Exception as exc:  # noqa: BLE001
-                        console.print(f"  [red]{model_name}: failed to get model — {exc}[/red]")
+                        console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
+                        if handle is not None:
+                            app.remove_pipeline(handle)
                         progress.advance(model_task)
                         continue
 
-                    rows = []
-                    with ctx.metrics.start_trace() as trace:
-                        try:
-                            model.load(ctx.platform, compute_unit)
-                        except Exception as exc:  # noqa: BLE001
-                            console.print(f"  [red]{model_name}: failed to load — {exc}[/red]")
-                            progress.advance(model_task)
-                            continue
-
-                        rows = _run_llm_benchmark(
-                            model,  # type: ignore[arg-type]
-                            model_name,
-                            clips,
-                            n_cycles,
-                            data_dir,
-                            detector_obj,
-                            ctx.metrics,
-                            progress,
-                            clip_task,
-                        )
-
-                        try:
-                            model.unload()
-                        except Exception as exc:  # noqa: BLE001
-                            console.print(f"  [yellow]{model_name}: unload error — {exc}[/yellow]")
-
-                    load_ms, unload_ms = extract_load_unload_ms(
-                        [trace], name_contains=type(model).__name__
+                    rows = _run_llm_benchmark(
+                        handle, model_name, clips, n_cycles, data_dir, progress, clip_task
                     )
+
+                    app.unload_pipeline(handle)
+                    report = app.metrics_report(handle)
+                    llm_class_name = MODEL_REGISTRY[model_id].model_class.__name__
+                    load_ms, unload_ms = extract_load_unload_ms(
+                        report.traces, name_contains=llm_class_name
+                    )
+                    app.remove_pipeline(handle)
+
                     for row in rows:
                         row["kind"] = "llm"
                         row["detector"] = detector_display
@@ -1064,7 +1024,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                             "detector": detector_display,
                             "load_ms": round(load_ms, 3),
                             "unload_ms": round(unload_ms, 3),
-                            "trace": trace.json(),
                             "runs": rows,
                         }
                     )
@@ -1078,14 +1037,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
                     all_rows.extend(rows)
                     progress.advance(model_task)
-
-                try:
-                    with ctx.metrics.start_trace(), silence_native_output():
-                        detector_obj.unload()
-                except Exception as exc:  # noqa: BLE001
-                    console.print(
-                        f"  [yellow]Detector {detector_display} unload error — {exc}[/yellow]"
-                    )
 
     if all_rows:
         _write_gzip_results(model_entries, output_path, merge=args.merge)
