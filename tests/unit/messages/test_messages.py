@@ -11,7 +11,6 @@ from moment_to_action.messages import DetectionMessage
 from moment_to_action.messages.llm import (
     DecisionMessage,
     DecisionReasoningMessage,
-    EndOfGenerationMessage,
     GenerationMessage,
 )
 from moment_to_action.messages.sensor import RawFrameMessage
@@ -232,18 +231,6 @@ class TestGenerationMessage:
             type="response",
         )
         assert len(msg.text) == 10000
-
-
-@pytest.mark.unit
-class TestEndOfGenerationMessage:
-    """Tests for EndOfGenerationMessage."""
-
-    def test_construction(self) -> None:
-        """Test EndOfGenerationMessage construction."""
-        timestamp = time.time()
-        msg = EndOfGenerationMessage(timestamp=timestamp, prompt="p")
-        assert msg.timestamp == timestamp
-        assert msg.prompt == "p"
 
 
 @pytest.mark.unit

@@ -19,12 +19,7 @@ from ._image_classification import ImageClassificationMessage
 from .audio import AudioTensorMessage
 from .control import EndOfClipMessage
 from .detection import DetectionMessage
-from .llm import (
-    DecisionMessage,
-    DecisionReasoningMessage,
-    EndOfGenerationMessage,
-    GenerationMessage,
-)
+from .llm import DecisionMessage, DecisionReasoningMessage, GenerationMessage
 from .sensor import RawFrameMessage
 from .video import FrameTensorMessage, VideoClipMessage
 from .vlm import ClassificationMessage
@@ -43,7 +38,6 @@ Message: TypeAlias = (
     | ClassificationMessage
     | ImageClassificationMessage
     | EndOfClipMessage
-    | EndOfGenerationMessage
 )
 
 __all__ = [
@@ -55,7 +49,6 @@ __all__ = [
     "Detection",
     "DetectionMessage",
     "EndOfClipMessage",
-    "EndOfGenerationMessage",
     "FrameTensorMessage",
     "GenerationMessage",
     "ImageClassificationMessage",

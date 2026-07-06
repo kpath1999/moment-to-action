@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from moment_to_action.messages.llm import EndOfGenerationMessage, GenerationMessage
+from moment_to_action.messages.control import EndOfClipMessage
+from moment_to_action.messages.llm import GenerationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import VideoClipMessage
 from moment_to_action.stages._base import Stage
@@ -106,7 +107,7 @@ class VLMDescriptionStage(Stage):
         Yields:
             Partial :class:`~moment_to_action.messages.llm.GenerationMessage`
             objects, one per token, a final one with the complete response text,
-            then an :class:`~moment_to_action.messages.llm.EndOfGenerationMessage`.
+            then an :class:`~moment_to_action.messages.control.EndOfClipMessage`.
         """
         msg = items[0]
         extracted = _frames_and_question_from(msg)
@@ -133,4 +134,4 @@ class VLMDescriptionStage(Stage):
             text=text,
             type="response",
         )
-        yield EndOfGenerationMessage(timestamp=msg.timestamp, prompt=question)
+        yield EndOfClipMessage(timestamp=msg.timestamp)

@@ -14,7 +14,7 @@ class GenerationMessage(BaseMessage):
     is the accumulated text of the current ``type`` phase up to and including this
     token (not just the new token), so each message is a complete snapshot of that
     phase so far. The stream for one prompt always ends with an
-    :class:`EndOfGenerationMessage` carrying the same ``prompt``, rather than a
+    :class:`~moment_to_action.messages.control.EndOfClipMessage`, rather than a
     ``done`` flag on the last content message.
     """
 
@@ -32,22 +32,6 @@ class GenerationMessage(BaseMessage):
     """
 
 
-class EndOfGenerationMessage(BaseMessage):
-    """Sentinel marking the end of one prompt's streamed generation.
-
-    Emitted once, after the last :class:`GenerationMessage` for a given
-    ``prompt``, by :class:`~moment_to_action.stages.llm.LLMStage` /
-    :class:`~moment_to_action.stages.vlm.VLMDescriptionStage`.
-    :class:`~moment_to_action.stages.llm.DecisionStage` forwards it unchanged,
-    since its filtered/stripped reasoning stream shares the same lifecycle as the
-    raw generation it's derived from — so this single sentinel also marks the end
-    of the corresponding :class:`DecisionReasoningMessage` stream.
-    """
-
-    prompt: str
-    """The exact prompt whose generation just ended."""
-
-
 class DecisionMessage(BaseMessage):
     """A yes/no decision extracted from a grammar-constrained LLM generation."""
 
@@ -61,9 +45,9 @@ class DecisionMessage(BaseMessage):
 class DecisionReasoningMessage(BaseMessage):
     """The free-text rationale following a yes/no decision, streamed incrementally.
 
-    The stream for one prompt ends when an :class:`EndOfGenerationMessage` carrying
-    the same ``prompt`` arrives (forwarded by
-    :class:`~moment_to_action.stages.llm.DecisionStage` from the underlying
+    The stream for one prompt ends when an
+    :class:`~moment_to_action.messages.control.EndOfClipMessage` arrives (forwarded
+    by :class:`~moment_to_action.stages.llm.DecisionStage` from the underlying
     generation it's reasoning over), rather than a ``done`` flag on the last
     rationale message.
     """

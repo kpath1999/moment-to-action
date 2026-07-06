@@ -11,8 +11,9 @@ import numpy as np
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, DataType, ModelType
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
-from moment_to_action.messages.llm import EndOfGenerationMessage, GenerationMessage
+from moment_to_action.messages.llm import GenerationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import VideoClipMessage
 from moment_to_action.metrics import MetricsCollector, SpanType
@@ -81,7 +82,7 @@ class TestVLMDescriptionStage:
         gen_msgs = results[:3]
         assert all(isinstance(r, GenerationMessage) for r in gen_msgs)
         assert all(_gen(r).type == "response" for r in gen_msgs)
-        assert isinstance(results[-1], EndOfGenerationMessage)
+        assert isinstance(results[-1], EndOfClipMessage)
         assert _gen(gen_msgs[-1]).text == "A dog"
 
     def test_dropped_raw_frame_yields_nothing(self) -> None:

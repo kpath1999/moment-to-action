@@ -110,28 +110,32 @@ with Moment2Action() as app:
 # equivalent to calling app.close(), which unloads the active pipeline
 ```
 
-## Bounded streams: `EndOfClipMessage` / `EndOfGenerationMessage`
+## Bounded streams: `EndOfClipMessage`
 
 A stage that must accumulate across a bounded run of messages (e.g. "every
-frame in this clip") doesn't need to know the run's length up front, and
-doesn't need a boolean flag bolted onto every payload message. Instead, the
-producer sends a dedicated sentinel message after the last real one — a
-control message with no payload, matched by `isinstance`, not a field:
+frame in this clip", or "every token of this generation") doesn't need to know
+the run's length up front, and doesn't need a boolean flag bolted onto every
+payload message. Instead, the producer sends one shared sentinel — a
+payload-free control message, matched by `isinstance`, not a field — after the
+last real message of the run:
 
-- `EndOfClipMessage` — sent after the last frame of a clip.
-  `DetectionAggregationStage` keeps a running highest-confidence-per-label
-  accumulation as instance state (`window=1`, real time, no buffering) and
-  flushes it as one `DetectionMessage` when it sees this sentinel.
-  `ImageDetectionStage` passes it through unchanged (it isn't a frame, so its
-  drop predicate has to special-case it) so it reaches the aggregation stage.
-- `EndOfGenerationMessage` — sent by `LLMStage`/`VLMDescriptionStage` after
-  the last `GenerationMessage` for a prompt, replacing what used to be a
-  `done=True` flag on the terminal message. `DecisionStage` forwards it
-  unchanged after its own last `DecisionReasoningMessage`, since the
-  (stripped) reasoning stream shares the same lifecycle as the generation
-  it's derived from.
+- `ImageDetectionStage`/`DetectionAggregationStage`: sent after the last frame
+  of a clip. `DetectionAggregationStage` keeps a running
+  highest-confidence-per-label accumulation as instance state (`window=1`,
+  real time, no buffering) and flushes it as one `DetectionMessage` when it
+  sees this sentinel. `ImageDetectionStage` passes it through unchanged (it
+  isn't a frame, so its drop predicate has to special-case it) so it reaches
+  the aggregation stage.
+- `LLMStage`/`VLMDescriptionStage`/`DecisionStage`: sent after the last
+  `GenerationMessage` for a prompt, replacing what used to be a `done=True`
+  flag on the terminal message. `DecisionStage` forwards it unchanged after
+  its own last `DecisionReasoningMessage`, since the (stripped) reasoning
+  stream shares the same lifecycle as the generation it's derived from.
 
-Stages that don't care about a given sentinel just don't match it in their
+It's the same `EndOfClipMessage` type in both cases — it carries no `prompt`
+or clip ID, because a single pipeline processes one bounded run to completion
+before starting the next, so there's never more than one run's sentinel live
+to disambiguate. Stages that don't care about it just don't match it in their
 `isinstance` dispatch — no `done`/`is_last` field to check on every message
 they do care about.
 

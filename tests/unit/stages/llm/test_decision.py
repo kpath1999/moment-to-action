@@ -9,12 +9,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, DataType, ModelType
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
-from moment_to_action.messages.llm import (
-    DecisionMessage,
-    DecisionReasoningMessage,
-    EndOfGenerationMessage,
-)
+from moment_to_action.messages.llm import DecisionMessage, DecisionReasoningMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.metrics import MetricsCollector
 from moment_to_action.models.llm._base import LlamaGGUFModel
@@ -99,7 +96,18 @@ class TestDecisionStage:
         reasoning = [r for r in results if isinstance(r, DecisionReasoningMessage)]
         assert reasoning
         assert "because of reasons" in reasoning[-1].text
-        assert isinstance(results[-1], EndOfGenerationMessage)
+        assert isinstance(results[-1], EndOfClipMessage)
+
+    def test_end_of_clip_message_forwarded_and_clears_state(self) -> None:
+        """An EndOfClipMessage is forwarded unchanged and clears decided-prompt state."""
+        decision_stage = DecisionStage()
+        decision_stage._decided_prompts.add("some prompt")
+        end_msg = EndOfClipMessage(timestamp=5.0)
+
+        results = list(decision_stage.process(iter([end_msg])))
+
+        assert results == [end_msg]
+        assert decision_stage._decided_prompts == set()
 
     def test_no_decision_yields_nothing(self) -> None:
         """No DecisionMessage is emitted while the decision is still ambiguous."""

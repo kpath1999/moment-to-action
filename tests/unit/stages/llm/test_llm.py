@@ -10,8 +10,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from moment_to_action.hardware import ComputeUnit, DataType, ModelType
+from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
-from moment_to_action.messages.llm import EndOfGenerationMessage, GenerationMessage
+from moment_to_action.messages.llm import GenerationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.metrics import MetricsCollector, SpanType
 from moment_to_action.models.llm._base import LlamaGGUFModel
@@ -149,7 +150,7 @@ class TestLLMStage:
     """Tests for LLMStage."""
 
     def test_yields_partial_and_final_messages(self) -> None:
-        """Each token yields a partial GenerationMessage, ending with EndOfGenerationMessage."""
+        """Each token yields a partial GenerationMessage, ending with EndOfClipMessage."""
         model = _FakeLlamaGGUFModel(["Hello", " world"])
         stage = LLMStage(model)
         msg = _detection_msg(question="Is this safe?")
@@ -159,7 +160,7 @@ class TestLLMStage:
         assert len(results) == 4  # 2 partials + 1 final content message + end-of-generation
         gen_msgs = results[:3]
         assert all(isinstance(r, GenerationMessage) for r in gen_msgs)
-        assert isinstance(results[3], EndOfGenerationMessage)
+        assert isinstance(results[3], EndOfClipMessage)
         assert _gen(results[0]).text == "Hello"
         assert _gen(results[1]).text == "Hello world"
         assert _gen(results[2]).text == "Hello world"
