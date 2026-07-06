@@ -157,6 +157,7 @@ class TestVLMDescriptionStage:
     def test_load_calls_model_load(self) -> None:
         """load() forwards platform and unit to the wrapped model."""
         model = MagicMock(spec=LlamaVLModel)
+        model.is_loaded = False
         stage = VLMDescriptionStage(model)
         platform = MagicMock()
         stage.load(platform, ComputeUnit.CPU)
@@ -165,6 +166,7 @@ class TestVLMDescriptionStage:
     def test_load_without_unit_raises(self) -> None:
         """load() without a compute unit raises ValueError."""
         model = MagicMock(spec=LlamaVLModel)
+        model.is_loaded = False
         stage = VLMDescriptionStage(model)
         with pytest.raises(ValueError, match="compute unit"):
             stage.load(MagicMock())
@@ -172,6 +174,7 @@ class TestVLMDescriptionStage:
     def test_unload_calls_model_unload(self) -> None:
         """unload() delegates to the wrapped model."""
         model = MagicMock(spec=LlamaVLModel)
+        model.is_loaded = False
         stage = VLMDescriptionStage(model)
         stage.unload()
         model.unload.assert_called_once()

@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from moment_to_action.metrics import NullMetricsCollector, SpanType
 
@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
+    from moment_to_action.models._base import BaseModel
+
+_ModelT = TypeVar("_ModelT", bound="BaseModel")
 
 logger = logging.getLogger(__name__)
 
@@ -158,3 +161,66 @@ class Stage(ABC):
             Zero or more output messages.
         """
         ...
+
+
+class ModelStage(Stage, Generic[_ModelT]):
+    """Abstract base for stages that wrap a single model.
+
+    Centralizes the three things every model-backed stage otherwise repeats:
+    requiring the model be unloaded at construction (device resources are
+    acquired later, uniformly, via ``Moment2Action.load_pipeline()``), and
+    ``load()``/``unload()`` delegating to the model. Subclasses just call
+    ``super().__init__(model, ...)`` and can't forget any of it. Parametrize
+    with the concrete model type (e.g. ``ModelStage[LlamaGGUFModel]``) so
+    ``self._model`` keeps its specific type for subclasses that need more than
+    :class:`~moment_to_action.models._base.BaseModel`'s interface.
+    """
+
+    def __init__(
+        self,
+        model: _ModelT,
+        *,
+        window: int = 1,
+        stride: int | None = None,
+        ready: Callable[[list[Message]], bool] | None = None,
+        drop: Callable[[Message], bool] | None = None,
+        metrics: MetricsCollector | None = None,
+    ) -> None:
+        """Configure the stage around an unloaded model.
+
+        Args:
+            model: An unloaded model instance — call :meth:`load` (or
+                ``model.load()``) before processing.
+            window: See :meth:`Stage.__init__`.
+            stride: See :meth:`Stage.__init__`.
+            ready: See :meth:`Stage.__init__`.
+            drop: See :meth:`Stage.__init__`.
+            metrics: Metrics collector used to time this stage's execution.
+
+        Raises:
+            ValueError: If *model* is already loaded.
+        """
+        if model.is_loaded:
+            msg = f"{type(self).__name__} requires an unloaded model."
+            raise ValueError(msg)
+        super().__init__(window=window, stride=stride, ready=ready, drop=drop, metrics=metrics)
+        self._model: _ModelT = model
+
+    def load(self, platform: Platform, unit: ComputeUnit | None = None) -> None:
+        """Load the wrapped model onto *platform*.
+
+        Args:
+            platform: The hardware platform to load onto.
+            unit: The compute unit to target.
+
+        Raises:
+            ValueError: If *unit* is ``None``.
+        """
+        if unit is None:
+            msg = f"{type(self).__name__}.load requires a compute unit"
+            raise ValueError(msg)
+        self._model.load(platform, unit)
+
+    def unload(self) -> None:
+        """Unload the wrapped model."""
+        self._model.unload()

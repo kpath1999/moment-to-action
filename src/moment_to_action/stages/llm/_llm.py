@@ -8,16 +8,15 @@ from moment_to_action.benchmarking import detect_yn
 from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.llm import GenerationMessage
+from moment_to_action.models.llm._base import LlamaGGUFModel
 from moment_to_action.prompting import build_detection_prompt
-from moment_to_action.stages._base import Stage
+from moment_to_action.stages._base import ModelStage
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
-    from moment_to_action.models.llm._base import LlamaGGUFModel
 
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
@@ -102,7 +101,7 @@ class _ThinkResponseRouter:
             self._phase = "response" if self._phase == "think" else "think"
 
 
-class LLMStage(Stage):
+class LLMStage(ModelStage[LlamaGGUFModel]):
     """Streams a language model's response to a detection-derived prompt.
 
     Consumes a :class:`~moment_to_action.messages.detection.DetectionMessage` and
@@ -128,37 +127,21 @@ class LLMStage(Stage):
         grammar: str | None = None,
         metrics: MetricsCollector | None = None,
     ) -> None:
-        """Initialize the stage with a language model.
+        """Initialize the stage with an unloaded language model.
 
         Args:
-            model: A loaded :class:`~moment_to_action.models.llm._base.LlamaGGUFModel`.
+            model: An unloaded :class:`~moment_to_action.models.llm._base.LlamaGGUFModel`
+                — call :meth:`load` (or ``model.load()``) before processing.
             grammar: Optional GBNF grammar constraining generation (e.g.
                 :data:`~moment_to_action.prompting.YES_NO_GRAMMAR`).
             metrics: Metrics collector used to time this stage and record
                 per-token ttft/itl via ``MetricsCollector.timed_stream``.
-        """
-        super().__init__(window=1, metrics=metrics)
-        self._model = model
-        self._grammar = grammar
-
-    def load(self, platform: Platform, unit: ComputeUnit | None = None) -> None:
-        """Load the wrapped model onto *platform*.
-
-        Args:
-            platform: The hardware platform to load onto.
-            unit: The compute unit to target.
 
         Raises:
-            ValueError: If *unit* is ``None``.
+            ValueError: If *model* is already loaded.
         """
-        if unit is None:
-            msg = "LLMStage.load requires a compute unit"
-            raise ValueError(msg)
-        self._model.load(platform, unit)
-
-    def unload(self) -> None:
-        """Unload the wrapped model."""
-        self._model.unload()
+        super().__init__(model, window=1, metrics=metrics)
+        self._grammar = grammar
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
         """Stream the model's response to the detection-derived prompt.

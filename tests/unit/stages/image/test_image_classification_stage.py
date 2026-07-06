@@ -31,6 +31,7 @@ class TestImageClassificationStage:
     def mock_model(self, sample_classification: Classification) -> MagicMock:
         """Return a mock ImageClassificationModel with reasonable defaults."""
         model = MagicMock(spec=ImageClassificationModel)
+        model.is_loaded = False
         model.prepare.return_value = np.zeros((1, 3, 224, 224), dtype=np.float32)
         model.run.return_value = [np.zeros((1, 1000), dtype=np.float32)]
         model.post_proc.return_value = [sample_classification]

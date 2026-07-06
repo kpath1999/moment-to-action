@@ -245,6 +245,7 @@ class TestLLMStage:
     def test_load_calls_model_load(self) -> None:
         """load() forwards platform and unit to the wrapped model."""
         model = MagicMock(spec=LlamaGGUFModel)
+        model.is_loaded = False
         stage = LLMStage(model)
         platform = MagicMock()
         stage.load(platform, ComputeUnit.CPU)
@@ -253,6 +254,7 @@ class TestLLMStage:
     def test_load_without_unit_raises(self) -> None:
         """load() without a compute unit raises ValueError."""
         model = MagicMock(spec=LlamaGGUFModel)
+        model.is_loaded = False
         stage = LLMStage(model)
         with pytest.raises(ValueError, match="compute unit"):
             stage.load(MagicMock())
@@ -260,6 +262,7 @@ class TestLLMStage:
     def test_unload_calls_model_unload(self) -> None:
         """unload() delegates to the wrapped model."""
         model = MagicMock(spec=LlamaGGUFModel)
+        model.is_loaded = False
         stage = LLMStage(model)
         stage.unload()
         model.unload.assert_called_once()

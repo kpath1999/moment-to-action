@@ -39,7 +39,7 @@ class Moment2Action:
     pipeline may be loaded (holding device resources) at a time.
     """
 
-    def __init__(self, config: AppConfig | None = None, *, qairt: bool = False) -> None:
+    def __init__(self, config: AppConfig | None = None, *, qairt: bool = True) -> None:
         """Set up the app: path manager, config, logging, and hardware platform.
 
         Args:

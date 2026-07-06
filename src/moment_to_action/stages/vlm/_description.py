@@ -8,7 +8,8 @@ from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.llm import GenerationMessage
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.messages.video import VideoClipMessage
-from moment_to_action.stages._base import Stage
+from moment_to_action.models.vlm._base import LlamaVLModel
+from moment_to_action.stages._base import ModelStage
 from moment_to_action.stages.vlm._encode import bgr_to_b64
 
 if TYPE_CHECKING:
@@ -16,10 +17,8 @@ if TYPE_CHECKING:
 
     import numpy as np
 
-    from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
-    from moment_to_action.models.vlm._base import LlamaVLModel
 
 
 def _frames_and_question_from(msg: Message) -> tuple[list[np.ndarray], str] | None:
@@ -41,7 +40,7 @@ def _frames_and_question_from(msg: Message) -> tuple[list[np.ndarray], str] | No
     return None
 
 
-class VLMDescriptionStage(Stage):
+class VLMDescriptionStage(ModelStage[LlamaVLModel]):
     """Streams a vision-language model's response to a task over raw frames.
 
     Consumes a :class:`~moment_to_action.messages.sensor.RawFrameMessage` (single
@@ -66,36 +65,20 @@ class VLMDescriptionStage(Stage):
         grammar: str | None = None,
         metrics: MetricsCollector | None = None,
     ) -> None:
-        """Initialize the stage with a vision-language model.
+        """Initialize the stage with an unloaded vision-language model.
 
         Args:
-            model: A loaded :class:`~moment_to_action.models.vlm._base.LlamaVLModel`.
+            model: An unloaded :class:`~moment_to_action.models.vlm._base.LlamaVLModel`
+                — call :meth:`load` (or ``model.load()``) before processing.
             grammar: Optional GBNF grammar constraining generation.
             metrics: Metrics collector used to time this stage and record
                 per-token ttft/itl via ``MetricsCollector.timed_stream``.
-        """
-        super().__init__(window=1, metrics=metrics)
-        self._model = model
-        self._grammar = grammar
-
-    def load(self, platform: Platform, unit: ComputeUnit | None = None) -> None:
-        """Load the wrapped model onto *platform*.
-
-        Args:
-            platform: The hardware platform to load onto.
-            unit: The compute unit to target.
 
         Raises:
-            ValueError: If *unit* is ``None``.
+            ValueError: If *model* is already loaded.
         """
-        if unit is None:
-            msg = "VLMDescriptionStage.load requires a compute unit"
-            raise ValueError(msg)
-        self._model.load(platform, unit)
-
-    def unload(self) -> None:
-        """Unload the wrapped model."""
-        self._model.unload()
+        super().__init__(model, window=1, metrics=metrics)
+        self._grammar = grammar
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
         """Stream the model's response to the incoming frames' question.

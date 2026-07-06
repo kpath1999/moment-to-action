@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
+from moment_to_action.hardware import ComputeUnit
 from moment_to_action.messages.sensor import RawFrameMessage
 from moment_to_action.metrics import MetricsCollector, SpanType
-from moment_to_action.stages._base import Stage
+from moment_to_action.models._base import BaseModel
+from moment_to_action.stages._base import ModelStage, Stage
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -30,6 +33,14 @@ def _make_frame(timestamp: float = 0.0) -> RawFrameMessage:
 
 class _PassthroughStage(Stage):
     """A concrete stage that passes each message through unchanged."""
+
+    def _process(self, items: list[Message]) -> Iterator[Message]:
+        """Yield each buffered item unchanged."""
+        yield from items
+
+
+class _StubModelStage(ModelStage[BaseModel]):
+    """A concrete ModelStage subclass for testing the shared model-stage behavior."""
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
         """Yield each buffered item unchanged."""
@@ -259,3 +270,47 @@ class TestStage:
             results = list(pipeline.run(iter(frames)))
 
         assert results == frames
+
+
+@pytest.mark.unit
+class TestModelStage:
+    """Tests for ModelStage base class."""
+
+    def test_construction_stores_model(self) -> None:
+        """The unloaded model passed in is stored for subclasses to use."""
+        model = MagicMock(spec=BaseModel)
+        model.is_loaded = False
+        stage = _StubModelStage(model)
+        assert stage._model is model
+
+    def test_construction_with_already_loaded_model_raises(self) -> None:
+        """Constructing with an already-loaded model raises ValueError."""
+        model = MagicMock(spec=BaseModel)
+        model.is_loaded = True
+        with pytest.raises(ValueError, match="requires an unloaded model"):
+            _StubModelStage(model)
+
+    def test_load_forwards_platform_and_unit(self) -> None:
+        """load() forwards platform and unit to the wrapped model."""
+        model = MagicMock(spec=BaseModel)
+        model.is_loaded = False
+        stage = _StubModelStage(model)
+        platform = MagicMock()
+        stage.load(platform, ComputeUnit.CPU)
+        model.load.assert_called_once_with(platform, ComputeUnit.CPU)
+
+    def test_load_without_unit_raises(self) -> None:
+        """load() without a compute unit raises ValueError."""
+        model = MagicMock(spec=BaseModel)
+        model.is_loaded = False
+        stage = _StubModelStage(model)
+        with pytest.raises(ValueError, match="compute unit"):
+            stage.load(MagicMock())
+
+    def test_unload_delegates_to_model(self) -> None:
+        """unload() delegates to the wrapped model."""
+        model = MagicMock(spec=BaseModel)
+        model.is_loaded = False
+        stage = _StubModelStage(model)
+        stage.unload()
+        model.unload.assert_called_once()

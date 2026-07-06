@@ -7,15 +7,14 @@ from typing import TYPE_CHECKING
 from moment_to_action.messages.control import EndOfClipMessage
 from moment_to_action.messages.detection import DetectionMessage
 from moment_to_action.messages.sensor import RawFrameMessage
+from moment_to_action.models.image.detection._base import ImageDetectionModel
 from moment_to_action.stages.image._base import ImageStage
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from moment_to_action.hardware import ComputeUnit, Platform
     from moment_to_action.messages import Message
     from moment_to_action.metrics import MetricsCollector
-    from moment_to_action.models.image.detection._base import ImageDetectionModel
 
 
 def _is_undroppable_frame(msg: Message) -> bool:
@@ -25,7 +24,7 @@ def _is_undroppable_frame(msg: Message) -> bool:
     return not isinstance(msg, RawFrameMessage) or msg.frame is None
 
 
-class ImageDetectionStage(ImageStage):
+class ImageDetectionStage(ImageStage[ImageDetectionModel]):
     """Pipeline stage that runs object detection on a raw frame.
 
     Wraps any :class:`~moment_to_action.models.image.detection._base.ImageDetectionModel`
@@ -42,35 +41,18 @@ class ImageDetectionStage(ImageStage):
     def __init__(
         self, model: ImageDetectionModel, *, metrics: MetricsCollector | None = None
     ) -> None:
-        """Initialize the stage with a detection model.
+        """Initialize the stage with an unloaded detection model.
 
         Args:
-            model: An :class:`~moment_to_action.models.image.detection._base.ImageDetectionModel`
-                instance.  The caller must call ``model.load(backend)`` before passing
-                it here.
+            model: An unloaded
+                :class:`~moment_to_action.models.image.detection._base.ImageDetectionModel`
+                — call :meth:`load` (or ``model.load()``) before processing.
             metrics: Metrics collector used to time this stage's execution.
-        """
-        super().__init__(window=1, drop=_is_undroppable_frame, metrics=metrics)
-        self._model = model
-
-    def load(self, platform: Platform, unit: ComputeUnit | None = None) -> None:
-        """Load the wrapped model onto *platform*.
-
-        Args:
-            platform: The hardware platform to load onto.
-            unit: The compute unit to target.
 
         Raises:
-            ValueError: If *unit* is ``None``.
+            ValueError: If *model* is already loaded.
         """
-        if unit is None:
-            msg = "ImageDetectionStage.load requires a compute unit"
-            raise ValueError(msg)
-        self._model.load(platform, unit)
-
-    def unload(self) -> None:
-        """Unload the wrapped model."""
-        self._model.unload()
+        super().__init__(model, window=1, drop=_is_undroppable_frame, metrics=metrics)
 
     def _process(self, items: list[Message]) -> Iterator[Message]:
         """Run detection on the buffered frame, or pass an EndOfClipMessage through.

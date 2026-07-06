@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -20,6 +21,9 @@ from moment_to_action.models.image.detection._types import BoundingBox, Detectio
 from moment_to_action.stages.image._base import ImageStage
 from moment_to_action.stages.image._detection import ImageDetectionStage
 
+if TYPE_CHECKING:
+    from moment_to_action.hardware import Platform
+
 
 class _StubDetectionModel(ImageDetectionModel):
     """Minimal concrete detection model for span-recording tests."""
@@ -34,10 +38,10 @@ class _StubDetectionModel(ImageDetectionModel):
             backends={},
             metrics=metrics,
         )
-        self._platform = MagicMock()
 
-    def _load(self, platform: object, unit: object) -> None:
-        """No-op load."""
+    def _load(self, platform: Platform, unit: ComputeUnit) -> None:
+        """Record the platform so is_loaded reflects the real load state."""
+        self._platform = platform
 
     def _unload(self) -> None:
         """No-op unload."""
@@ -83,6 +87,7 @@ class TestImageDetectionStage:
     def mock_model(self, sample_detection: Detection) -> MagicMock:
         """Return a mock ImageDetectionModel with reasonable defaults."""
         model = MagicMock(spec=ImageDetectionModel)
+        model.is_loaded = False
         model.prepare.return_value = np.zeros((1, 3, 640, 640), dtype=np.float32)
         model.run.return_value = [
             np.zeros((1, 1, 4), dtype=np.float32),
@@ -200,6 +205,7 @@ class TestImageDetectionStage:
         stub = _StubDetectionModel(metrics=metrics)
         stage = ImageDetectionStage(model=stub, metrics=metrics)
         with metrics.start_trace():
+            stage.load(MagicMock(), ComputeUnit.CPU)
             list(stage.process(iter([raw_frame_msg])))
 
         span_names = {s.name for s in metrics.spans}
