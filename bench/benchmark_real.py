@@ -25,12 +25,19 @@ across every clip and cycle. The per-clip ``question`` rides on the message
 fixed at stage construction, so one loaded model serves every application's
 question without reloading.
 
+Both clip runners score ``recall()`` against ``DecisionReasoningMessage.text``
+(the raw generation with the leading ``YES``/``NO`` stripped) rather than the
+raw ``GenerationMessage`` stream — ``recall_keywords`` are content words, never
+"yes"/"no", so this scores identically to the raw text without needing to keep
+the intermediate token stream around (see ``_accumulated_from_decision``).
+
 VLM pipeline — one real, chained ``Moment2Action`` pipeline per model:
   1. Extract frames at 1 FPS from the annotated ROI window, resize to <=480px tall.
   2. ``app.new_pipeline(...).add_stage(VLMDescriptionStage, ..., grammar=YES_NO_GRAMMAR)
      .add_stage(DecisionStage).build()``, loaded once, run once per
-     ``VideoClipMessage(frames, question=clip.question)``.
-  3. Score the streamed response and collect full timing + accuracy metrics.
+     ``VideoClipMessage(frames, question=clip.question)`` via one chained
+     ``handle.run()`` call.
+  3. Score the response and collect full timing + accuracy metrics.
 
 LLM pipeline — one ``Moment2Action`` pipeline per (detector, LLM) pair holding both
 models loaded together:
@@ -41,12 +48,13 @@ models loaded together:
      ``_detect_and_aggregate``), followed by an ``EndOfClipMessage`` that tells
      the aggregation stage to flush its running highest-confidence-per-label
      accumulation as one aggregated ``DetectionMessage`` (carrying ``clip.question``).
-  3. Run the pipeline's ``LLMStage``/``DecisionStage`` on the aggregated message —
-     driven directly (not via one chained ``run()``) only because ``DecisionStage``
-     doesn't forward the raw ``GenerationMessage`` text this benchmark needs to
-     score recall against; both are wrapped in ``handle.trace()`` so their spans
+     Done once per clip and reused across every cycle.
+  3. Run the pipeline's ``LLMStage``/``DecisionStage`` on the aggregated message,
+     chained together directly rather than via one ``handle.run()`` — running
+     the *whole* pipeline per cycle would redundantly rerun detection, which
+     already happened once in step 2. Wrapped in ``handle.trace()`` so spans
      still land on this pipeline's own metrics.
-  4. Score the streamed response and collect full timing + accuracy metrics.
+  4. Score the response and collect full timing + accuracy metrics.
 
 Model lists at the top of this file — comment out any entry to skip it.
 
@@ -92,8 +100,8 @@ from moment_to_action.config import AppConfig, load_config
 from moment_to_action.hardware import ComputeUnit
 from moment_to_action.messages import (
     DecisionMessage,
+    DecisionReasoningMessage,
     DetectionMessage,
-    GenerationMessage,
     RawFrameMessage,
 )
 from moment_to_action.messages.control import EndOfClipMessage
@@ -378,6 +386,27 @@ def _score_clip_response(
     }
 
 
+def _accumulated_from_decision(yn: str | None, reasoning: list[DecisionReasoningMessage]) -> str:
+    """Reconstruct scorable response text from a DecisionStage's output.
+
+    ``DecisionReasoningMessage.text`` is the raw generation with the leading
+    ``YES``/``NO`` token stripped (see ``_strip_decision_prefix`` in
+    ``DecisionStage``); ``recall_keywords`` are content words, never "yes"/"no",
+    so scoring ``recall()`` against this reconstruction matches scoring it
+    against the raw generated text.
+
+    Args:
+        yn: Extracted decision ("yes"/"no"), or ``None`` if not decided.
+        reasoning: ``DecisionReasoningMessage`` partials for this clip; only the
+            last (most complete) one is used.
+
+    Returns:
+        Reconstructed response text, e.g. ``"YES, because ..."``.
+    """
+    text = reasoning[-1].text if reasoning else ""
+    return f"{yn.upper()}, {text}" if yn else text
+
+
 def _run_vlm_clip(
     handle: PipelineHandle,
     model_name: str,
@@ -386,6 +415,10 @@ def _run_vlm_clip(
     frames: list[np.ndarray],
 ) -> dict:
     """Drive one clip through the loaded VLM+Decision pipeline and score it.
+
+    A single chained ``handle.run()`` call — the VLM+Decision pipeline has no
+    stage worth caching across cycles, so there's no reason to drive it in
+    pieces (see ``_run_llm_clip`` for the one that does).
 
     Args:
         handle: Loaded pipeline: ``[VLMDescriptionStage, DecisionStage]``.
@@ -398,23 +431,18 @@ def _run_vlm_clip(
         Result dict for this (clip, cycle).
     """
     is_yes_no = clip.expected.lower() in _YES_NO_LABELS
-    vlm_stage, decision_stage = handle.stages
     clip_msg = VideoClipMessage(frames=frames, timestamp=time.time(), question=clip.question)
 
-    with handle.trace() as trace:
-        gen_messages = list(vlm_stage.process(iter([clip_msg])))
-        gen_texts = [m for m in gen_messages if isinstance(m, GenerationMessage)]
-        accumulated = gen_texts[-1].text if gen_texts else ""
+    results = list(handle.run(iter([clip_msg])))
+    trace = handle.metrics_report().traces[-1]
 
-        yn: str | None = None
-        if is_yes_no:
-            decisions = [
-                m
-                for m in decision_stage.process(iter(gen_messages))
-                if isinstance(m, DecisionMessage)
-            ]
-            if decisions:
-                yn = decisions[0].decision
+    yn: str | None = None
+    if is_yes_no:
+        decisions = [m for m in results if isinstance(m, DecisionMessage)]
+        if decisions:
+            yn = decisions[0].decision
+    reasoning = [m for m in results if isinstance(m, DecisionReasoningMessage)]
+    accumulated = _accumulated_from_decision(yn, reasoning)
 
     frame_h, frame_w = frames[0].shape[:2]
     return {
@@ -445,9 +473,11 @@ def _run_llm_clip(
     """Drive one clip through the loaded LLM+Decision stages and score it.
 
     The prompt is built from aggregated detections; no images are passed. Pulls
-    ``LLMStage``/``DecisionStage`` directly off *handle* (see module docstring for
-    why this pipeline can't be driven with one chained ``run()``), wrapped in
-    ``handle.trace()`` so spans land on this pipeline's own metrics.
+    ``LLMStage``/``DecisionStage`` directly off *handle* rather than one chained
+    ``handle.run()`` — detection+aggregation already ran once for this clip (see
+    ``_detect_and_aggregate``) and *detections* is reused across every cycle, so
+    running the full pipeline again per cycle would redundantly rerun detection.
+    Wrapped in ``handle.trace()`` so spans land on this pipeline's own metrics.
 
     Args:
         handle: Loaded pipeline:
@@ -468,19 +498,15 @@ def _run_llm_clip(
     )
 
     with handle.trace() as trace:
-        gen_messages = list(llm_stage.process(iter([detection_msg])))
-        gen_texts = [m for m in gen_messages if isinstance(m, GenerationMessage)]
-        accumulated = gen_texts[-1].text if gen_texts else ""
+        results = list(decision_stage.process(llm_stage.process(iter([detection_msg]))))
 
-        yn: str | None = None
-        if is_yes_no:
-            decisions = [
-                m
-                for m in decision_stage.process(iter(gen_messages))
-                if isinstance(m, DecisionMessage)
-            ]
-            if decisions:
-                yn = decisions[0].decision
+    yn: str | None = None
+    if is_yes_no:
+        decisions = [m for m in results if isinstance(m, DecisionMessage)]
+        if decisions:
+            yn = decisions[0].decision
+    reasoning = [m for m in results if isinstance(m, DecisionReasoningMessage)]
+    accumulated = _accumulated_from_decision(yn, reasoning)
 
     return {
         "model": model_name,
