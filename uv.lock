@@ -1959,12 +1959,15 @@ wheels = [
 
 [[package]]
 name = "mako"
-version = "1.1.0"
+version = "1.3.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markupsafe", marker = "sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b0/3c/8dcd6883d009f7cae0f3157fb53e9afb05a0d3d33b3db1268ec2e6f4a56b/Mako-1.1.0.tar.gz", hash = "sha256:a36919599a9b7dc5d86a7a8988f23a9a3a3d083070023bab23d64f7f1d1e0a4b", size = 463945, upload-time = "2019-08-01T16:28:24.002Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/62/791b31e69ae182791ec67f04850f2f062716bbd205483d63a215f3e062d3/mako-1.3.12.tar.gz", hash = "sha256:9f778e93289bd410bb35daadeb4fc66d95a746f0b75777b942088b7fd7af550a", size = 400219, upload-time = "2026-04-28T19:01:08.512Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/b1/a0ec7a5a9db730a08daef1fdfb8090435b82465abbf758a596f0ea88727e/mako-1.3.12-py3-none-any.whl", hash = "sha256:8f61569480282dbf557145ce441e4ba888be453c30989f879f0d652e39f53ea9", size = 78521, upload-time = "2026-04-28T19:01:10.393Z" },
+]
 
 [[package]]
 name = "markdown"
@@ -2282,7 +2285,7 @@ requires-dist = [
     { name = "joblib", marker = "extra == 'host'", specifier = "==1.4.0" },
     { name = "jsonschema", marker = "extra == 'host'", specifier = "==4.19.0" },
     { name = "lxml", marker = "extra == 'host'", specifier = "==5.2.1" },
-    { name = "mako", marker = "extra == 'host'", specifier = "==1.1.0" },
+    { name = "mako", marker = "extra == 'host'", specifier = "==1.3.12" },
     { name = "matplotlib", marker = "extra == 'host'", specifier = "==3.6.0" },
     { name = "mock", marker = "extra == 'host'", specifier = "==3.0.5" },
     { name = "moment-to-action", extras = ["host", "yolo-export"], marker = "extra == 'full'" },
