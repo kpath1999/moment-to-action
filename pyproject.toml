@@ -63,7 +63,7 @@ host = [
     "lxml==5.2.1",
     "mako==1.1.0",
     "matplotlib==3.6.0",
-    "mock==3.0.5",
+    "mock==5.2.0",
     "opencv-python==4.8.1.78",
     "optuna==3.3.0",
     "packaging>=24.0",
