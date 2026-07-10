@@ -2304,7 +2304,7 @@ requires-dist = [
     { name = "psutil", specifier = "==6.1.1" },
     { name = "pycocotools", specifier = ">=2.0.11" },
     { name = "pydantic", specifier = "==2.8.2" },
-    { name = "pytest", marker = "extra == 'host'", specifier = "==8.1.1" },
+    { name = "pytest", marker = "extra == 'host'", specifier = "==9.1.1" },
     { name = "pyyaml", marker = "extra == 'host'", specifier = ">=6.0.2,<7.0.0" },
     { name = "qai-hub-models", extras = ["yolov8-det", "rf-detr", "rtmdet", "detectron2-detection"], marker = "extra == 'host'", specifier = ">=0.55.0" },
     { name = "qairt-dev", specifier = "==0.6.0" },
@@ -2334,7 +2334,7 @@ dev = [
     { name = "mypy", specifier = ">=1.19.1" },
     { name = "pre-commit", specifier = ">=4.0.0" },
     { name = "pylsp-mypy", specifier = ">=0.7.1" },
-    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-antilru", specifier = ">=2.0.0" },
     { name = "pytest-cov", specifier = ">=5.0.0" },
     { name = "pytest-randomly", specifier = ">=4.0.1" },
@@ -3457,18 +3457,19 @@ wheels = [
 
 [[package]]
 name = "pytest"
-version = "8.1.1"
+version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "exceptiongroup", marker = "sys_platform == 'linux'" },
     { name = "iniconfig", marker = "sys_platform == 'linux'" },
     { name = "packaging", marker = "sys_platform == 'linux'" },
     { name = "pluggy", marker = "sys_platform == 'linux'" },
+    { name = "pygments", marker = "sys_platform == 'linux'" },
     { name = "tomli", marker = "sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/30/b7/7d44bbc04c531dcc753056920e0988032e5871ac674b5a84cb979de6e7af/pytest-8.1.1.tar.gz", hash = "sha256:ac978141a75948948817d360297b7aae0fcb9d6ff6bc9ec6d514b85d5a65c044", size = 1409703, upload-time = "2024-03-09T11:51:08.012Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/7e/c79cecfdb6aa85c6c2e3cf63afc56d0f165f24f5c66c03c695c4d9b84756/pytest-8.1.1-py3-none-any.whl", hash = "sha256:2a8386cfc11fa9d2c50ee7b2a57e7d898ef90470a7a34c4b949ff59662bb78b7", size = 337359, upload-time = "2024-03-09T11:51:04.858Z" },
+    { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
 ]
 
 [[package]]
